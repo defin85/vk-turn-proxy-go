@@ -1,0 +1,148 @@
+{
+  "scenario_id": "vk_call_debug_stage4_missing_turn_url_v1",
+  "provider": "vk",
+  "legacy_source": {
+    "repo_path": "/home/egor/code/vk-turn-proxy",
+    "entrypoint": "client/main.go",
+    "function": "getVkCreds",
+    "stage_count": 4
+  },
+  "input": {
+    "invite_url_redacted": "https://vk.com/call/join/<redacted:vk-join-token>",
+    "normalized_join_token_redacted": "<redacted:vk-join-token>"
+  },
+  "stages": [
+    {
+      "name": "vk_login_anonym_token",
+      "endpoint_id": "vk_login_anonym_token",
+      "request": {
+        "method": "POST",
+        "form_keys": [
+          "client_id",
+          "token_type",
+          "client_secret",
+          "version",
+          "app_id"
+        ],
+        "redacted_fields": [
+          "client_secret"
+        ]
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "data": {
+            "access_token": "<redacted:vk-access-token-1>"
+          }
+        }
+      },
+      "outcome": {
+        "kind": "continue",
+        "extracted": {
+          "access_token": "<redacted:vk-access-token-1>"
+        }
+      }
+    },
+    {
+      "name": "vk_calls_get_anonymous_token",
+      "endpoint_id": "vk_calls_get_anonymous_token",
+      "request": {
+        "method": "POST",
+        "form_keys": [
+          "vk_join_link",
+          "name",
+          "access_token"
+        ],
+        "redacted_fields": [
+          "vk_join_link",
+          "access_token"
+        ]
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "response": {
+            "token": "<redacted:vk-anonym-token>"
+          }
+        }
+      },
+      "outcome": {
+        "kind": "continue",
+        "extracted": {
+          "anonym_token": "<redacted:vk-anonym-token>"
+        }
+      }
+    },
+    {
+      "name": "ok_anonym_login",
+      "endpoint_id": "ok_anonym_login",
+      "request": {
+        "method": "POST",
+        "form_keys": [
+          "session_data",
+          "method",
+          "format",
+          "application_key"
+        ],
+        "redacted_fields": [
+          "session_data"
+        ]
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "session_key": "<redacted:ok-session-key>"
+        }
+      },
+      "outcome": {
+        "kind": "continue",
+        "extracted": {
+          "session_key": "<redacted:ok-session-key>"
+        }
+      }
+    },
+    {
+      "name": "ok_join_conversation_by_link",
+      "endpoint_id": "ok_join_conversation_by_link",
+      "request": {
+        "method": "POST",
+        "form_keys": [
+          "joinLink",
+          "isVideo",
+          "protocolVersion",
+          "anonymToken",
+          "method",
+          "format",
+          "application_key",
+          "session_key"
+        ],
+        "redacted_fields": [
+          "joinLink",
+          "anonymToken",
+          "session_key"
+        ]
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "turn_server": {
+            "username": "<redacted:turn-username>",
+            "credential": "<redacted:turn-password>",
+            "urls": []
+          }
+        }
+      },
+      "outcome": {
+        "kind": "provider_error",
+        "error_code": "missing_turn_url"
+      }
+    }
+  ],
+  "expected": {
+    "result_kind": "provider_error",
+    "provider_error": {
+      "stage": "ok_join_conversation_by_link",
+      "code": "missing_turn_url"
+    }
+  }
+}
