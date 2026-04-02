@@ -32,6 +32,7 @@ internal/
   config/
   observe/
   provider/
+    genericturn/
     vk/
   session/
   transport/
@@ -78,6 +79,14 @@ List available providers in probe:
 go run ./cmd/probe -list-providers
 ```
 
+Run the deterministic lab provider:
+
+```bash
+go run ./cmd/probe -provider generic-turn -link 'generic-turn://user:pass@turn.example.test:3478' -output-dir artifacts
+```
+
+Successful runs print the normalized TURN address and write a sanitized artifact to `artifacts/generic-turn/probe-artifact.json`.
+
 Run the VK provider debug contour:
 
 ```bash
@@ -121,4 +130,4 @@ This repository was initialized without git hooks. If you want Beads to auto-inj
 
 - Module path is currently `github.com/defin85/vk-turn-proxy-go`.
 - The repository directory is `/home/egor/code/vk-turn-proxy-go`.
-- Provider adapters are intentionally stubbed until compatibility fixtures and tests are added.
+- Provider adapters are added incrementally; `vk` and `generic-turn` resolve credentials today.

@@ -12,6 +12,7 @@ import (
 	"github.com/defin85/vk-turn-proxy-go/internal/config"
 	"github.com/defin85/vk-turn-proxy-go/internal/observe"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
+	"github.com/defin85/vk-turn-proxy-go/internal/provider/genericturn"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider/vk"
 	"github.com/defin85/vk-turn-proxy-go/internal/session"
 )
@@ -41,7 +42,7 @@ func main() {
 
 	logger := observe.NewLogger(*logLevel)
 	sessionID := session.NewID()
-	registry := provider.NewRegistry(vk.New())
+	registry := newRegistry()
 	adapter, err := registry.Get(cfg.Provider)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "provider lookup: %v\n", err)
@@ -75,4 +76,8 @@ func exitCode(err error) int {
 	}
 
 	return 1
+}
+
+func newRegistry() *provider.Registry {
+	return provider.NewRegistry(genericturn.New(), vk.New())
 }

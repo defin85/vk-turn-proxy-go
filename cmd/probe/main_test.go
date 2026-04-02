@@ -131,3 +131,71 @@ func TestRunProbeWritesArtifactOnFailure(t *testing.T) {
 		t.Fatalf("stderr missing failure summary: %s", stderr.String())
 	}
 }
+
+func TestListProvidersIncludesGenericTurn(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runProbe(context.Background(), &stdout, &stderr, []string{"-list-providers"}, newRegistry())
+	if code != 0 {
+		t.Fatalf("runProbe() code = %d, stderr=%s", code, stderr.String())
+	}
+
+	if got := stdout.String(); got != "generic-turn\nvk\n" {
+		t.Fatalf("unexpected providers list %q", got)
+	}
+}
+
+func TestRunProbeGenericTurnWritesRedactedArtifact(t *testing.T) {
+	outputDir := t.TempDir()
+	link := "generic-turn://alice:s3cret@turn.example.test:3478"
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runProbe(context.Background(), &stdout, &stderr, []string{
+		"-provider", "generic-turn",
+		"-link", link,
+		"-output-dir", outputDir,
+	}, newRegistry())
+	if code != 0 {
+		t.Fatalf("runProbe() code = %d, stderr=%s", code, stderr.String())
+	}
+
+	artifactPath := filepath.Join(outputDir, "generic-turn", "probe-artifact.json")
+	data, err := os.ReadFile(artifactPath)
+	if err != nil {
+		t.Fatalf("read artifact: %v", err)
+	}
+	if strings.Contains(string(data), "alice") {
+		t.Fatalf("artifact leaked username: %s", data)
+	}
+	if strings.Contains(string(data), "s3cret") {
+		t.Fatalf("artifact leaked password: %s", data)
+	}
+	if strings.Contains(string(data), link) {
+		t.Fatalf("artifact leaked raw link: %s", data)
+	}
+
+	var saved provider.ProbeArtifact
+	if err := json.Unmarshal(data, &saved); err != nil {
+		t.Fatalf("decode artifact: %v", err)
+	}
+	if saved.Provider != "generic-turn" {
+		t.Fatalf("unexpected provider %q", saved.Provider)
+	}
+	if saved.Input.LinkRedacted != "generic-turn://<redacted:turn-username>:<redacted:turn-password>@turn.example.test:3478" {
+		t.Fatalf("unexpected redacted link %q", saved.Input.LinkRedacted)
+	}
+	if saved.Outcome.Resolution == nil || saved.Outcome.Resolution.Address != "turn.example.test:3478" {
+		t.Fatalf("unexpected resolution outcome %#v", saved.Outcome.Resolution)
+	}
+	if len(saved.Stages) != 1 {
+		t.Fatalf("unexpected stage count %d", len(saved.Stages))
+	}
+	if !strings.Contains(stdout.String(), "turn_addr=turn.example.test:3478") {
+		t.Fatalf("stdout missing normalized turn addr: %s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "stages=1") {
+		t.Fatalf("stdout missing stage count: %s", stdout.String())
+	}
+}

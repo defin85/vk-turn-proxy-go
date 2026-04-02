@@ -13,12 +13,17 @@ import (
 
 	"github.com/defin85/vk-turn-proxy-go/internal/config"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
+	"github.com/defin85/vk-turn-proxy-go/internal/provider/genericturn"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider/vk"
 )
 
 func main() {
-	registry := provider.NewRegistry(vk.New())
+	registry := newRegistry()
 	os.Exit(runProbe(context.Background(), os.Stdout, os.Stderr, os.Args[1:], registry))
+}
+
+func newRegistry() *provider.Registry {
+	return provider.NewRegistry(genericturn.New(), vk.New())
 }
 
 func runProbe(ctx context.Context, stdout io.Writer, stderr io.Writer, args []string, registry *provider.Registry) int {

@@ -9,6 +9,7 @@ type ProbeArtifact struct {
 }
 
 type ProbeArtifactInput struct {
+	LinkRedacted                string `json:"link_redacted,omitempty"`
 	InviteURLRedacted           string `json:"invite_url_redacted,omitempty"`
 	NormalizedJoinTokenRedacted string `json:"normalized_join_token_redacted,omitempty"`
 }
