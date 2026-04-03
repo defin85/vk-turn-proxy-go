@@ -99,13 +99,28 @@ func TestBuildTransportPlanRejectsNonIPBindInterface(t *testing.T) {
 	}
 }
 
-func TestBuildTransportPlanRejectsUnsupportedConnections(t *testing.T) {
-	_, err := buildTransportPlan(config.ClientConfig{
-		Connections: 2,
+func TestBuildSessionPlanCarriesSupervisionPolicy(t *testing.T) {
+	plan, err := buildSessionPlan(config.ClientConfig{
+		Connections: 3,
 		Mode:        config.TransportModeUDP,
 		UseDTLS:     true,
+	}, Dependencies{
+		RestartBackoff:    50,
+		MaxWorkerRestarts: 2,
 	})
-	if err == nil {
-		t.Fatal("expected error")
+	if err != nil {
+		t.Fatalf("buildSessionPlan() error = %v", err)
+	}
+	if plan.Connections != 3 {
+		t.Fatalf("plan.Connections = %d, want 3", plan.Connections)
+	}
+	if plan.RestartBackoff != 50 {
+		t.Fatalf("plan.RestartBackoff = %s, want 50ns", plan.RestartBackoff)
+	}
+	if plan.MaxWorkerRestarts != 2 {
+		t.Fatalf("plan.MaxWorkerRestarts = %d, want 2", plan.MaxWorkerRestarts)
+	}
+	if plan.Transport.TURNMode != transport.TURNModeUDP {
+		t.Fatalf("plan.Transport.TURNMode = %s, want %s", plan.Transport.TURNMode, transport.TURNModeUDP)
 	}
 }

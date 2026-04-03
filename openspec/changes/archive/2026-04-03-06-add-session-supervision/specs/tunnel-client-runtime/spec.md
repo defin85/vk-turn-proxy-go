@@ -1,8 +1,5 @@
-# tunnel-client-runtime Specification
+## MODIFIED Requirements
 
-## Purpose
-Define the supported one-session tunnel client runtime contract for provider-backed UDP or TCP TURN transport, DTLS or plain relay paths, outbound bind targets, reply routing, explicit startup policy gating, and stage-aware startup failures.
-## Requirements
 ### Requirement: Tunnel client validates the first-slice policy before provider resolution
 
 The system SHALL validate the documented supervised client transport policy matrix before resolving provider credentials or starting transport resources.
@@ -48,31 +45,6 @@ The system SHALL forward datagrams between the local UDP listener and the config
 - **AND** datagrams received back from a worker are emitted to that worker's most recently observed local UDP source address
 - **AND** the supervised session does not claim stable multi-peer reply demultiplexing across all workers
 
-### Requirement: Tunnel client honors TURN endpoint overrides
-
-The system SHALL honor operator-supplied TURN endpoint overrides and supported outbound bind targets while still using provider-resolved credentials.
-
-#### Scenario: Override TURN host and port
-
-- **GIVEN** provider-resolved credentials and operator-supplied `-turn` and/or `-port` flags
-- **WHEN** the client starts a supported session
-- **THEN** it uses the overridden TURN endpoint with the provider-resolved username and password
-- **AND** it does not re-enter provider signaling to derive replacement credentials
-
-#### Scenario: Supported literal local IP bind target
-
-- **GIVEN** a supported client policy with `bind-interface` set to a literal local IP address
-- **WHEN** outbound TURN transport setup starts
-- **THEN** the runtime binds or dials the TURN transport using that local source address
-- **AND** the local application listener remains bound to the configured `-listen` address
-
-#### Scenario: Bind target cannot be applied
-
-- **GIVEN** a supported client policy with a literal local IP bind target that cannot actually be used for outbound TURN setup
-- **WHEN** the runtime starts outbound transport setup
-- **THEN** the system exits non-zero with an error that identifies `turn_dial` or another documented outbound-setup stage
-- **AND** it does not silently retry with an implicit fallback bind target
-
 ### Requirement: Tunnel client surfaces stage-aware startup failures
 
 The system SHALL surface provider, transport, and supervised lifecycle failures explicitly with stage-aware errors for the accepted transport path.
@@ -83,4 +55,3 @@ The system SHALL surface provider, transport, and supervised lifecycle failures 
 - **WHEN** the supervisor exhausts the documented restart budget for that worker
 - **THEN** the system exits non-zero with an error that identifies `session_supervision` as the failing stage
 - **AND** it cleans up the shared local listener and all partially running workers
-

@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"time"
 
 	"github.com/defin85/vk-turn-proxy-go/internal/config"
+	"github.com/defin85/vk-turn-proxy-go/internal/observe"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
 	"github.com/defin85/vk-turn-proxy-go/internal/runstage"
 	"github.com/defin85/vk-turn-proxy-go/internal/transport"
@@ -15,10 +17,13 @@ import (
 type RunnerFactory func(transport.ClientConfig) transport.Runner
 
 type Dependencies struct {
-	Registry  *provider.Registry
-	Logger    *slog.Logger
-	NewRunner RunnerFactory
-	SessionID ID
+	Registry          *provider.Registry
+	Logger            *slog.Logger
+	Metrics           *observe.Metrics
+	NewRunner         RunnerFactory
+	SessionID         ID
+	RestartBackoff    time.Duration
+	MaxWorkerRestarts int
 }
 
 func Run(ctx context.Context, cfg config.ClientConfig, deps Dependencies) error {
@@ -32,9 +37,11 @@ func Run(ctx context.Context, cfg config.ClientConfig, deps Dependencies) error 
 	if logger == nil {
 		logger = slog.Default()
 	}
-	if deps.SessionID != "" {
-		logger = logger.With("session_id", deps.SessionID)
+	sessionID := deps.SessionID
+	if sessionID == "" {
+		sessionID = NewID()
 	}
+	deps.SessionID = sessionID
 	if deps.NewRunner == nil {
 		deps.NewRunner = transport.NewClientRunner
 	}
@@ -42,36 +49,85 @@ func Run(ctx context.Context, cfg config.ClientConfig, deps Dependencies) error 
 		return runstage.Wrap(runstage.PolicyValidate, err)
 	}
 
-	plan, err := buildTransportPlan(cfg)
+	plan, err := buildSessionPlan(cfg, deps)
 	if err != nil {
 		return runstage.Wrap(runstage.PolicyValidate, err)
 	}
-	cfg.Mode = plan.Mode
+	cfg.Mode = plan.Transport.Mode
+	observer := observe.NewObserver(observe.RuntimeClient, logger, deps.Metrics, observe.Metadata{
+		SessionID: string(sessionID),
+		Provider:  cfg.Provider,
+		TURNMode:  string(plan.Transport.TURNMode),
+		PeerMode:  string(plan.Transport.PeerMode),
+	})
+	logger = observer.Logger()
 
 	adapter, err := deps.Registry.Get(cfg.Provider)
 	if err != nil {
+		observer.RecordSessionFailure(string(runstage.ProviderResolve), true)
+		observer.Emit(ctx, slog.LevelError, "runtime_failure",
+			"stage", runstage.ProviderResolve,
+			"result", "failed",
+			"error", err,
+		)
 		return runstage.Wrap(runstage.ProviderResolve, err)
 	}
 
-	logger.Info("client session bootstrap started",
+	observer.Emit(ctx, slog.LevelInfo, "runtime_startup",
+		"stage", "bootstrap",
+		"result", "started",
 		"provider", cfg.Provider,
 		"listen", cfg.ListenAddr,
 		"peer", cfg.PeerAddr,
 		"mode", cfg.Mode,
 		"dtls", cfg.UseDTLS,
+		"connections", cfg.Connections,
 	)
 
 	resolution, err := adapter.Resolve(ctx, cfg.Link)
 	if err != nil {
+		observer.RecordSessionFailure(string(runstage.ProviderResolve), true)
+		observer.Emit(ctx, slog.LevelError, "runtime_failure",
+			"stage", runstage.ProviderResolve,
+			"result", "failed",
+			"error", err,
+		)
 		return runstage.Wrap(runstage.ProviderResolve, err)
 	}
 
 	turnAddr, err := applyTURNOverrides(resolution.Credentials.Address, cfg.TURNServer, cfg.TURNPort)
 	if err != nil {
+		observer.RecordSessionFailure(string(runstage.ProviderResolve), true)
+		observer.Emit(ctx, slog.LevelError, "runtime_failure",
+			"stage", runstage.ProviderResolve,
+			"result", "failed",
+			"error", err,
+		)
 		return runstage.Wrap(runstage.ProviderResolve, err)
 	}
 
-	runner := deps.NewRunner(transport.ClientConfig{
+	observer.Emit(ctx, slog.LevelInfo, "provider_resolution",
+		"stage", runstage.ProviderResolve,
+		"result", "succeeded",
+		"resolution_method", resolution.Metadata["resolution_method"],
+		"turn_addr", turnAddr,
+		"peer", cfg.PeerAddr,
+		"listen", cfg.ListenAddr,
+	)
+
+	localConn, err := net.ListenPacket("udp", cfg.ListenAddr)
+	if err != nil {
+		observer.RecordSessionFailure(string(runstage.LocalBind), true)
+		observer.Emit(ctx, slog.LevelError, "runtime_failure",
+			"stage", runstage.LocalBind,
+			"result", "failed",
+			"error", err,
+		)
+		return runstage.Wrap(runstage.LocalBind, fmt.Errorf("bind local listener: %w", err))
+	}
+	defer transportClosePacketConn(localConn)
+
+	if err := runSupervisedSession(ctx, localConn, transport.ClientConfig{
 		ListenAddr: cfg.ListenAddr,
 		PeerAddr:   cfg.PeerAddr,
 		TURN: transport.TURNCredentials{
@@ -79,29 +135,30 @@ func Run(ctx context.Context, cfg config.ClientConfig, deps Dependencies) error 
 			Username: resolution.Credentials.Username,
 			Password: resolution.Credentials.Password,
 		},
-		TURNMode: plan.TURNMode,
-		PeerMode: plan.PeerMode,
-		BindIP:   append(net.IP(nil), plan.BindIP...),
+		TURNMode: plan.Transport.TURNMode,
+		PeerMode: plan.Transport.PeerMode,
+		BindIP:   append(net.IP(nil), plan.Transport.BindIP...),
 		Logger:   logger,
-	})
-
-	logger.Info("client session resolved provider credentials",
-		"turn_addr", turnAddr,
-		"peer", cfg.PeerAddr,
-		"listen", cfg.ListenAddr,
-	)
-
-	if err := runner.Run(ctx); err != nil {
-		if stage, ok := runstage.FromError(err); ok {
-			logger.Error("client session failed", "stage", stage, "err", err)
-		} else {
-			logger.Error("client session failed", "err", err)
-		}
-
+		Hooks: transport.ClientHooks{
+			OnTraffic: observer.RecordForward,
+		},
+	}, deps, plan, observer); err != nil {
 		return err
 	}
 
-	logger.Info("client session stopped")
+	observer.SetActiveWorkers(0)
+	observer.Emit(ctx, slog.LevelInfo, "runtime_stop",
+		"stage", "shutdown",
+		"result", "stopped",
+	)
 
 	return nil
+}
+
+func transportClosePacketConn(conn net.PacketConn) {
+	if conn == nil {
+		return
+	}
+
+	_ = conn.Close()
 }

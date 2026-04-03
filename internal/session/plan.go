@@ -4,10 +4,23 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/defin85/vk-turn-proxy-go/internal/config"
 	"github.com/defin85/vk-turn-proxy-go/internal/transport"
 )
+
+const (
+	defaultWorkerRestartBackoff = 200 * time.Millisecond
+	defaultMaxWorkerRestarts    = 1
+)
+
+type sessionPlan struct {
+	Connections       int
+	RestartBackoff    time.Duration
+	MaxWorkerRestarts int
+	Transport         transportPlan
+}
 
 type transportPlan struct {
 	Mode     config.TransportMode
@@ -16,16 +29,34 @@ type transportPlan struct {
 	BindIP   net.IP
 }
 
+func buildSessionPlan(cfg config.ClientConfig, deps Dependencies) (sessionPlan, error) {
+	transportPlan, err := buildTransportPlan(cfg)
+	if err != nil {
+		return sessionPlan{}, err
+	}
+
+	plan := sessionPlan{
+		Connections:       cfg.Connections,
+		RestartBackoff:    defaultWorkerRestartBackoff,
+		MaxWorkerRestarts: defaultMaxWorkerRestarts,
+		Transport:         transportPlan,
+	}
+	if deps.RestartBackoff > 0 {
+		plan.RestartBackoff = deps.RestartBackoff
+	}
+	if deps.MaxWorkerRestarts > 0 {
+		plan.MaxWorkerRestarts = deps.MaxWorkerRestarts
+	}
+
+	return plan, nil
+}
+
 func buildTransportPlan(cfg config.ClientConfig) (transportPlan, error) {
 	plan := transportPlan{
 		Mode: cfg.Mode,
 	}
 	if plan.Mode == config.TransportModeAuto {
 		plan.Mode = config.TransportModeUDP
-	}
-
-	if cfg.Connections != 1 {
-		return transportPlan{}, fmt.Errorf("unsupported transport policy: connections=%d", cfg.Connections)
 	}
 
 	switch plan.Mode {

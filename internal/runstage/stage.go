@@ -8,14 +8,15 @@ import (
 type Stage string
 
 const (
-	PolicyValidate  Stage = "policy_validate"
-	ProviderResolve Stage = "provider_resolve"
-	LocalBind       Stage = "local_bind"
-	TURNDial        Stage = "turn_dial"
-	TURNAllocate    Stage = "turn_allocate"
-	PeerSetup       Stage = "peer_setup"
-	DTLSHandshake   Stage = "dtls_handshake"
-	ForwardingLoop  Stage = "forwarding_loop"
+	PolicyValidate   Stage = "policy_validate"
+	ProviderResolve  Stage = "provider_resolve"
+	SessionSupervise Stage = "session_supervision"
+	LocalBind        Stage = "local_bind"
+	TURNDial         Stage = "turn_dial"
+	TURNAllocate     Stage = "turn_allocate"
+	PeerSetup        Stage = "peer_setup"
+	DTLSHandshake    Stage = "dtls_handshake"
+	ForwardingLoop   Stage = "forwarding_loop"
 )
 
 type Error struct {

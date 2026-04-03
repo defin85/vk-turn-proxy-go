@@ -14,11 +14,14 @@ import (
 	"github.com/pion/dtls/v3/pkg/crypto/selfsign"
 
 	"github.com/defin85/vk-turn-proxy-go/internal/config"
+	"github.com/defin85/vk-turn-proxy-go/internal/observe"
 )
 
 type Server struct {
-	cfg    config.ServerConfig
-	logger *slog.Logger
+	cfg       config.ServerConfig
+	logger    *slog.Logger
+	metrics   *observe.Metrics
+	sessionID string
 }
 
 func New(cfg config.ServerConfig, logger *slog.Logger) (*Server, error) {
@@ -30,14 +33,29 @@ func New(cfg config.ServerConfig, logger *slog.Logger) (*Server, error) {
 	}
 
 	return &Server{
-		cfg:    cfg,
-		logger: logger,
+		cfg:       cfg,
+		logger:    logger,
+		sessionID: observe.NewSessionID(),
 	}, nil
+}
+
+func (s *Server) SetMetrics(metrics *observe.Metrics) {
+	if s == nil {
+		return
+	}
+
+	s.metrics = metrics
 }
 
 func (s *Server) Run(ctx context.Context) error {
 	listener, err := s.Listen()
 	if err != nil {
+		s.observer().RecordSessionFailure("listen", true)
+		s.observer().Emit(ctx, slog.LevelError, "runtime_failure",
+			"stage", "listen",
+			"result", "failed",
+			"error", err,
+		)
 		return err
 	}
 
@@ -69,6 +87,7 @@ func (s *Server) Listen() (net.Listener, error) {
 }
 
 func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
+	observer := s.observer()
 	defer func() {
 		if err := listener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
 			s.logger.Warn("close listener", "err", err)
@@ -81,7 +100,18 @@ func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
 		}
 	})
 
+	observer.RecordSessionStart()
+	observer.Emit(ctx, slog.LevelInfo, "runtime_startup",
+		"stage", "listen",
+		"result", "succeeded",
+		"listen", listener.Addr().String(),
+		"upstream", s.cfg.UpstreamAddr,
+	)
 	s.logger.Info("server listening", "listen", listener.Addr().String(), "upstream", s.cfg.UpstreamAddr)
+	defer observer.Emit(ctx, slog.LevelInfo, "runtime_stop",
+		"stage", "shutdown",
+		"result", "stopped",
+	)
 
 	var wg sync.WaitGroup
 	defer wg.Wait()
@@ -96,6 +126,11 @@ func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
 				return nil
 			}
 
+			observer.Emit(ctx, slog.LevelError, "connection_accept_failure",
+				"stage", "accept",
+				"result", "failed",
+				"error", acceptErr,
+			)
 			s.logger.Error("accept connection", "err", acceptErr)
 			continue
 		}
@@ -109,6 +144,7 @@ func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
 }
 
 func (s *Server) handleConnection(parent context.Context, conn net.Conn) {
+	observer := s.observer()
 	defer func() {
 		if closeErr := conn.Close(); closeErr != nil {
 			s.logger.Warn("close incoming connection", "err", closeErr)
@@ -117,23 +153,44 @@ func (s *Server) handleConnection(parent context.Context, conn net.Conn) {
 
 	dtlsConn, ok := conn.(*dtls.Conn)
 	if !ok {
+		observer.Emit(parent, slog.LevelError, "connection_failure",
+			"stage", "accept",
+			"result", "failed",
+		)
 		s.logger.Error("unexpected incoming connection type")
 		return
 	}
 
 	remoteAddr := conn.RemoteAddr().String()
+	observer.Emit(parent, slog.LevelInfo, "connection_accepted",
+		"stage", "accept",
+		"result", "accepted",
+		"remote", remoteAddr,
+	)
 	s.logger.Info("accepted connection", "remote", remoteAddr)
 
 	handshakeCtx, cancelHandshake := context.WithTimeout(parent, s.cfg.HandshakeTimeout)
 	defer cancelHandshake()
 
 	if err := dtlsConn.HandshakeContext(handshakeCtx); err != nil {
+		observer.Emit(parent, slog.LevelError, "connection_failure",
+			"stage", "dtls_handshake",
+			"result", "failed",
+			"remote", remoteAddr,
+			"error", err,
+		)
 		s.logger.Error("dtls handshake failed", "remote", remoteAddr, "err", err)
 		return
 	}
 
 	upstreamConn, err := net.Dial("udp", s.cfg.UpstreamAddr)
 	if err != nil {
+		observer.Emit(parent, slog.LevelError, "connection_failure",
+			"stage", "upstream_dial",
+			"result", "failed",
+			"remote", remoteAddr,
+			"error", err,
+		)
 		s.logger.Error("dial upstream", "remote", remoteAddr, "err", err)
 		return
 	}
@@ -143,6 +200,11 @@ func (s *Server) handleConnection(parent context.Context, conn net.Conn) {
 		}
 	}()
 
+	observer.Emit(parent, slog.LevelInfo, "connection_ready",
+		"stage", "dtls_handshake",
+		"result", "succeeded",
+		"remote", remoteAddr,
+	)
 	s.logger.Info("dtls handshake complete", "remote", remoteAddr)
 
 	sessionCtx, cancelSession := context.WithCancel(parent)
@@ -163,21 +225,27 @@ func (s *Server) handleConnection(parent context.Context, conn net.Conn) {
 	go func() {
 		defer wg.Done()
 		defer cancelSession()
-		s.pipeConn(sessionCtx, conn, upstreamConn, remoteAddr, "client->upstream")
+		s.pipeConn(sessionCtx, conn, upstreamConn, remoteAddr, "client_to_upstream")
 	}()
 
 	go func() {
 		defer wg.Done()
 		defer cancelSession()
-		s.pipeConn(sessionCtx, upstreamConn, conn, remoteAddr, "upstream->client")
+		s.pipeConn(sessionCtx, upstreamConn, conn, remoteAddr, "upstream_to_client")
 	}()
 
 	wg.Wait()
+	observer.Emit(parent, slog.LevelInfo, "connection_closed",
+		"stage", "shutdown",
+		"result", "stopped",
+		"remote", remoteAddr,
+	)
 	s.logger.Info("connection closed", "remote", remoteAddr)
 }
 
 func (s *Server) pipeConn(ctx context.Context, src net.Conn, dst net.Conn, remoteAddr string, direction string) {
 	buffer := make([]byte, 1600)
+	observer := s.observer()
 
 	for {
 		if ctx.Err() != nil {
@@ -208,5 +276,14 @@ func (s *Server) pipeConn(ctx context.Context, src net.Conn, dst net.Conn, remot
 			}
 			return
 		}
+		observer.RecordForward(direction, n)
 	}
+}
+
+func (s *Server) observer() *observe.Observer {
+	return observe.NewObserver(observe.RuntimeServer, s.logger, s.metrics, observe.Metadata{
+		SessionID: s.sessionID,
+		Provider:  "none",
+		PeerMode:  "dtls",
+	})
 }

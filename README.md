@@ -17,7 +17,7 @@ Phase 0 is complete in this repository:
 Phase 1 is next:
 - port the legacy client behavior behind provider and transport boundaries
 - add compatibility tests against the legacy Go implementation
-- add structured traces and metrics
+- add runtime observability
 
 ## Repository layout
 
@@ -104,21 +104,31 @@ The probe remains provider-only by design:
 
 Use the persisted artifact together with the fixture contract in `test/compatibility/vk/` before porting broader legacy client behavior into transport/session code.
 
-`cmd/tunnel-client` now runs the supported one-session client runtime matrix after provider resolution.
+`cmd/tunnel-client` now runs the supported supervised client runtime matrix after provider resolution.
 Supported startup policy for this slice:
-- `connections=1`
+- `connections >= 1` through supervised transport workers sharing one local UDP listener
 - local listener stays UDP
 - `dtls=true|false`
 - `mode=auto|udp|tcp` where `auto` normalizes to the provider-default UDP TURN path
 - empty `bind-interface` or a literal local IP for outbound TURN setup
-- one active local UDP peer per session for reply routing
+- round-robin local datagram dispatch across ready workers
+- "most recent local sender" reply routing within each worker; stable multi-peer routing across a supervised session is still not claimed
 
 Rejected combinations fail closed before provider resolution:
-- `connections != 1`
 - non-IP `bind-interface` values such as interface names
 
-When startup fails after policy validation, the command reports a stage-aware error such as `provider_resolve`, `turn_dial`, `turn_allocate`, `peer_setup`, or `dtls_handshake`.
+Lifecycle policy for supervised sessions:
+- worker startup failures before readiness fail the session with the worker's transport stage
+- runtime worker failures after readiness are restarted with deterministic backoff
+- restart-budget exhaustion fails the session with `session_supervision`
+
+When startup fails after policy validation, the command reports a stage-aware error such as `provider_resolve`, `turn_dial`, `turn_allocate`, `peer_setup`, `dtls_handshake`, or `session_supervision`.
 `-turn` and `-port` overrides remain supported and are applied after provider credential resolution.
+
+Client and server runtimes now expose an optional Prometheus-style metrics surface through `-metrics-listen <addr>`.
+The first metric set covers session starts, session failures, startup-stage failures, active workers, and forwarded packets/bytes.
+Structured runtime events use stable fields such as `event`, `runtime`, `session_id`, `provider`, `turn_mode`, `peer_mode`, `stage`, and `result`.
+The observability contract and operator workflow are documented in `docs/runtime-observability.md`.
 
 ## TURN lab harness
 

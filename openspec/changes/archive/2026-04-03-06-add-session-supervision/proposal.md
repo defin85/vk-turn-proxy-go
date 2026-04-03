@@ -15,5 +15,5 @@ The rewrite needs explicit session supervision so transport workers, shutdown, a
 ## Impact
 
 - Affected specs: `session-supervision`
-- Related specs: `tunnel-client-runtime`, `transport-policy-matrix`
+- Related specs: `tunnel-client-runtime`
 - Affected code: `internal/session`, `internal/transport`, `cmd/tunnel-client`, lifecycle tests

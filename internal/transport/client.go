@@ -2,12 +2,9 @@ package transport
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net"
-	"sync"
-	"time"
 
 	"github.com/pion/turn/v4"
 
@@ -32,12 +29,14 @@ func (r *clientRunner) Run(ctx context.Context) error {
 		logger = slog.Default()
 	}
 
-	localConn, err := net.ListenPacket("udp", r.cfg.ListenAddr)
+	localConn, ownLocal, err := r.openLocalConn()
 	if err != nil {
-		return runstage.Wrap(runstage.LocalBind, fmt.Errorf("bind local listener: %w", err))
+		return err
 	}
-	defer closePacketConn(localConn)
-	if r.cfg.Hooks.OnLocalBind != nil {
+	if ownLocal {
+		defer closePacketConn(localConn)
+	}
+	if localConn != nil && r.cfg.Hooks.OnLocalBind != nil {
 		r.cfg.Hooks.OnLocalBind(cloneAddr(localConn.LocalAddr()))
 	}
 
@@ -81,8 +80,13 @@ func (r *clientRunner) Run(ctx context.Context) error {
 	}
 	defer closeConn(peerConn)
 
+	listenAddr := r.cfg.ListenAddr
+	if localConn != nil {
+		listenAddr = localConn.LocalAddr().String()
+	}
+
 	logger.Info("client transport connected",
-		"listen", localConn.LocalAddr().String(),
+		"listen", listenAddr,
 		"turn_addr", r.cfg.TURN.Address,
 		"turn_mode", r.cfg.TURNMode,
 		"relay_mode", r.cfg.PeerMode,
@@ -90,165 +94,38 @@ func (r *clientRunner) Run(ctx context.Context) error {
 		"peer", peerAddr,
 	)
 
-	if err := runForwarders(ctx, localConn, peerConn, logger); err != nil {
+	if r.cfg.Hooks.OnReady != nil {
+		r.cfg.Hooks.OnReady()
+	}
+
+	if err := r.runForwarders(ctx, localConn, peerConn, logger, ownLocal); err != nil {
 		return runstage.Wrap(runstage.ForwardingLoop, err)
 	}
 
 	return nil
 }
 
-func runForwarders(ctx context.Context, localConn net.PacketConn, relayConn net.Conn, logger *slog.Logger) error {
-	loopCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	stopCancel := context.AfterFunc(loopCtx, func() {
-		now := time.Now()
-		_ = localConn.SetDeadline(now)
-		_ = relayConn.SetDeadline(now)
-	})
-	defer stopCancel()
-
-	replyTarget := &lastLocalPeer{}
-	errCh := make(chan error, 2)
-
-	go func() {
-		errCh <- localToRelay(loopCtx, localConn, relayConn, replyTarget)
-	}()
-	go func() {
-		errCh <- relayToLocal(loopCtx, relayConn, localConn, replyTarget, logger)
-	}()
-
-	var errs []error
-	for i := 0; i < 2; i++ {
-		err := <-errCh
-		if err != nil {
-			errs = append(errs, err)
-			cancel()
-		}
-	}
-
-	if ctx.Err() != nil {
-		return nil
-	}
-
-	return errors.Join(errs...)
-}
-
-func localToRelay(ctx context.Context, localConn net.PacketConn, relayConn net.Conn, target *lastLocalPeer) error {
-	buf := make([]byte, 1600)
-
-	for {
-		n, addr, err := localConn.ReadFrom(buf)
-		if err != nil {
-			if ctx.Err() != nil {
-				return nil
-			}
-
-			return fmt.Errorf("read local datagram: %w", err)
+func (r *clientRunner) openLocalConn() (net.PacketConn, bool, error) {
+	if r.cfg.Outbound != nil || r.cfg.Inbound != nil {
+		if r.cfg.Outbound == nil || r.cfg.Inbound == nil {
+			return nil, false, fmt.Errorf("supervised worker transport requires both outbound and inbound hooks")
 		}
 
-		target.Store(addr)
-		if _, err := relayConn.Write(buf[:n]); err != nil {
-			if ctx.Err() != nil {
-				return nil
-			}
-
-			return fmt.Errorf("write relay datagram: %w", err)
-		}
+		return nil, false, nil
 	}
+
+	localConn, err := net.ListenPacket("udp", r.cfg.ListenAddr)
+	if err != nil {
+		return nil, false, runstage.Wrap(runstage.LocalBind, fmt.Errorf("bind local listener: %w", err))
+	}
+
+	return localConn, true, nil
 }
 
-func relayToLocal(ctx context.Context, relayConn net.Conn, localConn net.PacketConn, target *lastLocalPeer, logger *slog.Logger) error {
-	buf := make([]byte, 1600)
-
-	for {
-		n, err := relayConn.Read(buf)
-		if err != nil {
-			if ctx.Err() != nil {
-				return nil
-			}
-
-			return fmt.Errorf("read relay datagram: %w", err)
-		}
-
-		addr, ok := target.Load()
-		if !ok {
-			logger.Debug("dropping relay datagram without known local peer")
-			continue
-		}
-
-		if _, err := localConn.WriteTo(buf[:n], addr); err != nil {
-			if ctx.Err() != nil {
-				return nil
-			}
-
-			return fmt.Errorf("write local datagram: %w", err)
-		}
-	}
-}
-
-type lastLocalPeer struct {
-	mu   sync.RWMutex
-	addr net.Addr
-}
-
-func (p *lastLocalPeer) Store(addr net.Addr) {
-	if p == nil || addr == nil {
-		return
+func (r *clientRunner) runForwarders(ctx context.Context, localConn net.PacketConn, relayConn net.Conn, logger *slog.Logger, ownLocal bool) error {
+	if r.cfg.Outbound != nil || r.cfg.Inbound != nil {
+		return runChannelForwarders(ctx, r.cfg.Outbound, r.cfg.Inbound, relayConn, logger, r.cfg.Hooks.OnTraffic)
 	}
 
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.addr = cloneAddr(addr)
-}
-
-func (p *lastLocalPeer) Load() (net.Addr, bool) {
-	if p == nil {
-		return nil, false
-	}
-
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	if p.addr == nil {
-		return nil, false
-	}
-
-	return cloneAddr(p.addr), true
-}
-
-func cloneAddr(addr net.Addr) net.Addr {
-	switch value := addr.(type) {
-	case *net.UDPAddr:
-		if value == nil {
-			return nil
-		}
-
-		cloned := *value
-		cloned.IP = append(net.IP(nil), value.IP...)
-		return &cloned
-	case *net.TCPAddr:
-		if value == nil {
-			return nil
-		}
-
-		cloned := *value
-		cloned.IP = append(net.IP(nil), value.IP...)
-		return &cloned
-	default:
-		return addr
-	}
-}
-
-func closePacketConn(conn net.PacketConn) {
-	if conn == nil {
-		return
-	}
-	_ = conn.Close()
-}
-
-func closeConn(conn net.Conn) {
-	if conn == nil {
-		return
-	}
-	_ = conn.Close()
+	return runPacketConnForwarders(ctx, localConn, relayConn, logger, ownLocal, r.cfg.Hooks.OnTraffic)
 }

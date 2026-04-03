@@ -10,9 +10,11 @@ import (
 	"time"
 
 	"github.com/defin85/vk-turn-proxy-go/internal/config"
+	"github.com/defin85/vk-turn-proxy-go/internal/observe"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider/genericturn"
 	"github.com/defin85/vk-turn-proxy-go/internal/runstage"
+	"github.com/defin85/vk-turn-proxy-go/internal/transport"
 	"github.com/defin85/vk-turn-proxy-go/test/turnlab"
 )
 
@@ -59,6 +61,207 @@ func TestRunRelayRoundTrip(t *testing.T) {
 
 	payload := []byte("session-round-trip")
 	mustEchoEventually(t, clientConn, payload)
+
+	cancelSession()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("Run() error = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("session did not stop after cancellation")
+	}
+}
+
+func TestRunSupervisedRelayRoundTrip(t *testing.T) {
+	harnessCtx, cancelHarness := context.WithCancel(context.Background())
+	harness, err := turnlab.Start(harnessCtx, testLogger())
+	if err != nil {
+		t.Fatalf("start harness: %v", err)
+	}
+	t.Cleanup(func() {
+		cancelHarness()
+		if err := harness.Close(); err != nil {
+			t.Errorf("close harness: %v", err)
+		}
+	})
+
+	sessionCtx, cancelSession := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	listenAddr := reserveUDPAddr(t)
+	go func() {
+		errCh <- Run(sessionCtx, config.ClientConfig{
+			Provider:    "generic-turn",
+			Link:        harness.GenericTurnLink(),
+			ListenAddr:  listenAddr,
+			PeerAddr:    harness.Descriptor.PeerAddress,
+			Connections: 2,
+			Mode:        config.TransportModeAuto,
+			UseDTLS:     true,
+		}, Dependencies{
+			Registry:  provider.NewRegistry(genericturn.New()),
+			Logger:    testLogger(),
+			SessionID: NewID(),
+		})
+	}()
+
+	clientConn, err := net.Dial("udp", listenAddr)
+	if err != nil {
+		cancelSession()
+		t.Fatalf("dial local client addr: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = clientConn.Close()
+	})
+
+	for _, payload := range [][]byte{
+		[]byte("session-supervision-round-trip-1"),
+		[]byte("session-supervision-round-trip-2"),
+		[]byte("session-supervision-round-trip-3"),
+	} {
+		mustEchoEventually(t, clientConn, payload)
+	}
+
+	cancelSession()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("Run() error = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("session did not stop after cancellation")
+	}
+}
+
+func TestRunRelayRoundTripUpdatesForwardingMetrics(t *testing.T) {
+	harnessCtx, cancelHarness := context.WithCancel(context.Background())
+	harness, err := turnlab.Start(harnessCtx, testLogger())
+	if err != nil {
+		t.Fatalf("start harness: %v", err)
+	}
+	t.Cleanup(func() {
+		cancelHarness()
+		if err := harness.Close(); err != nil {
+			t.Errorf("close harness: %v", err)
+		}
+	})
+
+	metrics := observe.NewMetrics()
+	sessionCtx, cancelSession := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	listenAddr := reserveUDPAddr(t)
+	go func() {
+		errCh <- Run(sessionCtx, config.ClientConfig{
+			Provider:    "generic-turn",
+			Link:        harness.GenericTurnLink(),
+			ListenAddr:  listenAddr,
+			PeerAddr:    harness.Descriptor.PeerAddress,
+			Connections: 1,
+			Mode:        config.TransportModeAuto,
+			UseDTLS:     true,
+		}, Dependencies{
+			Registry:  provider.NewRegistry(genericturn.New()),
+			Logger:    testLogger(),
+			Metrics:   metrics,
+			SessionID: NewID(),
+		})
+	}()
+
+	clientConn, err := net.Dial("udp", listenAddr)
+	if err != nil {
+		cancelSession()
+		t.Fatalf("dial local client addr: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = clientConn.Close()
+	})
+
+	mustEchoEventually(t, clientConn, []byte("metric-round-trip"))
+
+	cancelSession()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("Run() error = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("session did not stop after cancellation")
+	}
+
+	text := metrics.Prometheus()
+	for _, expected := range []string{
+		`vk_turn_proxy_runtime_forwarded_packets_total{direction="local_to_relay",provider="generic-turn",runtime="client"} 1`,
+		`vk_turn_proxy_runtime_forwarded_packets_total{direction="relay_to_local",provider="generic-turn",runtime="client"} 1`,
+	} {
+		if !strings.Contains(text, expected) {
+			t.Fatalf("metrics output missing %q:\n%s", expected, text)
+		}
+	}
+}
+
+func TestRunRestartsRealTransportWorkerAfterRuntimeFailure(t *testing.T) {
+	harnessCtx, cancelHarness := context.WithCancel(context.Background())
+	harness, err := turnlab.Start(harnessCtx, testLogger())
+	if err != nil {
+		t.Fatalf("start harness: %v", err)
+	}
+	t.Cleanup(func() {
+		cancelHarness()
+		if err := harness.Close(); err != nil {
+			t.Errorf("close harness: %v", err)
+		}
+	})
+
+	restartProbe := newTransportRestartProbe()
+	sessionCtx, cancelSession := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	listenAddr := reserveUDPAddr(t)
+	go func() {
+		errCh <- Run(sessionCtx, config.ClientConfig{
+			Provider:    "generic-turn",
+			Link:        harness.GenericTurnLink(),
+			ListenAddr:  listenAddr,
+			PeerAddr:    harness.Descriptor.PeerAddress,
+			Connections: 1,
+			Mode:        config.TransportModeAuto,
+			UseDTLS:     true,
+		}, Dependencies{
+			Registry:          provider.NewRegistry(genericturn.New()),
+			Logger:            testLogger(),
+			NewRunner:         restartProbe.RunnerFactory(),
+			RestartBackoff:    10 * time.Millisecond,
+			MaxWorkerRestarts: 1,
+			SessionID:         NewID(),
+		})
+	}()
+
+	clientConn, err := net.Dial("udp", listenAddr)
+	if err != nil {
+		cancelSession()
+		t.Fatalf("dial local client addr: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = clientConn.Close()
+	})
+
+	restartProbe.mustWaitReady(t, 0)
+	if _, err := clientConn.Write([]byte("restart-trigger")); err != nil {
+		cancelSession()
+		t.Fatalf("write restart trigger: %v", err)
+	}
+	restartProbe.mustWaitReady(t, 1)
+	drainConn(t, clientConn, 200*time.Millisecond)
+
+	mustEchoEventually(t, clientConn, []byte("post-restart-round-trip"))
+
+	if restartProbe.turnBaseCount() < 2 {
+		cancelSession()
+		t.Fatalf("turn base bind count = %d, want >= 2", restartProbe.turnBaseCount())
+	}
+	if restartProbe.relayCount() < 2 {
+		cancelSession()
+		t.Fatalf("relay allocation count = %d, want >= 2", restartProbe.relayCount())
+	}
 
 	cancelSession()
 	select {
@@ -215,7 +418,6 @@ func TestRunFailsOnBadTURNCredentials(t *testing.T) {
 		t.Fatalf("unexpected stage: %v", err)
 	}
 	mustRebindPacket(t, listenAddr)
-	mustRebindAddr(t, recorder.Local())
 	mustRebindAddr(t, recorder.TURNBase())
 }
 
@@ -266,26 +468,14 @@ func TestRunFailsOnBadDTLSPeer(t *testing.T) {
 		t.Fatalf("unexpected stage: %v", err)
 	}
 	mustRebindPacket(t, listenAddr)
-	mustRebindAddr(t, recorder.Local())
 	mustRebindAddr(t, recorder.TURNBase())
 	mustRebindAddr(t, recorder.Relay())
 }
 
 type transportAddrRecorder struct {
 	mu       sync.Mutex
-	local    net.Addr
 	turnBase net.Addr
 	relay    net.Addr
-}
-
-func (r *transportAddrRecorder) setLocal(addr net.Addr) {
-	if addr == nil {
-		return
-	}
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.local = cloneTestAddr(addr)
 }
 
 func (r *transportAddrRecorder) setTURNBase(addr net.Addr) {
@@ -306,12 +496,6 @@ func (r *transportAddrRecorder) setRelay(addr net.Addr) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.relay = cloneTestAddr(addr)
-}
-
-func (r *transportAddrRecorder) Local() net.Addr {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return cloneTestAddr(r.local)
 }
 
 func (r *transportAddrRecorder) TURNBase() net.Addr {
@@ -502,4 +686,147 @@ func cloneTestAddr(addr net.Addr) net.Addr {
 	default:
 		return addr
 	}
+}
+
+type transportRestartProbe struct {
+	mu        sync.Mutex
+	attempts  map[int]int
+	readyCh   chan int
+	turnBases []net.Addr
+	relays    []net.Addr
+}
+
+func newTransportRestartProbe() *transportRestartProbe {
+	return &transportRestartProbe{
+		attempts: make(map[int]int),
+		readyCh:  make(chan int, 8),
+	}
+}
+
+func (p *transportRestartProbe) RunnerFactory() RunnerFactory {
+	return func(cfg transport.ClientConfig) transport.Runner {
+		attempt := p.nextAttempt(cfg.WorkerIndex)
+
+		previousReady := cfg.Hooks.OnReady
+		previousTURNBase := cfg.Hooks.OnTURNBaseBind
+		previousRelay := cfg.Hooks.OnRelayAllocate
+		cfg.Hooks.OnReady = func() {
+			if previousReady != nil {
+				previousReady()
+			}
+			select {
+			case p.readyCh <- attempt:
+			default:
+			}
+		}
+		cfg.Hooks.OnTURNBaseBind = func(addr net.Addr) {
+			if previousTURNBase != nil {
+				previousTURNBase(addr)
+			}
+			p.recordTURNBase(addr)
+		}
+		cfg.Hooks.OnRelayAllocate = func(addr net.Addr) {
+			if previousRelay != nil {
+				previousRelay(addr)
+			}
+			p.recordRelay(addr)
+		}
+
+		if cfg.WorkerIndex == 0 && attempt == 0 {
+			return failingTransportRunner{cfg: cfg}
+		}
+
+		return transport.NewClientRunner(cfg)
+	}
+}
+
+func (p *transportRestartProbe) nextAttempt(worker int) int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	attempt := p.attempts[worker]
+	p.attempts[worker] = attempt + 1
+	return attempt
+}
+
+func (p *transportRestartProbe) recordTURNBase(addr net.Addr) {
+	if addr == nil {
+		return
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.turnBases = append(p.turnBases, cloneTestAddr(addr))
+}
+
+func (p *transportRestartProbe) recordRelay(addr net.Addr) {
+	if addr == nil {
+		return
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.relays = append(p.relays, cloneTestAddr(addr))
+}
+
+func (p *transportRestartProbe) turnBaseCount() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.turnBases)
+}
+
+func (p *transportRestartProbe) relayCount() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.relays)
+}
+
+func (p *transportRestartProbe) mustWaitReady(t *testing.T, wantAttempt int) {
+	t.Helper()
+
+	select {
+	case got := <-p.readyCh:
+		if got != wantAttempt {
+			t.Fatalf("worker ready attempt = %d, want %d", got, wantAttempt)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("timed out waiting for ready attempt %d", wantAttempt)
+	}
+}
+
+type failingTransportRunner struct {
+	cfg transport.ClientConfig
+}
+
+func (r failingTransportRunner) Run(ctx context.Context) error {
+	if r.cfg.Outbound == nil {
+		return transport.NewClientRunner(r.cfg).Run(ctx)
+	}
+
+	proxyOutbound := make(chan transport.RelayPacket, 1)
+	cfg := r.cfg
+	cfg.Outbound = proxyOutbound
+
+	go func() {
+		defer close(proxyOutbound)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case packet, ok := <-r.cfg.Outbound:
+				if !ok {
+					return
+				}
+				select {
+				case proxyOutbound <- packet:
+				case <-ctx.Done():
+					return
+				}
+
+				return
+			}
+		}
+	}()
+
+	return transport.NewClientRunner(cfg).Run(ctx)
 }

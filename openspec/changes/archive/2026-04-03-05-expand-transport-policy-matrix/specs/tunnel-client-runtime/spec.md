@@ -1,6 +1,6 @@
 ## MODIFIED Requirements
 
-### Requirement: Tunnel client validates the supported transport policy matrix before provider resolution
+### Requirement: Tunnel client validates the first-slice policy before provider resolution
 
 The system SHALL validate the documented supported one-session client transport policy matrix before resolving provider credentials or starting transport resources.
 
@@ -20,7 +20,7 @@ The system SHALL validate the documented supported one-session client transport 
 - **AND** it does not resolve provider credentials
 - **AND** it does not bind the local listener or open TURN transport resources
 
-### Requirement: Tunnel client starts the provider-backed transport path for the accepted policy
+### Requirement: Tunnel client starts a provider-backed session
 
 The system SHALL start the provider-backed transport path that corresponds to the accepted one-session client transport policy.
 
@@ -50,7 +50,7 @@ The system SHALL start the provider-backed transport path that corresponds to th
 - **AND** forwards plain datagrams between that relay allocation and the configured UDP peer
 - **AND** it does not initiate a DTLS handshake
 
-### Requirement: Tunnel client forwards UDP traffic through the accepted relay path
+### Requirement: Tunnel client forwards UDP traffic through the relay path
 
 The system SHALL forward datagrams between the local UDP listener and the configured UDP peer through the established relay path for the accepted client policy.
 
@@ -62,9 +62,23 @@ The system SHALL forward datagrams between the local UDP listener and the config
 - **AND** datagrams received back from the peer are emitted to the most recently observed local UDP source address for that session
 - **AND** provider-specific signaling state is not mixed into the forwarding logic
 
-### Requirement: Tunnel client honors supported outbound bind targets
+#### Scenario: Reply target switches to the most recent local sender
 
-The system SHALL apply the supported outbound bind target to TURN transport setup without changing provider resolution or local UDP listen semantics.
+- **GIVEN** an established client session and two local applications sending datagrams from different UDP source addresses
+- **WHEN** the second application becomes the most recent sender to the client listen address
+- **THEN** subsequent datagrams received from the peer are emitted to the second application's source address
+- **AND** the accepted one-session policy does not claim multi-peer session demultiplexing
+
+### Requirement: Tunnel client honors TURN endpoint overrides
+
+The system SHALL honor operator-supplied TURN endpoint overrides and supported outbound bind targets while still using provider-resolved credentials.
+
+#### Scenario: Override TURN host and port
+
+- **GIVEN** provider-resolved credentials and operator-supplied `-turn` and/or `-port` flags
+- **WHEN** the client starts a supported session
+- **THEN** it uses the overridden TURN endpoint with the provider-resolved username and password
+- **AND** it does not re-enter provider signaling to derive replacement credentials
 
 #### Scenario: Supported literal local IP bind target
 
@@ -83,6 +97,13 @@ The system SHALL apply the supported outbound bind target to TURN transport setu
 ### Requirement: Tunnel client surfaces stage-aware startup failures
 
 The system SHALL surface provider and transport startup failures explicitly with stage-aware errors for the accepted transport path.
+
+#### Scenario: Provider resolution failure
+
+- **GIVEN** a supported one-session client policy and invalid provider input
+- **WHEN** the operator starts `cmd/tunnel-client`
+- **THEN** the system exits non-zero with an error that identifies `provider_resolve` as the failing stage
+- **AND** it does not bind the local listener or open TURN transport resources
 
 #### Scenario: Transport-stage startup failure
 

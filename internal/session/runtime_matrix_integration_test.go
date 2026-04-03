@@ -178,7 +178,6 @@ func TestRunFailsOnInvalidPeerAddress(t *testing.T) {
 		t.Fatalf("unexpected stage: %v", err)
 	}
 	mustRebindPacket(t, listenAddr)
-	mustRebindAddr(t, recorder.Local())
 	mustRebindAddr(t, recorder.TURNBase())
 	mustRebindAddr(t, recorder.Relay())
 }
@@ -214,7 +213,6 @@ func TestRunFailsOnBadTURNCredentialsOverTCP(t *testing.T) {
 		t.Fatalf("unexpected stage: %v", err)
 	}
 	mustRebindPacket(t, listenAddr)
-	mustRebindAddr(t, recorder.Local())
 	waitCtx, waitCancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer waitCancel()
 	if err := harness.WaitNoActiveTURNTCPConns(waitCtx); err != nil {
@@ -260,7 +258,6 @@ func TestRunFailsOnBadDTLSPeerOverTCP(t *testing.T) {
 		t.Fatalf("unexpected stage: %v", err)
 	}
 	mustRebindPacket(t, listenAddr)
-	mustRebindAddr(t, recorder.Local())
 	mustRebindAddr(t, recorder.Relay())
 	waitCtx, waitCancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer waitCancel()
@@ -406,16 +403,19 @@ func addrIPString(addr net.Addr) string {
 
 func (r *transportAddrRecorder) RunnerFactory() RunnerFactory {
 	return func(cfg transport.ClientConfig) transport.Runner {
-		cfg.Hooks = transport.ClientHooks{
-			OnLocalBind: func(addr net.Addr) {
-				r.setLocal(addr)
-			},
-			OnTURNBaseBind: func(addr net.Addr) {
-				r.setTURNBase(addr)
-			},
-			OnRelayAllocate: func(addr net.Addr) {
-				r.setRelay(addr)
-			},
+		previousTURNBase := cfg.Hooks.OnTURNBaseBind
+		previousRelayAllocate := cfg.Hooks.OnRelayAllocate
+		cfg.Hooks.OnTURNBaseBind = func(addr net.Addr) {
+			if previousTURNBase != nil {
+				previousTURNBase(addr)
+			}
+			r.setTURNBase(addr)
+		}
+		cfg.Hooks.OnRelayAllocate = func(addr net.Addr) {
+			if previousRelayAllocate != nil {
+				previousRelayAllocate(addr)
+			}
+			r.setRelay(addr)
 		}
 
 		return transport.NewClientRunner(cfg)

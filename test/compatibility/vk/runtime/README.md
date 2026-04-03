@@ -5,7 +5,7 @@
 This contract covers the supported VK-backed client runtime slice after
 `05-expand-transport-policy-matrix`.
 
-It covers:
+It currently records replayable evidence for:
 
 - `connections=1`
 - `dtls=true|false`
@@ -16,8 +16,12 @@ It covers:
 It explicitly excludes:
 
 - non-IP `bind-interface` values such as interface names
-- multi-connection supervision
 - mobile rebinding and broader legacy parity claims
+
+The runtime now also supports supervised sessions with `connections > 1`, but
+that behavior is not yet anchored by committed VK replay assets in this
+directory. Treat multi-worker supervision as implemented runtime behavior with
+remaining provider-compatibility evidence work.
 
 ## Evidence layout
 
@@ -223,7 +227,7 @@ resources at test time.
 The rewrite currently does not claim compatibility for:
 
 - non-IP `bind-interface`
-- `connections > 1`
+- VK-backed evidence for `connections > 1`
 - multi-peer reply demultiplexing beyond the most recent local sender
 
 If a live VK run exposes any additional supported-slice deviation, record it in
