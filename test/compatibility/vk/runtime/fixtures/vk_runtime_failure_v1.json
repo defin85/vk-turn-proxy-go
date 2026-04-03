@@ -1,0 +1,49 @@
+{
+  "scenario_id": "vk_runtime_failure_v1",
+  "provider": "vk",
+  "kind": "runtime_failure",
+  "source": {
+    "kind": "fixture_replay",
+    "captured_at": "2026-04-03",
+    "legacy_reference": "test/compatibility/vk/fixtures/vk_call_debug_success_v1.json; /home/egor/code/vk-turn-proxy/client/main.go:getVkCreds,oneTurnConnection,oneDtlsConnection",
+    "rewrite_reference": "test/compatibility/vk/runtime/replay_test.go:TestRuntimeEvidenceReplay; cmd/tunnel-client/main.go:runClient"
+  },
+  "replay": {
+    "provider_fixture": "vk_call_debug_success_v1.json"
+  },
+  "slice": {
+    "connections": 1,
+    "dtls": true,
+    "mode": "udp",
+    "bind_interface": ""
+  },
+  "input": {
+    "invite_redacted": "https://vk.com/call/join/<redacted:vk-join-token>",
+    "peer_addr_redacted": "<runtime:plain-udp-peer>",
+    "turn_override": "<runtime:turnlab-host>",
+    "port_override": "<runtime:turnlab-port>"
+  },
+  "legacy": {
+    "result": "failure",
+    "exit_code": 1,
+    "error_stage": "",
+    "forwarding_round_trip": false,
+    "notes": [
+      "Provider resolution precondition is the same as vk_call_debug_success_v1; the failure trigger comes from the replay placeholder peer target, which materializes to a plain UDP socket instead of a DTLS peer.",
+      "The legacy runtime path fails the session with exit_code=1 when DTLS handshake cannot complete against that peer, but it does not expose a structured stage name for the error."
+    ]
+  },
+  "rewrite": {
+    "result": "failure",
+    "exit_code": 1,
+    "error_stage": "dtls_handshake",
+    "forwarding_round_trip": false,
+    "notes": [
+      "The rewrite failure path is replayed deterministically by TestRuntimeEvidenceReplay using provider=vk, fixture-driven staged HTTP resolution, a valid TURN allocation, and a plain UDP peer.",
+      "cmd/tunnel-client/main.go maps stage-wrapped runtime failures to exit code 1 and prints stage=dtls_handshake."
+    ]
+  },
+  "deviations": [
+    "Rewrite emits the structured stage dtls_handshake when the replay peer does not speak DTLS; the legacy client exposes only an untyped runtime failure for the same supported slice."
+  ]
+}

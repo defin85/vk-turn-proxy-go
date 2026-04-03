@@ -5,7 +5,7 @@
 
 ## 2. Evidence and verification
 
-- [ ] 2.1 Capture the first redacted acceptance assets for one success case and one runtime failure case.
+- [x] 2.1 Capture the first redacted acceptance assets for one success case and one runtime failure case.
 - [x] 2.2 Add compatibility checks or verification tooling that assert those expectations.
 
 ## 3. Handoff

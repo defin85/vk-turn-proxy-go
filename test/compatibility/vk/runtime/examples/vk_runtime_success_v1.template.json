@@ -8,6 +8,9 @@
     "legacy_reference": "<pending:legacy-commit-or-run-id>",
     "rewrite_reference": "<pending:rewrite-commit-or-run-id>"
   },
+  "replay": {
+    "provider_fixture": "vk_call_debug_success_v1.json"
+  },
   "slice": {
     "connections": 1,
     "dtls": true,
@@ -16,9 +19,9 @@
   },
   "input": {
     "invite_redacted": "https://vk.com/call/join/<redacted:vk-join-token>",
-    "peer_addr_redacted": "<redacted:peer-addr>",
-    "turn_override": "",
-    "port_override": ""
+    "peer_addr_redacted": "<runtime:turnlab-peer>",
+    "turn_override": "<runtime:turnlab-host>",
+    "port_override": "<runtime:turnlab-port>"
   },
   "legacy": {
     "result": "success",

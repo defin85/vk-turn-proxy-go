@@ -31,6 +31,10 @@ type TURNCredentials struct {
 	Realm    string
 }
 
+type Options struct {
+	AcceptedCredentials []TURNCredentials
+}
+
 type Descriptor struct {
 	TURNAddress     string
 	TURNCredentials TURNCredentials
@@ -61,6 +65,10 @@ type Harness struct {
 }
 
 func Start(parent context.Context, logger *slog.Logger) (*Harness, error) {
+	return StartWithOptions(parent, logger, Options{})
+}
+
+func StartWithOptions(parent context.Context, logger *slog.Logger, opts Options) (*Harness, error) {
 	if parent == nil {
 		parent = context.Background()
 	}
@@ -139,7 +147,7 @@ func Start(parent context.Context, logger *slog.Logger) (*Harness, error) {
 
 	turnServer, err := turn.NewServer(turn.ServerConfig{
 		Realm:       turnRealm,
-		AuthHandler: staticAuthHandler(),
+		AuthHandler: staticAuthHandler(opts.AcceptedCredentials),
 		PacketConnConfigs: []turn.PacketConnConfig{
 			{
 				PacketConn: turnConn,
@@ -233,14 +241,33 @@ func (h *Harness) InjectUpstream(payload []byte) error {
 	return h.upstream.Inject(payload)
 }
 
-func staticAuthHandler() func(string, string, net.Addr) ([]byte, bool) {
-	key := turn.GenerateAuthKey(turnUsername, turnRealm, turnPassword)
-
-	return func(username string, realm string, _ net.Addr) ([]byte, bool) {
-		if username != turnUsername || realm != turnRealm {
-			return nil, false
+func staticAuthHandler(extra []TURNCredentials) func(string, string, net.Addr) ([]byte, bool) {
+	keys := map[string][]byte{
+		authIdentity(turnUsername, turnRealm): turn.GenerateAuthKey(turnUsername, turnRealm, turnPassword),
+	}
+	for _, creds := range extra {
+		username := creds.Username
+		if username == "" {
+			continue
 		}
 
-		return key, true
+		realm := creds.Realm
+		if realm == "" {
+			realm = turnRealm
+		}
+		if creds.Password == "" {
+			continue
+		}
+
+		keys[authIdentity(username, realm)] = turn.GenerateAuthKey(username, realm, creds.Password)
 	}
+
+	return func(username string, realm string, _ net.Addr) ([]byte, bool) {
+		key, ok := keys[authIdentity(username, realm)]
+		return key, ok
+	}
+}
+
+func authIdentity(username string, realm string) string {
+	return username + "\x00" + realm
 }

@@ -9,6 +9,7 @@
     "provider",
     "kind",
     "source",
+    "replay",
     "slice",
     "input",
     "legacy",
@@ -55,6 +56,19 @@
           "minLength": 1
         },
         "rewrite_reference": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "replay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider_fixture"
+      ],
+      "properties": {
+        "provider_fixture": {
           "type": "string",
           "minLength": 1
         }

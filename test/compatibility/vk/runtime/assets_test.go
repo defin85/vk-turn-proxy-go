@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -13,6 +14,7 @@ type evidenceAsset struct {
 	Provider   string          `json:"provider"`
 	Kind       string          `json:"kind"`
 	Source     evidenceSource  `json:"source"`
+	Replay     evidenceReplay  `json:"replay"`
 	Slice      evidenceSlice   `json:"slice"`
 	Input      evidenceInput   `json:"input"`
 	Legacy     evidenceOutcome `json:"legacy"`
@@ -25,6 +27,10 @@ type evidenceSource struct {
 	CapturedAt       string `json:"captured_at"`
 	LegacyReference  string `json:"legacy_reference"`
 	RewriteReference string `json:"rewrite_reference"`
+}
+
+type evidenceReplay struct {
+	ProviderFixture string `json:"provider_fixture"`
 }
 
 type evidenceSlice struct {
@@ -49,6 +55,13 @@ type evidenceOutcome struct {
 	Notes               []string `json:"notes"`
 }
 
+const (
+	runtimePeerTurnlab  = "<runtime:turnlab-peer>"
+	runtimePeerPlainUDP = "<runtime:plain-udp-peer>"
+	runtimeTurnHost     = "<runtime:turnlab-host>"
+	runtimeTurnPort     = "<runtime:turnlab-port>"
+)
+
 func TestRuntimeEvidenceAssets(t *testing.T) {
 	root := "."
 	patterns := []string{
@@ -68,6 +81,11 @@ func TestRuntimeEvidenceAssets(t *testing.T) {
 		t.Fatal("expected at least example runtime evidence assets")
 	}
 
+	expectedFixtures := map[string]bool{
+		"vk_runtime_success_v1": false,
+		"vk_runtime_failure_v1": false,
+	}
+
 	for _, path := range files {
 		path := path
 		t.Run(filepath.Base(path), func(t *testing.T) {
@@ -81,16 +99,46 @@ func TestRuntimeEvidenceAssets(t *testing.T) {
 				t.Fatalf("decode asset: %v", err)
 			}
 
-			validateEvidenceAsset(t, path, asset)
+			kind := assetKindFromPath(t, path)
+			if kind == "fixture" {
+				if _, ok := expectedFixtures[asset.ScenarioID]; ok {
+					expectedFixtures[asset.ScenarioID] = true
+				}
+			}
+
+			validateEvidenceAsset(t, path, data, asset, kind)
 		})
+	}
+
+	for scenarioID, seen := range expectedFixtures {
+		if !seen {
+			t.Fatalf("missing runtime evidence fixture for %s", scenarioID)
+		}
 	}
 }
 
-func validateEvidenceAsset(t *testing.T, path string, asset evidenceAsset) {
+func assetKindFromPath(t *testing.T, path string) string {
+	t.Helper()
+
+	switch filepath.Base(filepath.Dir(path)) {
+	case "examples":
+		return "example"
+	case "fixtures":
+		return "fixture"
+	default:
+		t.Fatalf("%s: unsupported asset location", path)
+		return ""
+	}
+}
+
+func validateEvidenceAsset(t *testing.T, path string, raw []byte, asset evidenceAsset, kind string) {
 	t.Helper()
 
 	if asset.ScenarioID == "" {
 		t.Fatalf("%s: scenario_id is required", path)
+	}
+	if want := scenarioIDFromFilename(path, kind); asset.ScenarioID != want {
+		t.Fatalf("%s: scenario_id = %q, want %q from filename", path, asset.ScenarioID, want)
 	}
 	if asset.Provider != "vk" {
 		t.Fatalf("%s: provider = %q, want vk", path, asset.Provider)
@@ -106,8 +154,33 @@ func validateEvidenceAsset(t *testing.T, path string, asset evidenceAsset) {
 	default:
 		t.Fatalf("%s: unsupported source.kind %q", path, asset.Source.Kind)
 	}
+	switch kind {
+	case "example":
+		if asset.Source.Kind != "template" {
+			t.Fatalf("%s: example assets must use source.kind=template", path)
+		}
+		if !strings.Contains(string(raw), "<pending:") {
+			t.Fatalf("%s: example asset must retain pending placeholders", path)
+		}
+	case "fixture":
+		if asset.Source.Kind == "template" {
+			t.Fatalf("%s: fixture assets must not use source.kind=template", path)
+		}
+		if strings.Contains(string(raw), "<pending:") {
+			t.Fatalf("%s: fixture asset must not contain pending placeholders", path)
+		}
+	default:
+		t.Fatalf("%s: unsupported validation kind %q", path, kind)
+	}
 	if asset.Source.CapturedAt == "" || asset.Source.LegacyReference == "" || asset.Source.RewriteReference == "" {
 		t.Fatalf("%s: source fields must be populated", path)
+	}
+	if strings.TrimSpace(asset.Replay.ProviderFixture) == "" {
+		t.Fatalf("%s: replay.provider_fixture is required", path)
+	}
+	validateReplayFixtureReference(t, path, asset.Replay.ProviderFixture)
+	if kind == "fixture" || asset.Source.Kind == "fixture_replay" {
+		validateReplayableInputs(t, path, asset.Input)
 	}
 
 	if asset.Slice.Connections != 1 || !asset.Slice.DTLS {
@@ -142,6 +215,15 @@ func validateEvidenceAsset(t *testing.T, path string, asset evidenceAsset) {
 	}
 }
 
+func scenarioIDFromFilename(path string, kind string) string {
+	base := filepath.Base(path)
+	if kind == "example" {
+		return strings.TrimSuffix(base, ".template.json")
+	}
+
+	return strings.TrimSuffix(base, ".json")
+}
+
 func validateOutcome(t *testing.T, path string, label string, outcome evidenceOutcome) {
 	t.Helper()
 
@@ -155,5 +237,38 @@ func validateOutcome(t *testing.T, path string, label string, outcome evidenceOu
 	}
 	if len(outcome.Notes) == 0 {
 		t.Fatalf("%s: %s.notes must contain at least one entry", path, label)
+	}
+	if slices.Contains(outcome.Notes, "") {
+		t.Fatalf("%s: %s.notes must not contain empty entries", path, label)
+	}
+}
+
+func validateReplayFixtureReference(t *testing.T, path string, name string) {
+	t.Helper()
+
+	if filepath.Ext(name) != ".json" {
+		t.Fatalf("%s: replay.provider_fixture must point to a .json file, got %q", path, name)
+	}
+
+	fixturePath := filepath.Join("..", "fixtures", name)
+	if _, err := os.Stat(fixturePath); err != nil {
+		t.Fatalf("%s: replay.provider_fixture %q is not available: %v", path, name, err)
+	}
+}
+
+func validateReplayableInputs(t *testing.T, path string, input evidenceInput) {
+	t.Helper()
+
+	switch input.PeerAddrRedacted {
+	case runtimePeerTurnlab, runtimePeerPlainUDP:
+	default:
+		t.Fatalf("%s: unsupported replay peer placeholder %q", path, input.PeerAddrRedacted)
+	}
+
+	if input.TURNOverride != runtimeTurnHost {
+		t.Fatalf("%s: unsupported replay turn_override %q", path, input.TURNOverride)
+	}
+	if input.PortOverride != runtimeTurnPort {
+		t.Fatalf("%s: unsupported replay port_override %q", path, input.PortOverride)
 	}
 }

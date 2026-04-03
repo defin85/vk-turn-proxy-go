@@ -7,13 +7,14 @@ Those policies need their own change because they materially alter startup wirin
 
 ## What Changes
 
-- Extend the client runtime beyond the first-slice defaults to support additional transport policy combinations.
-- Support explicit `mode=tcp|udp|auto`, explicit `dtls=true|false`, and interface pinning where declared by config.
-- Replace first-slice unsupported-config rejections with real behavior for the newly supported combinations.
-- Add tests and docs that define the supported matrix precisely.
+- Modify the canonical `tunnel-client-runtime` contract to expand the supported one-session transport policy matrix beyond the first slice.
+- Support explicit TURN transport selection `mode=udp|tcp|auto`, explicit `dtls=true|false`, and a narrowly defined outbound bind target contract.
+- Keep local client listening on UDP in every supported combination while varying TURN transport and peer relay setup explicitly.
+- Replace first-slice unsupported-config rejections with real behavior only for the newly documented combinations.
+- Refresh compatibility evidence and docs for every VK-backed runtime combination that this change claims as supported.
 
 ## Impact
 
-- Affected specs: `transport-policy-matrix`
-- Related specs: `tunnel-client-runtime`
-- Affected code: `internal/config`, `internal/session`, `internal/transport`, `cmd/tunnel-client`, integration tests
+- Affected specs: `tunnel-client-runtime`
+- Related specs: `vk-runtime-compatibility`
+- Affected code: `internal/config`, `internal/session`, `internal/transport`, `cmd/tunnel-client`, `test/turnlab`, `test/compatibility/vk/runtime`

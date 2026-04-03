@@ -44,6 +44,19 @@ evidence.
 Real captured evidence belongs in `fixtures/` with the same `scenario_id`
 values and without the `.template` suffix.
 
+The first committed baseline uses `source.kind=fixture_replay`.
+That means the asset is backed by replayable committed inputs:
+
+- provider resolution is anchored by the sanitized VK provider fixture set in
+  `test/compatibility/vk/fixtures/`
+- rewrite runtime behavior is anchored by deterministic `turnlab` integration
+  tests
+- legacy runtime expectations are recorded as oracle notes with source
+  references, not as a CI replay of a live VK session
+
+`manual_live` evidence remains allowed for future refreshes, but it is not
+required for the first committed baseline.
+
 ## First scenarios
 
 ### `vk_runtime_success_v1`
@@ -86,6 +99,7 @@ Required top-level fields:
 - `provider`
 - `kind`
 - `source`
+- `replay`
 - `slice`
 - `input`
 - `legacy`
@@ -103,6 +117,11 @@ Required top-level fields:
 - `runtime_success`
 - `runtime_failure`
 
+`replay.provider_fixture`:
+
+- points to the sanitized VK provider fixture that drives staged HTTP resolution
+  for the runtime replay
+
 ## Redaction rules
 
 - Replace the raw invite everywhere with
@@ -115,6 +134,16 @@ Required top-level fields:
   `<redacted:peer-addr>`.
 - Keep exit codes, result kind, stage names, and supported-slice policy values
   intact.
+
+For the committed `fixture_replay` baseline, runtime targets are symbolic:
+
+- `<runtime:turnlab-host>`
+- `<runtime:turnlab-port>`
+- `<runtime:turnlab-peer>`
+- `<runtime:plain-udp-peer>`
+
+Verification tooling materializes those placeholders into deterministic local
+resources at test time.
 
 ## Intentional deviations versus legacy
 
@@ -129,17 +158,31 @@ The rewrite currently does not claim compatibility for:
 If a live VK run exposes any additional supported-slice deviation, record it in
 `deviations[]` instead of silently accepting drift.
 
-## Capture workflow
+## Replay baseline workflow
 
-1. Prepare a local peer target for the supported slice and note its redacted
-   description.
-2. Run the legacy oracle against a live VK invite and capture only redacted
+1. Start from the matching template in `examples/`.
+2. Anchor provider resolution to the sanitized VK fixture contract in
+   `test/compatibility/vk/fixtures/`.
+3. Encode runtime targets with the supported symbolic placeholders instead of
+   committing ephemeral local ports.
+4. Anchor rewrite runtime behavior to deterministic tests for the same
+   supported-slice contract.
+5. Record the legacy runtime expectation with source references and clear notes
+   when CI cannot replay the live VK session directly.
+6. Write the final asset into `fixtures/` with `source.kind=fixture_replay`.
+7. Record any intentional legacy deviation in `deviations[]`.
+8. Run `go test ./test/compatibility/vk/runtime -run 'TestRuntimeEvidence(Assets|Replay)'`.
+
+## Optional manual live refresh
+
+When a live invite is available and the supported slice changes materially:
+
+1. Run the legacy oracle against the live VK invite and capture only redacted
    outcomes.
-3. Run `go run ./cmd/tunnel-client ...` with the same supported-slice policy.
-4. Copy the matching template from `examples/` into `fixtures/`.
-5. Replace template placeholders with redacted observed values.
-6. Record any intentional legacy deviation in `deviations[]`.
-7. Run `go test ./test/compatibility/vk/runtime -run TestRuntimeEvidenceAssets`.
+2. Run `go run ./cmd/tunnel-client ...` with the same supported-slice policy.
+3. Replace the replay notes with the observed redacted outcomes.
+4. Switch `source.kind` from `fixture_replay` to `manual_live`.
+5. Keep the same `scenario_id` so replay and live evidence remain comparable.
 
 ## Refresh workflow
 
@@ -151,4 +194,6 @@ Refresh the runtime evidence set whenever one of the following changes:
 - a change claims new parity or a new intentional deviation versus legacy
 
 Do not update the recorded evidence without rerunning both the rewrite and the
-legacy oracle for the affected scenario.
+legacy oracle for the affected scenario when the asset is `manual_live`.
+For `fixture_replay` assets, rerun the referenced provider and runtime tests and
+refresh the legacy-oracle notes if the supported slice meaning changes.
