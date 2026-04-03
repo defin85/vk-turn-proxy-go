@@ -13,7 +13,6 @@ import (
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider/genericturn"
 	"github.com/defin85/vk-turn-proxy-go/internal/runstage"
-	"github.com/defin85/vk-turn-proxy-go/internal/transport"
 	"github.com/defin85/vk-turn-proxy-go/test/turnlab"
 )
 
@@ -216,8 +215,8 @@ func TestRunFailsOnBadTURNCredentials(t *testing.T) {
 		t.Fatalf("unexpected stage: %v", err)
 	}
 	mustRebindPacket(t, listenAddr)
-	mustRebindPacket(t, recorder.Local())
-	mustRebindPacket(t, recorder.TURNBase())
+	mustRebindAddr(t, recorder.Local())
+	mustRebindAddr(t, recorder.TURNBase())
 }
 
 func TestRunFailsOnBadDTLSPeer(t *testing.T) {
@@ -267,34 +266,16 @@ func TestRunFailsOnBadDTLSPeer(t *testing.T) {
 		t.Fatalf("unexpected stage: %v", err)
 	}
 	mustRebindPacket(t, listenAddr)
-	mustRebindPacket(t, recorder.Local())
-	mustRebindPacket(t, recorder.TURNBase())
-	mustRebindPacket(t, recorder.Relay())
+	mustRebindAddr(t, recorder.Local())
+	mustRebindAddr(t, recorder.TURNBase())
+	mustRebindAddr(t, recorder.Relay())
 }
 
 type transportAddrRecorder struct {
 	mu       sync.Mutex
-	local    string
-	turnBase string
-	relay    string
-}
-
-func (r *transportAddrRecorder) RunnerFactory() RunnerFactory {
-	return func(cfg transport.ClientConfig) transport.Runner {
-		cfg.Hooks = transport.ClientHooks{
-			OnLocalBind: func(addr net.Addr) {
-				r.setLocal(addr)
-			},
-			OnTURNBaseBind: func(addr net.Addr) {
-				r.setTURNBase(addr)
-			},
-			OnRelayAllocate: func(addr net.Addr) {
-				r.setRelay(addr)
-			},
-		}
-
-		return transport.NewClientRunner(cfg)
-	}
+	local    net.Addr
+	turnBase net.Addr
+	relay    net.Addr
 }
 
 func (r *transportAddrRecorder) setLocal(addr net.Addr) {
@@ -304,7 +285,7 @@ func (r *transportAddrRecorder) setLocal(addr net.Addr) {
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.local = addr.String()
+	r.local = cloneTestAddr(addr)
 }
 
 func (r *transportAddrRecorder) setTURNBase(addr net.Addr) {
@@ -314,7 +295,7 @@ func (r *transportAddrRecorder) setTURNBase(addr net.Addr) {
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.turnBase = addr.String()
+	r.turnBase = cloneTestAddr(addr)
 }
 
 func (r *transportAddrRecorder) setRelay(addr net.Addr) {
@@ -324,25 +305,25 @@ func (r *transportAddrRecorder) setRelay(addr net.Addr) {
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.relay = addr.String()
+	r.relay = cloneTestAddr(addr)
 }
 
-func (r *transportAddrRecorder) Local() string {
+func (r *transportAddrRecorder) Local() net.Addr {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.local
+	return cloneTestAddr(r.local)
 }
 
-func (r *transportAddrRecorder) TURNBase() string {
+func (r *transportAddrRecorder) TURNBase() net.Addr {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.turnBase
+	return cloneTestAddr(r.turnBase)
 }
 
-func (r *transportAddrRecorder) Relay() string {
+func (r *transportAddrRecorder) Relay() net.Addr {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.relay
+	return cloneTestAddr(r.relay)
 }
 
 func reserveUDPAddr(t *testing.T) string {
@@ -468,4 +449,57 @@ func mustRebindPacket(t *testing.T, addr string) {
 	}
 
 	t.Fatalf("rebind %s: address stayed busy past deadline", addr)
+}
+
+func mustRebindAddr(t *testing.T, addr net.Addr) {
+	t.Helper()
+
+	if addr == nil {
+		t.Fatal("expected non-nil address for rebind check")
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		switch value := addr.(type) {
+		case *net.UDPAddr:
+			conn, err := net.ListenPacket("udp", value.String())
+			if err == nil {
+				_ = conn.Close()
+				return
+			}
+		case *net.TCPAddr:
+			listener, err := net.Listen("tcp", value.String())
+			if err == nil {
+				_ = listener.Close()
+				return
+			}
+		default:
+			t.Fatalf("unsupported addr type %T", addr)
+		}
+
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	t.Fatalf("rebind %s: address stayed busy past deadline", addr.String())
+}
+
+func cloneTestAddr(addr net.Addr) net.Addr {
+	switch value := addr.(type) {
+	case *net.UDPAddr:
+		if value == nil {
+			return nil
+		}
+		cloned := *value
+		cloned.IP = append(net.IP(nil), value.IP...)
+		return &cloned
+	case *net.TCPAddr:
+		if value == nil {
+			return nil
+		}
+		cloned := *value
+		cloned.IP = append(net.IP(nil), value.IP...)
+		return &cloned
+	default:
+		return addr
+	}
 }

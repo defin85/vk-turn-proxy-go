@@ -46,12 +46,31 @@ func TestRunClientReportsStageAwareFailure(t *testing.T) {
 		"-link", "generic-turn://user:pass@turn.example.test:3478",
 		"-listen", "127.0.0.1:9000",
 		"-peer", "127.0.0.1:56000",
-		"-dtls=false",
+		"-bind-interface", "eth0",
 	}, provider.NewRegistry())
 	if code != 1 {
 		t.Fatalf("runClient() code = %d, stderr=%s", code, stderr.String())
 	}
 	if !strings.Contains(stderr.String(), "stage=policy_validate") {
 		t.Fatalf("stderr missing stage: %s", stderr.String())
+	}
+}
+
+func TestRunClientAllowsExpandedPolicyToReachRuntime(t *testing.T) {
+	var stderr bytes.Buffer
+	code := runClient(context.Background(), &stderr, []string{
+		"-provider", "generic-turn",
+		"-link", "generic-turn://user:pass@turn.example.test:3478",
+		"-listen", "127.0.0.1:9000",
+		"-peer", "127.0.0.1:56000",
+		"-mode", "tcp",
+		"-dtls=false",
+		"-bind-interface", "127.0.0.1",
+	}, provider.NewRegistry())
+	if code != 1 {
+		t.Fatalf("runClient() code = %d, stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "stage=provider_resolve") {
+		t.Fatalf("stderr missing provider_resolve stage: %s", stderr.String())
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 
 	"github.com/defin85/vk-turn-proxy-go/internal/config"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
@@ -41,10 +42,11 @@ func Run(ctx context.Context, cfg config.ClientConfig, deps Dependencies) error 
 		return runstage.Wrap(runstage.PolicyValidate, err)
 	}
 
-	cfg = normalizePolicy(cfg)
-	if err := validatePolicy(cfg); err != nil {
+	plan, err := buildTransportPlan(cfg)
+	if err != nil {
 		return runstage.Wrap(runstage.PolicyValidate, err)
 	}
+	cfg.Mode = plan.Mode
 
 	adapter, err := deps.Registry.Get(cfg.Provider)
 	if err != nil {
@@ -77,7 +79,10 @@ func Run(ctx context.Context, cfg config.ClientConfig, deps Dependencies) error 
 			Username: resolution.Credentials.Username,
 			Password: resolution.Credentials.Password,
 		},
-		Logger: logger,
+		TURNMode: plan.TURNMode,
+		PeerMode: plan.PeerMode,
+		BindIP:   append(net.IP(nil), plan.BindIP...),
+		Logger:   logger,
 	})
 
 	logger.Info("client session resolved provider credentials",

@@ -1,5 +1,5 @@
 {
-  "scenario_id": "vk_runtime_success_v1",
+  "scenario_id": "vk_runtime_tcp_dtls_success_v1",
   "provider": "vk",
   "kind": "runtime_success",
   "source": {
@@ -14,14 +14,14 @@
   "slice": {
     "connections": 1,
     "dtls": true,
-    "mode": "auto",
+    "mode": "tcp",
     "bind_interface": ""
   },
   "input": {
     "invite_redacted": "https://vk.com/call/join/<redacted:vk-join-token>",
     "peer_addr_redacted": "<runtime:turnlab-peer>",
-    "turn_override": "<runtime:turnlab-host>",
-    "port_override": "<runtime:turnlab-port>"
+    "turn_override": "<runtime:turnlab-tcp-host>",
+    "port_override": "<runtime:turnlab-tcp-port>"
   },
   "legacy": {
     "result": "success",
@@ -30,7 +30,7 @@
     "forwarding_round_trip": true,
     "notes": [
       "Provider resolution for this scenario is anchored by vk_call_debug_success_v1, which preserves the legacy getVkCreds four-stage VK/OK flow and normalized TURN address.",
-      "The legacy runtime oracle for the supported slice is the single-session path getVkCreds -> oneTurnConnection -> oneDtlsConnection with turn and peer overrides materialized from the replay placeholders below; expected outcome is exit_code=0 with a completed UDP round trip on the provider-default TURN transport."
+      "The legacy runtime oracle for this slice is getVkCreds -> oneTurnConnection with udp=false -> oneDtlsConnection, using turn and peer overrides materialized from the replay placeholders below; expected outcome is exit_code=0 with a completed UDP round trip."
     ]
   },
   "rewrite": {
@@ -39,7 +39,7 @@
     "error_stage": "",
     "forwarding_round_trip": true,
     "notes": [
-      "The rewrite success path is replayed deterministically by TestRuntimeEvidenceReplay using provider=vk, fixture-driven staged HTTP resolution, and a turnlab DTLS peer while mode=auto normalizes to the provider-default UDP TURN path.",
+      "The rewrite success path is replayed deterministically by TestRuntimeEvidenceReplay using provider=vk, fixture-driven staged HTTP resolution, a turnlab TCP TURN listener, and a DTLS peer.",
       "cmd/tunnel-client/main.go returns exit code 0 when session.Run completes without error."
     ]
   },

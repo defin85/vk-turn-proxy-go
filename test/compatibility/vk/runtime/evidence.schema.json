@@ -71,6 +71,10 @@
         "provider_fixture": {
           "type": "string",
           "minLength": 1
+        },
+        "expect_turn_base_ip": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },
@@ -88,12 +92,13 @@
           "const": 1
         },
         "dtls": {
-          "const": true
+          "type": "boolean"
         },
         "mode": {
           "enum": [
+            "auto",
             "udp",
-            "auto"
+            "tcp"
           ]
         },
         "bind_interface": {

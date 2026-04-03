@@ -1,5 +1,5 @@
 {
-  "scenario_id": "vk_runtime_success_v1",
+  "scenario_id": "vk_runtime_bind_target_success_v1",
   "provider": "vk",
   "kind": "runtime_success",
   "source": {
@@ -9,13 +9,14 @@
     "rewrite_reference": "test/compatibility/vk/runtime/replay_test.go:TestRuntimeEvidenceReplay; cmd/tunnel-client/main.go:runClient"
   },
   "replay": {
-    "provider_fixture": "vk_call_debug_success_v1.json"
+    "provider_fixture": "vk_call_debug_success_v1.json",
+    "expect_turn_base_ip": "127.0.0.2"
   },
   "slice": {
     "connections": 1,
     "dtls": true,
-    "mode": "auto",
-    "bind_interface": ""
+    "mode": "udp",
+    "bind_interface": "127.0.0.2"
   },
   "input": {
     "invite_redacted": "https://vk.com/call/join/<redacted:vk-join-token>",
@@ -24,13 +25,13 @@
     "port_override": "<runtime:turnlab-port>"
   },
   "legacy": {
-    "result": "success",
+    "result": "unsupported",
     "exit_code": 0,
     "error_stage": "",
-    "forwarding_round_trip": true,
+    "forwarding_round_trip": false,
     "notes": [
-      "Provider resolution for this scenario is anchored by vk_call_debug_success_v1, which preserves the legacy getVkCreds four-stage VK/OK flow and normalized TURN address.",
-      "The legacy runtime oracle for the supported slice is the single-session path getVkCreds -> oneTurnConnection -> oneDtlsConnection with turn and peer overrides materialized from the replay placeholders below; expected outcome is exit_code=0 with a completed UDP round trip on the provider-default TURN transport."
+      "Provider resolution for this scenario is anchored by vk_call_debug_success_v1, but the legacy oracle does not expose a committed runtime flag equivalent to rewrite bind-interface with literal local IP semantics.",
+      "This asset records rewrite behavior for the supported slice while keeping the provider-backed VK resolution precondition identical to the legacy-compatible fixtures above."
     ]
   },
   "rewrite": {
@@ -39,9 +40,11 @@
     "error_stage": "",
     "forwarding_round_trip": true,
     "notes": [
-      "The rewrite success path is replayed deterministically by TestRuntimeEvidenceReplay using provider=vk, fixture-driven staged HTTP resolution, and a turnlab DTLS peer while mode=auto normalizes to the provider-default UDP TURN path.",
+      "The rewrite success path is replayed deterministically by TestRuntimeEvidenceReplay using provider=vk, fixture-driven staged HTTP resolution, a UDP TURN allocation, a DTLS peer, and bind-interface=127.0.0.2.",
       "cmd/tunnel-client/main.go returns exit code 0 when session.Run completes without error."
     ]
   },
-  "deviations": []
+  "deviations": [
+    "Rewrite supports bind-interface as a literal local IP for outbound TURN setup; the legacy oracle has no equivalent committed runtime flag for this behavior."
+  ]
 }

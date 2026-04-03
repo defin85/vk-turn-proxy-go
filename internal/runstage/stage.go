@@ -13,6 +13,7 @@ const (
 	LocalBind       Stage = "local_bind"
 	TURNDial        Stage = "turn_dial"
 	TURNAllocate    Stage = "turn_allocate"
+	PeerSetup       Stage = "peer_setup"
 	DTLSHandshake   Stage = "dtls_handshake"
 	ForwardingLoop  Stage = "forwarding_loop"
 )

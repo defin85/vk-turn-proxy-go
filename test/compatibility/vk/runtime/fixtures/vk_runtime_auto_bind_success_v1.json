@@ -1,0 +1,50 @@
+{
+  "scenario_id": "vk_runtime_auto_bind_success_v1",
+  "provider": "vk",
+  "kind": "runtime_success",
+  "source": {
+    "kind": "fixture_replay",
+    "captured_at": "2026-04-04",
+    "legacy_reference": "test/compatibility/vk/fixtures/vk_call_debug_success_v1.json; /home/egor/code/vk-turn-proxy/client/main.go:getVkCreds,oneTurnConnection,oneDtlsConnection",
+    "rewrite_reference": "test/compatibility/vk/runtime/replay_test.go:TestRuntimeEvidenceReplay; cmd/tunnel-client/main.go:runClient"
+  },
+  "replay": {
+    "provider_fixture": "vk_call_debug_success_v1.json",
+    "expect_turn_base_ip": "127.0.0.2"
+  },
+  "slice": {
+    "connections": 1,
+    "dtls": true,
+    "mode": "auto",
+    "bind_interface": "127.0.0.2"
+  },
+  "input": {
+    "invite_redacted": "https://vk.com/call/join/<redacted:vk-join-token>",
+    "peer_addr_redacted": "<runtime:turnlab-peer>",
+    "turn_override": "<runtime:turnlab-host>",
+    "port_override": "<runtime:turnlab-port>"
+  },
+  "legacy": {
+    "result": "unsupported",
+    "exit_code": 0,
+    "error_stage": "",
+    "forwarding_round_trip": false,
+    "notes": [
+      "Provider resolution for this scenario is anchored by vk_call_debug_success_v1, but the legacy oracle does not expose a committed runtime flag equivalent to rewrite bind-interface with literal local IP semantics.",
+      "Mode=auto in the rewrite contract normalizes to the provider-default UDP path; this asset records that supported rewrite behavior without implying legacy parity for the bind-target feature."
+    ]
+  },
+  "rewrite": {
+    "result": "success",
+    "exit_code": 0,
+    "error_stage": "",
+    "forwarding_round_trip": true,
+    "notes": [
+      "The rewrite success path is replayed deterministically by TestRuntimeEvidenceReplay using provider=vk, fixture-driven staged HTTP resolution, mode=auto, a DTLS peer, and bind-interface=127.0.0.2.",
+      "Replay verification also asserts that the TURN base transport actually uses 127.0.0.2 as its local source IP."
+    ]
+  },
+  "deviations": [
+    "Rewrite supports bind-interface as a literal local IP for outbound TURN setup; the legacy oracle has no equivalent committed runtime flag for this behavior."
+  ]
+}

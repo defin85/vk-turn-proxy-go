@@ -1,5 +1,5 @@
 {
-  "scenario_id": "vk_runtime_success_v1",
+  "scenario_id": "vk_runtime_bind_target_success_v1",
   "provider": "vk",
   "kind": "runtime_success",
   "source": {
@@ -9,13 +9,14 @@
     "rewrite_reference": "<pending:rewrite-commit-or-run-id>"
   },
   "replay": {
-    "provider_fixture": "vk_call_debug_success_v1.json"
+    "provider_fixture": "vk_call_debug_success_v1.json",
+    "expect_turn_base_ip": "<pending:literal-local-ip>"
   },
   "slice": {
     "connections": 1,
     "dtls": true,
-    "mode": "auto",
-    "bind_interface": ""
+    "mode": "udp",
+    "bind_interface": "<pending:literal-local-ip>"
   },
   "input": {
     "invite_redacted": "https://vk.com/call/join/<redacted:vk-join-token>",
@@ -24,12 +25,12 @@
     "port_override": "<runtime:turnlab-port>"
   },
   "legacy": {
-    "result": "success",
+    "result": "unsupported",
     "exit_code": 0,
     "error_stage": "",
-    "forwarding_round_trip": true,
+    "forwarding_round_trip": false,
     "notes": [
-      "<pending:redacted-legacy-runtime-note>"
+      "<pending:redacted-legacy-unsupported-note>"
     ]
   },
   "rewrite": {
@@ -41,5 +42,7 @@
       "<pending:redacted-rewrite-runtime-note>"
     ]
   },
-  "deviations": []
+  "deviations": [
+    "<pending:document-intentional-deviation-or-remove>"
+  ]
 }

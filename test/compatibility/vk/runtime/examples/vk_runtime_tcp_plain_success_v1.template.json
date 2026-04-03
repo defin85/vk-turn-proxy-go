@@ -1,5 +1,5 @@
 {
-  "scenario_id": "vk_runtime_success_v1",
+  "scenario_id": "vk_runtime_tcp_plain_success_v1",
   "provider": "vk",
   "kind": "runtime_success",
   "source": {
@@ -13,15 +13,15 @@
   },
   "slice": {
     "connections": 1,
-    "dtls": true,
-    "mode": "auto",
+    "dtls": false,
+    "mode": "tcp",
     "bind_interface": ""
   },
   "input": {
     "invite_redacted": "https://vk.com/call/join/<redacted:vk-join-token>",
-    "peer_addr_redacted": "<runtime:turnlab-peer>",
-    "turn_override": "<runtime:turnlab-host>",
-    "port_override": "<runtime:turnlab-port>"
+    "peer_addr_redacted": "<runtime:turnlab-upstream>",
+    "turn_override": "<runtime:turnlab-tcp-host>",
+    "port_override": "<runtime:turnlab-tcp-port>"
   },
   "legacy": {
     "result": "success",

@@ -22,6 +22,7 @@ import (
 	vkprovider "github.com/defin85/vk-turn-proxy-go/internal/provider/vk"
 	"github.com/defin85/vk-turn-proxy-go/internal/runstage"
 	"github.com/defin85/vk-turn-proxy-go/internal/session"
+	"github.com/defin85/vk-turn-proxy-go/internal/transport"
 	"github.com/defin85/vk-turn-proxy-go/test/turnlab"
 )
 
@@ -64,6 +65,12 @@ func TestRuntimeEvidenceReplay(t *testing.T) {
 	fixtures := []string{
 		"vk_runtime_success_v1.json",
 		"vk_runtime_failure_v1.json",
+		"vk_runtime_tcp_dtls_success_v1.json",
+		"vk_runtime_udp_plain_success_v1.json",
+		"vk_runtime_tcp_plain_success_v1.json",
+		"vk_runtime_bind_target_success_v1.json",
+		"vk_runtime_auto_plain_success_v1.json",
+		"vk_runtime_auto_bind_success_v1.json",
 	}
 
 	for _, name := range fixtures {
@@ -104,7 +111,12 @@ func verifyRuntimeReplay(t *testing.T, asset evidenceAsset) {
 	t.Cleanup(cleanupPeer)
 
 	registry := provider.NewRegistry(vkprovider.NewWithHTTPDoer(doer))
-	result := runReplayScenario(t, asset, cfg, registry)
+	recorder := &turnBaseRecorder{}
+	var newRunner session.RunnerFactory
+	if asset.Replay.ExpectTURNBaseIP != "" {
+		newRunner = recorder.RunnerFactory()
+	}
+	result := runReplayScenario(t, asset, cfg, registry, newRunner)
 
 	if result.exitCode != asset.Rewrite.ExitCode {
 		t.Fatalf("rewrite exit_code = %d, want %d", result.exitCode, asset.Rewrite.ExitCode)
@@ -114,6 +126,11 @@ func verifyRuntimeReplay(t *testing.T, asset evidenceAsset) {
 	}
 	if result.stage != asset.Rewrite.ErrorStage {
 		t.Fatalf("rewrite error_stage = %q, want %q", result.stage, asset.Rewrite.ErrorStage)
+	}
+	if asset.Replay.ExpectTURNBaseIP != "" {
+		if got := addrIPString(recorder.Addr()); got != asset.Replay.ExpectTURNBaseIP {
+			t.Fatalf("rewrite turn base ip = %q, want %q", got, asset.Replay.ExpectTURNBaseIP)
+		}
 	}
 
 	wantResult := asset.Rewrite.Result
@@ -135,7 +152,13 @@ type replayResult struct {
 	forwardingRoundTrip bool
 }
 
-func runReplayScenario(t *testing.T, asset evidenceAsset, cfg config.ClientConfig, registry *provider.Registry) replayResult {
+func runReplayScenario(
+	t *testing.T,
+	asset evidenceAsset,
+	cfg config.ClientConfig,
+	registry *provider.Registry,
+	newRunner session.RunnerFactory,
+) replayResult {
 	t.Helper()
 
 	switch asset.Kind {
@@ -148,6 +171,7 @@ func runReplayScenario(t *testing.T, asset evidenceAsset, cfg config.ClientConfi
 			errCh <- session.Run(ctx, cfg, session.Dependencies{
 				Registry:  registry,
 				Logger:    testLogger(),
+				NewRunner: newRunner,
 				SessionID: session.NewID(),
 			})
 		}()
@@ -180,6 +204,7 @@ func runReplayScenario(t *testing.T, asset evidenceAsset, cfg config.ClientConfi
 		err := session.Run(ctx, cfg, session.Dependencies{
 			Registry:  registry,
 			Logger:    testLogger(),
+			NewRunner: newRunner,
 			SessionID: session.NewID(),
 		})
 		if err == nil {
@@ -200,11 +225,6 @@ func runReplayScenario(t *testing.T, asset evidenceAsset, cfg config.ClientConfi
 func materializeReplayConfig(t *testing.T, asset evidenceAsset, harness *turnlab.Harness) (config.ClientConfig, func()) {
 	t.Helper()
 
-	host, port, err := net.SplitHostPort(harness.Descriptor.TURNAddress)
-	if err != nil {
-		t.Fatalf("split turn address: %v", err)
-	}
-
 	peerAddr, cleanup := materializeReplayPeer(t, asset.Input.PeerAddrRedacted, harness)
 
 	return config.ClientConfig{
@@ -213,8 +233,8 @@ func materializeReplayConfig(t *testing.T, asset evidenceAsset, harness *turnlab
 		ListenAddr:    reserveUDPAddr(t),
 		PeerAddr:      peerAddr,
 		Connections:   asset.Slice.Connections,
-		TURNServer:    materializeReplayValue(t, asset.Input.TURNOverride, host, runtimeTurnHost),
-		TURNPort:      materializeReplayValue(t, asset.Input.PortOverride, port, runtimeTurnPort),
+		TURNServer:    materializeReplayTURNValue(t, asset.Input.TURNOverride, harness),
+		TURNPort:      materializeReplayTURNValue(t, asset.Input.PortOverride, harness),
 		BindInterface: asset.Slice.BindInterface,
 		Mode:          config.TransportMode(asset.Slice.Mode),
 		UseDTLS:       asset.Slice.DTLS,
@@ -227,6 +247,8 @@ func materializeReplayPeer(t *testing.T, placeholder string, harness *turnlab.Ha
 	switch placeholder {
 	case runtimePeerTurnlab:
 		return harness.Descriptor.PeerAddress, func() {}
+	case runtimePeerTurnlabUpstream:
+		return harness.Descriptor.UpstreamAddress, func() {}
 	case runtimePeerPlainUDP:
 		conn, err := net.ListenPacket("udp4", "127.0.0.1:0")
 		if err != nil {
@@ -242,14 +264,89 @@ func materializeReplayPeer(t *testing.T, placeholder string, harness *turnlab.Ha
 	}
 }
 
-func materializeReplayValue(t *testing.T, placeholder string, actual string, want string) string {
+func materializeReplayTURNValue(t *testing.T, placeholder string, harness *turnlab.Harness) string {
 	t.Helper()
 
-	if placeholder != want {
-		t.Fatalf("unsupported replay placeholder %q, want %q", placeholder, want)
+	switch placeholder {
+	case runtimeTurnHost:
+		host, _, err := net.SplitHostPort(harness.Descriptor.TURNAddress)
+		if err != nil {
+			t.Fatalf("split turn udp address: %v", err)
+		}
+		return host
+	case runtimeTurnPort:
+		_, port, err := net.SplitHostPort(harness.Descriptor.TURNAddress)
+		if err != nil {
+			t.Fatalf("split turn udp address: %v", err)
+		}
+		return port
+	case runtimeTurnTCPHost:
+		host, _, err := net.SplitHostPort(harness.Descriptor.TURNTCPAddress)
+		if err != nil {
+			t.Fatalf("split turn tcp address: %v", err)
+		}
+		return host
+	case runtimeTurnTCPPort:
+		_, port, err := net.SplitHostPort(harness.Descriptor.TURNTCPAddress)
+		if err != nil {
+			t.Fatalf("split turn tcp address: %v", err)
+		}
+		return port
+	default:
+		t.Fatalf("unsupported replay turn placeholder %q", placeholder)
+		return ""
+	}
+}
+
+type turnBaseRecorder struct {
+	mu   sync.Mutex
+	addr net.Addr
+}
+
+func (r *turnBaseRecorder) RunnerFactory() session.RunnerFactory {
+	return func(cfg transport.ClientConfig) transport.Runner {
+		cfg.Hooks.OnTURNBaseBind = func(addr net.Addr) {
+			r.set(addr)
+		}
+		return transport.NewClientRunner(cfg)
+	}
+}
+
+func (r *turnBaseRecorder) set(addr net.Addr) {
+	if addr == nil {
+		return
 	}
 
-	return actual
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.addr = cloneReplayAddr(addr)
+}
+
+func (r *turnBaseRecorder) Addr() net.Addr {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return cloneReplayAddr(r.addr)
+}
+
+func cloneReplayAddr(addr net.Addr) net.Addr {
+	switch value := addr.(type) {
+	case *net.UDPAddr:
+		if value == nil {
+			return nil
+		}
+		cloned := *value
+		cloned.IP = append(net.IP(nil), value.IP...)
+		return &cloned
+	case *net.TCPAddr:
+		if value == nil {
+			return nil
+		}
+		cloned := *value
+		cloned.IP = append(net.IP(nil), value.IP...)
+		return &cloned
+	default:
+		return addr
+	}
 }
 
 func loadRuntimeEvidenceAsset(t *testing.T, relativePath string) evidenceAsset {
@@ -408,6 +505,23 @@ func stageString(err error) string {
 	}
 
 	return string(stage)
+}
+
+func addrIPString(addr net.Addr) string {
+	switch value := addr.(type) {
+	case *net.UDPAddr:
+		if value == nil {
+			return ""
+		}
+		return value.IP.String()
+	case *net.TCPAddr:
+		if value == nil {
+			return ""
+		}
+		return value.IP.String()
+	default:
+		return ""
+	}
 }
 
 func testLogger() *slog.Logger {

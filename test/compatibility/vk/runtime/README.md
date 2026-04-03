@@ -2,22 +2,20 @@
 
 ## Scope
 
-This contract covers the supported VK-backed client runtime slice introduced by
-`03-add-tunnel-client-runtime`.
+This contract covers the supported VK-backed client runtime slice after
+`05-expand-transport-policy-matrix`.
 
-It is intentionally limited to:
+It covers:
 
 - `connections=1`
-- `dtls=true`
-- `mode=udp|auto`
-- empty `bind-interface`
+- `dtls=true|false`
+- `mode=auto|udp|tcp`
+- empty `bind-interface` or a literal local IP
 - one active local UDP peer per session for reply routing
 
 It explicitly excludes:
 
-- `mode=tcp`
-- `dtls=false`
-- non-empty `bind-interface`
+- non-IP `bind-interface` values such as interface names
 - multi-connection supervision
 - mobile rebinding and broader legacy parity claims
 
@@ -33,8 +31,21 @@ test/compatibility/vk/runtime/
   examples/
     vk_runtime_success_v1.template.json
     vk_runtime_failure_v1.template.json
+    vk_runtime_tcp_dtls_success_v1.template.json
+    vk_runtime_udp_plain_success_v1.template.json
+    vk_runtime_tcp_plain_success_v1.template.json
+    vk_runtime_bind_target_success_v1.template.json
+    vk_runtime_auto_plain_success_v1.template.json
+    vk_runtime_auto_bind_success_v1.template.json
   fixtures/
-    .gitkeep
+    vk_runtime_success_v1.json
+    vk_runtime_failure_v1.json
+    vk_runtime_tcp_dtls_success_v1.json
+    vk_runtime_udp_plain_success_v1.json
+    vk_runtime_tcp_plain_success_v1.json
+    vk_runtime_bind_target_success_v1.json
+    vk_runtime_auto_plain_success_v1.json
+    vk_runtime_auto_bind_success_v1.json
 ```
 
 `examples/` contains schema-valid templates only.
@@ -44,8 +55,8 @@ evidence.
 Real captured evidence belongs in `fixtures/` with the same `scenario_id`
 values and without the `.template` suffix.
 
-The first committed baseline uses `source.kind=fixture_replay`.
-That means the asset is backed by replayable committed inputs:
+The committed baseline uses `source.kind=fixture_replay`.
+That means each asset is backed by replayable committed inputs:
 
 - provider resolution is anchored by the sanitized VK provider fixture set in
   `test/compatibility/vk/fixtures/`
@@ -66,7 +77,7 @@ Supported-slice success case for:
 - VK provider resolution
 - one TURN allocation
 - one DTLS-backed relay session
-- successful UDP round-trip through the configured peer
+- successful UDP round-trip through the configured peer on the provider-default transport path
 
 Expected compatibility claim:
 
@@ -87,6 +98,60 @@ Expected compatibility claim:
 - the failure is recorded explicitly instead of being inferred from logs
 - any intentional deviation from legacy semantics is written into
   `deviations[]`
+
+### `vk_runtime_tcp_dtls_success_v1`
+
+Supported-slice success case for:
+
+- VK provider resolution
+- TCP between the client and the TURN server
+- one DTLS-backed relay session
+- successful UDP round-trip through the configured peer
+
+### `vk_runtime_udp_plain_success_v1`
+
+Supported-slice success case for:
+
+- VK provider resolution
+- UDP between the client and the TURN server
+- plain datagram relay without DTLS
+- successful UDP round-trip through the configured upstream peer
+
+### `vk_runtime_tcp_plain_success_v1`
+
+Supported-slice success case for:
+
+- VK provider resolution
+- TCP between the client and the TURN server
+- plain datagram relay without DTLS
+- successful UDP round-trip through the configured upstream peer
+
+### `vk_runtime_bind_target_success_v1`
+
+Supported-slice success case for:
+
+- VK provider resolution
+- literal local IP `bind-interface`
+- successful runtime startup and forwarding on the rewrite path
+- explicit legacy deviation recording because the legacy oracle has no equivalent committed flag
+
+### `vk_runtime_auto_plain_success_v1`
+
+Supported-slice success case for:
+
+- VK provider resolution
+- `mode=auto` normalization to the provider-default UDP TURN path
+- plain datagram relay without DTLS
+- successful UDP round-trip through the configured upstream peer
+
+### `vk_runtime_auto_bind_success_v1`
+
+Supported-slice success case for:
+
+- VK provider resolution
+- `mode=auto` normalization to the provider-default UDP TURN path
+- literal local IP `bind-interface`
+- successful runtime startup and forwarding on the rewrite path with verified TURN source IP
 
 ## Asset format
 
@@ -122,6 +187,11 @@ Required top-level fields:
 - points to the sanitized VK provider fixture that drives staged HTTP resolution
   for the runtime replay
 
+`replay.expect_turn_base_ip`:
+
+- is required for fixture assets that claim a literal-IP `bind-interface`
+- records the exact TURN source IP that replay verification must observe
+
 ## Redaction rules
 
 - Replace the raw invite everywhere with
@@ -139,7 +209,10 @@ For the committed `fixture_replay` baseline, runtime targets are symbolic:
 
 - `<runtime:turnlab-host>`
 - `<runtime:turnlab-port>`
+- `<runtime:turnlab-tcp-host>`
+- `<runtime:turnlab-tcp-port>`
 - `<runtime:turnlab-peer>`
+- `<runtime:turnlab-upstream>`
 - `<runtime:plain-udp-peer>`
 
 Verification tooling materializes those placeholders into deterministic local
@@ -149,9 +222,7 @@ resources at test time.
 
 The rewrite currently does not claim compatibility for:
 
-- `mode=tcp`
-- `dtls=false`
-- non-empty `bind-interface`
+- non-IP `bind-interface`
 - `connections > 1`
 - multi-peer reply demultiplexing beyond the most recent local sender
 
@@ -166,7 +237,8 @@ If a live VK run exposes any additional supported-slice deviation, record it in
 3. Encode runtime targets with the supported symbolic placeholders instead of
    committing ephemeral local ports.
 4. Anchor rewrite runtime behavior to deterministic tests for the same
-   supported-slice contract.
+   supported-slice contract, including the concrete transport mode and relay
+   mode for the scenario.
 5. Record the legacy runtime expectation with source references and clear notes
    when CI cannot replay the live VK session directly.
 6. Write the final asset into `fixtures/` with `source.kind=fixture_replay`.

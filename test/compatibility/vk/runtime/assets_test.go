@@ -2,6 +2,7 @@ package vkruntime_test
 
 import (
 	"encoding/json"
+	"net"
 	"os"
 	"path/filepath"
 	"slices"
@@ -30,7 +31,8 @@ type evidenceSource struct {
 }
 
 type evidenceReplay struct {
-	ProviderFixture string `json:"provider_fixture"`
+	ProviderFixture  string `json:"provider_fixture"`
+	ExpectTURNBaseIP string `json:"expect_turn_base_ip"`
 }
 
 type evidenceSlice struct {
@@ -56,10 +58,13 @@ type evidenceOutcome struct {
 }
 
 const (
-	runtimePeerTurnlab  = "<runtime:turnlab-peer>"
-	runtimePeerPlainUDP = "<runtime:plain-udp-peer>"
-	runtimeTurnHost     = "<runtime:turnlab-host>"
-	runtimeTurnPort     = "<runtime:turnlab-port>"
+	runtimePeerTurnlab         = "<runtime:turnlab-peer>"
+	runtimePeerTurnlabUpstream = "<runtime:turnlab-upstream>"
+	runtimePeerPlainUDP        = "<runtime:plain-udp-peer>"
+	runtimeTurnHost            = "<runtime:turnlab-host>"
+	runtimeTurnPort            = "<runtime:turnlab-port>"
+	runtimeTurnTCPHost         = "<runtime:turnlab-tcp-host>"
+	runtimeTurnTCPPort         = "<runtime:turnlab-tcp-port>"
 )
 
 func TestRuntimeEvidenceAssets(t *testing.T) {
@@ -82,8 +87,14 @@ func TestRuntimeEvidenceAssets(t *testing.T) {
 	}
 
 	expectedFixtures := map[string]bool{
-		"vk_runtime_success_v1": false,
-		"vk_runtime_failure_v1": false,
+		"vk_runtime_success_v1":             false,
+		"vk_runtime_failure_v1":             false,
+		"vk_runtime_tcp_dtls_success_v1":    false,
+		"vk_runtime_udp_plain_success_v1":   false,
+		"vk_runtime_tcp_plain_success_v1":   false,
+		"vk_runtime_bind_target_success_v1": false,
+		"vk_runtime_auto_plain_success_v1":  false,
+		"vk_runtime_auto_bind_success_v1":   false,
 	}
 
 	for _, path := range files {
@@ -183,14 +194,21 @@ func validateEvidenceAsset(t *testing.T, path string, raw []byte, asset evidence
 		validateReplayableInputs(t, path, asset.Input)
 	}
 
-	if asset.Slice.Connections != 1 || !asset.Slice.DTLS {
+	if asset.Slice.Connections != 1 {
 		t.Fatalf("%s: unsupported slice %+v", path, asset.Slice)
 	}
-	if asset.Slice.Mode != "udp" && asset.Slice.Mode != "auto" {
+	switch asset.Slice.Mode {
+	case "auto", "udp", "tcp":
+	default:
 		t.Fatalf("%s: unsupported mode %q", path, asset.Slice.Mode)
 	}
-	if asset.Slice.BindInterface != "" {
-		t.Fatalf("%s: bind_interface must be empty, got %q", path, asset.Slice.BindInterface)
+	if kind == "fixture" && asset.Slice.BindInterface != "" && net.ParseIP(asset.Slice.BindInterface) == nil {
+		t.Fatalf("%s: bind_interface must be a literal IP, got %q", path, asset.Slice.BindInterface)
+	}
+	if kind == "fixture" && asset.Slice.BindInterface != "" {
+		if asset.Replay.ExpectTURNBaseIP != asset.Slice.BindInterface {
+			t.Fatalf("%s: replay.expect_turn_base_ip = %q, want %q", path, asset.Replay.ExpectTURNBaseIP, asset.Slice.BindInterface)
+		}
 	}
 
 	if !strings.Contains(asset.Input.InviteRedacted, "<redacted:") {
@@ -260,15 +278,15 @@ func validateReplayableInputs(t *testing.T, path string, input evidenceInput) {
 	t.Helper()
 
 	switch input.PeerAddrRedacted {
-	case runtimePeerTurnlab, runtimePeerPlainUDP:
+	case runtimePeerTurnlab, runtimePeerTurnlabUpstream, runtimePeerPlainUDP:
 	default:
 		t.Fatalf("%s: unsupported replay peer placeholder %q", path, input.PeerAddrRedacted)
 	}
 
-	if input.TURNOverride != runtimeTurnHost {
+	if input.TURNOverride != runtimeTurnHost && input.TURNOverride != runtimeTurnTCPHost {
 		t.Fatalf("%s: unsupported replay turn_override %q", path, input.TURNOverride)
 	}
-	if input.PortOverride != runtimeTurnPort {
+	if input.PortOverride != runtimeTurnPort && input.PortOverride != runtimeTurnTCPPort {
 		t.Fatalf("%s: unsupported replay port_override %q", path, input.PortOverride)
 	}
 }

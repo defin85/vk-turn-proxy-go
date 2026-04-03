@@ -9,33 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pion/dtls/v3"
 	"github.com/pion/turn/v4"
 
 	"github.com/defin85/vk-turn-proxy-go/internal/runstage"
 )
-
-const handshakeTimeout = 5 * time.Second
-
-type TURNCredentials struct {
-	Address  string
-	Username string
-	Password string
-}
-
-type ClientConfig struct {
-	ListenAddr string
-	PeerAddr   string
-	TURN       TURNCredentials
-	Logger     *slog.Logger
-	Hooks      ClientHooks
-}
-
-type ClientHooks struct {
-	OnLocalBind     func(net.Addr)
-	OnTURNBaseBind  func(net.Addr)
-	OnRelayAllocate func(net.Addr)
-}
 
 type clientRunner struct {
 	cfg ClientConfig
@@ -64,7 +41,7 @@ func (r *clientRunner) Run(ctx context.Context) error {
 		r.cfg.Hooks.OnLocalBind(cloneAddr(localConn.LocalAddr()))
 	}
 
-	baseConn, err := listenTURNBaseSocket(r.cfg.TURN.Address)
+	baseConn, err := openTURNBaseConn(ctx, r.cfg)
 	if err != nil {
 		return runstage.Wrap(runstage.TURNDial, err)
 	}
@@ -98,64 +75,26 @@ func (r *clientRunner) Run(ctx context.Context) error {
 		r.cfg.Hooks.OnRelayAllocate(cloneAddr(relayConn.LocalAddr()))
 	}
 
-	peerAddr, err := net.ResolveUDPAddr("udp", r.cfg.PeerAddr)
+	peerConn, peerAddr, err := openPeerRelay(ctx, relayConn, r.cfg)
 	if err != nil {
-		return runstage.Wrap(runstage.DTLSHandshake, fmt.Errorf("resolve peer addr: %w", err))
+		return err
 	}
-
-	dtlsConn, err := dtls.Client(relayConn, peerAddr, &dtls.Config{
-		InsecureSkipVerify:   true,
-		ExtendedMasterSecret: dtls.RequireExtendedMasterSecret,
-	})
-	if err != nil {
-		return runstage.Wrap(runstage.DTLSHandshake, fmt.Errorf("create dtls client: %w", err))
-	}
-	defer closeConn(dtlsConn)
-
-	handshakeCtx, cancelHandshake := context.WithTimeout(ctx, handshakeTimeout)
-	defer cancelHandshake()
-	if err := dtlsConn.HandshakeContext(handshakeCtx); err != nil {
-		return runstage.Wrap(runstage.DTLSHandshake, fmt.Errorf("dtls handshake: %w", err))
-	}
+	defer closeConn(peerConn)
 
 	logger.Info("client transport connected",
 		"listen", localConn.LocalAddr().String(),
 		"turn_addr", r.cfg.TURN.Address,
+		"turn_mode", r.cfg.TURNMode,
+		"relay_mode", r.cfg.PeerMode,
 		"relay_addr", relayConn.LocalAddr().String(),
-		"peer", peerAddr.String(),
+		"peer", peerAddr,
 	)
 
-	if err := runForwarders(ctx, localConn, dtlsConn, logger); err != nil {
+	if err := runForwarders(ctx, localConn, peerConn, logger); err != nil {
 		return runstage.Wrap(runstage.ForwardingLoop, err)
 	}
 
 	return nil
-}
-
-func listenTURNBaseSocket(turnAddr string) (net.PacketConn, error) {
-	resolvedAddr, err := net.ResolveUDPAddr("udp", turnAddr)
-	if err != nil {
-		return nil, fmt.Errorf("resolve turn address %q: %w", turnAddr, err)
-	}
-
-	network := "udp"
-	listenAddr := ":0"
-	if resolvedAddr.IP != nil {
-		if resolvedAddr.IP.To4() != nil {
-			network = "udp4"
-			listenAddr = "0.0.0.0:0"
-		} else {
-			network = "udp6"
-			listenAddr = "[::]:0"
-		}
-	}
-
-	conn, err := net.ListenPacket(network, listenAddr)
-	if err != nil {
-		return nil, fmt.Errorf("bind turn client socket: %w", err)
-	}
-
-	return conn, nil
 }
 
 func runForwarders(ctx context.Context, localConn net.PacketConn, relayConn net.Conn, logger *slog.Logger) error {
@@ -285,10 +224,15 @@ func cloneAddr(addr net.Addr) net.Addr {
 		}
 
 		cloned := *value
-		if value.IP != nil {
-			cloned.IP = append([]byte(nil), value.IP...)
+		cloned.IP = append(net.IP(nil), value.IP...)
+		return &cloned
+	case *net.TCPAddr:
+		if value == nil {
+			return nil
 		}
 
+		cloned := *value
+		cloned.IP = append(net.IP(nil), value.IP...)
 		return &cloned
 	default:
 		return addr

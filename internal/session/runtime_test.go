@@ -136,6 +136,46 @@ func TestRunAppliesTURNOverrides(t *testing.T) {
 	}
 }
 
+func TestRunPassesExpandedTransportPlanToRunner(t *testing.T) {
+	cfg := validClientConfig()
+	cfg.Mode = config.TransportModeTCP
+	cfg.UseDTLS = false
+	cfg.BindInterface = "127.0.0.1"
+
+	adapter := &fakeAdapter{
+		name: "fake",
+		resolution: provider.Resolution{
+			Credentials: provider.Credentials{
+				Username: "user",
+				Password: "pass",
+				Address:  "turn.example.test:3478",
+			},
+		},
+	}
+
+	var got transport.ClientConfig
+	err := Run(context.Background(), cfg, Dependencies{
+		Registry: provider.NewRegistry(adapter),
+		Logger:   testLogger(),
+		NewRunner: func(cfg transport.ClientConfig) transport.Runner {
+			got = cfg
+			return fakeRunner{}
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if got.TURNMode != transport.TURNModeTCP {
+		t.Fatalf("TURNMode = %s, want %s", got.TURNMode, transport.TURNModeTCP)
+	}
+	if got.PeerMode != transport.PeerModePlain {
+		t.Fatalf("PeerMode = %s, want %s", got.PeerMode, transport.PeerModePlain)
+	}
+	if got.BindIP == nil || got.BindIP.String() != "127.0.0.1" {
+		t.Fatalf("BindIP = %v, want 127.0.0.1", got.BindIP)
+	}
+}
+
 func validClientConfig() config.ClientConfig {
 	return config.ClientConfig{
 		Provider:    "fake",

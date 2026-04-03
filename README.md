@@ -104,21 +104,20 @@ The probe remains provider-only by design:
 
 Use the persisted artifact together with the fixture contract in `test/compatibility/vk/` before porting broader legacy client behavior into transport/session code.
 
-`cmd/tunnel-client` now runs the first client runtime slice after provider resolution.
+`cmd/tunnel-client` now runs the supported one-session client runtime matrix after provider resolution.
 Supported startup policy for this slice:
 - `connections=1`
-- `dtls=true`
-- `mode=auto|udp` where `auto` normalizes to the UDP TURN path
-- empty `bind-interface`
+- local listener stays UDP
+- `dtls=true|false`
+- `mode=auto|udp|tcp` where `auto` normalizes to the provider-default UDP TURN path
+- empty `bind-interface` or a literal local IP for outbound TURN setup
 - one active local UDP peer per session for reply routing
 
-Rejected first-slice combinations fail closed before provider resolution:
+Rejected combinations fail closed before provider resolution:
 - `connections != 1`
-- `mode=tcp`
-- `dtls=false`
-- non-empty `bind-interface`
+- non-IP `bind-interface` values such as interface names
 
-When startup fails after policy validation, the command reports a stage-aware error such as `provider_resolve`, `turn_allocate`, or `dtls_handshake`.
+When startup fails after policy validation, the command reports a stage-aware error such as `provider_resolve`, `turn_dial`, `turn_allocate`, `peer_setup`, or `dtls_handshake`.
 `-turn` and `-port` overrides remain supported and are applied after provider credential resolution.
 
 ## TURN lab harness
@@ -126,6 +125,7 @@ When startup fails after policy validation, the command reports a stage-aware er
 The repository now includes a reusable local TURN lab harness in `test/turnlab`.
 It starts three real components under one fixture:
 - an in-process TURN server with static credentials
+- UDP and TCP TURN listeners over the same relay fabric
 - the DTLS tunnel server from `internal/tunnelserver`
 - a UDP echo target behind the tunnel server
 
@@ -137,9 +137,11 @@ go test -v ./test/turnlab -run TestHarnessRelayRoundTrip
 
 Future runtime and integration tests should call `turnlab.Start(ctx, logger)` and consume the returned descriptor:
 - `Descriptor.TURNAddress` plus `Descriptor.TURNCredentials` for TURN client setup
+- `Descriptor.TURNTCPAddress` when a test needs TURN-over-TCP startup
 - `Descriptor.PeerAddress` as the DTLS peer address
-- `Descriptor.UpstreamAddress` when a test needs the upstream echo endpoint explicitly
+- `Descriptor.UpstreamAddress` when a test needs the plain UDP upstream endpoint explicitly
 - `GenericTurnLink()` when a test wants to drive `generic-turn` provider startup without hand-building the link
+- `Descriptor.GenericTurnTCPLink()` when a test wants a `generic-turn` link anchored to the TCP TURN listener
 - `WaitUpstreamPeer(ctx)` plus `InjectUpstream(payload)` when a test needs to assert reply routing independently from the automatic echo path
 
 CI picks the harness up automatically through the existing `go test ./...` workflow.

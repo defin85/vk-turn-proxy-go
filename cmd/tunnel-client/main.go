@@ -68,7 +68,7 @@ func parseClientFlags(stderr io.Writer, args []string) (config.ClientConfig, str
 	flags.IntVar(&cfg.Connections, "connections", cfg.Connections, "number of parallel transport connections")
 	flags.StringVar(&cfg.TURNServer, "turn", cfg.TURNServer, "override TURN server IP or host")
 	flags.StringVar(&cfg.TURNPort, "port", cfg.TURNPort, "override TURN server port")
-	flags.StringVar(&cfg.BindInterface, "bind-interface", cfg.BindInterface, "preferred local interface or address")
+	flags.StringVar(&cfg.BindInterface, "bind-interface", cfg.BindInterface, "literal local IP for outbound TURN setup")
 	flags.BoolVar(&cfg.UseDTLS, "dtls", cfg.UseDTLS, "wrap transport in DTLS")
 	flags.Func("mode", "transport mode: auto|tcp|udp", func(value string) error {
 		cfg.Mode = config.TransportMode(value)

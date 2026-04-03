@@ -37,20 +37,29 @@ type Options struct {
 
 type Descriptor struct {
 	TURNAddress     string
+	TURNTCPAddress  string
 	TURNCredentials TURNCredentials
 	PeerAddress     string
 	UpstreamAddress string
 }
 
 func (d Descriptor) GenericTurnLink() string {
-	if d.TURNAddress == "" {
+	return d.GenericTurnLinkForAddress(d.TURNAddress)
+}
+
+func (d Descriptor) GenericTurnTCPLink() string {
+	return d.GenericTurnLinkForAddress(d.TURNTCPAddress)
+}
+
+func (d Descriptor) GenericTurnLinkForAddress(address string) string {
+	if address == "" {
 		return ""
 	}
 
 	return (&url.URL{
 		Scheme: "generic-turn",
 		User:   url.UserPassword(d.TURNCredentials.Username, d.TURNCredentials.Password),
-		Host:   d.TURNAddress,
+		Host:   address,
 	}).String()
 }
 
@@ -58,6 +67,7 @@ type Harness struct {
 	Descriptor Descriptor
 
 	upstream *upstreamController
+	turnTCP  *trackingListener
 	cancel   context.CancelFunc
 	done     chan struct{}
 	closeErr error
@@ -144,6 +154,18 @@ func StartWithOptions(parent context.Context, logger *slog.Logger, opts Options)
 		<-echoErrCh
 		return nil, fmt.Errorf("listen turn server: %w", err)
 	}
+	tcpListener, err := net.Listen("tcp4", loopbackAddress+":0")
+	if err != nil {
+		cancel()
+		_ = turnConn.Close()
+		_ = peerListener.Close()
+		<-peerErrCh
+		_ = echoConn.Close()
+		<-echoErrCh
+		return nil, fmt.Errorf("listen turn tcp server: %w", err)
+	}
+	trackingTCPListener := newTrackingListener(tcpListener)
+	harness.turnTCP = trackingTCPListener
 
 	turnServer, err := turn.NewServer(turn.ServerConfig{
 		Realm:       turnRealm,
@@ -157,9 +179,19 @@ func StartWithOptions(parent context.Context, logger *slog.Logger, opts Options)
 				},
 			},
 		},
+		ListenerConfigs: []turn.ListenerConfig{
+			{
+				Listener: trackingTCPListener,
+				RelayAddressGenerator: &turn.RelayAddressGeneratorStatic{
+					RelayAddress: net.ParseIP(loopbackAddress),
+					Address:      loopbackAddress,
+				},
+			},
+		},
 	})
 	if err != nil {
 		cancel()
+		_ = trackingTCPListener.Close()
 		_ = turnConn.Close()
 		_ = peerListener.Close()
 		<-peerErrCh
@@ -168,13 +200,17 @@ func StartWithOptions(parent context.Context, logger *slog.Logger, opts Options)
 		return nil, fmt.Errorf("start turn server: %w", err)
 	}
 	harness.Descriptor.TURNAddress = turnConn.LocalAddr().String()
+	harness.Descriptor.TURNTCPAddress = trackingTCPListener.Addr().String()
 
 	go func() {
 		<-ctx.Done()
 
-		errs := make([]error, 0, 5)
+		errs := make([]error, 0, 6)
 		if err := turnServer.Close(); err != nil {
 			errs = append(errs, fmt.Errorf("close turn server: %w", err))
+		}
+		if err := trackingTCPListener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+			errs = append(errs, fmt.Errorf("close turn tcp listener: %w", err))
 		}
 		if err := peerListener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
 			errs = append(errs, fmt.Errorf("close peer listener: %w", err))
@@ -239,6 +275,14 @@ func (h *Harness) InjectUpstream(payload []byte) error {
 	}
 
 	return h.upstream.Inject(payload)
+}
+
+func (h *Harness) WaitNoActiveTURNTCPConns(ctx context.Context) error {
+	if h == nil || h.turnTCP == nil {
+		return errors.New("harness turn tcp listener is not available")
+	}
+
+	return h.turnTCP.WaitZero(ctx)
 }
 
 func staticAuthHandler(extra []TURNCredentials) func(string, string, net.Addr) ([]byte, bool) {
