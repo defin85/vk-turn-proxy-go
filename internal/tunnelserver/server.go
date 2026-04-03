@@ -36,14 +36,23 @@ func New(cfg config.ServerConfig, logger *slog.Logger) (*Server, error) {
 }
 
 func (s *Server) Run(ctx context.Context) error {
+	listener, err := s.Listen()
+	if err != nil {
+		return err
+	}
+
+	return s.Serve(ctx, listener)
+}
+
+func (s *Server) Listen() (net.Listener, error) {
 	listenAddr, err := net.ResolveUDPAddr("udp", s.cfg.ListenAddr)
 	if err != nil {
-		return fmt.Errorf("resolve listen addr: %w", err)
+		return nil, fmt.Errorf("resolve listen addr: %w", err)
 	}
 
 	certificate, err := selfsign.GenerateSelfSigned()
 	if err != nil {
-		return fmt.Errorf("generate self-signed certificate: %w", err)
+		return nil, fmt.Errorf("generate self-signed certificate: %w", err)
 	}
 
 	listener, err := dtls.Listen("udp", listenAddr, &dtls.Config{
@@ -53,17 +62,26 @@ func (s *Server) Run(ctx context.Context) error {
 		ConnectionIDGenerator: dtls.RandomCIDGenerator(8),
 	})
 	if err != nil {
-		return fmt.Errorf("listen dtls: %w", err)
+		return nil, fmt.Errorf("listen dtls: %w", err)
 	}
-	defer listener.Close()
+
+	return listener, nil
+}
+
+func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
+	defer func() {
+		if err := listener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+			s.logger.Warn("close listener", "err", err)
+		}
+	}()
 
 	context.AfterFunc(ctx, func() {
-		if closeErr := listener.Close(); closeErr != nil && !errors.Is(closeErr, net.ErrClosed) {
-			s.logger.Warn("close listener", "err", closeErr)
+		if err := listener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+			s.logger.Warn("close listener", "err", err)
 		}
 	})
 
-	s.logger.Info("server listening", "listen", s.cfg.ListenAddr, "upstream", s.cfg.UpstreamAddr)
+	s.logger.Info("server listening", "listen", listener.Addr().String(), "upstream", s.cfg.UpstreamAddr)
 
 	var wg sync.WaitGroup
 	defer wg.Wait()

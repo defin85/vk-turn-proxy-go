@@ -104,6 +104,28 @@ The current VK contour is provider-only by design:
 
 Use the persisted artifact together with the fixture contract in `test/compatibility/vk/` before porting broader legacy client behavior into transport/session code.
 
+## TURN lab harness
+
+The repository now includes a reusable local TURN lab harness in `test/turnlab`.
+It starts three real components under one fixture:
+- an in-process TURN server with static credentials
+- the DTLS tunnel server from `internal/tunnelserver`
+- a UDP echo target behind the tunnel server
+
+Run the harness smoke test locally with:
+
+```bash
+go test -v ./test/turnlab -run TestHarnessRelayRoundTrip
+```
+
+Future runtime and integration tests should call `turnlab.Start(ctx, logger)` and consume the returned descriptor:
+- `Descriptor.TURNAddress` plus `Descriptor.TURNCredentials` for TURN client setup
+- `Descriptor.PeerAddress` as the DTLS peer address
+- `Descriptor.UpstreamAddress` when a test needs the upstream echo endpoint explicitly
+- `GenericTurnLink()` when a test wants to drive `generic-turn` provider startup without hand-building the link
+
+CI picks the harness up automatically through the existing `go test ./...` workflow.
+
 ## Planning and tracking
 
 Use OpenSpec for behavior and architecture changes:
