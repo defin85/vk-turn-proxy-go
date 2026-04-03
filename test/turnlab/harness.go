@@ -53,6 +53,7 @@ func (d Descriptor) GenericTurnLink() string {
 type Harness struct {
 	Descriptor Descriptor
 
+	upstream *upstreamController
 	cancel   context.CancelFunc
 	done     chan struct{}
 	closeErr error
@@ -88,10 +89,12 @@ func Start(parent context.Context, logger *slog.Logger) (*Harness, error) {
 		cancel()
 		return nil, fmt.Errorf("listen upstream echo: %w", err)
 	}
+	upstream := newUpstreamController(echoConn)
+	harness.upstream = upstream
 
 	echoErrCh := make(chan error, 1)
 	go func() {
-		echoErrCh <- runUDPEcho(echoConn)
+		echoErrCh <- upstream.run()
 		close(echoErrCh)
 	}()
 	harness.Descriptor.UpstreamAddress = echoConn.LocalAddr().String()
@@ -212,6 +215,22 @@ func (h *Harness) GenericTurnLink() string {
 	}
 
 	return h.Descriptor.GenericTurnLink()
+}
+
+func (h *Harness) WaitUpstreamPeer(ctx context.Context) (net.Addr, error) {
+	if h == nil || h.upstream == nil {
+		return nil, errors.New("harness upstream is not available")
+	}
+
+	return h.upstream.WaitPeer(ctx)
+}
+
+func (h *Harness) InjectUpstream(payload []byte) error {
+	if h == nil || h.upstream == nil {
+		return errors.New("harness upstream is not available")
+	}
+
+	return h.upstream.Inject(payload)
 }
 
 func staticAuthHandler() func(string, string, net.Addr) ([]byte, bool) {

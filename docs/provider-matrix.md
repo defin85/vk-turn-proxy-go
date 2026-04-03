@@ -2,9 +2,9 @@
 
 | Provider | Status | Credential source | Notes |
 | --- | --- | --- | --- |
-| `vk` | provider-only | provider adapter | Live credential resolution is available; transport parity follows runtime changes |
+| `vk` | runtime implemented | provider adapter + client runtime | Live credential resolution plus single-session UDP/DTLS runtime are implemented; explicit compatibility evidence is tracked separately under `04-add-vk-runtime-compatibility-evidence` |
 | `yandex-telemost` | legacy | provider adapter | Legacy path only; do not treat as active product target |
-| `generic-turn` | available | static provider link | Deterministic lab and integration provider with no live signaling |
+| `generic-turn` | available | static provider link + client runtime | Deterministic provider for CI, harness-backed integration tests, and local first-slice runtime checks with no live signaling |
 
 Open questions:
 - whether credentials are stable enough for production support

@@ -1,0 +1,42 @@
+{
+  "scenario_id": "vk_runtime_success_v1",
+  "provider": "vk",
+  "kind": "runtime_success",
+  "source": {
+    "kind": "template",
+    "captured_at": "<pending:yyyy-mm-dd>",
+    "legacy_reference": "<pending:legacy-commit-or-run-id>",
+    "rewrite_reference": "<pending:rewrite-commit-or-run-id>"
+  },
+  "slice": {
+    "connections": 1,
+    "dtls": true,
+    "mode": "udp",
+    "bind_interface": ""
+  },
+  "input": {
+    "invite_redacted": "https://vk.com/call/join/<redacted:vk-join-token>",
+    "peer_addr_redacted": "<redacted:peer-addr>",
+    "turn_override": "",
+    "port_override": ""
+  },
+  "legacy": {
+    "result": "success",
+    "exit_code": 0,
+    "error_stage": "",
+    "forwarding_round_trip": true,
+    "notes": [
+      "<pending:redacted-legacy-runtime-note>"
+    ]
+  },
+  "rewrite": {
+    "result": "success",
+    "exit_code": 0,
+    "error_stage": "",
+    "forwarding_round_trip": true,
+    "notes": [
+      "<pending:redacted-rewrite-runtime-note>"
+    ]
+  },
+  "deviations": []
+}

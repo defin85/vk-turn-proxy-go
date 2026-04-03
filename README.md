@@ -97,12 +97,29 @@ Successful runs print a normalized summary including the resolved TURN address, 
 The probe writes a sanitized JSON artifact to `artifacts/vk/probe-artifact.json`.
 Provider-stage failures also persist a sanitized artifact before the command exits non-zero.
 
-The current VK contour is provider-only by design:
+The probe remains provider-only by design:
 - it normalizes the invite
 - it resolves staged VK/OK credentials
 - it does not start TURN, DTLS, or session transport loops
 
 Use the persisted artifact together with the fixture contract in `test/compatibility/vk/` before porting broader legacy client behavior into transport/session code.
+
+`cmd/tunnel-client` now runs the first client runtime slice after provider resolution.
+Supported startup policy for this slice:
+- `connections=1`
+- `dtls=true`
+- `mode=auto|udp` where `auto` normalizes to the UDP TURN path
+- empty `bind-interface`
+- one active local UDP peer per session for reply routing
+
+Rejected first-slice combinations fail closed before provider resolution:
+- `connections != 1`
+- `mode=tcp`
+- `dtls=false`
+- non-empty `bind-interface`
+
+When startup fails after policy validation, the command reports a stage-aware error such as `provider_resolve`, `turn_allocate`, or `dtls_handshake`.
+`-turn` and `-port` overrides remain supported and are applied after provider credential resolution.
 
 ## TURN lab harness
 
@@ -123,8 +140,15 @@ Future runtime and integration tests should call `turnlab.Start(ctx, logger)` an
 - `Descriptor.PeerAddress` as the DTLS peer address
 - `Descriptor.UpstreamAddress` when a test needs the upstream echo endpoint explicitly
 - `GenericTurnLink()` when a test wants to drive `generic-turn` provider startup without hand-building the link
+- `WaitUpstreamPeer(ctx)` plus `InjectUpstream(payload)` when a test needs to assert reply routing independently from the automatic echo path
 
 CI picks the harness up automatically through the existing `go test ./...` workflow.
+
+Run the first runtime slice locally against the harness-backed deterministic provider through tests:
+
+```bash
+go test -v ./internal/session -run TestRunRelayRoundTrip
+```
 
 ## Planning and tracking
 

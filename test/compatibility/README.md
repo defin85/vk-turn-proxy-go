@@ -9,3 +9,5 @@ The legacy repository `/home/egor/code/vk-turn-proxy` remains the oracle until t
 
 Provider-specific contracts live next to their fixtures.
 The first committed contract is `test/compatibility/vk/README.md`, which defines the VK call debug contour and the schema for sanitized fixtures.
+Runtime acceptance scaffolding for the supported VK-backed client slice lives in
+`test/compatibility/vk/runtime/README.md`.

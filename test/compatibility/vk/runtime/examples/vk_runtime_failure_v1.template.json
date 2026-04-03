@@ -1,0 +1,44 @@
+{
+  "scenario_id": "vk_runtime_failure_v1",
+  "provider": "vk",
+  "kind": "runtime_failure",
+  "source": {
+    "kind": "template",
+    "captured_at": "<pending:yyyy-mm-dd>",
+    "legacy_reference": "<pending:legacy-commit-or-run-id>",
+    "rewrite_reference": "<pending:rewrite-commit-or-run-id>"
+  },
+  "slice": {
+    "connections": 1,
+    "dtls": true,
+    "mode": "udp",
+    "bind_interface": ""
+  },
+  "input": {
+    "invite_redacted": "https://vk.com/call/join/<redacted:vk-join-token>",
+    "peer_addr_redacted": "<redacted:peer-addr>",
+    "turn_override": "<redacted:turn-override-or-empty>",
+    "port_override": "<redacted:port-override-or-empty>"
+  },
+  "legacy": {
+    "result": "failure",
+    "exit_code": 1,
+    "error_stage": "<pending:legacy-stage-or-empty>",
+    "forwarding_round_trip": false,
+    "notes": [
+      "<pending:redacted-legacy-failure-note>"
+    ]
+  },
+  "rewrite": {
+    "result": "failure",
+    "exit_code": 1,
+    "error_stage": "turn_allocate",
+    "forwarding_round_trip": false,
+    "notes": [
+      "<pending:redacted-rewrite-failure-note>"
+    ]
+  },
+  "deviations": [
+    "<pending:document-intentional-deviation-or-remove>"
+  ]
+}

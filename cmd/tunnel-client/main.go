@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,60 +15,67 @@ import (
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider/genericturn"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider/vk"
+	"github.com/defin85/vk-turn-proxy-go/internal/runstage"
 	"github.com/defin85/vk-turn-proxy-go/internal/session"
 )
 
 func main() {
-	cfg := config.DefaultClientConfig()
-	logLevel := flag.String("log-level", "info", "log level: debug|info|warn|error")
-	flag.StringVar(&cfg.Provider, "provider", cfg.Provider, "provider name")
-	flag.StringVar(&cfg.Link, "link", cfg.Link, "provider link or invite")
-	flag.StringVar(&cfg.ListenAddr, "listen", cfg.ListenAddr, "local UDP listen address")
-	flag.StringVar(&cfg.PeerAddr, "peer", cfg.PeerAddr, "remote server address")
-	flag.IntVar(&cfg.Connections, "connections", cfg.Connections, "number of parallel transport connections")
-	flag.StringVar(&cfg.TURNServer, "turn", cfg.TURNServer, "override TURN server IP or host")
-	flag.StringVar(&cfg.TURNPort, "port", cfg.TURNPort, "override TURN server port")
-	flag.StringVar(&cfg.BindInterface, "bind-interface", cfg.BindInterface, "preferred local interface or address")
-	flag.BoolVar(&cfg.UseDTLS, "dtls", cfg.UseDTLS, "wrap transport in DTLS")
-	flag.Func("mode", "transport mode: auto|tcp|udp", func(value string) error {
-		cfg.Mode = config.TransportMode(value)
-		return nil
-	})
-	flag.Parse()
-
-	if err := cfg.Validate(); err != nil {
-		fmt.Fprintf(os.Stderr, "invalid client config: %v\n", err)
-		os.Exit(2)
-	}
-
-	logger := observe.NewLogger(*logLevel)
-	sessionID := session.NewID()
-	registry := newRegistry()
-	adapter, err := registry.Get(cfg.Provider)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "provider lookup: %v\n", err)
-		os.Exit(2)
-	}
-
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	logger.Info("client scaffold initialized",
-		"session_id", sessionID,
-		"provider", cfg.Provider,
-		"listen", cfg.ListenAddr,
-		"peer", cfg.PeerAddr,
-		"mode", cfg.Mode,
-		"dtls", cfg.UseDTLS,
-	)
+	os.Exit(runClient(ctx, os.Stderr, os.Args[1:], newRegistry()))
+}
 
-	if _, err := adapter.Resolve(ctx, cfg.Link); err != nil {
-		fmt.Fprintf(os.Stderr, "resolve provider credentials: %v\n", err)
-		os.Exit(exitCode(err))
+func runClient(ctx context.Context, stderr io.Writer, args []string, registry *provider.Registry) int {
+	cfg, logLevel, err := parseClientFlags(stderr, args)
+	if err != nil {
+		return 2
+	}
+	if err := cfg.Validate(); err != nil {
+		fmt.Fprintf(stderr, "invalid client config: %v\n", err)
+		return 2
 	}
 
-	fmt.Fprintln(os.Stderr, "client transport core is not ported yet")
-	os.Exit(3)
+	logger := observe.NewLogger(logLevel)
+	err = session.Run(ctx, cfg, session.Dependencies{
+		Registry:  registry,
+		Logger:    logger,
+		SessionID: session.NewID(),
+	})
+	if err != nil {
+		if stage, ok := runstage.FromError(err); ok {
+			fmt.Fprintf(stderr, "client runtime failed stage=%s: %v\n", stage, err)
+		} else {
+			fmt.Fprintf(stderr, "client runtime failed: %v\n", err)
+		}
+
+		return exitCode(err)
+	}
+
+	return 0
+}
+
+func parseClientFlags(stderr io.Writer, args []string) (config.ClientConfig, string, error) {
+	cfg := config.DefaultClientConfig()
+	logLevel := "info"
+	flags := flag.NewFlagSet("tunnel-client", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	flags.StringVar(&logLevel, "log-level", logLevel, "log level: debug|info|warn|error")
+	flags.StringVar(&cfg.Provider, "provider", cfg.Provider, "provider name")
+	flags.StringVar(&cfg.Link, "link", cfg.Link, "provider link or invite")
+	flags.StringVar(&cfg.ListenAddr, "listen", cfg.ListenAddr, "local UDP listen address")
+	flags.StringVar(&cfg.PeerAddr, "peer", cfg.PeerAddr, "remote server address")
+	flags.IntVar(&cfg.Connections, "connections", cfg.Connections, "number of parallel transport connections")
+	flags.StringVar(&cfg.TURNServer, "turn", cfg.TURNServer, "override TURN server IP or host")
+	flags.StringVar(&cfg.TURNPort, "port", cfg.TURNPort, "override TURN server port")
+	flags.StringVar(&cfg.BindInterface, "bind-interface", cfg.BindInterface, "preferred local interface or address")
+	flags.BoolVar(&cfg.UseDTLS, "dtls", cfg.UseDTLS, "wrap transport in DTLS")
+	flags.Func("mode", "transport mode: auto|tcp|udp", func(value string) error {
+		cfg.Mode = config.TransportMode(value)
+		return nil
+	})
+
+	return cfg, logLevel, flags.Parse(args)
 }
 
 func exitCode(err error) int {

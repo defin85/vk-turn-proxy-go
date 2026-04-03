@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://defin85.github.io/vk-turn-proxy-go/test/compatibility/vk/runtime/evidence.schema.json",
+  "title": "VK Runtime Compatibility Evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "scenario_id",
+    "provider",
+    "kind",
+    "source",
+    "slice",
+    "input",
+    "legacy",
+    "rewrite",
+    "deviations"
+  ],
+  "properties": {
+    "scenario_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "provider": {
+      "const": "vk"
+    },
+    "kind": {
+      "enum": [
+        "runtime_success",
+        "runtime_failure"
+      ]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "captured_at",
+        "legacy_reference",
+        "rewrite_reference"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "template",
+            "manual_live",
+            "fixture_replay"
+          ]
+        },
+        "captured_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "legacy_reference": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rewrite_reference": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "slice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "connections",
+        "dtls",
+        "mode",
+        "bind_interface"
+      ],
+      "properties": {
+        "connections": {
+          "const": 1
+        },
+        "dtls": {
+          "const": true
+        },
+        "mode": {
+          "enum": [
+            "udp",
+            "auto"
+          ]
+        },
+        "bind_interface": {
+          "type": "string"
+        }
+      }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "invite_redacted",
+        "peer_addr_redacted",
+        "turn_override",
+        "port_override"
+      ],
+      "properties": {
+        "invite_redacted": {
+          "type": "string",
+          "minLength": 1
+        },
+        "peer_addr_redacted": {
+          "type": "string",
+          "minLength": 1
+        },
+        "turn_override": {
+          "type": "string"
+        },
+        "port_override": {
+          "type": "string"
+        }
+      }
+    },
+    "legacy": {
+      "$ref": "#/$defs/outcome"
+    },
+    "rewrite": {
+      "$ref": "#/$defs/outcome"
+    },
+    "deviations": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "$defs": {
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "result",
+        "exit_code",
+        "error_stage",
+        "forwarding_round_trip",
+        "notes"
+      ],
+      "properties": {
+        "result": {
+          "enum": [
+            "success",
+            "failure",
+            "unsupported"
+          ]
+        },
+        "exit_code": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "error_stage": {
+          "type": "string"
+        },
+        "forwarding_round_trip": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}
