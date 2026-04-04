@@ -50,7 +50,44 @@ func InteractionHandlerFromContext(ctx context.Context) InteractionHandler {
 }
 
 type BrowserContinuation struct {
-	Cookies []*http.Cookie
+	Cookies      []*http.Cookie
+	StageResults []BrowserStageResult
+}
+
+type BrowserStageObservation struct {
+	Stage     string
+	Method    string
+	URLPrefix string
+}
+
+type BrowserStageRequest struct {
+	Stage  string
+	Method string
+	URL    string
+	Form   map[string]string
+}
+
+type BrowserStageResult struct {
+	Stage      string
+	Method     string
+	URL        string
+	FormKeys   []string
+	StatusCode int
+	Body       map[string]any
+}
+
+func (c *BrowserContinuation) StageResult(stage string) (*BrowserStageResult, bool) {
+	if c == nil {
+		return nil, false
+	}
+
+	for i := len(c.StageResults) - 1; i >= 0; i-- {
+		if c.StageResults[i].Stage == stage {
+			return &c.StageResults[i], true
+		}
+	}
+
+	return nil, false
 }
 
 type BrowserContinuationHandler interface {
@@ -92,4 +129,14 @@ func BrowserContinuationHandlerFromContext(ctx context.Context) BrowserContinuat
 type BrowserContinuationChallenge interface {
 	InteractiveChallenge
 	CookieURLs() []string
+}
+
+type BrowserOwnedStageChallenge interface {
+	BrowserContinuationChallenge
+	BrowserStageRequests() []BrowserStageRequest
+}
+
+type BrowserObservedStageChallenge interface {
+	BrowserContinuationChallenge
+	BrowserStageObservations() []BrowserStageObservation
 }

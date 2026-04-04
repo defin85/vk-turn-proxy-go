@@ -7,7 +7,7 @@ It is intentionally limited to:
 
 - invite normalization from `https://vk.com/call/join/...`
 - staged VK/OK HTTP resolution
-- explicit browser-assisted captcha continuation for stage 2 when VK requires it
+- explicit browser-observed stage-2 continuation when VK requires captcha gating
 - normalized TURN credential output
 - explicit provider-stage failures
 
@@ -26,7 +26,7 @@ The compatibility baseline is the four-stage sequence already present in the leg
 
 The rewrite must preserve this stage order for the initial debug contour.
 If a required field is missing or malformed, the provider must fail at the stage where the field becomes unavailable.
-If VK returns `Captcha needed` at stage 2, the rewrite may pause for an explicit browser-assisted retry, but it must not skip directly to stages 3 or 4 without a successful repeated stage-2 response.
+If VK returns `Captcha needed` at stage 2, the rewrite may pause for an explicit browser-observed continuation from the controlled browser context, but it must not skip directly to stages 3 or 4 without a successful repeated stage-2 response.
 
 ## First scenarios
 
@@ -93,7 +93,7 @@ Input contract:
 Expected behavior:
 
 - the provider records the initial challenge stage and the repeated successful stage 2 attempt
-- the repeated stage 2 attempt uses browser-assisted continuation state instead of the original plain HTTP client alone
+- the repeated stage 2 result is observed from that same controlled browser context after the native VK captcha continuation chain
 - the provider returns normalized TURN credentials after the resumed staged flow completes
 - no TURN or session transport is started by the probe itself
 
@@ -104,14 +104,15 @@ Input contract:
 - stage 1 succeeds
 - stage 2 first returns `captcha_required`
 - interactive provider handling is enabled
-- the controlled browser session cannot be started, queried, or converted into usable continuation state
+- the repeated stage 2 still does not yield a usable result from the controlled browser context
 
 Expected behavior:
 
 - the provider returns an explicit provider error
 - the reported failing stage is `vk_calls_get_anonymous_token`
 - the machine-readable error code is `browser_continuation_failed`
-- sanitized artifacts still preserve the initial captcha-gated stage and must not persist raw browser cookies or session identifiers
+- sanitized artifacts still preserve the initial captcha-gated stage and the repeated browser-observed stage-2 failure
+- sanitized artifacts must not persist raw browser cookies, session identifiers, profile paths, or unredacted challenge URLs
 
 ## Fixture layout
 
@@ -185,7 +186,7 @@ Use the probe to execute the current VK provider-only debug contour:
 go run ./cmd/probe -provider vk -link 'https://vk.com/call/join/<invite>' -output-dir artifacts
 ```
 
-For invites that hit VK captcha gating, use browser-assisted continuation:
+For invites that hit VK captcha gating, use browser-observed continuation:
 
 ```bash
 go run ./cmd/probe -provider vk -link 'https://vk.com/call/join/<invite>' -output-dir artifacts -interactive-provider
@@ -196,9 +197,10 @@ Expected operator workflow:
 1. Run the probe with a VK invite.
 2. If VK requires captcha, the tool opens a controlled Chromium session for the challenge.
 3. Complete the challenge in that browser window and type `continue` in the terminal.
-4. Inspect the one-line summary on stdout for `turn_addr`, `stages`, and `artifact`.
-5. Inspect `artifacts/vk/probe-artifact.json` for the sanitized stage trace.
-6. Compare the resulting stage sequence and normalized address semantics with the committed fixtures in `test/compatibility/vk/fixtures/`.
+4. The browser completes the native VK captcha continuation chain, and only the observed repeated stage-2 result is returned to the Go provider flow.
+5. Inspect the one-line summary on stdout for `turn_addr`, `stages`, and `artifact`.
+6. Inspect `artifacts/vk/probe-artifact.json` for the sanitized stage trace.
+7. Compare the resulting stage sequence and normalized address semantics with the committed fixtures in `test/compatibility/vk/fixtures/`.
 
 If Chromium is not discoverable on `PATH`, set `VK_PROVIDER_BROWSER=/path/to/chromium` before running the probe.
 

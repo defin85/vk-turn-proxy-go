@@ -75,6 +75,50 @@
         "kind": "provider_error",
         "error_code": "captcha_required"
       }
+    },
+    {
+      "name": "vk_calls_get_anonymous_token",
+      "endpoint_id": "vk_calls_get_anonymous_token",
+      "request": {
+        "method": "POST",
+        "form_keys": [
+          "access_token",
+          "captcha_attempt",
+          "captcha_key",
+          "captcha_sid",
+          "captcha_ts",
+          "is_sound_captcha",
+          "name",
+          "success_token",
+          "vk_join_link"
+        ],
+        "redacted_fields": [
+          "vk_join_link",
+          "access_token",
+          "captcha_attempt",
+          "captcha_key",
+          "captcha_sid",
+          "captcha_ts",
+          "success_token"
+        ]
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "error": {
+            "error_code": 14,
+            "error_msg": "Captcha needed",
+            "redirect_uri": "<redacted:vk-captcha-redirect-uri>",
+            "captcha_img": "<redacted:vk-captcha-image-uri>",
+            "captcha_sid": "<redacted:vk-captcha-sid>",
+            "remixstlid": "<redacted:vk-remixstlid>"
+          }
+        }
+      },
+      "outcome": {
+        "kind": "provider_error",
+        "error_code": "browser_continuation_failed"
+      }
     }
   ],
   "expected": {

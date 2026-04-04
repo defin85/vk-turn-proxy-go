@@ -174,7 +174,7 @@ func TestRunPassesBrowserContinuationHandlerBeforeLocalBind(t *testing.T) {
 		t.Fatalf("unexpected stage: %v", err)
 	}
 	if runnerCalled {
-		t.Fatal("runner should not be created before browser-assisted provider resolution succeeds")
+		t.Fatal("runner should not be created before browser-observed provider resolution succeeds")
 	}
 	mustRebindPacket(t, cfg.ListenAddr)
 }

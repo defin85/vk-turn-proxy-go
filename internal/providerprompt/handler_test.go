@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/defin85/vk-turn-proxy-go/internal/provider"
 )
 
 type fakeChallenge struct {
@@ -28,11 +30,46 @@ func (f fakeChallenge) CookieURLs() []string {
 	return []string{"https://api.vk.ru/", "https://vk.com/"}
 }
 
+type fakeStageChallenge struct {
+	fakeChallenge
+}
+
+func (f fakeStageChallenge) BrowserStageRequests() []provider.BrowserStageRequest {
+	return []provider.BrowserStageRequest{
+		{
+			Stage:  f.fakeChallenge.stage,
+			Method: http.MethodPost,
+			URL:    "https://api.vk.ru/method/calls.getAnonymousToken?v=5.274&client_id=6287487",
+			Form: map[string]string{
+				"vk_join_link": "https://vk.com/call/join/test-token",
+				"name":         "123",
+				"access_token": "test-token",
+			},
+		},
+	}
+}
+
+type fakeObservedChallenge struct {
+	fakeChallenge
+}
+
+func (f fakeObservedChallenge) BrowserStageObservations() []provider.BrowserStageObservation {
+	return []provider.BrowserStageObservation{
+		{
+			Stage:     f.fakeChallenge.stage,
+			Method:    http.MethodPost,
+			URLPrefix: "https://api.vk.ru/method/calls.getAnonymousToken",
+		},
+	}
+}
+
 type fakeBrowserSession struct {
-	openURL  string
-	cookies  []*http.Cookie
-	errOpen  error
-	errFetch error
+	openURL        string
+	cookies        []*http.Cookie
+	stageResults   []provider.BrowserStageResult
+	observeResults []provider.BrowserStageResult
+	errOpen        error
+	errFetch       error
 }
 
 func (s *fakeBrowserSession) Open(ctx context.Context, challengeURL string) error {
@@ -45,6 +82,21 @@ func (s *fakeBrowserSession) Cookies(ctx context.Context, urls []string) ([]*htt
 		return nil, s.errFetch
 	}
 	return append([]*http.Cookie(nil), s.cookies...), nil
+}
+
+func (s *fakeBrowserSession) ExecuteStageRequests(ctx context.Context, requests []provider.BrowserStageRequest) ([]provider.BrowserStageResult, error) {
+	if s.errFetch != nil {
+		return nil, s.errFetch
+	}
+	return append([]provider.BrowserStageResult(nil), s.stageResults...), nil
+}
+
+func (s *fakeBrowserSession) ObserveStageResults(ctx context.Context, observations []provider.BrowserStageObservation, confirmed <-chan struct{}) ([]provider.BrowserStageResult, error) {
+	if s.errFetch != nil {
+		return nil, s.errFetch
+	}
+	<-confirmed
+	return append([]provider.BrowserStageResult(nil), s.observeResults...), nil
 }
 
 func (s *fakeBrowserSession) Close() error { return nil }
@@ -153,6 +205,89 @@ func TestHandlerContinueReturnsBrowserCookies(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "controlled browser opened") {
 		t.Fatalf("stderr missing controlled browser hint: %s", stderr.String())
+	}
+}
+
+func TestHandlerContinueReturnsBrowserOwnedStageResults(t *testing.T) {
+	var stderr bytes.Buffer
+	session := &fakeBrowserSession{
+		stageResults: []provider.BrowserStageResult{
+			{
+				Stage:      "vk_calls_get_anonymous_token",
+				Method:     http.MethodPost,
+				URL:        "https://api.vk.ru/method/calls.getAnonymousToken?v=5.274&client_id=6287487",
+				StatusCode: http.StatusOK,
+				Body: map[string]any{
+					"response": map[string]any{
+						"token": "<redacted:vk-anonym-token>",
+					},
+				},
+			},
+		},
+	}
+	handler := NewHandler(strings.NewReader("continue\n"), &stderr, Options{
+		NewBrowserSession: func(ctx context.Context) (browserSession, error) {
+			return session, nil
+		},
+	})
+
+	result, err := handler.Continue(context.Background(), fakeStageChallenge{fakeChallenge: fakeChallenge{
+		provider: "vk",
+		stage:    "vk_calls_get_anonymous_token",
+		kind:     "captcha",
+		prompt:   "complete captcha",
+		openURL:  "https://example.test/challenge",
+	}})
+	if err != nil {
+		t.Fatalf("Continue() error = %v", err)
+	}
+	if result == nil || len(result.StageResults) != 1 {
+		t.Fatalf("unexpected browser continuation %#v", result)
+	}
+	if len(result.Cookies) != 0 {
+		t.Fatalf("unexpected cookies in browser-owned continuation %#v", result.Cookies)
+	}
+}
+
+func TestHandlerContinueReturnsBrowserObservedStageResults(t *testing.T) {
+	var stderr bytes.Buffer
+	session := &fakeBrowserSession{
+		observeResults: []provider.BrowserStageResult{
+			{
+				Stage:      "vk_calls_get_anonymous_token",
+				Method:     http.MethodPost,
+				URL:        "https://api.vk.ru/method/calls.getAnonymousToken?v=5.275&client_id=6287487",
+				FormKeys:   []string{"access_token", "captcha_attempt", "captcha_sid", "captcha_ts", "name", "success_token", "vk_join_link"},
+				StatusCode: http.StatusOK,
+				Body: map[string]any{
+					"response": map[string]any{
+						"token": "<redacted:vk-anonym-token>",
+					},
+				},
+			},
+		},
+	}
+	handler := NewHandler(strings.NewReader("continue\n"), &stderr, Options{
+		NewBrowserSession: func(ctx context.Context) (browserSession, error) {
+			return session, nil
+		},
+	})
+
+	result, err := handler.Continue(context.Background(), fakeObservedChallenge{fakeChallenge: fakeChallenge{
+		provider: "vk",
+		stage:    "vk_calls_get_anonymous_token",
+		kind:     "captcha",
+		prompt:   "complete captcha",
+		openURL:  "https://vk.com/call/join/test-token",
+	}})
+	if err != nil {
+		t.Fatalf("Continue() error = %v", err)
+	}
+	if result == nil || len(result.StageResults) != 1 {
+		t.Fatalf("unexpected browser continuation %#v", result)
+	}
+	if got := result.StageResults[0].FormKeys; len(got) != 7 {
+		t.Fatalf("unexpected observed form keys %#v", got)
 	}
 }
 

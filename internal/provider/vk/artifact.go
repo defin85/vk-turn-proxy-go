@@ -17,6 +17,10 @@ const (
 	placeholderCaptchaURL     = "<redacted:vk-captcha-redirect-uri>"
 	placeholderCaptchaImage   = "<redacted:vk-captcha-image-uri>"
 	placeholderCaptchaSID     = "<redacted:vk-captcha-sid>"
+	placeholderCaptchaKey     = "<redacted:vk-captcha-key>"
+	placeholderCaptchaTS      = "<redacted:vk-captcha-ts>"
+	placeholderCaptchaAttempt = "<redacted:vk-captcha-attempt>"
+	placeholderSuccessToken   = "<redacted:vk-success-token>"
 	placeholderRemixSTLID     = "<redacted:vk-remixstlid>"
 )
 
@@ -102,11 +106,17 @@ func sanitizeResponseBody(stage string, payload map[string]any) map[string]any {
 		})
 	case stageGetAnonymousToken:
 		return redactKeys(payload, map[string]string{
-			"token":        placeholderAnonymousToken,
-			"redirect_uri": placeholderCaptchaURL,
-			"captcha_img":  placeholderCaptchaImage,
-			"captcha_sid":  placeholderCaptchaSID,
-			"remixstlid":   placeholderRemixSTLID,
+			"vk_join_link":    placeholderInviteURL,
+			"access_token":    placeholderAccessToken1,
+			"token":           placeholderAnonymousToken,
+			"redirect_uri":    placeholderCaptchaURL,
+			"captcha_img":     placeholderCaptchaImage,
+			"captcha_sid":     placeholderCaptchaSID,
+			"captcha_key":     placeholderCaptchaKey,
+			"captcha_ts":      placeholderCaptchaTS,
+			"captcha_attempt": placeholderCaptchaAttempt,
+			"success_token":   placeholderSuccessToken,
+			"remixstlid":      placeholderRemixSTLID,
 		})
 	case stageOKAnonymLogin:
 		return redactKeys(payload, map[string]string{
@@ -135,7 +145,14 @@ func redactValue(value any, replacements map[string]string) any {
 	switch typed := value.(type) {
 	case map[string]any:
 		result := make(map[string]any, len(typed))
+		keyName, hasKeyName := typed["key"].(string)
 		for key, inner := range typed {
+			if key == "value" && hasKeyName {
+				if replacement, ok := replacements[keyName]; ok {
+					result[key] = replacement
+					continue
+				}
+			}
 			if replacement, ok := replacements[key]; ok {
 				result[key] = replacement
 				continue

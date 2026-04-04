@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
@@ -243,6 +244,7 @@ func (r *resolver) resolveAnonymousToken(
 		"name":         {"123"},
 		"access_token": {accessToken},
 	}
+	inviteURL := "https://vk.com/call/join/" + joinToken
 
 	for {
 		payload, stageArtifact, err := r.performStage(ctx, descriptor, form)
@@ -251,6 +253,10 @@ func (r *resolver) resolveAnonymousToken(
 		}
 
 		if challenge, ok := parseCaptchaChallenge(payload); ok {
+			challenge.browserOpenURL = inviteURL
+			challenge.stageObservations = []provider.BrowserStageObservation{
+				buildBrowserObservedStageObservation(stageGetAnonymousToken, "https://api.vk.com/method/calls.getAnonymousToken"),
+			}
 			challengeStage := withStageOutcome(stageArtifact, "provider_error", nil, captchaRequiredCode)
 			browserHandler := provider.BrowserContinuationHandlerFromContext(ctx)
 			if browserHandler == nil {
@@ -280,7 +286,20 @@ func (r *resolver) resolveAnonymousToken(
 					ProbeArtifact: artifacts.artifact,
 				}
 			}
-			continuationDoer, err := newCookieDoer(r.doer, challenge.CookieURLs(), continuation.Cookies)
+			stageResult, ok := continuation.StageResult(stageGetAnonymousToken)
+			if !ok || stageResult == nil {
+				artifacts.fail(stageGetAnonymousToken, browserContinuationFailedCode)
+				return "", &provider.ArtifactError{
+					Err: &stageError{
+						stage: stageGetAnonymousToken,
+						code:  browserContinuationFailedCode,
+						err:   errors.New("browser-observed stage-2 result is required"),
+					},
+					ProbeArtifact: artifacts.artifact,
+				}
+			}
+
+			browserStageArtifact, err := stageArtifactFromBrowserResult(descriptor, *stageResult)
 			if err != nil {
 				artifacts.fail(stageGetAnonymousToken, browserContinuationFailedCode)
 				return "", &provider.ArtifactError{
@@ -292,8 +311,29 @@ func (r *resolver) resolveAnonymousToken(
 					ProbeArtifact: artifacts.artifact,
 				}
 			}
-			r = &resolver{doer: continuationDoer}
-			continue
+			if _, challengeAgain := parseCaptchaChallenge(stageResult.Body); challengeAgain {
+				return "", artifacts.wrapError(
+					&stageError{
+						stage: stageGetAnonymousToken,
+						code:  browserContinuationFailedCode,
+						err:   errors.New("browser-observed stage 2 still requires captcha"),
+					},
+					withStageOutcome(browserStageArtifact, "provider_error", nil, browserContinuationFailedCode),
+				)
+			}
+
+			anonymousToken, err := parseAnonymousToken(stageResult.Body)
+			if err != nil {
+				return "", artifacts.wrapError(
+					&stageError{stage: stageGetAnonymousToken, code: browserContinuationFailedCode, err: err},
+					withStageOutcome(browserStageArtifact, "provider_error", nil, browserContinuationFailedCode),
+				)
+			}
+			artifacts.append(withStageOutcome(browserStageArtifact, "continue", map[string]any{
+				"anonym_token": placeholderAnonymousToken,
+			}, ""))
+
+			return anonymousToken, nil
 		}
 
 		anonymousToken, err := parseAnonymousToken(payload)
@@ -309,4 +349,66 @@ func (r *resolver) resolveAnonymousToken(
 
 		return anonymousToken, nil
 	}
+}
+
+func stageArtifactFromBrowserResult(descriptor stageDescriptor, result provider.BrowserStageResult) (provider.ProbeArtifactStage, error) {
+	if result.StatusCode == 0 {
+		return provider.ProbeArtifactStage{}, errors.New("browser-observed stage response status is required")
+	}
+	if result.Body == nil {
+		return provider.ProbeArtifactStage{}, errors.New("browser-observed stage response body is required")
+	}
+
+	return provider.ProbeArtifactStage{
+		Name:       descriptor.name,
+		EndpointID: descriptor.name,
+		Request: provider.ProbeArtifactStageRequest{
+			Method:         http.MethodPost,
+			FormKeys:       browserStageFormKeys(descriptor, result),
+			RedactedFields: browserStageRedactedFields(descriptor, result),
+		},
+		Response: provider.ProbeArtifactStageResponse{
+			StatusCode: result.StatusCode,
+			Body:       sanitizeResponseBody(descriptor.name, result.Body),
+		},
+	}, nil
+}
+
+func browserStageFormKeys(descriptor stageDescriptor, result provider.BrowserStageResult) []string {
+	if len(result.FormKeys) == 0 {
+		return descriptor.formKeys
+	}
+
+	keys := make([]string, 0, len(result.FormKeys))
+	keys = append(keys, result.FormKeys...)
+	return keys
+}
+
+func browserStageRedactedFields(descriptor stageDescriptor, result provider.BrowserStageResult) []string {
+	keys := make([]string, 0, len(descriptor.redactedFields)+4)
+	keys = append(keys, descriptor.redactedFields...)
+
+	extra := map[string]struct{}{
+		"captcha_sid":     {},
+		"captcha_key":     {},
+		"captcha_ts":      {},
+		"captcha_attempt": {},
+		"success_token":   {},
+	}
+	seen := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		seen[key] = struct{}{}
+	}
+	for _, key := range result.FormKeys {
+		if _, ok := extra[key]; !ok {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		keys = append(keys, key)
+	}
+
+	return keys
 }

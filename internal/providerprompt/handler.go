@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os/exec"
 	"strings"
 
@@ -111,12 +110,12 @@ func (h *Handler) Continue(ctx context.Context, challenge provider.InteractiveCh
 		return nil, errors.New("interactive provider challenge URL is required")
 	}
 	if h.newBrowserSession == nil {
-		return nil, errors.New("browser-assisted provider session is required")
+		return nil, errors.New("provider browser session is required")
 	}
 
 	session, err := h.newBrowserSession(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("start browser-assisted provider session: %w", err)
+		return nil, fmt.Errorf("start provider browser session: %w", err)
 	}
 	defer func() {
 		_ = session.Close()
@@ -127,8 +126,55 @@ func (h *Handler) Continue(ctx context.Context, challenge provider.InteractiveCh
 		return nil, fmt.Errorf("open controlled browser challenge: %w", err)
 	}
 	fmt.Fprintln(h.stderr, "controlled browser opened for provider challenge")
+
+	var (
+		observedResultsCh chan []provider.BrowserStageResult
+		observationErrCh  chan error
+		confirmed         chan struct{}
+	)
+	if observedChallenge, ok := challenge.(provider.BrowserObservedStageChallenge); ok {
+		confirmed = make(chan struct{})
+		observedResultsCh = make(chan []provider.BrowserStageResult, 1)
+		observationErrCh = make(chan error, 1)
+		go func() {
+			stageResults, err := session.ObserveStageResults(ctx, observedChallenge.BrowserStageObservations(), confirmed)
+			if err != nil {
+				observationErrCh <- err
+				return
+			}
+			observedResultsCh <- stageResults
+		}()
+	}
+
 	if err := h.waitForContinue(ctx); err != nil {
+		if confirmed != nil {
+			close(confirmed)
+		}
 		return nil, err
+	}
+	if confirmed != nil {
+		close(confirmed)
+	}
+
+	result := &provider.BrowserContinuation{}
+	if observedResultsCh != nil {
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("observe browser continuation stage: %w", ctx.Err())
+		case err := <-observationErrCh:
+			return nil, fmt.Errorf("observe browser continuation stage: %w", err)
+		case stageResults := <-observedResultsCh:
+			result.StageResults = append(result.StageResults, stageResults...)
+			return result, nil
+		}
+	}
+	if stageChallenge, ok := challenge.(provider.BrowserOwnedStageChallenge); ok {
+		stageResults, err := session.ExecuteStageRequests(ctx, stageChallenge.BrowserStageRequests())
+		if err != nil {
+			return nil, fmt.Errorf("execute browser continuation stage: %w", err)
+		}
+		result.StageResults = append(result.StageResults, stageResults...)
+		return result, nil
 	}
 
 	cookieURLs := []string{challengeURL}
@@ -141,8 +187,9 @@ func (h *Handler) Continue(ctx context.Context, challenge provider.InteractiveCh
 	if err != nil {
 		return nil, fmt.Errorf("collect browser continuation cookies: %w", err)
 	}
+	result.Cookies = append(result.Cookies, cookies...)
 
-	return &provider.BrowserContinuation{Cookies: append([]*http.Cookie(nil), cookies...)}, nil
+	return result, nil
 }
 
 func (h *Handler) validate(challenge provider.InteractiveChallenge) error {

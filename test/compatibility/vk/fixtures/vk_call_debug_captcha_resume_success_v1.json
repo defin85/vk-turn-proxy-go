@@ -82,13 +82,24 @@
       "request": {
         "method": "POST",
         "form_keys": [
-          "vk_join_link",
+          "access_token",
+          "captcha_attempt",
+          "captcha_key",
+          "captcha_sid",
+          "captcha_ts",
+          "is_sound_captcha",
           "name",
-          "access_token"
+          "success_token",
+          "vk_join_link"
         ],
         "redacted_fields": [
           "vk_join_link",
-          "access_token"
+          "access_token",
+          "captcha_attempt",
+          "captcha_key",
+          "captcha_sid",
+          "captcha_ts",
+          "success_token"
         ]
       },
       "response": {

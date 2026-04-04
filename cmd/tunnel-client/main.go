@@ -103,7 +103,7 @@ func parseClientFlags(stderr io.Writer, args []string) (config.ClientConfig, str
 	flags.SetOutput(stderr)
 	flags.StringVar(&logLevel, "log-level", logLevel, "log level: debug|info|warn|error")
 	flags.StringVar(&metricsListen, "metrics-listen", metricsListen, "optional metrics listen address")
-	flags.BoolVar(&interactiveProvider, "interactive-provider", interactiveProvider, "allow operator-assisted provider challenges, including browser-assisted VK captcha continuation")
+	flags.BoolVar(&interactiveProvider, "interactive-provider", interactiveProvider, "allow operator-assisted provider challenges, including browser-observed VK stage-2 continuation")
 	flags.StringVar(&cfg.Provider, "provider", cfg.Provider, "provider name")
 	flags.StringVar(&cfg.Link, "link", cfg.Link, "provider link or invite")
 	flags.StringVar(&cfg.ListenAddr, "listen", cfg.ListenAddr, "local UDP listen address")
