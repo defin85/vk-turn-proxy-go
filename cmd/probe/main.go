@@ -115,7 +115,7 @@ func parseProbeFlags(stderr io.Writer, args []string) (config.ProbeConfig, bool,
 	flags.StringVar(&cfg.BindInterface, "bind-interface", cfg.BindInterface, "preferred local interface or address")
 	flags.StringVar(&cfg.OutputDir, "output-dir", cfg.OutputDir, "directory for collected artifacts")
 	flags.BoolVar(&cfg.ListProviders, "list-providers", cfg.ListProviders, "list available providers and exit")
-	flags.BoolVar(&interactiveProvider, "interactive-provider", interactiveProvider, "allow operator-assisted provider challenges, including browser-observed VK stage-2 continuation")
+	flags.BoolVar(&interactiveProvider, "interactive-provider", interactiveProvider, "allow operator-assisted provider challenges, including browser-observed VK captcha continuation and live preview contour capture")
 
 	return cfg, interactiveProvider, flags.Parse(args)
 }

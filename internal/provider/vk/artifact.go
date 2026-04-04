@@ -7,21 +7,22 @@ import (
 )
 
 const (
-	placeholderInviteURL      = "https://vk.com/call/join/<redacted:vk-join-token>"
-	placeholderJoinToken      = "<redacted:vk-join-token>"
-	placeholderAccessToken1   = "<redacted:vk-access-token-1>"
-	placeholderAnonymousToken = "<redacted:vk-anonym-token>"
-	placeholderSessionKey     = "<redacted:ok-session-key>"
-	placeholderTurnUsername   = "<redacted:turn-username>"
-	placeholderTurnPassword   = "<redacted:turn-password>"
-	placeholderCaptchaURL     = "<redacted:vk-captcha-redirect-uri>"
-	placeholderCaptchaImage   = "<redacted:vk-captcha-image-uri>"
-	placeholderCaptchaSID     = "<redacted:vk-captcha-sid>"
-	placeholderCaptchaKey     = "<redacted:vk-captcha-key>"
-	placeholderCaptchaTS      = "<redacted:vk-captcha-ts>"
-	placeholderCaptchaAttempt = "<redacted:vk-captcha-attempt>"
-	placeholderSuccessToken   = "<redacted:vk-success-token>"
-	placeholderRemixSTLID     = "<redacted:vk-remixstlid>"
+	placeholderInviteURL          = "https://vk.com/call/join/<redacted:vk-join-token>"
+	placeholderJoinToken          = "<redacted:vk-join-token>"
+	placeholderAccessToken1       = "<redacted:vk-access-token-1>"
+	placeholderBrowserAccessToken = "<redacted:vk-browser-access-token>"
+	placeholderAnonymousToken     = "<redacted:vk-anonym-token>"
+	placeholderSessionKey         = "<redacted:ok-session-key>"
+	placeholderTurnUsername       = "<redacted:turn-username>"
+	placeholderTurnPassword       = "<redacted:turn-password>"
+	placeholderCaptchaURL         = "<redacted:vk-captcha-redirect-uri>"
+	placeholderCaptchaImage       = "<redacted:vk-captcha-image-uri>"
+	placeholderCaptchaSID         = "<redacted:vk-captcha-sid>"
+	placeholderCaptchaKey         = "<redacted:vk-captcha-key>"
+	placeholderCaptchaTS          = "<redacted:vk-captcha-ts>"
+	placeholderCaptchaAttempt     = "<redacted:vk-captcha-attempt>"
+	placeholderSuccessToken       = "<redacted:vk-success-token>"
+	placeholderRemixSTLID         = "<redacted:vk-remixstlid>"
 )
 
 type artifactBuilder struct {
@@ -104,6 +105,21 @@ func sanitizeResponseBody(stage string, payload map[string]any) map[string]any {
 		return redactKeys(payload, map[string]string{
 			"access_token": placeholderAccessToken1,
 		})
+	case stageBrowserLoginAnonymTokenMessages:
+		return redactKeys(payload, map[string]string{
+			"access_token":  placeholderBrowserAccessToken,
+			"redirect_uri":  placeholderCaptchaURL,
+			"captcha_img":   placeholderCaptchaImage,
+			"captcha_sid":   placeholderCaptchaSID,
+			"captcha_key":   placeholderCaptchaKey,
+			"captcha_ts":    placeholderCaptchaTS,
+			"success_token": placeholderSuccessToken,
+			"remixstlid":    placeholderRemixSTLID,
+			"vk_join_link":  placeholderInviteURL,
+			"join_link":     placeholderInviteURL,
+			"join_url":      placeholderInviteURL,
+			"invite_url":    placeholderInviteURL,
+		})
 	case stageGetAnonymousToken:
 		return redactKeys(payload, map[string]string{
 			"vk_join_link":    placeholderInviteURL,
@@ -115,6 +131,24 @@ func sanitizeResponseBody(stage string, payload map[string]any) map[string]any {
 			"captcha_key":     placeholderCaptchaKey,
 			"captcha_ts":      placeholderCaptchaTS,
 			"captcha_attempt": placeholderCaptchaAttempt,
+			"success_token":   placeholderSuccessToken,
+			"remixstlid":      placeholderRemixSTLID,
+		})
+	case stageGetCallPreview:
+		return redactKeys(payload, map[string]string{
+			"vk_join_link":    placeholderInviteURL,
+			"join_link":       placeholderInviteURL,
+			"join_url":        placeholderInviteURL,
+			"invite_url":      placeholderInviteURL,
+			"access_token":    placeholderBrowserAccessToken,
+			"anonym_token":    placeholderAnonymousToken,
+			"anonymous_token": placeholderAnonymousToken,
+			"token":           placeholderAnonymousToken,
+			"redirect_uri":    placeholderCaptchaURL,
+			"captcha_img":     placeholderCaptchaImage,
+			"captcha_sid":     placeholderCaptchaSID,
+			"captcha_key":     placeholderCaptchaKey,
+			"captcha_ts":      placeholderCaptchaTS,
 			"success_token":   placeholderSuccessToken,
 			"remixstlid":      placeholderRemixSTLID,
 		})

@@ -103,13 +103,14 @@ The probe remains provider-only by design:
 - it resolves staged VK/OK credentials
 - it does not start TURN, DTLS, or session transport loops
 
-If VK returns `Captcha needed`, rerun the probe with browser-observed stage-2 continuation:
+If VK returns `Captcha needed`, rerun the probe with browser-observed continuation:
 
 ```bash
 go run ./cmd/probe -provider vk -link 'https://vk.com/call/join/<invite>' -output-dir artifacts -interactive-provider
 ```
 
-Interactive mode launches a controlled browser session when possible, waits for the operator to complete the challenge and type `continue`, then lets the browser complete the native VK captcha continuation flow and imports only the observed repeated stage-2 result back into the provider flow.
+Interactive mode launches a controlled browser session when possible, waits for the operator to complete the challenge and type `continue`, then records either the deterministic repeated stage-2 result or the live browser preview contour that reaches the pre-join page.
+If the live browser contour stops at preview-only state, the probe still fails closed and writes a sanitized artifact instead of claiming TURN-ready parity.
 Raw browser cookies, profile paths, and challenge URLs are not persisted in the probe artifact.
 If Chromium is not on `PATH`, point the helper at it explicitly with `VK_PROVIDER_BROWSER=/path/to/chromium`.
 

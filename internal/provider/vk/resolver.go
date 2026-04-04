@@ -254,9 +254,7 @@ func (r *resolver) resolveAnonymousToken(
 
 		if challenge, ok := parseCaptchaChallenge(payload); ok {
 			challenge.browserOpenURL = inviteURL
-			challenge.stageObservations = []provider.BrowserStageObservation{
-				buildBrowserObservedStageObservation(stageGetAnonymousToken, "https://api.vk.com/method/calls.getAnonymousToken"),
-			}
+			challenge.stageObservations = liveBrowserObservedStageObservations()
 			challengeStage := withStageOutcome(stageArtifact, "provider_error", nil, captchaRequiredCode)
 			browserHandler := provider.BrowserContinuationHandlerFromContext(ctx)
 			if browserHandler == nil {
@@ -275,65 +273,7 @@ func (r *resolver) resolveAnonymousToken(
 					ProbeArtifact: artifacts.artifact,
 				}
 			}
-			if continuation == nil {
-				artifacts.fail(stageGetAnonymousToken, browserContinuationFailedCode)
-				return "", &provider.ArtifactError{
-					Err: &stageError{
-						stage: stageGetAnonymousToken,
-						code:  browserContinuationFailedCode,
-						err:   errors.New("browser continuation result is required"),
-					},
-					ProbeArtifact: artifacts.artifact,
-				}
-			}
-			stageResult, ok := continuation.StageResult(stageGetAnonymousToken)
-			if !ok || stageResult == nil {
-				artifacts.fail(stageGetAnonymousToken, browserContinuationFailedCode)
-				return "", &provider.ArtifactError{
-					Err: &stageError{
-						stage: stageGetAnonymousToken,
-						code:  browserContinuationFailedCode,
-						err:   errors.New("browser-observed stage-2 result is required"),
-					},
-					ProbeArtifact: artifacts.artifact,
-				}
-			}
-
-			browserStageArtifact, err := stageArtifactFromBrowserResult(descriptor, *stageResult)
-			if err != nil {
-				artifacts.fail(stageGetAnonymousToken, browserContinuationFailedCode)
-				return "", &provider.ArtifactError{
-					Err: &stageError{
-						stage: stageGetAnonymousToken,
-						code:  browserContinuationFailedCode,
-						err:   err,
-					},
-					ProbeArtifact: artifacts.artifact,
-				}
-			}
-			if _, challengeAgain := parseCaptchaChallenge(stageResult.Body); challengeAgain {
-				return "", artifacts.wrapError(
-					&stageError{
-						stage: stageGetAnonymousToken,
-						code:  browserContinuationFailedCode,
-						err:   errors.New("browser-observed stage 2 still requires captcha"),
-					},
-					withStageOutcome(browserStageArtifact, "provider_error", nil, browserContinuationFailedCode),
-				)
-			}
-
-			anonymousToken, err := parseAnonymousToken(stageResult.Body)
-			if err != nil {
-				return "", artifacts.wrapError(
-					&stageError{stage: stageGetAnonymousToken, code: browserContinuationFailedCode, err: err},
-					withStageOutcome(browserStageArtifact, "provider_error", nil, browserContinuationFailedCode),
-				)
-			}
-			artifacts.append(withStageOutcome(browserStageArtifact, "continue", map[string]any{
-				"anonym_token": placeholderAnonymousToken,
-			}, ""))
-
-			return anonymousToken, nil
+			return r.resolveAnonymousTokenFromBrowserContinuation(artifacts, descriptor, continuation)
 		}
 
 		anonymousToken, err := parseAnonymousToken(payload)

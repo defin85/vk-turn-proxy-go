@@ -2,12 +2,16 @@
 
 ## Scope
 
-This contract covers the provider-only VK flow mirrored from the legacy `getVkCreds` implementation in `/home/egor/code/vk-turn-proxy/client/main.go`.
+This contract covers the provider-only VK flow anchored by two separate contours:
+
+- the deterministic legacy `getVkCreds` implementation in `/home/egor/code/vk-turn-proxy/client/main.go`
+- the browser-observed live post-challenge preview contour captured on April 4, 2026
+
 It is intentionally limited to:
 
 - invite normalization from `https://vk.com/call/join/...`
 - staged VK/OK HTTP resolution
-- explicit browser-observed stage-2 continuation when VK requires captcha gating
+- explicit browser-observed continuation when VK requires captcha gating
 - normalized TURN credential output
 - explicit provider-stage failures
 
@@ -26,7 +30,9 @@ The compatibility baseline is the four-stage sequence already present in the leg
 
 The rewrite must preserve this stage order for the initial debug contour.
 If a required field is missing or malformed, the provider must fail at the stage where the field becomes unavailable.
-If VK returns `Captcha needed` at stage 2, the rewrite may pause for an explicit browser-observed continuation from the controlled browser context, but it must not skip directly to stages 3 or 4 without a successful repeated stage-2 response.
+If VK returns `Captcha needed` at stage 2, the rewrite may pause for an explicit browser-observed continuation from the controlled browser context.
+That continuation may either yield the deterministic repeated stage-2 response or a distinct live browser contour that reaches the pre-join preview page through `login.vk.com/?act=get_anonym_token` plus `calls.getCallPreview`.
+The rewrite must distinguish those contours and fail closed when the live browser contour is still preview-only.
 
 ## First scenarios
 
@@ -114,6 +120,25 @@ Expected behavior:
 - sanitized artifacts still preserve the initial captcha-gated stage and the repeated browser-observed stage-2 failure
 - sanitized artifacts must not persist raw browser cookies, session identifiers, profile paths, or unredacted challenge URLs
 
+### `vk_call_debug_live_browser_preview_only_v1`
+
+Input contract:
+
+- stage 1 succeeds
+- stage 2 returns `captcha_required`
+- interactive provider handling is enabled
+- the controlled browser reaches the pre-join page by using the live browser contour centered on `login.vk.com/?act=get_anonym_token` and `calls.getCallPreview`
+- no normalized TURN credentials are exposed in that live contour
+
+Expected behavior:
+
+- the provider records the initial captcha-gated stage separately from the live browser preview stages
+- the provider persists sanitized browser-observed evidence for `get_anonym_token(messages)` and `calls.getCallPreview`
+- the provider returns an explicit provider error
+- the reported failing stage is `vk_calls_get_call_preview`
+- the machine-readable error code is `browser_preview_only`
+- `cmd/probe` and `cmd/tunnel-client` still do not start TURN, DTLS, or session transport loops from that preview-only state
+
 ## Fixture layout
 
 The fixture directory for this contract is:
@@ -126,6 +151,7 @@ test/compatibility/vk/
     vk_call_debug_browser_continuation_failed_v1.json
     vk_call_debug_captcha_required_v1.json
     vk_call_debug_captcha_resume_success_v1.json
+    vk_call_debug_live_browser_preview_only_v1.json
     vk_call_debug_success_v1.json
     vk_call_debug_stage4_missing_turn_url_v1.json
 ```
@@ -133,8 +159,8 @@ test/compatibility/vk/
 Task `1.2` in the OpenSpec change is responsible for creating the two JSON fixtures above.
 Task `1.1` defines their contract only.
 
-The first committed fixture set is a sanitized reconstruction of the legacy `getVkCreds` stage flow.
-It is sufficient for deterministic parser and normalization tests even before a live-capture workflow is added.
+The deterministic fixture set is a sanitized reconstruction of the legacy `getVkCreds` stage flow.
+The live preview fixture set is sanitized browser-observed evidence for a different post-challenge contract and must not be used to claim TURN-ready parity.
 
 ## Sanitization rules
 
@@ -154,7 +180,7 @@ Every VK compatibility fixture must satisfy `test/compatibility/vk/fixture.schem
 
 - `scenario_id`
 - `provider`
-- `legacy_source`
+- `legacy_source` or `browser_source`
 - `input`
 - `stages`
 - `expected`
@@ -197,7 +223,7 @@ Expected operator workflow:
 1. Run the probe with a VK invite.
 2. If VK requires captcha, the tool opens a controlled Chromium session for the challenge.
 3. Complete the challenge in that browser window and type `continue` in the terminal.
-4. The browser completes the native VK captcha continuation chain, and only the observed repeated stage-2 result is returned to the Go provider flow.
+4. The browser completes the native VK captcha continuation chain, and the provider records either the repeated deterministic stage-2 result or the distinct live preview contour.
 5. Inspect the one-line summary on stdout for `turn_addr`, `stages`, and `artifact`.
 6. Inspect `artifacts/vk/probe-artifact.json` for the sanitized stage trace.
 7. Compare the resulting stage sequence and normalized address semantics with the committed fixtures in `test/compatibility/vk/fixtures/`.

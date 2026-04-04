@@ -7,10 +7,21 @@
   "required": [
     "scenario_id",
     "provider",
-    "legacy_source",
     "input",
     "stages",
     "expected"
+  ],
+  "anyOf": [
+    {
+      "required": [
+        "legacy_source"
+      ]
+    },
+    {
+      "required": [
+        "browser_source"
+      ]
+    }
   ],
   "properties": {
     "scenario_id": {
@@ -41,6 +52,29 @@
         },
         "stage_count": {
           "const": 4
+        }
+      }
+    },
+    "browser_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "captured_at",
+        "contour"
+      ],
+      "properties": {
+        "captured_at": {
+          "type": "string",
+          "format": "date"
+        },
+        "contour": {
+          "type": "string",
+          "enum": [
+            "post_challenge_prejoin_preview"
+          ]
+        },
+        "notes": {
+          "type": "string"
         }
       }
     },
@@ -81,6 +115,8 @@
             "enum": [
               "vk_login_anonym_token",
               "vk_calls_get_anonymous_token",
+              "vk_browser_login_anonym_token_messages",
+              "vk_calls_get_call_preview",
               "ok_anonym_login",
               "ok_join_conversation_by_link"
             ]
@@ -90,6 +126,8 @@
             "enum": [
               "vk_login_anonym_token",
               "vk_calls_get_anonymous_token",
+              "vk_browser_login_anonym_token_messages",
+              "vk_calls_get_call_preview",
               "ok_anonym_login",
               "ok_join_conversation_by_link"
             ]
@@ -214,6 +252,8 @@
               "enum": [
                 "vk_login_anonym_token",
                 "vk_calls_get_anonymous_token",
+                "vk_browser_login_anonym_token_messages",
+                "vk_calls_get_call_preview",
                 "ok_anonym_login",
                 "ok_join_conversation_by_link"
               ]

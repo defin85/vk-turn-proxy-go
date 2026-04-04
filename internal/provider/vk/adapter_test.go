@@ -228,15 +228,9 @@ func TestResolveContinuesAfterBrowserObservedChallenge(t *testing.T) {
 			t.Fatalf("expected browser-observed stage challenge, got %T", challenge)
 		}
 		observations := stageChallenge.BrowserStageObservations()
-		if len(observations) != 1 {
-			t.Fatalf("browser stage observation count = %d, want 1", len(observations))
-		}
-		if observations[0].Stage != stageGetAnonymousToken {
-			t.Fatalf("browser stage observation stage = %q", observations[0].Stage)
-		}
-		if observations[0].URLPrefix != "https://api.vk.com/method/calls.getAnonymousToken" {
-			t.Fatalf("browser stage observation URL prefix = %q", observations[0].URLPrefix)
-		}
+		assertObservedStage(t, observations, stageGetAnonymousToken, "https://api.vk.com/method/calls.getAnonymousToken")
+		assertObservedStage(t, observations, stageBrowserLoginAnonymTokenMessages, liveLoginAnonymTokenURL)
+		assertObservedStage(t, observations, stageGetCallPreview, getCallPreviewURL)
 		return &provider.BrowserContinuation{
 			StageResults: []provider.BrowserStageResult{
 				{
@@ -272,6 +266,81 @@ func TestResolveContinuesAfterBrowserObservedChallenge(t *testing.T) {
 	}
 	if resolution.Artifact == nil || len(resolution.Artifact.Stages) != len(fixture.Stages) {
 		t.Fatalf("unexpected artifact stages %#v", resolution.Artifact)
+	}
+}
+
+func TestResolveFailsClosedOnLiveBrowserPreviewContour(t *testing.T) {
+	fixture := loadFixture(t, "vk_call_debug_live_browser_preview_only_v1.json")
+	doer := &fixtureDoer{t: t, stages: fixture.Stages[:2]}
+	adapter := NewWithHTTPDoer(doer)
+
+	ctx := provider.WithBrowserContinuationHandler(context.Background(), provider.BrowserContinuationHandlerFunc(func(ctx context.Context, challenge provider.InteractiveChallenge) (*provider.BrowserContinuation, error) {
+		stageChallenge, ok := challenge.(provider.BrowserObservedStageChallenge)
+		if !ok {
+			t.Fatalf("expected browser-observed stage challenge, got %T", challenge)
+		}
+		observations := stageChallenge.BrowserStageObservations()
+		assertObservedStage(t, observations, stageGetAnonymousToken, "https://api.vk.com/method/calls.getAnonymousToken")
+		assertObservedStage(t, observations, stageBrowserLoginAnonymTokenMessages, liveLoginAnonymTokenURL)
+		assertObservedStage(t, observations, stageGetCallPreview, getCallPreviewURL)
+
+		return &provider.BrowserContinuation{
+			StageResults: []provider.BrowserStageResult{
+				{
+					Stage:      fixture.Stages[2].Name,
+					Method:     fixture.Stages[2].Request.Method,
+					URL:        liveLoginAnonymTokenURL + "&app_id=6287487",
+					FormKeys:   fixture.Stages[2].Request.FormKeys,
+					StatusCode: fixture.Stages[2].Response.StatusCode,
+					Body:       fixture.Stages[2].Response.Body,
+				},
+				{
+					Stage:      fixture.Stages[3].Name,
+					Method:     fixture.Stages[3].Request.Method,
+					URL:        getCallPreviewURL + "?v=5.275&client_id=6287487",
+					FormKeys:   fixture.Stages[3].Request.FormKeys,
+					StatusCode: fixture.Stages[3].Response.StatusCode,
+					Body:       fixture.Stages[3].Response.Body,
+				},
+			},
+		}, nil
+	}))
+
+	_, err := adapter.Resolve(ctx, "https://vk.com/call/join/test-token")
+	if err == nil {
+		t.Fatal("Resolve() expected error")
+	}
+
+	var stageErr *stageError
+	if !errors.As(err, &stageErr) {
+		t.Fatalf("expected stageError, got %T", err)
+	}
+	if stageErr.stage != fixture.Expected.ProviderError.Stage {
+		t.Fatalf("unexpected stage %q", stageErr.stage)
+	}
+	if stageErr.code != fixture.Expected.ProviderError.Code {
+		t.Fatalf("unexpected code %q", stageErr.code)
+	}
+	if doer.calls != 2 {
+		t.Fatalf("unexpected HTTP call count %d", doer.calls)
+	}
+
+	var carrier provider.ArtifactCarrier
+	if !errors.As(err, &carrier) {
+		t.Fatalf("expected artifact carrier, got %T", err)
+	}
+	artifact := carrier.Artifact()
+	if artifact == nil || len(artifact.Stages) != len(fixture.Stages) {
+		t.Fatalf("unexpected artifact stages %#v", artifact)
+	}
+	if artifact.Outcome.ProviderError == nil {
+		t.Fatalf("expected provider error outcome, got %#v", artifact.Outcome)
+	}
+	if artifact.Outcome.ProviderError.Stage != fixture.Expected.ProviderError.Stage {
+		t.Fatalf("artifact stage = %q, want %q", artifact.Outcome.ProviderError.Stage, fixture.Expected.ProviderError.Stage)
+	}
+	if artifact.Outcome.ProviderError.Code != fixture.Expected.ProviderError.Code {
+		t.Fatalf("artifact code = %q, want %q", artifact.Outcome.ProviderError.Code, fixture.Expected.ProviderError.Code)
 	}
 }
 
@@ -342,6 +411,22 @@ func TestResolveFailsWhenBrowserOwnedStageStillReturnsCaptcha(t *testing.T) {
 	if artifact.Outcome.ProviderError == nil || artifact.Outcome.ProviderError.Code != fixture.Expected.ProviderError.Code {
 		t.Fatalf("unexpected artifact outcome %#v", artifact.Outcome)
 	}
+}
+
+func assertObservedStage(t *testing.T, observations []provider.BrowserStageObservation, stage string, urlPrefix string) {
+	t.Helper()
+
+	for _, observation := range observations {
+		if observation.Stage != stage {
+			continue
+		}
+		if observation.URLPrefix != urlPrefix {
+			t.Fatalf("browser stage observation URL prefix for %s = %q, want %q", stage, observation.URLPrefix, urlPrefix)
+		}
+		return
+	}
+
+	t.Fatalf("missing browser stage observation for %s", stage)
 }
 
 func loadFixture(t *testing.T, name string) fixture {

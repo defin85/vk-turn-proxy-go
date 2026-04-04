@@ -1,0 +1,142 @@
+{
+  "scenario_id": "vk_call_debug_live_browser_preview_only_v1",
+  "provider": "vk",
+  "browser_source": {
+    "captured_at": "2026-04-04",
+    "contour": "post_challenge_prejoin_preview",
+    "notes": "Observed live browser contour after challenge.html reached the pre-join preview page via login.vk.com get_anonym_token(messages) and calls.getCallPreview without a repeated calls.getAnonymousToken replay."
+  },
+  "input": {
+    "invite_url_redacted": "https://vk.com/call/join/<redacted:vk-join-token>",
+    "normalized_join_token_redacted": "<redacted:vk-join-token>"
+  },
+  "stages": [
+    {
+      "name": "vk_login_anonym_token",
+      "endpoint_id": "vk_login_anonym_token",
+      "request": {
+        "method": "POST",
+        "form_keys": [
+          "client_id",
+          "token_type",
+          "client_secret",
+          "version",
+          "app_id"
+        ],
+        "redacted_fields": [
+          "client_secret"
+        ]
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "data": {
+            "access_token": "<redacted:vk-access-token-1>"
+          }
+        }
+      },
+      "outcome": {
+        "kind": "continue",
+        "extracted": {
+          "access_token": "<redacted:vk-access-token-1>"
+        }
+      }
+    },
+    {
+      "name": "vk_calls_get_anonymous_token",
+      "endpoint_id": "vk_calls_get_anonymous_token",
+      "request": {
+        "method": "POST",
+        "form_keys": [
+          "vk_join_link",
+          "name",
+          "access_token"
+        ],
+        "redacted_fields": [
+          "vk_join_link",
+          "access_token"
+        ]
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "error": {
+            "error_code": 14,
+            "error_msg": "Captcha needed",
+            "redirect_uri": "<redacted:vk-captcha-redirect-uri>",
+            "captcha_img": "<redacted:vk-captcha-image-uri>",
+            "captcha_sid": "<redacted:vk-captcha-sid>",
+            "remixstlid": "<redacted:vk-remixstlid>"
+          }
+        }
+      },
+      "outcome": {
+        "kind": "provider_error",
+        "error_code": "captcha_required"
+      }
+    },
+    {
+      "name": "vk_browser_login_anonym_token_messages",
+      "endpoint_id": "vk_browser_login_anonym_token_messages",
+      "request": {
+        "method": "POST",
+        "form_keys": [
+          "app_id",
+          "client_id",
+          "token_type",
+          "version"
+        ],
+        "redacted_fields": []
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "data": {
+            "access_token": "<redacted:vk-browser-access-token>"
+          }
+        }
+      },
+      "outcome": {
+        "kind": "continue",
+        "extracted": {
+          "access_token": "<redacted:vk-browser-access-token>"
+        }
+      }
+    },
+    {
+      "name": "vk_calls_get_call_preview",
+      "endpoint_id": "vk_calls_get_call_preview",
+      "request": {
+        "method": "POST",
+        "form_keys": [
+          "access_token",
+          "call_id",
+          "v"
+        ],
+        "redacted_fields": [
+          "access_token"
+        ]
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "response": {
+            "join_link": "https://vk.com/call/join/<redacted:vk-join-token>",
+            "state": "prejoin"
+          }
+        }
+      },
+      "outcome": {
+        "kind": "provider_error",
+        "error_code": "browser_preview_only"
+      }
+    }
+  ],
+  "expected": {
+    "result_kind": "provider_error",
+    "provider_error": {
+      "stage": "vk_calls_get_call_preview",
+      "code": "browser_preview_only"
+    }
+  }
+}

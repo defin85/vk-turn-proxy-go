@@ -86,3 +86,29 @@ func TestSanitizeResponseBodyRedactsRequestParamsValues(t *testing.T) {
 		t.Fatalf("success_token value = %#v, want %q", got, placeholderSuccessToken)
 	}
 }
+
+func TestSanitizeResponseBodyRedactsLiveBrowserPreviewValues(t *testing.T) {
+	payload := map[string]any{
+		"response": map[string]any{
+			"join_link":    "https://vk.com/call/join/live-secret-token",
+			"access_token": "raw-browser-access-token",
+			"token":        "raw-browser-preview-token",
+		},
+	}
+
+	sanitized := sanitizeResponseBody(stageGetCallPreview, payload)
+
+	responseObject, ok := sanitized["response"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected response object, got %#v", sanitized["response"])
+	}
+	if got := responseObject["join_link"]; got != placeholderInviteURL {
+		t.Fatalf("join_link = %#v, want %q", got, placeholderInviteURL)
+	}
+	if got := responseObject["access_token"]; got != placeholderBrowserAccessToken {
+		t.Fatalf("access_token = %#v, want %q", got, placeholderBrowserAccessToken)
+	}
+	if got := responseObject["token"]; got != placeholderAnonymousToken {
+		t.Fatalf("token = %#v, want %q", got, placeholderAnonymousToken)
+	}
+}
