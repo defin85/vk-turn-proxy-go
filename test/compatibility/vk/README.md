@@ -5,7 +5,7 @@
 This contract covers the provider-only VK flow anchored by two separate contours:
 
 - the deterministic legacy `getVkCreds` implementation in `/home/egor/code/vk-turn-proxy/client/main.go`
-- the browser-observed live post-challenge preview contour captured on April 4, 2026
+- the browser-observed live post-challenge preview and post-preview contours captured on April 4, 2026
 
 It is intentionally limited to:
 
@@ -32,7 +32,8 @@ The rewrite must preserve this stage order for the initial debug contour.
 If a required field is missing or malformed, the provider must fail at the stage where the field becomes unavailable.
 If VK returns `Captcha needed` at stage 2, the rewrite may pause for an explicit browser-observed continuation from the controlled browser context.
 That continuation may either yield the deterministic repeated stage-2 response or a distinct live browser contour that reaches the pre-join preview page through `login.vk.com/?act=get_anonym_token` plus `calls.getCallPreview`.
-The rewrite must distinguish those contours and fail closed when the live browser contour is still preview-only.
+If observation continues beyond preview into browser-observed `ok_anonym_login` or `ok_join_conversation_by_link`, the rewrite must distinguish preview-only, post-preview unsupported, and transport-ready post-preview outcomes.
+The rewrite must still fail closed until normalized TURN credentials are explicitly observed.
 
 ## First scenarios
 
@@ -139,6 +140,25 @@ Expected behavior:
 - the machine-readable error code is `browser_preview_only`
 - `cmd/probe` and `cmd/tunnel-client` still do not start TURN, DTLS, or session transport loops from that preview-only state
 
+### `vk_call_debug_live_browser_post_preview_unsupported_v1`
+
+Input contract:
+
+- stage 1 succeeds
+- stage 2 returns `captcha_required`
+- interactive provider handling is enabled
+- the controlled browser reaches the pre-join preview page and then continues into browser-observed OK post-preview requests
+- the observed post-preview contour still does not expose normalized TURN credentials
+
+Expected behavior:
+
+- the provider records the preview stage as a non-terminal browser contour stage
+- the provider persists sanitized browser-observed evidence for the ordered post-preview OK stage sequence
+- the provider returns an explicit provider error
+- the reported failing stage is the last observed post-preview stage
+- the machine-readable error code is `browser_post_preview_unsupported`
+- `cmd/probe` and `cmd/tunnel-client` still do not start TURN, DTLS, or session transport loops from that post-preview unsupported state
+
 ## Fixture layout
 
 The fixture directory for this contract is:
@@ -151,6 +171,7 @@ test/compatibility/vk/
     vk_call_debug_browser_continuation_failed_v1.json
     vk_call_debug_captcha_required_v1.json
     vk_call_debug_captcha_resume_success_v1.json
+    vk_call_debug_live_browser_post_preview_unsupported_v1.json
     vk_call_debug_live_browser_preview_only_v1.json
     vk_call_debug_success_v1.json
     vk_call_debug_stage4_missing_turn_url_v1.json
@@ -160,7 +181,7 @@ Task `1.2` in the OpenSpec change is responsible for creating the two JSON fixtu
 Task `1.1` defines their contract only.
 
 The deterministic fixture set is a sanitized reconstruction of the legacy `getVkCreds` stage flow.
-The live preview fixture set is sanitized browser-observed evidence for a different post-challenge contract and must not be used to claim TURN-ready parity.
+The live preview/post-preview fixture set is sanitized browser-observed evidence for a different post-challenge contract and must not be used to claim TURN-ready parity beyond what the captured contour actually shows.
 
 ## Sanitization rules
 
@@ -223,7 +244,7 @@ Expected operator workflow:
 1. Run the probe with a VK invite.
 2. If VK requires captcha, the tool opens a controlled Chromium session for the challenge.
 3. Complete the challenge in that browser window and type `continue` in the terminal.
-4. The browser completes the native VK captcha continuation chain, and the provider records either the repeated deterministic stage-2 result or the distinct live preview contour.
+4. The browser completes the native VK captcha continuation chain, and the provider records either the repeated deterministic stage-2 result, the preview-only contour, or the distinct post-preview contour that still remains provider-only.
 5. Inspect the one-line summary on stdout for `turn_addr`, `stages`, and `artifact`.
 6. Inspect `artifacts/vk/probe-artifact.json` for the sanitized stage trace.
 7. Compare the resulting stage sequence and normalized address semantics with the committed fixtures in `test/compatibility/vk/fixtures/`.

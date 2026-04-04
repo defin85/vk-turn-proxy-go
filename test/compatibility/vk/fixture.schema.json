@@ -70,7 +70,8 @@
         "contour": {
           "type": "string",
           "enum": [
-            "post_challenge_prejoin_preview"
+            "post_challenge_prejoin_preview",
+            "post_challenge_post_preview"
           ]
         },
         "notes": {

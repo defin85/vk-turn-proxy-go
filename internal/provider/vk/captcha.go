@@ -84,10 +84,20 @@ func (c *CaptchaChallenge) BrowserStageObservations() []provider.BrowserStageObs
 
 	result := make([]provider.BrowserStageObservation, 0, len(c.stageObservations))
 	for _, observation := range c.stageObservations {
+		clonedExact := make(map[string]string, len(observation.RequiredFormValues))
+		for key, value := range observation.RequiredFormValues {
+			clonedExact[key] = value
+		}
+		clonedAlternatives := make(map[string][]string, len(observation.RequiredFormValueAlternatives))
+		for key, values := range observation.RequiredFormValueAlternatives {
+			clonedAlternatives[key] = append([]string(nil), values...)
+		}
 		result = append(result, provider.BrowserStageObservation{
-			Stage:     observation.Stage,
-			Method:    observation.Method,
-			URLPrefix: observation.URLPrefix,
+			Stage:                         observation.Stage,
+			Method:                        observation.Method,
+			URLPrefix:                     observation.URLPrefix,
+			RequiredFormValues:            clonedExact,
+			RequiredFormValueAlternatives: clonedAlternatives,
 		})
 	}
 

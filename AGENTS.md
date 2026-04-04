@@ -19,51 +19,42 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 # Local instructions for Codex
 
-## Scope
-- This repository is the canonical codebase for the Go rewrite.
-- The legacy repository `/home/egor/code/vk-turn-proxy` is a reference implementation and compatibility oracle, not a place for new product changes.
-
-## Project Docs
-- Start with `README.md` for the current runtime/operator surface.
+## First pass
+- Start with `docs/agent/index.md` for the repo map and task routing.
+- Use `README.md` for the runtime/operator surface.
 - Use `openspec/project.md` plus `openspec/specs/*/spec.md` as the checked-in behavior contract.
-- For provider compatibility and wire-behavior work, start with `test/compatibility/README.md`, `test/compatibility/vk/README.md`, and the relevant fixtures before changing code.
-- Use `docs/provider-matrix.md`, `docs/runtime-observability.md`, and `docs/adr/0001-go-monorepo.md` as the repo-owned architecture and runtime references.
+- For compatibility or wire-behavior work, also open `test/compatibility/AGENTS.md`.
 
-## Search Playbook
+## Escalation triggers
+- Open `openspec/AGENTS.md` before planning or proposing behavior/architecture changes.
+- Open `code_review.md` for review requests or when you need the repo review rubric.
+
+## Repo map
+- `cmd/`: operator entrypoints (`probe`, `tunnel-client`, `tunnel-server`)
+- `internal/provider/`: provider-specific signaling and credential resolution
+- `internal/transport/`: provider-agnostic TURN/DTLS/UDP primitives
+- `internal/session/`: client runtime orchestration and supervision
+- `internal/observe/`: structured logs and metrics
+- `test/compatibility/`: replayable compatibility contracts and fixtures
+- `test/turnlab/`: deterministic integration harness
+- `openspec/`: behavior and architecture source of truth
+
+## Search workflow
 - Search order: `mcp__claude_context__search_code` -> `rg` -> `rg --files` -> targeted file reads.
-- Use the canonical repo root `/home/egor/code/vk-turn-proxy-go/` for semantic indexing tools; use the same absolute path for index, status, clear, and search.
-- Form the first semantic query as `component + action + context` and keep the first pass narrow.
-- Set `extensionFilter` early when using semantic search:
-  - Go implementation: `.go`
-  - Specs/docs/instructions: `.md`
-  - Compatibility fixtures/evidence: `.json`
-  - CI/workflows: `.yml`
-- Prioritize `internal/`, `cmd/`, `openspec/`, `test/compatibility/`, `docs/`, `README.md`, and `AGENTS.md` when narrowing search scope.
-- For OpenSpec work, use `openspec list`, `openspec list --specs`, and `openspec show` first; treat `rg` as full-text fallback.
-- For provider and wire-behavior questions, confirm findings in at least two sources: code + tests/spec/docs.
-- Do not treat plans, tasks, TODO lists, or status files as proof that behavior is implemented.
+- Use the canonical repo root `/home/egor/code/vk-turn-proxy-go/` for semantic indexing tools.
+- Start with narrow queries and set `extensionFilter` early.
+- Do not treat plans, tasks, or TODO lists as proof that behavior exists.
+- For provider and wire-behavior questions, confirm claims in at least two sources: code + tests/spec/docs.
 
-## Architecture rules
+## Guardrails
+- This repository is the canonical codebase for the Go rewrite; `/home/egor/code/vk-turn-proxy` is the compatibility oracle, not the place for new product changes.
 - Keep provider-specific signaling and credential resolution inside `internal/provider/...`.
 - Keep TURN/DTLS/UDP transport logic provider-agnostic.
-- Keep runtime concerns such as flags, config loading, logging, metrics, and service integration out of transport packages.
-- New behavior-changing work must preserve explicit traceability: `requirement -> code -> test`.
+- Keep runtime/config/logging/metrics out of transport packages.
+- Fail closed on provider failures; do not add silent fallbacks.
+- Prefer small packages and files with one responsibility.
 
-## Compatibility rules
-- Before changing wire behavior, define the compatibility scenario first.
-- Prefer adding or updating an integration/compatibility test over arguing from inspection.
-- Do not silently add fallback behavior for provider failures; fail closed with explicit errors.
-
-## Complexity rules
-- Prefer small packages with one responsibility.
-- Avoid files growing beyond 300 lines unless there is a clear reason.
-- Avoid mixed provider + transport + orchestration code in one file.
-
-## Verification
-- For Go changes, run the smallest relevant test set first, then `go test ./...` and `go build ./...` when feasible.
-
-## Issue Tracking
-- This repository uses `bd (beads)` for issue tracking. Run `bd prime` for the current workflow context.
-- Prefer `bd ready`, `bd show <id>`, `bd create "Title" --type task --priority 2`, and `bd close <id>`.
-- Use `--json` for machine-readable output and do not keep parallel markdown TODO/task lists.
-- When work comes from an approved OpenSpec change, keep the related Beads issues aligned with `openspec/changes/<change-id>/tasks.md`.
+## Verification and tracking
+- Use `docs/agent/verification.md` to choose the smallest relevant verification set.
+- For Go changes, escalate to `go test ./...` and `go build ./...` when the smaller relevant checks pass.
+- Run `bd prime` for workflow context, track work in Beads, and keep approved OpenSpec tasks aligned with Beads.

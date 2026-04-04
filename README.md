@@ -27,6 +27,7 @@ cmd/
   tunnel-client/
   tunnel-server/
 docs/
+  agent/
   adr/
 internal/
   config/
@@ -41,6 +42,15 @@ internal/
 test/
   compatibility/
 ```
+
+## Agent docs
+
+Use these repo-local documents when working through Codex or other agents:
+
+- `docs/agent/index.md`: task routing and the smallest useful doc set
+- `docs/agent/architecture-map.md`: subsystem ownership and navigation
+- `docs/agent/verification.md`: change-specific verification matrix
+- `code_review.md`: repository review rubric
 
 ## Design contract
 
@@ -109,10 +119,11 @@ If VK returns `Captcha needed`, rerun the probe with browser-observed continuati
 go run ./cmd/probe -provider vk -link 'https://vk.com/call/join/<invite>' -output-dir artifacts -interactive-provider
 ```
 
-Interactive mode launches a controlled browser session when possible, waits for the operator to complete the challenge and type `continue`, then records either the deterministic repeated stage-2 result or the live browser preview contour that reaches the pre-join page.
-If the live browser contour stops at preview-only state, the probe still fails closed and writes a sanitized artifact instead of claiming TURN-ready parity.
+Interactive mode launches a controlled browser session when possible, waits for the operator to complete the challenge and type `continue`, then records either the deterministic repeated stage-2 result or the live browser contour that reaches preview and may continue into post-preview OK stages.
+If the live browser contour stops at preview-only state or reaches post-preview without normalized TURN credentials, the probe still fails closed and writes a sanitized artifact instead of claiming TURN-ready parity.
 Raw browser cookies, profile paths, and challenge URLs are not persisted in the probe artifact.
 If Chromium is not on `PATH`, point the helper at it explicitly with `VK_PROVIDER_BROWSER=/path/to/chromium`.
+CI-like environments automatically switch the helper to headless Chromium; override that behavior explicitly with `VK_PROVIDER_BROWSER_HEADLESS=true|false` when needed.
 
 Use the persisted artifact together with the fixture contract in `test/compatibility/vk/` before porting broader legacy client behavior into transport/session code.
 
@@ -176,6 +187,18 @@ Run the first runtime slice locally against the harness-backed deterministic pro
 ```bash
 go test -v ./internal/session -run TestRunRelayRoundTrip
 ```
+
+## Local GitHub Actions reproduction
+
+The repository includes a repo-local `.actrc` for `act`.
+Use it to run the GitHub Actions `test` job locally through Docker:
+
+```bash
+act -j test -W .github/workflows/ci.yml
+```
+
+The default `act` runner image is intentionally a full GitHub-like Ubuntu snapshot because the CI job exercises browser-backed Chromium tests.
+If you need to override the runner image for a one-off run, pass your own `-P ubuntu-latest=...` value on the command line.
 
 ## Planning and tracking
 

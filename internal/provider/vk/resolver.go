@@ -44,6 +44,11 @@ type stageError struct {
 	err   error
 }
 
+type anonymousTokenResolution struct {
+	anonymousToken string
+	resolution     *provider.Resolution
+}
+
 func (e *stageError) Error() string {
 	if e.err == nil {
 		return fmt.Sprintf("vk stage %s [%s]", e.stage, e.code)
@@ -106,10 +111,14 @@ func (r *resolver) resolve(ctx context.Context, joinToken string) (provider.Reso
 			"access_token",
 		},
 	}
-	anonymousToken, err := r.resolveAnonymousToken(ctx, artifacts, joinToken, accessToken, anonymousTokenStage)
+	anonymousTokenResult, err := r.resolveAnonymousToken(ctx, artifacts, joinToken, accessToken, anonymousTokenStage)
 	if err != nil {
 		return provider.Resolution{}, err
 	}
+	if anonymousTokenResult.resolution != nil {
+		return *anonymousTokenResult.resolution, nil
+	}
+	anonymousToken := anonymousTokenResult.anonymousToken
 
 	deviceID, err := newDeviceID()
 	if err != nil {
@@ -238,7 +247,7 @@ func (r *resolver) resolveAnonymousToken(
 	joinToken string,
 	accessToken string,
 	descriptor stageDescriptor,
-) (string, error) {
+) (anonymousTokenResolution, error) {
 	form := url.Values{
 		"vk_join_link": {"https://vk.com/call/join/" + joinToken},
 		"name":         {"123"},
@@ -249,22 +258,22 @@ func (r *resolver) resolveAnonymousToken(
 	for {
 		payload, stageArtifact, err := r.performStage(ctx, descriptor, form)
 		if err != nil {
-			return "", artifacts.wrapError(err, stageArtifact)
+			return anonymousTokenResolution{}, artifacts.wrapError(err, stageArtifact)
 		}
 
 		if challenge, ok := parseCaptchaChallenge(payload); ok {
 			challenge.browserOpenURL = inviteURL
-			challenge.stageObservations = liveBrowserObservedStageObservations()
+			challenge.stageObservations = liveBrowserObservedStageObservations(joinToken)
 			challengeStage := withStageOutcome(stageArtifact, "provider_error", nil, captchaRequiredCode)
 			browserHandler := provider.BrowserContinuationHandlerFromContext(ctx)
 			if browserHandler == nil {
-				return "", artifacts.wrapError(newCaptchaRequiredError(stageGetAnonymousToken, challenge, nil), challengeStage)
+				return anonymousTokenResolution{}, artifacts.wrapError(newCaptchaRequiredError(stageGetAnonymousToken, challenge, nil), challengeStage)
 			}
 			artifacts.append(challengeStage)
 			continuation, err := browserHandler.Continue(ctx, challenge)
 			if err != nil {
 				artifacts.fail(stageGetAnonymousToken, browserContinuationFailedCode)
-				return "", &provider.ArtifactError{
+				return anonymousTokenResolution{}, &provider.ArtifactError{
 					Err: &stageError{
 						stage: stageGetAnonymousToken,
 						code:  browserContinuationFailedCode,
@@ -278,7 +287,7 @@ func (r *resolver) resolveAnonymousToken(
 
 		anonymousToken, err := parseAnonymousToken(payload)
 		if err != nil {
-			return "", artifacts.wrapError(
+			return anonymousTokenResolution{}, artifacts.wrapError(
 				&stageError{stage: stageGetAnonymousToken, code: "missing_anonymous_token", err: err},
 				withStageOutcome(stageArtifact, "provider_error", nil, "missing_anonymous_token"),
 			)
@@ -287,7 +296,7 @@ func (r *resolver) resolveAnonymousToken(
 			"anonym_token": placeholderAnonymousToken,
 		}, ""))
 
-		return anonymousToken, nil
+		return anonymousTokenResolution{anonymousToken: anonymousToken}, nil
 	}
 }
 

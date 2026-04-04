@@ -11,14 +11,29 @@ import (
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
 )
 
-func TestChromiumSessionCollectsCookies(t *testing.T) {
+func newBrowserTestSession(t *testing.T, ctx context.Context) browserSession {
+	t.Helper()
+
 	if testing.Short() {
 		t.Skip("skipping controlled browser integration in short mode")
 	}
+	t.Setenv(browserHeadlessEnv, "true")
 	if _, err := resolveBrowserPath(); err != nil {
 		t.Skipf("browser not available: %v", err)
 	}
 
+	session, err := newChromiumSession(ctx)
+	if err != nil {
+		t.Fatalf("newChromiumSession() error = %v", err)
+	}
+	t.Cleanup(func() {
+		_ = session.Close()
+	})
+
+	return session
+}
+
+func TestChromiumSessionCollectsCookies(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		http.SetCookie(writer, &http.Cookie{
 			Name:     "vkprobe",
@@ -34,13 +49,7 @@ func TestChromiumSessionCollectsCookies(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	session, err := newChromiumSession(ctx)
-	if err != nil {
-		t.Fatalf("newChromiumSession() error = %v", err)
-	}
-	defer func() {
-		_ = session.Close()
-	}()
+	session := newBrowserTestSession(t, ctx)
 
 	if err := session.Open(ctx, server.URL); err != nil {
 		t.Fatalf("Open() error = %v", err)
@@ -61,13 +70,6 @@ func TestChromiumSessionCollectsCookies(t *testing.T) {
 }
 
 func TestChromiumSessionExecutesBrowserOwnedStageRequest(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping controlled browser integration in short mode")
-	}
-	if _, err := resolveBrowserPath(); err != nil {
-		t.Skipf("browser not available: %v", err)
-	}
-
 	var challengeOrigin string
 	stageServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if challengeOrigin != "" {
@@ -98,13 +100,7 @@ func TestChromiumSessionExecutesBrowserOwnedStageRequest(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	session, err := newChromiumSession(ctx)
-	if err != nil {
-		t.Fatalf("newChromiumSession() error = %v", err)
-	}
-	defer func() {
-		_ = session.Close()
-	}()
+	session := newBrowserTestSession(t, ctx)
 
 	if err := session.Open(ctx, challengeServer.URL); err != nil {
 		t.Fatalf("Open() error = %v", err)
@@ -138,13 +134,6 @@ func TestChromiumSessionExecutesBrowserOwnedStageRequest(t *testing.T) {
 }
 
 func TestChromiumSessionObservesBrowserOwnedStageResult(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping controlled browser integration in short mode")
-	}
-	if _, err := resolveBrowserPath(); err != nil {
-		t.Skipf("browser not available: %v", err)
-	}
-
 	var challengeOrigin string
 	stageServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if challengeOrigin != "" {
@@ -189,13 +178,7 @@ setTimeout(() => {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	session, err := newChromiumSession(ctx)
-	if err != nil {
-		t.Fatalf("newChromiumSession() error = %v", err)
-	}
-	defer func() {
-		_ = session.Close()
-	}()
+	session := newBrowserTestSession(t, ctx)
 
 	if err := session.Open(ctx, challengeServer.URL); err != nil {
 		t.Fatalf("Open() error = %v", err)
@@ -244,14 +227,128 @@ setTimeout(() => {
 	}
 }
 
-func TestChromiumSessionObservesStageResultDuringInitialPageLoad(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping controlled browser integration in short mode")
-	}
-	if _, err := resolveBrowserPath(); err != nil {
-		t.Skipf("browser not available: %v", err)
+func TestChromiumSessionObservesResultsInRequestOrder(t *testing.T) {
+	var challengeOrigin string
+	stageServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if challengeOrigin != "" {
+			writer.Header().Set("Access-Control-Allow-Origin", challengeOrigin)
+			writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
+		if err := request.ParseForm(); err != nil {
+			t.Fatalf("parse form: %v", err)
+		}
+		switch request.PostForm.Get("method") {
+		case "auth.anonymLogin":
+			time.Sleep(300 * time.Millisecond)
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"response":{"stage":"first"}}`))
+		case "vchat.joinConversationByLink":
+			if got := request.PostForm.Get("joinLink"); got != "https://vk.com/call/join/test-token" {
+				t.Fatalf("unexpected joinLink %q", got)
+			}
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"response":{"stage":"second"}}`))
+		default:
+			t.Fatalf("unexpected method form value %q", request.PostForm.Get("method"))
+		}
+	}))
+	defer stageServer.Close()
+
+	challengeServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = writer.Write([]byte(fmt.Sprintf(`<html><body><script>
+setTimeout(() => {
+  fetch(%q, {
+    method: "POST",
+    credentials: "include",
+    headers: {"Content-Type": "application/x-www-form-urlencoded"},
+    body: new URLSearchParams({"method": "auth.anonymLogin", "format": "JSON", "application_key": "CGMMEJLGDIHBABABA"})
+  });
+  fetch(%q, {
+    method: "POST",
+    credentials: "include",
+    headers: {"Content-Type": "application/x-www-form-urlencoded"},
+    body: new URLSearchParams({
+      "method": "vchat.joinConversationByLink",
+      "format": "JSON",
+      "application_key": "CGMMEJLGDIHBABABA",
+      "protocolVersion": "5",
+      "isVideo": "false",
+      "joinLink": "https://vk.com/call/join/test-token"
+    })
+  });
+}, 200);
+</script>challenge</body></html>`, stageServer.URL, stageServer.URL)))
+	}))
+	defer challengeServer.Close()
+	challengeOrigin = challengeServer.URL
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	session := newBrowserTestSession(t, ctx)
+
+	if err := session.Open(ctx, challengeServer.URL); err != nil {
+		t.Fatalf("Open() error = %v", err)
 	}
 
+	confirmed := make(chan struct{})
+	resultsCh := make(chan []provider.BrowserStageResult, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		results, err := session.ObserveStageResults(ctx, []provider.BrowserStageObservation{
+			{
+				Stage:     "ok_anonym_login",
+				Method:    http.MethodPost,
+				URLPrefix: stageServer.URL,
+				RequiredFormValues: map[string]string{
+					"method":          "auth.anonymLogin",
+					"format":          "JSON",
+					"application_key": "CGMMEJLGDIHBABABA",
+				},
+			},
+			{
+				Stage:     "ok_join_conversation_by_link",
+				Method:    http.MethodPost,
+				URLPrefix: stageServer.URL,
+				RequiredFormValues: map[string]string{
+					"method":          "vchat.joinConversationByLink",
+					"format":          "JSON",
+					"application_key": "CGMMEJLGDIHBABABA",
+					"protocolVersion": "5",
+					"isVideo":         "false",
+				},
+				RequiredFormValueAlternatives: map[string][]string{
+					"joinLink": {"test-token", "https://vk.com/call/join/test-token"},
+				},
+			},
+		}, confirmed, nil)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		resultsCh <- results
+	}()
+
+	time.Sleep(700 * time.Millisecond)
+	close(confirmed)
+
+	select {
+	case err := <-errCh:
+		t.Fatalf("ObserveStageResults() error = %v", err)
+	case results := <-resultsCh:
+		if len(results) != 2 {
+			t.Fatalf("unexpected stage results %#v", results)
+		}
+		if results[0].Stage != "ok_anonym_login" || results[1].Stage != "ok_join_conversation_by_link" {
+			t.Fatalf("unexpected stage order %#v", results)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("ObserveStageResults() timed out")
+	}
+}
+
+func TestChromiumSessionObservesStageResultDuringInitialPageLoad(t *testing.T) {
 	var challengeOrigin string
 	stageServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if challengeOrigin != "" {
@@ -294,13 +391,7 @@ fetch(%q, {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	session, err := newChromiumSession(ctx)
-	if err != nil {
-		t.Fatalf("newChromiumSession() error = %v", err)
-	}
-	defer func() {
-		_ = session.Close()
-	}()
+	session := newBrowserTestSession(t, ctx)
 
 	confirmed := make(chan struct{})
 	ready := make(chan struct{})

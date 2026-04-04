@@ -55,9 +55,11 @@ type BrowserContinuation struct {
 }
 
 type BrowserStageObservation struct {
-	Stage     string
-	Method    string
-	URLPrefix string
+	Stage                         string
+	Method                        string
+	URLPrefix                     string
+	RequiredFormValues            map[string]string
+	RequiredFormValueAlternatives map[string][]string
 }
 
 type BrowserStageRequest struct {

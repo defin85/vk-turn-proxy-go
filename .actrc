@@ -1,0 +1,3 @@
+-P ubuntu-latest=catthehacker/ubuntu:full-latest
+--env RUNNER_TOOL_CACHE=/tmp/act-toolcache
+--env RUNNER_TEMP=/tmp/act-runner-temp

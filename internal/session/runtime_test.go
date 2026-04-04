@@ -232,6 +232,60 @@ func TestRunFailsClosedOnPreviewOnlyProviderResolutionBeforeLocalBind(t *testing
 	mustRebindPacket(t, cfg.ListenAddr)
 }
 
+func TestRunFailsClosedOnPostPreviewUnsupportedProviderResolutionBeforeLocalBind(t *testing.T) {
+	cfg := validClientConfig()
+	cfg.Provider = "vk"
+	cfg.ListenAddr = reserveUDPAddr(t)
+
+	adapter := &fakeAdapter{
+		name: "vk",
+		err: &provider.ArtifactError{
+			Err: errors.New("vk stage ok_anonym_login [browser_post_preview_unsupported]"),
+			ProbeArtifact: &provider.ProbeArtifact{
+				Provider: "vk",
+				Stages: []provider.ProbeArtifactStage{
+					{Name: "vk_login_anonym_token", EndpointID: "vk_login_anonym_token"},
+					{Name: "vk_calls_get_anonymous_token", EndpointID: "vk_calls_get_anonymous_token"},
+					{Name: "vk_browser_login_anonym_token_messages", EndpointID: "vk_browser_login_anonym_token_messages"},
+					{Name: "vk_calls_get_call_preview", EndpointID: "vk_calls_get_call_preview"},
+					{Name: "ok_anonym_login", EndpointID: "ok_anonym_login"},
+				},
+				Outcome: provider.ProbeArtifactOutcome{
+					ResultKind: "provider_error",
+					ProviderError: &provider.ProbeArtifactProviderError{
+						Stage: "ok_anonym_login",
+						Code:  "browser_post_preview_unsupported",
+					},
+				},
+			},
+		},
+	}
+	runnerCalled := false
+
+	err := Run(context.Background(), cfg, Dependencies{
+		Registry: provider.NewRegistry(adapter),
+		Logger:   testLogger(),
+		NewRunner: func(cfg transport.ClientConfig) transport.Runner {
+			runnerCalled = true
+			return fakeRunner{}
+		},
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	stage, ok := runstage.FromError(err)
+	if !ok || stage != runstage.ProviderResolve {
+		t.Fatalf("unexpected stage: %v", err)
+	}
+	if adapter.calls != 1 {
+		t.Fatalf("provider Resolve() calls = %d, want 1", adapter.calls)
+	}
+	if runnerCalled {
+		t.Fatal("runner should not be created for post-preview unsupported provider resolution")
+	}
+	mustRebindPacket(t, cfg.ListenAddr)
+}
+
 func TestRunAppliesTURNOverrides(t *testing.T) {
 	cfg := validClientConfig()
 	cfg.TURNServer = "override.example.test"

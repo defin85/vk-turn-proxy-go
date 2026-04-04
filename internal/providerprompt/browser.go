@@ -1,6 +1,7 @@
 package providerprompt
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -26,6 +27,8 @@ import (
 const browserStartupTimeout = 15 * time.Second
 const browserStageTimeout = 20 * time.Second
 
+const browserHeadlessEnv = "VK_PROVIDER_BROWSER_HEADLESS"
+
 type browserSession interface {
 	Open(context.Context, string) error
 	Cookies(context.Context, []string) ([]*http.Cookie, error)
@@ -42,6 +45,7 @@ type chromiumSession struct {
 	remoteCancel context.CancelFunc
 	targetCtx    context.Context
 	targetCancel context.CancelFunc
+	launchLog    *bytes.Buffer
 }
 
 func newChromiumSession(ctx context.Context) (browserSession, error) {
@@ -58,14 +62,10 @@ func newChromiumSession(ctx context.Context) (browserSession, error) {
 		return nil, fmt.Errorf("create browser profile dir: %w", err)
 	}
 
-	cmd := exec.CommandContext(ctx, browserPath,
-		"--no-first-run",
-		"--no-default-browser-check",
-		"--new-window",
-		fmt.Sprintf("--user-data-dir=%s", userDataDir),
-		fmt.Sprintf("--remote-debugging-port=%d", debugPort),
-		"about:blank",
-	)
+	launchLog := &bytes.Buffer{}
+	cmd := exec.CommandContext(ctx, browserPath, chromiumLaunchArgs(userDataDir, debugPort)...)
+	cmd.Stdout = launchLog
+	cmd.Stderr = launchLog
 	if err := cmd.Start(); err != nil {
 		_ = os.RemoveAll(userDataDir)
 		return nil, fmt.Errorf("start chromium: %w", err)
@@ -78,7 +78,7 @@ func newChromiumSession(ctx context.Context) (browserSession, error) {
 		_ = cmd.Process.Kill()
 		_, _ = cmd.Process.Wait()
 		_ = os.RemoveAll(userDataDir)
-		return nil, fmt.Errorf("wait for browser devtools: %w", err)
+		return nil, fmt.Errorf("wait for browser devtools: %w%s", err, browserStartupLogSuffix(launchLog.String()))
 	}
 
 	remoteCtx, remoteCancel := chromedp.NewRemoteAllocator(ctx, debugURL)
@@ -92,6 +92,7 @@ func newChromiumSession(ctx context.Context) (browserSession, error) {
 		remoteCancel: remoteCancel,
 		targetCtx:    targetCtx,
 		targetCancel: targetCancel,
+		launchLog:    launchLog,
 	}, nil
 }
 
@@ -198,16 +199,23 @@ func (s *chromiumSession) ObserveStageResults(
 		observation provider.BrowserStageObservation
 		method      string
 		url         string
+		order       int
 		formKeys    []string
 		status      int
 	}
 
-	resultsCh := make(chan provider.BrowserStageResult, len(observations)+8)
+	type observedStageResult struct {
+		order  int
+		result provider.BrowserStageResult
+	}
+
+	resultsCh := make(chan observedStageResult, len(observations)+8)
 	errCh := make(chan error, 1)
 
 	var (
-		mu      sync.Mutex
-		matched = make(map[network.RequestID]requestMeta)
+		mu        sync.Mutex
+		nextOrder int
+		matched   = make(map[network.RequestID]requestMeta)
 	)
 
 	sendErr := func(err error) {
@@ -223,7 +231,8 @@ func (s *chromiumSession) ObserveStageResults(
 			if ev.Request == nil {
 				return
 			}
-			observation, ok := matchObservation(observations, ev.Request.Method, ev.Request.URL)
+			formValues := extractObservedFormValues(ev.Request)
+			observation, ok := matchObservation(observations, ev.Request.Method, ev.Request.URL, formValues)
 			if !ok {
 				return
 			}
@@ -233,8 +242,10 @@ func (s *chromiumSession) ObserveStageResults(
 				observation: observation,
 				method:      ev.Request.Method,
 				url:         ev.Request.URL,
-				formKeys:    extractObservedFormKeys(ev.Request),
+				order:       nextOrder,
+				formKeys:    sortedKeys(formValues),
 			}
+			nextOrder++
 			mu.Unlock()
 		case *network.EventResponseReceived:
 			mu.Lock()
@@ -286,13 +297,16 @@ func (s *chromiumSession) ObserveStageResults(
 				}
 
 				select {
-				case resultsCh <- provider.BrowserStageResult{
-					Stage:      meta.observation.Stage,
-					Method:     meta.method,
-					URL:        meta.url,
-					FormKeys:   meta.formKeys,
-					StatusCode: meta.status,
-					Body:       payload,
+				case resultsCh <- observedStageResult{
+					order: meta.order,
+					result: provider.BrowserStageResult{
+						Stage:      meta.observation.Stage,
+						Method:     meta.method,
+						URL:        meta.url,
+						FormKeys:   meta.formKeys,
+						StatusCode: meta.status,
+						Body:       payload,
+					},
 				}:
 				case <-ctx.Done():
 				}
@@ -305,7 +319,7 @@ func (s *chromiumSession) ObserveStageResults(
 	}
 
 	var (
-		results         []provider.BrowserStageResult
+		results         []observedStageResult
 		postConfirmOpen bool
 		timer           *time.Timer
 		timerCh         <-chan time.Time
@@ -319,8 +333,8 @@ func (s *chromiumSession) ObserveStageResults(
 			return nil, ctx.Err()
 		case err := <-errCh:
 			return nil, err
-		case result := <-resultsCh:
-			results = append(results, result)
+		case observed := <-resultsCh:
+			results = append(results, observed)
 			if postConfirmOpen {
 				if timer == nil {
 					timer = time.NewTimer(settleDelay)
@@ -351,7 +365,14 @@ func (s *chromiumSession) ObserveStageResults(
 			if len(results) == 0 {
 				return nil, errors.New("browser-observed stage result was not captured")
 			}
-			return append([]provider.BrowserStageResult(nil), results...), nil
+			sort.SliceStable(results, func(i, j int) bool {
+				return results[i].order < results[j].order
+			})
+			sorted := make([]provider.BrowserStageResult, 0, len(results))
+			for _, observed := range results {
+				sorted = append(sorted, observed.result)
+			}
+			return sorted, nil
 		}
 	}
 }
@@ -415,12 +436,18 @@ func (s *chromiumSession) executeStageRequest(ctx context.Context, request provi
 	}, nil
 }
 
-func matchObservation(observations []provider.BrowserStageObservation, method string, requestURL string) (provider.BrowserStageObservation, bool) {
+func matchObservation(observations []provider.BrowserStageObservation, method string, requestURL string, formValues map[string]string) (provider.BrowserStageObservation, bool) {
 	for _, observation := range observations {
 		if !strings.EqualFold(observation.Method, method) {
 			continue
 		}
 		if strings.HasPrefix(requestURL, observation.URLPrefix) {
+			if !matchesObservedFormValues(observation.RequiredFormValues, formValues) {
+				continue
+			}
+			if !matchesObservedFormValueAlternatives(observation.RequiredFormValueAlternatives, formValues) {
+				continue
+			}
 			return observation, true
 		}
 	}
@@ -428,12 +455,49 @@ func matchObservation(observations []provider.BrowserStageObservation, method st
 	return provider.BrowserStageObservation{}, false
 }
 
-func extractObservedFormKeys(request *network.Request) []string {
+func matchesObservedFormValues(required map[string]string, observed map[string]string) bool {
+	if len(required) == 0 {
+		return true
+	}
+	for key, want := range required {
+		if got, ok := observed[key]; !ok || got != want {
+			return false
+		}
+	}
+	return true
+}
+
+func matchesObservedFormValueAlternatives(required map[string][]string, observed map[string]string) bool {
+	if len(required) == 0 {
+		return true
+	}
+
+	for key, allowed := range required {
+		got, ok := observed[key]
+		if !ok {
+			return false
+		}
+		matched := false
+		for _, candidate := range allowed {
+			if got == candidate {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+
+	return true
+}
+
+func extractObservedFormValues(request *network.Request) map[string]string {
 	if request == nil || !request.HasPostData {
 		return nil
 	}
 
-	var keys []string
+	formValues := make(map[string]string)
 	for _, entry := range request.PostDataEntries {
 		if entry == nil || entry.Bytes == "" {
 			continue
@@ -444,16 +508,23 @@ func extractObservedFormKeys(request *network.Request) []string {
 			raw = string(decoded)
 		}
 
-		values, err := url.ParseQuery(raw)
+		parsedValues, err := url.ParseQuery(raw)
 		if err != nil {
 			continue
 		}
-		for key := range values {
-			keys = append(keys, key)
+		for key := range parsedValues {
+			if len(parsedValues[key]) == 0 {
+				continue
+			}
+			formValues[key] = parsedValues.Get(key)
 		}
 	}
 
-	return uniqueSorted(keys)
+	if len(formValues) == 0 {
+		return nil
+	}
+
+	return formValues
 }
 
 func sortedKeys(values map[string]string) []string {
@@ -573,6 +644,60 @@ func resolveBrowserPath() (string, error) {
 	}
 
 	return "", errors.New("no supported browser executable found")
+}
+
+func chromiumLaunchArgs(userDataDir string, debugPort int) []string {
+	args := []string{
+		"--no-first-run",
+		"--no-default-browser-check",
+		fmt.Sprintf("--user-data-dir=%s", userDataDir),
+		fmt.Sprintf("--remote-debugging-port=%d", debugPort),
+	}
+	if shouldLaunchBrowserHeadless() {
+		args = append(args,
+			"--headless=new",
+			"--disable-gpu",
+			"--no-sandbox",
+			"--disable-dev-shm-usage",
+		)
+	} else {
+		args = append(args, "--new-window")
+	}
+	args = append(args, "about:blank")
+
+	return args
+}
+
+func shouldLaunchBrowserHeadless() bool {
+	if raw, ok := os.LookupEnv(browserHeadlessEnv); ok && strings.TrimSpace(raw) != "" {
+		return parseTruthyEnv(raw)
+	}
+
+	return parseTruthyEnv(os.Getenv("CI")) ||
+		parseTruthyEnv(os.Getenv("GITHUB_ACTIONS")) ||
+		parseTruthyEnv(os.Getenv("ACT"))
+}
+
+func parseTruthyEnv(raw string) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+func browserStartupLogSuffix(logs string) string {
+	if strings.TrimSpace(logs) == "" {
+		return ""
+	}
+
+	lines := strings.Split(strings.TrimSpace(logs), "\n")
+	if len(lines) > 8 {
+		lines = lines[len(lines)-8:]
+	}
+
+	return "\nstartup log tail:\n" + strings.Join(lines, "\n")
 }
 
 func reserveTCPPort() (int, error) {
