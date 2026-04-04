@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -23,22 +24,39 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	os.Exit(runClient(ctx, os.Stderr, os.Args[1:], newRegistry()))
+	os.Exit(runClient(ctx, os.Stdout, os.Stderr, os.Args[1:], newRegistry()))
 }
 
-func runClient(ctx context.Context, stderr io.Writer, args []string, registry *provider.Registry) int {
+func runClient(ctx context.Context, stdout io.Writer, stderr io.Writer, args []string, registry *provider.Registry) int {
 	cfg, logLevel, metricsListen, err := parseClientFlags(stderr, args)
 	if err != nil {
 		return 2
 	}
+	logger := observe.NewLoggerWriter(logLevel, stdout)
+	sessionID := session.NewID()
+	metrics := observe.NewMetrics()
+	observer := observe.NewObserver(observe.RuntimeClient, logger, metrics, observe.Metadata{
+		SessionID: string(sessionID),
+		Provider:  cfg.Provider,
+	})
 	if err := cfg.Validate(); err != nil {
+		observer.RecordSessionFailure(string(runstage.PolicyValidate), true)
+		observer.Emit(ctx, slog.LevelError, "runtime_failure",
+			"stage", runstage.PolicyValidate,
+			"result", "failed",
+			"error", err,
+		)
 		fmt.Fprintf(stderr, "invalid client config: %v\n", err)
 		return 2
 	}
 
-	logger := observe.NewLogger(logLevel)
-	metrics := observe.NewMetrics()
 	if _, err := observe.StartMetricsServer(ctx, metricsListen, metrics, logger); err != nil {
+		observer.RecordSessionFailure("metrics_listen", true)
+		observer.Emit(ctx, slog.LevelError, "runtime_failure",
+			"stage", "metrics_listen",
+			"result", "failed",
+			"error", err,
+		)
 		fmt.Fprintf(stderr, "client metrics failed: %v\n", err)
 		return 1
 	}
@@ -46,7 +64,7 @@ func runClient(ctx context.Context, stderr io.Writer, args []string, registry *p
 		Registry:  registry,
 		Logger:    logger,
 		Metrics:   metrics,
-		SessionID: session.NewID(),
+		SessionID: sessionID,
 	})
 	if err != nil {
 		if stage, ok := runstage.FromError(err); ok {

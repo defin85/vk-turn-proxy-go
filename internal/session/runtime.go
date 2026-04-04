@@ -42,24 +42,33 @@ func Run(ctx context.Context, cfg config.ClientConfig, deps Dependencies) error 
 		sessionID = NewID()
 	}
 	deps.SessionID = sessionID
+	baseLogger := logger
+	bootstrapObserver := observe.NewObserver(observe.RuntimeClient, baseLogger, deps.Metrics, clientObserverMetadata(cfg, sessionID, nil))
 	if deps.NewRunner == nil {
 		deps.NewRunner = transport.NewClientRunner
 	}
 	if err := cfg.Validate(); err != nil {
+		bootstrapObserver.RecordSessionFailure(string(runstage.PolicyValidate), true)
+		bootstrapObserver.Emit(ctx, slog.LevelError, "runtime_failure",
+			"stage", runstage.PolicyValidate,
+			"result", "failed",
+			"error", err,
+		)
 		return runstage.Wrap(runstage.PolicyValidate, err)
 	}
 
 	plan, err := buildSessionPlan(cfg, deps)
 	if err != nil {
+		bootstrapObserver.RecordSessionFailure(string(runstage.PolicyValidate), true)
+		bootstrapObserver.Emit(ctx, slog.LevelError, "runtime_failure",
+			"stage", runstage.PolicyValidate,
+			"result", "failed",
+			"error", err,
+		)
 		return runstage.Wrap(runstage.PolicyValidate, err)
 	}
 	cfg.Mode = plan.Transport.Mode
-	observer := observe.NewObserver(observe.RuntimeClient, logger, deps.Metrics, observe.Metadata{
-		SessionID: string(sessionID),
-		Provider:  cfg.Provider,
-		TURNMode:  string(plan.Transport.TURNMode),
-		PeerMode:  string(plan.Transport.PeerMode),
-	})
+	observer := observe.NewObserver(observe.RuntimeClient, baseLogger, deps.Metrics, clientObserverMetadata(cfg, sessionID, &plan))
 	logger = observer.Logger()
 
 	adapter, err := deps.Registry.Get(cfg.Provider)
@@ -117,6 +126,7 @@ func Run(ctx context.Context, cfg config.ClientConfig, deps Dependencies) error 
 
 	localConn, err := net.ListenPacket("udp", cfg.ListenAddr)
 	if err != nil {
+		observer.RecordTransportFailure(string(runstage.LocalBind))
 		observer.RecordSessionFailure(string(runstage.LocalBind), true)
 		observer.Emit(ctx, slog.LevelError, "runtime_failure",
 			"stage", runstage.LocalBind,
@@ -161,4 +171,28 @@ func transportClosePacketConn(conn net.PacketConn) {
 	}
 
 	_ = conn.Close()
+}
+
+func clientObserverMetadata(cfg config.ClientConfig, sessionID ID, plan *sessionPlan) observe.Metadata {
+	meta := observe.Metadata{
+		SessionID: string(sessionID),
+		Provider:  cfg.Provider,
+	}
+	if plan != nil {
+		meta.TURNMode = string(plan.Transport.TURNMode)
+		meta.PeerMode = string(plan.Transport.PeerMode)
+		return meta
+	}
+
+	switch cfg.Mode {
+	case config.TransportModeAuto, config.TransportModeTCP, config.TransportModeUDP:
+		meta.TURNMode = string(cfg.Mode)
+	}
+	if cfg.UseDTLS {
+		meta.PeerMode = string(transport.PeerModeDTLS)
+	} else {
+		meta.PeerMode = string(transport.PeerModePlain)
+	}
+
+	return meta
 }

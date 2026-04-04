@@ -114,6 +114,14 @@ func (o *Observer) RecordSessionFailure(stage string, startup bool) {
 	}
 }
 
+func (o *Observer) RecordTransportFailure(stage string) {
+	if o == nil || o.metrics == nil {
+		return
+	}
+
+	o.metrics.IncTransportStageFailures(o.runtime, o.meta.Provider, o.meta.TURNMode, o.meta.PeerMode, sanitizeText(stage))
+}
+
 func (o *Observer) SetActiveWorkers(count int) {
 	if o == nil || o.metrics == nil {
 		return

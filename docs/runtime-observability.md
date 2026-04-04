@@ -49,6 +49,7 @@ The first metric set is intentionally small:
 - `vk_turn_proxy_runtime_session_starts_total`
 - `vk_turn_proxy_runtime_session_failures_total`
 - `vk_turn_proxy_runtime_startup_stage_failures_total`
+- `vk_turn_proxy_runtime_transport_stage_failures_total`
 - `vk_turn_proxy_runtime_active_workers`
 - `vk_turn_proxy_runtime_forwarded_packets_total`
 - `vk_turn_proxy_runtime_forwarded_bytes_total`
@@ -64,9 +65,36 @@ Allowed label dimensions are:
 
 `session_id` is intentionally excluded from metrics to keep cardinality low.
 
+## Stage taxonomy
+
+Client runtime stages emitted through observability:
+
+- `metrics_listen`
+- `policy_validate`
+- `provider_resolve`
+- `local_bind`
+- `turn_dial`
+- `turn_allocate`
+- `peer_setup`
+- `dtls_handshake`
+- `forwarding_loop`
+- `session_supervision`
+- `shutdown`
+
+Server runtime stages emitted through observability:
+
+- `metrics_listen`
+- `policy_validate`
+- `server_init`
+- `listen`
+- `accept`
+- `dtls_handshake`
+- `upstream_dial`
+- `shutdown`
+
 ## Operator workflow
 
 1. Start the runtime with `-metrics-listen`.
 2. Tail structured logs and filter by `session_id` when investigating one runtime attempt.
-3. Inspect `/metrics` for startup-stage failures, active workers, and forwarding counters.
-4. Compare stage names with the documented runtime stage taxonomy in the client runtime spec.
+3. Inspect `/metrics` for startup-stage failures, transport-stage failures, active workers, and forwarding counters.
+4. Compare stage names with the runtime-specific taxonomy above instead of assuming the client and server share the same stage set.

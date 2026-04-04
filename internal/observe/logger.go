@@ -1,14 +1,23 @@
 package observe
 
 import (
+	"io"
 	"log/slog"
 	"os"
 	"strings"
 )
 
 func NewLogger(level string) *slog.Logger {
+	return NewLoggerWriter(level, os.Stdout)
+}
+
+func NewLoggerWriter(level string, writer io.Writer) *slog.Logger {
+	if writer == nil {
+		writer = os.Stdout
+	}
+
 	options := &slog.HandlerOptions{Level: parseLevel(level)}
-	handler := slog.NewTextHandler(os.Stdout, options)
+	handler := slog.NewTextHandler(writer, options)
 
 	return slog.New(handler)
 }

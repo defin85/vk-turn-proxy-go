@@ -178,6 +178,7 @@ loop:
 
 			if result.err == nil {
 				if observer != nil {
+					observer.RecordTransportFailure(string(runstage.SessionSupervise))
 					observer.RecordSessionFailure(string(runstage.SessionSupervise), !sessionReady)
 					observer.Emit(supervisorCtx, slog.LevelError, "runtime_failure",
 						"stage", runstage.SessionSupervise,
@@ -196,6 +197,7 @@ loop:
 
 			if !wasReady {
 				if observer != nil {
+					observer.RecordTransportFailure(stageString(result.err))
 					observer.RecordSessionFailure(stageString(result.err), true)
 					observer.Emit(supervisorCtx, slog.LevelError, "runtime_failure",
 						"stage", stageString(result.err),
@@ -212,6 +214,7 @@ loop:
 			if state.restarts < plan.MaxWorkerRestarts {
 				state.restarts++
 				if observer != nil {
+					observer.RecordTransportFailure(stageString(result.err))
 					observer.Emit(supervisorCtx, slog.LevelWarn, "worker_restart_scheduled",
 						"stage", stageString(result.err),
 						"result", "retrying",
@@ -245,6 +248,7 @@ loop:
 			}
 
 			if observer != nil {
+				observer.RecordTransportFailure(string(runstage.SessionSupervise))
 				observer.RecordSessionFailure(string(runstage.SessionSupervise), false)
 				observer.Emit(supervisorCtx, slog.LevelError, "runtime_failure",
 					"stage", runstage.SessionSupervise,
@@ -276,6 +280,7 @@ loop:
 		case err := <-routerErrCh:
 			if err != nil && supervisorCtx.Err() == nil {
 				if observer != nil {
+					observer.RecordTransportFailure(string(runstage.ForwardingLoop))
 					observer.RecordSessionFailure(string(runstage.ForwardingLoop), !sessionReady)
 					observer.Emit(supervisorCtx, slog.LevelError, "runtime_failure",
 						"stage", runstage.ForwardingLoop,
@@ -322,6 +327,7 @@ type observerAPI interface {
 	Emit(context.Context, slog.Level, string, ...any)
 	RecordSessionStart()
 	RecordSessionFailure(stage string, startup bool)
+	RecordTransportFailure(stage string)
 	SetActiveWorkers(count int)
 }
 

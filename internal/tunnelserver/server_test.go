@@ -123,6 +123,90 @@ func TestServerObservabilityTracksStartupAndTraffic(t *testing.T) {
 	}
 }
 
+func TestServerObservabilityTracksUpstreamDialFailureMetric(t *testing.T) {
+	handler := newServerCaptureHandler()
+	metrics := observe.NewMetrics()
+	server, err := New(config.ServerConfig{
+		ListenAddr:       "127.0.0.1:0",
+		UpstreamAddr:     "127.0.0.1",
+		HandshakeTimeout: 5 * time.Second,
+		IdleTimeout:      5 * time.Second,
+	}, slog.New(handler))
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	server.SetMetrics(metrics)
+
+	listener, err := server.Listen()
+	if err != nil {
+		t.Fatalf("Listen() error = %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- server.Serve(ctx, listener)
+	}()
+
+	localConn, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	if err != nil {
+		cancel()
+		t.Fatalf("listen local packet conn: %v", err)
+	}
+	defer localConn.Close()
+
+	peerAddr, err := net.ResolveUDPAddr("udp", listener.Addr().String())
+	if err != nil {
+		cancel()
+		t.Fatalf("resolve peer addr: %v", err)
+	}
+
+	clientConn, err := dtls.Client(localConn, peerAddr, &dtls.Config{
+		InsecureSkipVerify:   true,
+		ExtendedMasterSecret: dtls.RequireExtendedMasterSecret,
+		CipherSuites:         []dtls.CipherSuiteID{dtls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256},
+	})
+	if err != nil {
+		cancel()
+		t.Fatalf("dtls client: %v", err)
+	}
+	defer clientConn.Close()
+
+	handshakeCtx, cancelHandshake := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelHandshake()
+	if err := clientConn.HandshakeContext(handshakeCtx); err != nil {
+		cancel()
+		t.Fatalf("handshake: %v", err)
+	}
+
+	deadline := time.After(2 * time.Second)
+	for {
+		if strings.Contains(metrics.Prometheus(), `vk_turn_proxy_runtime_transport_stage_failures_total{peer_mode="dtls",provider="none",runtime="server",stage="upstream_dial"} 1`) {
+			break
+		}
+		select {
+		case <-deadline:
+			cancel()
+			t.Fatalf("timed out waiting for upstream_dial metric:\n%s", metrics.Prometheus())
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+
+	cancel()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("Serve() error = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Serve() did not stop")
+	}
+
+	if !hasServerRecord(handler.records(), "connection_failure") {
+		t.Fatalf("missing connection_failure event: %#v", handler.records())
+	}
+}
+
 func runUDPEcho(ctx context.Context, conn net.PacketConn) {
 	buf := make([]byte, 1600)
 	for {

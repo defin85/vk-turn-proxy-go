@@ -50,6 +50,7 @@ func (s *Server) SetMetrics(metrics *observe.Metrics) {
 func (s *Server) Run(ctx context.Context) error {
 	listener, err := s.Listen()
 	if err != nil {
+		s.observer().RecordTransportFailure("listen")
 		s.observer().RecordSessionFailure("listen", true)
 		s.observer().Emit(ctx, slog.LevelError, "runtime_failure",
 			"stage", "listen",
@@ -131,6 +132,7 @@ func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
 				"result", "failed",
 				"error", acceptErr,
 			)
+			observer.RecordTransportFailure("accept")
 			s.logger.Error("accept connection", "err", acceptErr)
 			continue
 		}
@@ -153,6 +155,7 @@ func (s *Server) handleConnection(parent context.Context, conn net.Conn) {
 
 	dtlsConn, ok := conn.(*dtls.Conn)
 	if !ok {
+		observer.RecordTransportFailure("accept")
 		observer.Emit(parent, slog.LevelError, "connection_failure",
 			"stage", "accept",
 			"result", "failed",
@@ -173,6 +176,7 @@ func (s *Server) handleConnection(parent context.Context, conn net.Conn) {
 	defer cancelHandshake()
 
 	if err := dtlsConn.HandshakeContext(handshakeCtx); err != nil {
+		observer.RecordTransportFailure("dtls_handshake")
 		observer.Emit(parent, slog.LevelError, "connection_failure",
 			"stage", "dtls_handshake",
 			"result", "failed",
@@ -185,6 +189,7 @@ func (s *Server) handleConnection(parent context.Context, conn net.Conn) {
 
 	upstreamConn, err := net.Dial("udp", s.cfg.UpstreamAddr)
 	if err != nil {
+		observer.RecordTransportFailure("upstream_dial")
 		observer.Emit(parent, slog.LevelError, "connection_failure",
 			"stage", "upstream_dial",
 			"result", "failed",

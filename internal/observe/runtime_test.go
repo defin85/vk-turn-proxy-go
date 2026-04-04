@@ -63,6 +63,7 @@ func TestMetricsPrometheusExportsDocumentedFamilies(t *testing.T) {
 	metrics.IncSessionStarts(RuntimeClient, "generic-turn", "udp", "dtls")
 	metrics.IncSessionFailures(RuntimeClient, "generic-turn", "udp", "dtls", "provider_resolve")
 	metrics.IncStartupStageFailures(RuntimeClient, "generic-turn", "udp", "dtls", "provider_resolve")
+	metrics.IncTransportStageFailures(RuntimeClient, "generic-turn", "udp", "dtls", "turn_dial")
 	metrics.SetActiveWorkers(RuntimeClient, "generic-turn", "udp", "dtls", 2)
 	metrics.AddForwardedTraffic(RuntimeClient, "generic-turn", "local_to_relay", 11)
 
@@ -74,6 +75,8 @@ func TestMetricsPrometheusExportsDocumentedFamilies(t *testing.T) {
 		`turn_mode="udp"`,
 		`peer_mode="dtls"`,
 		`stage="provider_resolve"`,
+		`vk_turn_proxy_runtime_transport_stage_failures_total`,
+		`stage="turn_dial"`,
 		"vk_turn_proxy_runtime_active_workers",
 		"vk_turn_proxy_runtime_forwarded_packets_total",
 		"vk_turn_proxy_runtime_forwarded_bytes_total",

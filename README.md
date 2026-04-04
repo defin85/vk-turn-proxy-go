@@ -126,7 +126,7 @@ When startup fails after policy validation, the command reports a stage-aware er
 `-turn` and `-port` overrides remain supported and are applied after provider credential resolution.
 
 Client and server runtimes now expose an optional Prometheus-style metrics surface through `-metrics-listen <addr>`.
-The first metric set covers session starts, session failures, startup-stage failures, active workers, and forwarded packets/bytes.
+The first metric set covers session starts, session failures, startup-stage failures, transport-stage failures, active workers, and forwarded packets/bytes.
 Structured runtime events use stable fields such as `event`, `runtime`, `session_id`, `provider`, `turn_mode`, `peer_mode`, `stage`, and `result`.
 The observability contract and operator workflow are documented in `docs/runtime-observability.md`.
 

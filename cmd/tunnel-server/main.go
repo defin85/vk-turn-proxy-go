@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -18,24 +19,51 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	os.Exit(runServer(ctx, os.Stderr, os.Args[1:]))
+	os.Exit(runServer(ctx, os.Stdout, os.Stderr, os.Args[1:]))
 }
 
-func runServer(ctx context.Context, stderr io.Writer, args []string) int {
+func runServer(ctx context.Context, stdout io.Writer, stderr io.Writer, args []string) int {
 	cfg, logLevel, metricsListen, err := parseServerFlags(stderr, args)
 	if err != nil {
 		return 2
 	}
 
-	logger := observe.NewLogger(logLevel)
+	logger := observe.NewLoggerWriter(logLevel, stdout)
 	metrics := observe.NewMetrics()
+	observer := observe.NewObserver(observe.RuntimeServer, logger, metrics, observe.Metadata{
+		SessionID: observe.NewSessionID(),
+		Provider:  "none",
+		PeerMode:  "dtls",
+	})
+	if err := cfg.Validate(); err != nil {
+		observer.RecordSessionFailure("policy_validate", true)
+		observer.Emit(ctx, slog.LevelError, "runtime_failure",
+			"stage", "policy_validate",
+			"result", "failed",
+			"error", err,
+		)
+		fmt.Fprintf(stderr, "init server: %v\n", err)
+		return 2
+	}
 	if _, err := observe.StartMetricsServer(ctx, metricsListen, metrics, logger); err != nil {
+		observer.RecordSessionFailure("metrics_listen", true)
+		observer.Emit(ctx, slog.LevelError, "runtime_failure",
+			"stage", "metrics_listen",
+			"result", "failed",
+			"error", err,
+		)
 		fmt.Fprintf(stderr, "server metrics failed: %v\n", err)
 		return 1
 	}
 
 	server, err := tunnelserver.New(cfg, logger)
 	if err != nil {
+		observer.RecordSessionFailure("server_init", true)
+		observer.Emit(ctx, slog.LevelError, "runtime_failure",
+			"stage", "server_init",
+			"result", "failed",
+			"error", err,
+		)
 		fmt.Fprintf(stderr, "init server: %v\n", err)
 		return 2
 	}

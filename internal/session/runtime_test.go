@@ -50,10 +50,13 @@ func TestRunRejectsUnsupportedPolicyBeforeProviderResolution(t *testing.T) {
 
 	adapter := &fakeAdapter{name: "fake"}
 	runnerCalled := false
+	handler := newCaptureHandler()
+	metrics := observe.NewMetrics()
 
 	err := Run(context.Background(), cfg, Dependencies{
 		Registry: provider.NewRegistry(adapter),
-		Logger:   testLogger(),
+		Logger:   slog.New(handler),
+		Metrics:  metrics,
 		NewRunner: func(transport.ClientConfig) transport.Runner {
 			runnerCalled = true
 			return fakeRunner{}
@@ -71,6 +74,24 @@ func TestRunRejectsUnsupportedPolicyBeforeProviderResolution(t *testing.T) {
 	}
 	if runnerCalled {
 		t.Fatal("runner should not be created for unsupported policy")
+	}
+	record := findRecord(t, handler.records(), "runtime_failure")
+	if got := record.attrs["stage"]; got != runstage.PolicyValidate {
+		t.Fatalf("runtime_failure stage = %#v", got)
+	}
+	text := metrics.Prometheus()
+	for _, expected := range []string{
+		"vk_turn_proxy_runtime_session_failures_total",
+		"vk_turn_proxy_runtime_startup_stage_failures_total",
+		`runtime="client"`,
+		`provider="fake"`,
+		`turn_mode="auto"`,
+		`peer_mode="dtls"`,
+		`stage="policy_validate"`,
+	} {
+		if !strings.Contains(text, expected) {
+			t.Fatalf("metrics output missing %q:\n%s", expected, text)
+		}
 	}
 }
 

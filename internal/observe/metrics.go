@@ -34,6 +34,7 @@ type Metrics struct {
 	sessionStarts        map[sessionKey]uint64
 	sessionFailures      map[failureKey]uint64
 	startupStageFailures map[failureKey]uint64
+	transportStageErrors map[failureKey]uint64
 	activeWorkers        map[sessionKey]int64
 	forwardedPackets     map[trafficKey]uint64
 	forwardedBytes       map[trafficKey]uint64
@@ -44,6 +45,7 @@ func NewMetrics() *Metrics {
 		sessionStarts:        make(map[sessionKey]uint64),
 		sessionFailures:      make(map[failureKey]uint64),
 		startupStageFailures: make(map[failureKey]uint64),
+		transportStageErrors: make(map[failureKey]uint64),
 		activeWorkers:        make(map[sessionKey]int64),
 		forwardedPackets:     make(map[trafficKey]uint64),
 		forwardedBytes:       make(map[trafficKey]uint64),
@@ -102,6 +104,25 @@ func (m *Metrics) IncStartupStageFailures(runtime RuntimeKind, provider string, 
 		Stage: sanitizeText(stage),
 	}
 	m.startupStageFailures[key]++
+}
+
+func (m *Metrics) IncTransportStageFailures(runtime RuntimeKind, provider string, turnMode string, peerMode string, stage string) {
+	if m == nil {
+		return
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	key := failureKey{
+		sessionKey: sessionKey{
+			Runtime:  string(runtime),
+			Provider: sanitizeText(provider),
+			TURNMode: sanitizeText(turnMode),
+			PeerMode: sanitizeText(peerMode),
+		},
+		Stage: sanitizeText(stage),
+	}
+	m.transportStageErrors[key]++
 }
 
 func (m *Metrics) SetActiveWorkers(runtime RuntimeKind, provider string, turnMode string, peerMode string, count int) {
@@ -170,6 +191,12 @@ func (m *Metrics) Prometheus() string {
 		"counter",
 		"Total startup-stage failures before the runtime reached ready state.",
 		sortedFailureMetrics(m.startupStageFailures),
+	)
+	writeMetricFamily(&out,
+		"vk_turn_proxy_runtime_transport_stage_failures_total",
+		"counter",
+		"Total transport-stage failures observed by the runtime, including recoverable worker or connection failures.",
+		sortedFailureMetrics(m.transportStageErrors),
 	)
 	writeMetricFamily(&out,
 		"vk_turn_proxy_runtime_active_workers",
