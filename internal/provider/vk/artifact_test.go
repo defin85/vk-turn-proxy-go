@@ -93,6 +93,26 @@ func TestSanitizeResponseBodyRedactsLiveBrowserPreviewValues(t *testing.T) {
 			"join_link":    "https://vk.com/call/join/live-secret-token",
 			"access_token": "raw-browser-access-token",
 			"token":        "raw-browser-preview-token",
+			"call_id":      "3b08d584-e42a-4b69-86fe-fa72a3e71357",
+			"title":        "Sensitive title",
+			"ok_join_link": "raw-ok-join-link",
+			"photo_400":    "https://cdn.example.test/photo-400.jpg",
+			"photo_base":   "https://cdn.example.test/photo-base.jpg",
+			"profiles": []any{
+				map[string]any{
+					"id":         372485183,
+					"first_name": "Egor",
+					"last_name":  "Mazalov",
+					"photo_200":  "https://cdn.example.test/profile-200.jpg",
+					"photo_base": "https://cdn.example.test/profile-base.jpg",
+				},
+			},
+			"short_credentials": map[string]any{
+				"id":                    "135-264-794",
+				"link_with_password":    "https://vk.com/call/135-264-794?p=rjouzF",
+				"link_without_password": "https://vk.com/call/135-264-794",
+				"password":              "rjouzF",
+			},
 		},
 	}
 
@@ -110,5 +130,61 @@ func TestSanitizeResponseBodyRedactsLiveBrowserPreviewValues(t *testing.T) {
 	}
 	if got := responseObject["token"]; got != placeholderAnonymousToken {
 		t.Fatalf("token = %#v, want %q", got, placeholderAnonymousToken)
+	}
+	if got := responseObject["call_id"]; got != placeholderCallPreviewID {
+		t.Fatalf("call_id = %#v, want %q", got, placeholderCallPreviewID)
+	}
+	if got := responseObject["title"]; got != placeholderCallPreviewTitle {
+		t.Fatalf("title = %#v, want %q", got, placeholderCallPreviewTitle)
+	}
+	if got := responseObject["ok_join_link"]; got != placeholderOKJoinLink {
+		t.Fatalf("ok_join_link = %#v, want %q", got, placeholderOKJoinLink)
+	}
+	if got := responseObject["photo_400"]; got != placeholderCallPreviewPhoto {
+		t.Fatalf("photo_400 = %#v, want %q", got, placeholderCallPreviewPhoto)
+	}
+	if got := responseObject["photo_base"]; got != placeholderCallPreviewPhoto {
+		t.Fatalf("photo_base = %#v, want %q", got, placeholderCallPreviewPhoto)
+	}
+
+	profiles, ok := responseObject["profiles"].([]any)
+	if !ok || len(profiles) != 1 {
+		t.Fatalf("profiles = %#v, want one profile", responseObject["profiles"])
+	}
+	profile, ok := profiles[0].(map[string]any)
+	if !ok {
+		t.Fatalf("profile = %#v, want object", profiles[0])
+	}
+	if got := profile["id"]; got != placeholderProfileID {
+		t.Fatalf("profile.id = %#v, want %q", got, placeholderProfileID)
+	}
+	if got := profile["first_name"]; got != placeholderProfileFirstName {
+		t.Fatalf("profile.first_name = %#v, want %q", got, placeholderProfileFirstName)
+	}
+	if got := profile["last_name"]; got != placeholderProfileLastName {
+		t.Fatalf("profile.last_name = %#v, want %q", got, placeholderProfileLastName)
+	}
+	if got := profile["photo_200"]; got != placeholderProfilePhoto {
+		t.Fatalf("profile.photo_200 = %#v, want %q", got, placeholderProfilePhoto)
+	}
+	if got := profile["photo_base"]; got != placeholderProfilePhoto {
+		t.Fatalf("profile.photo_base = %#v, want %q", got, placeholderProfilePhoto)
+	}
+
+	shortCredentials, ok := responseObject["short_credentials"].(map[string]any)
+	if !ok {
+		t.Fatalf("short_credentials = %#v, want object", responseObject["short_credentials"])
+	}
+	if got := shortCredentials["id"]; got != placeholderShortCallID {
+		t.Fatalf("short_credentials.id = %#v, want %q", got, placeholderShortCallID)
+	}
+	if got := shortCredentials["link_with_password"]; got != placeholderShortCallLinkWithPassword {
+		t.Fatalf("short_credentials.link_with_password = %#v, want %q", got, placeholderShortCallLinkWithPassword)
+	}
+	if got := shortCredentials["link_without_password"]; got != placeholderShortCallLink {
+		t.Fatalf("short_credentials.link_without_password = %#v, want %q", got, placeholderShortCallLink)
+	}
+	if got := shortCredentials["password"]; got != placeholderShortCallPassword {
+		t.Fatalf("short_credentials.password = %#v, want %q", got, placeholderShortCallPassword)
 	}
 }

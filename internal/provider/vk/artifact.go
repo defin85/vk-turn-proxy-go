@@ -7,22 +7,34 @@ import (
 )
 
 const (
-	placeholderInviteURL          = "https://vk.com/call/join/<redacted:vk-join-token>"
-	placeholderJoinToken          = "<redacted:vk-join-token>"
-	placeholderAccessToken1       = "<redacted:vk-access-token-1>"
-	placeholderBrowserAccessToken = "<redacted:vk-browser-access-token>"
-	placeholderAnonymousToken     = "<redacted:vk-anonym-token>"
-	placeholderSessionKey         = "<redacted:ok-session-key>"
-	placeholderTurnUsername       = "<redacted:turn-username>"
-	placeholderTurnPassword       = "<redacted:turn-password>"
-	placeholderCaptchaURL         = "<redacted:vk-captcha-redirect-uri>"
-	placeholderCaptchaImage       = "<redacted:vk-captcha-image-uri>"
-	placeholderCaptchaSID         = "<redacted:vk-captcha-sid>"
-	placeholderCaptchaKey         = "<redacted:vk-captcha-key>"
-	placeholderCaptchaTS          = "<redacted:vk-captcha-ts>"
-	placeholderCaptchaAttempt     = "<redacted:vk-captcha-attempt>"
-	placeholderSuccessToken       = "<redacted:vk-success-token>"
-	placeholderRemixSTLID         = "<redacted:vk-remixstlid>"
+	placeholderInviteURL                 = "https://vk.com/call/join/<redacted:vk-join-token>"
+	placeholderJoinToken                 = "<redacted:vk-join-token>"
+	placeholderAccessToken1              = "<redacted:vk-access-token-1>"
+	placeholderBrowserAccessToken        = "<redacted:vk-browser-access-token>"
+	placeholderAnonymousToken            = "<redacted:vk-anonym-token>"
+	placeholderSessionKey                = "<redacted:ok-session-key>"
+	placeholderTurnUsername              = "<redacted:turn-username>"
+	placeholderTurnPassword              = "<redacted:turn-password>"
+	placeholderCaptchaURL                = "<redacted:vk-captcha-redirect-uri>"
+	placeholderCaptchaImage              = "<redacted:vk-captcha-image-uri>"
+	placeholderCaptchaSID                = "<redacted:vk-captcha-sid>"
+	placeholderCaptchaKey                = "<redacted:vk-captcha-key>"
+	placeholderCaptchaTS                 = "<redacted:vk-captcha-ts>"
+	placeholderCaptchaAttempt            = "<redacted:vk-captcha-attempt>"
+	placeholderSuccessToken              = "<redacted:vk-success-token>"
+	placeholderRemixSTLID                = "<redacted:vk-remixstlid>"
+	placeholderCallPreviewID             = "<redacted:vk-call-preview-id>"
+	placeholderCallPreviewTitle          = "<redacted:vk-call-preview-title>"
+	placeholderCallPreviewPhoto          = "<redacted:vk-call-preview-photo-uri>"
+	placeholderProfileFirstName          = "<redacted:vk-profile-first-name>"
+	placeholderProfileLastName           = "<redacted:vk-profile-last-name>"
+	placeholderProfileID                 = "<redacted:vk-profile-id>"
+	placeholderProfilePhoto              = "<redacted:vk-profile-photo-uri>"
+	placeholderOKJoinLink                = "<redacted:vk-ok-join-link>"
+	placeholderShortCallID               = "<redacted:vk-short-call-id>"
+	placeholderShortCallLink             = "https://vk.com/call/<redacted:vk-short-call-id>"
+	placeholderShortCallLinkWithPassword = "https://vk.com/call/<redacted:vk-short-call-id>?p=<redacted:vk-short-call-password>"
+	placeholderShortCallPassword         = "<redacted:vk-short-call-password>"
 )
 
 type artifactBuilder struct {
@@ -135,7 +147,7 @@ func sanitizeResponseBody(stage string, payload map[string]any) map[string]any {
 			"remixstlid":      placeholderRemixSTLID,
 		})
 	case stageGetCallPreview:
-		return redactKeys(payload, map[string]string{
+		return sanitizeCallPreviewResponseBody(redactKeys(payload, map[string]string{
 			"vk_join_link":    placeholderInviteURL,
 			"join_link":       placeholderInviteURL,
 			"join_url":        placeholderInviteURL,
@@ -151,7 +163,7 @@ func sanitizeResponseBody(stage string, payload map[string]any) map[string]any {
 			"captcha_ts":      placeholderCaptchaTS,
 			"success_token":   placeholderSuccessToken,
 			"remixstlid":      placeholderRemixSTLID,
-		})
+		}))
 	case stageOKAnonymLogin:
 		return redactKeys(payload, map[string]string{
 			"session_key": placeholderSessionKey,
@@ -164,6 +176,51 @@ func sanitizeResponseBody(stage string, payload map[string]any) map[string]any {
 	default:
 		return map[string]any{}
 	}
+}
+
+func sanitizeCallPreviewResponseBody(payload map[string]any) map[string]any {
+	response, ok := payload["response"].(map[string]any)
+	if !ok || response == nil {
+		return payload
+	}
+
+	response["call_id"] = placeholderCallPreviewID
+	response["title"] = placeholderCallPreviewTitle
+	response["ok_join_link"] = placeholderOKJoinLink
+
+	if _, ok := response["photo_400"]; ok {
+		response["photo_400"] = placeholderCallPreviewPhoto
+	}
+	if _, ok := response["photo_base"]; ok {
+		response["photo_base"] = placeholderCallPreviewPhoto
+	}
+
+	if shortCredentials, ok := response["short_credentials"].(map[string]any); ok && shortCredentials != nil {
+		shortCredentials["id"] = placeholderShortCallID
+		shortCredentials["link_with_password"] = placeholderShortCallLinkWithPassword
+		shortCredentials["link_without_password"] = placeholderShortCallLink
+		shortCredentials["password"] = placeholderShortCallPassword
+	}
+
+	if profiles, ok := response["profiles"].([]any); ok {
+		for _, rawProfile := range profiles {
+			profile, ok := rawProfile.(map[string]any)
+			if !ok || profile == nil {
+				continue
+			}
+			profile["id"] = placeholderProfileID
+			profile["first_name"] = placeholderProfileFirstName
+			profile["last_name"] = placeholderProfileLastName
+			if _, ok := profile["photo_200"]; ok {
+				profile["photo_200"] = placeholderProfilePhoto
+			}
+			if _, ok := profile["photo_base"]; ok {
+				profile["photo_base"] = placeholderProfilePhoto
+			}
+		}
+	}
+
+	return payload
 }
 
 func redactKeys(value any, replacements map[string]string) map[string]any {
