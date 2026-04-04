@@ -23,6 +23,26 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - This repository is the canonical codebase for the Go rewrite.
 - The legacy repository `/home/egor/code/vk-turn-proxy` is a reference implementation and compatibility oracle, not a place for new product changes.
 
+## Project Docs
+- Start with `README.md` for the current runtime/operator surface.
+- Use `openspec/project.md` plus `openspec/specs/*/spec.md` as the checked-in behavior contract.
+- For provider compatibility and wire-behavior work, start with `test/compatibility/README.md`, `test/compatibility/vk/README.md`, and the relevant fixtures before changing code.
+- Use `docs/provider-matrix.md`, `docs/runtime-observability.md`, and `docs/adr/0001-go-monorepo.md` as the repo-owned architecture and runtime references.
+
+## Search Playbook
+- Search order: `mcp__claude_context__search_code` -> `rg` -> `rg --files` -> targeted file reads.
+- Use the canonical repo root `/home/egor/code/vk-turn-proxy-go/` for semantic indexing tools; use the same absolute path for index, status, clear, and search.
+- Form the first semantic query as `component + action + context` and keep the first pass narrow.
+- Set `extensionFilter` early when using semantic search:
+  - Go implementation: `.go`
+  - Specs/docs/instructions: `.md`
+  - Compatibility fixtures/evidence: `.json`
+  - CI/workflows: `.yml`
+- Prioritize `internal/`, `cmd/`, `openspec/`, `test/compatibility/`, `docs/`, `README.md`, and `AGENTS.md` when narrowing search scope.
+- For OpenSpec work, use `openspec list`, `openspec list --specs`, and `openspec show` first; treat `rg` as full-text fallback.
+- For provider and wire-behavior questions, confirm findings in at least two sources: code + tests/spec/docs.
+- Do not treat plans, tasks, TODO lists, or status files as proof that behavior is implemented.
+
 ## Architecture rules
 - Keep provider-specific signaling and credential resolution inside `internal/provider/...`.
 - Keep TURN/DTLS/UDP transport logic provider-agnostic.
