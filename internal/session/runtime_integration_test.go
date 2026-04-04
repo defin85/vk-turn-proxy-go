@@ -133,6 +133,82 @@ func TestRunSupervisedRelayRoundTrip(t *testing.T) {
 	}
 }
 
+func TestRunKeepsRelayAliveThroughTURNRefresh(t *testing.T) {
+	harnessCtx, cancelHarness := context.WithCancel(context.Background())
+	harness, err := turnlab.StartWithOptions(harnessCtx, testLogger(), turnlab.Options{
+		AllocationLifetime: 2 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("start harness: %v", err)
+	}
+	t.Cleanup(func() {
+		cancelHarness()
+		if err := harness.Close(); err != nil {
+			t.Errorf("close harness: %v", err)
+		}
+	})
+
+	recorder := &transportAddrRecorder{}
+	sessionCtx, cancelSession := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	listenAddr := reserveUDPAddr(t)
+	go func() {
+		errCh <- Run(sessionCtx, config.ClientConfig{
+			Provider:    "generic-turn",
+			Link:        harness.GenericTurnLink(),
+			ListenAddr:  listenAddr,
+			PeerAddr:    harness.Descriptor.PeerAddress,
+			Connections: 1,
+			Mode:        config.TransportModeAuto,
+			UseDTLS:     true,
+		}, Dependencies{
+			Registry:  provider.NewRegistry(genericturn.New()),
+			Logger:    testLogger(),
+			NewRunner: recorder.RunnerFactory(),
+			SessionID: NewID(),
+		})
+	}()
+
+	clientConn, err := net.Dial("udp", listenAddr)
+	if err != nil {
+		cancelSession()
+		t.Fatalf("dial local client addr: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = clientConn.Close()
+	})
+
+	mustEchoEventually(t, clientConn, []byte("before-turn-refresh"))
+
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer waitCancel()
+	if err := harness.WaitRefreshCount(waitCtx, 1); err != nil {
+		cancelSession()
+		t.Fatalf("wait refresh count: %v", err)
+	}
+
+	if got := recorder.TURNBaseCount(); got != 1 {
+		cancelSession()
+		t.Fatalf("turn base bind count = %d, want 1", got)
+	}
+	if got := recorder.RelayCount(); got != 1 {
+		cancelSession()
+		t.Fatalf("relay allocation count = %d, want 1", got)
+	}
+
+	mustEchoEventually(t, clientConn, []byte("after-turn-refresh"))
+
+	cancelSession()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("Run() error = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("session did not stop after cancellation")
+	}
+}
+
 func TestRunRelayRoundTripUpdatesForwardingMetrics(t *testing.T) {
 	harnessCtx, cancelHarness := context.WithCancel(context.Background())
 	harness, err := turnlab.Start(harnessCtx, testLogger())
@@ -473,9 +549,11 @@ func TestRunFailsOnBadDTLSPeer(t *testing.T) {
 }
 
 type transportAddrRecorder struct {
-	mu       sync.Mutex
-	turnBase net.Addr
-	relay    net.Addr
+	mu        sync.Mutex
+	turnBase  net.Addr
+	relay     net.Addr
+	turnHits  int
+	relayHits int
 }
 
 func (r *transportAddrRecorder) setTURNBase(addr net.Addr) {
@@ -486,6 +564,7 @@ func (r *transportAddrRecorder) setTURNBase(addr net.Addr) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.turnBase = cloneTestAddr(addr)
+	r.turnHits++
 }
 
 func (r *transportAddrRecorder) setRelay(addr net.Addr) {
@@ -496,6 +575,7 @@ func (r *transportAddrRecorder) setRelay(addr net.Addr) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.relay = cloneTestAddr(addr)
+	r.relayHits++
 }
 
 func (r *transportAddrRecorder) TURNBase() net.Addr {
@@ -508,6 +588,18 @@ func (r *transportAddrRecorder) Relay() net.Addr {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return cloneTestAddr(r.relay)
+}
+
+func (r *transportAddrRecorder) TURNBaseCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.turnHits
+}
+
+func (r *transportAddrRecorder) RelayCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.relayHits
 }
 
 func reserveUDPAddr(t *testing.T) string {

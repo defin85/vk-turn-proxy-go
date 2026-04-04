@@ -34,6 +34,7 @@ internal/
   provider/
     genericturn/
     vk/
+  providerprompt/
   session/
   transport/
   tunnelserver/
@@ -102,6 +103,16 @@ The probe remains provider-only by design:
 - it resolves staged VK/OK credentials
 - it does not start TURN, DTLS, or session transport loops
 
+If VK returns `Captcha needed`, rerun the probe with browser-assisted continuation:
+
+```bash
+go run ./cmd/probe -provider vk -link 'https://vk.com/call/join/<invite>' -output-dir artifacts -interactive-provider
+```
+
+Interactive mode launches a controlled browser session when possible, waits for the operator to complete the challenge and type `continue`, then retries only the blocked VK provider stage with browser-backed session cookies.
+Raw browser cookies are not persisted in the probe artifact.
+If Chromium is not on `PATH`, point the helper at it explicitly with `VK_PROVIDER_BROWSER=/path/to/chromium`.
+
 Use the persisted artifact together with the fixture contract in `test/compatibility/vk/` before porting broader legacy client behavior into transport/session code.
 
 `cmd/tunnel-client` now runs the supported supervised client runtime matrix after provider resolution.
@@ -124,6 +135,8 @@ Lifecycle policy for supervised sessions:
 
 When startup fails after policy validation, the command reports a stage-aware error such as `provider_resolve`, `turn_dial`, `turn_allocate`, `peer_setup`, `dtls_handshake`, or `session_supervision`.
 `-turn` and `-port` overrides remain supported and are applied after provider credential resolution.
+If the selected provider returns an interactive VK captcha challenge, start the client with `-interactive-provider` so provider resolution can pause for a controlled browser step before any local listener or TURN transport is started.
+Long-lived reliability is currently evidenced by deterministic TURN allocation-refresh coverage in `turnlab` and runtime integration tests; the repository still does not claim live mobile-network or NAT parity from that alone.
 
 Client and server runtimes now expose an optional Prometheus-style metrics surface through `-metrics-listen <addr>`.
 The first metric set covers session starts, session failures, startup-stage failures, transport-stage failures, active workers, and forwarded packets/bytes.
@@ -153,6 +166,7 @@ Future runtime and integration tests should call `turnlab.Start(ctx, logger)` an
 - `GenericTurnLink()` when a test wants to drive `generic-turn` provider startup without hand-building the link
 - `Descriptor.GenericTurnTCPLink()` when a test wants a `generic-turn` link anchored to the TCP TURN listener
 - `WaitUpstreamPeer(ctx)` plus `InjectUpstream(payload)` when a test needs to assert reply routing independently from the automatic echo path
+- `StartWithOptions(... AllocationLifetime ...)` plus `WaitRefreshCount(ctx, n)` when a test needs a short deterministic maintenance window for allocation refresh
 
 CI picks the harness up automatically through the existing `go test ./...` workflow.
 

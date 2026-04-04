@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"net"
 
-	"github.com/pion/turn/v4"
+	"github.com/pion/turn/v5"
 
 	"github.com/defin85/vk-turn-proxy-go/internal/runstage"
 )
@@ -49,10 +49,16 @@ func (r *clientRunner) Run(ctx context.Context) error {
 		r.cfg.Hooks.OnTURNBaseBind(cloneAddr(baseConn.LocalAddr()))
 	}
 
+	turnNet, err := newTURNNet(r.cfg.BindIP)
+	if err != nil {
+		return runstage.Wrap(runstage.TURNDial, fmt.Errorf("create turn network: %w", err))
+	}
+
 	client, err := turn.NewClient(&turn.ClientConfig{
 		STUNServerAddr: r.cfg.TURN.Address,
 		TURNServerAddr: r.cfg.TURN.Address,
 		Conn:           baseConn,
+		Net:            turnNet,
 		Username:       r.cfg.TURN.Username,
 		Password:       r.cfg.TURN.Password,
 	})

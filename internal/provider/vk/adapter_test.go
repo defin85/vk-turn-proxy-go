@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/defin85/vk-turn-proxy-go/internal/provider"
 )
 
 type fixture struct {
@@ -53,6 +55,11 @@ type fixtureDoer struct {
 	calls int
 }
 
+type cookieCheckingDoer struct {
+	*fixtureDoer
+	sawRetryCookie bool
+}
+
 func (d *fixtureDoer) Do(request *http.Request) (*http.Response, error) {
 	d.t.Helper()
 
@@ -89,6 +96,17 @@ func (d *fixtureDoer) Do(request *http.Request) (*http.Response, error) {
 		Body:       io.NopCloser(bytes.NewReader(body)),
 		Header:     make(http.Header),
 	}, nil
+}
+
+func (d *cookieCheckingDoer) Do(request *http.Request) (*http.Response, error) {
+	if d.fixtureDoer.calls == 2 && request.URL.String() == getAnonymousTokenURL {
+		if request.Header.Get("Cookie") == "" {
+			d.t.Fatalf("expected cookie header on browser-assisted retry")
+		}
+		d.sawRetryCookie = true
+	}
+
+	return d.fixtureDoer.Do(request)
 }
 
 func TestResolveUsesStagedVKFlow(t *testing.T) {
@@ -153,6 +171,126 @@ func TestResolveReturnsExplicitStageErrorForMissingTurnURL(t *testing.T) {
 	}
 	if doer.calls != len(fixture.Stages) {
 		t.Fatalf("unexpected HTTP call count %d", doer.calls)
+	}
+}
+
+func TestResolveReturnsCaptchaRequiredWithoutInteractiveHandler(t *testing.T) {
+	fixture := loadFixture(t, "vk_call_debug_captcha_required_v1.json")
+	doer := &fixtureDoer{t: t, stages: fixture.Stages}
+	adapter := NewWithHTTPDoer(doer)
+
+	_, err := adapter.Resolve(context.Background(), "test-token")
+	if err == nil {
+		t.Fatal("Resolve() expected error")
+	}
+
+	var captchaErr *CaptchaRequiredError
+	if !errors.As(err, &captchaErr) {
+		t.Fatalf("expected CaptchaRequiredError, got %T", err)
+	}
+	if captchaErr.Challenge() == nil {
+		t.Fatal("captcha challenge is required")
+	}
+	if captchaErr.Challenge().StageName() != fixture.Expected.ProviderError.Stage {
+		t.Fatalf("challenge stage = %q, want %q", captchaErr.Challenge().StageName(), fixture.Expected.ProviderError.Stage)
+	}
+
+	var stageErr *stageError
+	if !errors.As(err, &stageErr) {
+		t.Fatalf("expected stageError, got %T", err)
+	}
+	if stageErr.code != fixture.Expected.ProviderError.Code {
+		t.Fatalf("unexpected code %q", stageErr.code)
+	}
+	if doer.calls != len(fixture.Stages) {
+		t.Fatalf("unexpected HTTP call count %d", doer.calls)
+	}
+
+	var carrier provider.ArtifactCarrier
+	if !errors.As(err, &carrier) {
+		t.Fatalf("expected artifact carrier, got %T", err)
+	}
+	artifact := carrier.Artifact()
+	if artifact == nil || artifact.Outcome.ProviderError == nil {
+		t.Fatalf("expected provider error artifact, got %#v", artifact)
+	}
+	if artifact.Outcome.ProviderError.Code != fixture.Expected.ProviderError.Code {
+		t.Fatalf("artifact code = %q, want %q", artifact.Outcome.ProviderError.Code, fixture.Expected.ProviderError.Code)
+	}
+}
+
+func TestResolveContinuesAfterBrowserAssistedChallenge(t *testing.T) {
+	fixture := loadFixture(t, "vk_call_debug_captcha_resume_success_v1.json")
+	doer := &cookieCheckingDoer{fixtureDoer: &fixtureDoer{t: t, stages: fixture.Stages}}
+	adapter := NewWithHTTPDoer(doer)
+
+	handlerCalls := 0
+	ctx := provider.WithBrowserContinuationHandler(context.Background(), provider.BrowserContinuationHandlerFunc(func(ctx context.Context, challenge provider.InteractiveChallenge) (*provider.BrowserContinuation, error) {
+		handlerCalls++
+		if challenge.ProviderName() != "vk" {
+			t.Fatalf("challenge provider = %q", challenge.ProviderName())
+		}
+		if challenge.StageName() != stageGetAnonymousToken {
+			t.Fatalf("challenge stage = %q", challenge.StageName())
+		}
+		if challenge.Kind() != "captcha" {
+			t.Fatalf("challenge kind = %q", challenge.Kind())
+		}
+		if challenge.OpenURL() == "" {
+			t.Fatal("challenge URL is required")
+		}
+		return &provider.BrowserContinuation{
+			Cookies: []*http.Cookie{{Name: "remixsid", Value: "secret", Domain: ".vk.ru", Path: "/"}},
+		}, nil
+	}))
+
+	resolution, err := adapter.Resolve(ctx, "https://vk.com/call/join/test-token")
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if handlerCalls != 1 {
+		t.Fatalf("interactive handler calls = %d, want 1", handlerCalls)
+	}
+	if resolution.Credentials.Username != fixture.Expected.Resolution.Username {
+		t.Fatalf("unexpected username %q", resolution.Credentials.Username)
+	}
+	if resolution.Credentials.Password != fixture.Expected.Resolution.Password {
+		t.Fatalf("unexpected password %q", resolution.Credentials.Password)
+	}
+	if resolution.Credentials.Address != fixture.Expected.Resolution.Address {
+		t.Fatalf("unexpected address %q", resolution.Credentials.Address)
+	}
+	if doer.calls != len(fixture.Stages) {
+		t.Fatalf("unexpected HTTP call count %d", doer.calls)
+	}
+	if !doer.sawRetryCookie {
+		t.Fatal("expected browser-assisted retry to include cookies")
+	}
+	if resolution.Artifact == nil || len(resolution.Artifact.Stages) != len(fixture.Stages) {
+		t.Fatalf("unexpected artifact stages %#v", resolution.Artifact)
+	}
+}
+
+func TestResolveFailsWhenBrowserContinuationFails(t *testing.T) {
+	fixture := loadFixture(t, "vk_call_debug_browser_continuation_failed_v1.json")
+	doer := &fixtureDoer{t: t, stages: fixture.Stages}
+	adapter := NewWithHTTPDoer(doer)
+
+	ctx := provider.WithBrowserContinuationHandler(context.Background(), provider.BrowserContinuationHandlerFunc(func(ctx context.Context, challenge provider.InteractiveChallenge) (*provider.BrowserContinuation, error) {
+		return nil, errors.New("controlled browser unavailable")
+	}))
+
+	_, err := adapter.Resolve(ctx, "https://vk.com/call/join/test-token")
+	if err == nil {
+		t.Fatal("Resolve() expected error")
+	}
+
+	var stageErr *stageError
+	if !errors.As(err, &stageErr) {
+		t.Fatalf("expected stageError, got %T", err)
+	}
+	if stageErr.code != fixture.Expected.ProviderError.Code {
+		t.Fatalf("unexpected code %q", stageErr.code)
 	}
 }
 

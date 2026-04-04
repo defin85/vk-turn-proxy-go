@@ -105,25 +105,10 @@ func (r *resolver) resolve(ctx context.Context, joinToken string) (provider.Reso
 			"access_token",
 		},
 	}
-	anonymousTokenPayload, anonymousTokenArtifact, err := r.performStage(ctx, anonymousTokenStage, url.Values{
-		"vk_join_link": {"https://vk.com/call/join/" + joinToken},
-		"name":         {"123"},
-		"access_token": {accessToken},
-	})
+	anonymousToken, err := r.resolveAnonymousToken(ctx, artifacts, joinToken, accessToken, anonymousTokenStage)
 	if err != nil {
-		return provider.Resolution{}, artifacts.wrapError(err, anonymousTokenArtifact)
+		return provider.Resolution{}, err
 	}
-
-	anonymousToken, err := parseAnonymousToken(anonymousTokenPayload)
-	if err != nil {
-		return provider.Resolution{}, artifacts.wrapError(
-			&stageError{stage: stageGetAnonymousToken, code: "missing_anonymous_token", err: err},
-			withStageOutcome(anonymousTokenArtifact, "provider_error", nil, "missing_anonymous_token"),
-		)
-	}
-	artifacts.append(withStageOutcome(anonymousTokenArtifact, "continue", map[string]any{
-		"anonym_token": placeholderAnonymousToken,
-	}, ""))
 
 	deviceID, err := newDeviceID()
 	if err != nil {
@@ -244,4 +229,84 @@ func (r *resolver) resolve(ctx context.Context, joinToken string) (provider.Reso
 		},
 		Artifact: artifacts.artifact,
 	}, nil
+}
+
+func (r *resolver) resolveAnonymousToken(
+	ctx context.Context,
+	artifacts *artifactBuilder,
+	joinToken string,
+	accessToken string,
+	descriptor stageDescriptor,
+) (string, error) {
+	form := url.Values{
+		"vk_join_link": {"https://vk.com/call/join/" + joinToken},
+		"name":         {"123"},
+		"access_token": {accessToken},
+	}
+
+	for {
+		payload, stageArtifact, err := r.performStage(ctx, descriptor, form)
+		if err != nil {
+			return "", artifacts.wrapError(err, stageArtifact)
+		}
+
+		if challenge, ok := parseCaptchaChallenge(payload); ok {
+			challengeStage := withStageOutcome(stageArtifact, "provider_error", nil, captchaRequiredCode)
+			browserHandler := provider.BrowserContinuationHandlerFromContext(ctx)
+			if browserHandler == nil {
+				return "", artifacts.wrapError(newCaptchaRequiredError(stageGetAnonymousToken, challenge, nil), challengeStage)
+			}
+			artifacts.append(challengeStage)
+			continuation, err := browserHandler.Continue(ctx, challenge)
+			if err != nil {
+				artifacts.fail(stageGetAnonymousToken, browserContinuationFailedCode)
+				return "", &provider.ArtifactError{
+					Err: &stageError{
+						stage: stageGetAnonymousToken,
+						code:  browserContinuationFailedCode,
+						err:   err,
+					},
+					ProbeArtifact: artifacts.artifact,
+				}
+			}
+			if continuation == nil {
+				artifacts.fail(stageGetAnonymousToken, browserContinuationFailedCode)
+				return "", &provider.ArtifactError{
+					Err: &stageError{
+						stage: stageGetAnonymousToken,
+						code:  browserContinuationFailedCode,
+						err:   errors.New("browser continuation result is required"),
+					},
+					ProbeArtifact: artifacts.artifact,
+				}
+			}
+			continuationDoer, err := newCookieDoer(r.doer, challenge.CookieURLs(), continuation.Cookies)
+			if err != nil {
+				artifacts.fail(stageGetAnonymousToken, browserContinuationFailedCode)
+				return "", &provider.ArtifactError{
+					Err: &stageError{
+						stage: stageGetAnonymousToken,
+						code:  browserContinuationFailedCode,
+						err:   err,
+					},
+					ProbeArtifact: artifacts.artifact,
+				}
+			}
+			r = &resolver{doer: continuationDoer}
+			continue
+		}
+
+		anonymousToken, err := parseAnonymousToken(payload)
+		if err != nil {
+			return "", artifacts.wrapError(
+				&stageError{stage: stageGetAnonymousToken, code: "missing_anonymous_token", err: err},
+				withStageOutcome(stageArtifact, "provider_error", nil, "missing_anonymous_token"),
+			)
+		}
+		artifacts.append(withStageOutcome(stageArtifact, "continue", map[string]any{
+			"anonym_token": placeholderAnonymousToken,
+		}, ""))
+
+		return anonymousToken, nil
+	}
 }

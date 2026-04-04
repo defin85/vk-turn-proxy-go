@@ -16,19 +16,29 @@ import (
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider/genericturn"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider/vk"
+	"github.com/defin85/vk-turn-proxy-go/internal/providerprompt"
 	"github.com/defin85/vk-turn-proxy-go/internal/runstage"
 	"github.com/defin85/vk-turn-proxy-go/internal/session"
 )
+
+type interactiveProviderHandler interface {
+	provider.InteractionHandler
+	provider.BrowserContinuationHandler
+}
+
+var newInteractiveProviderHandler = func(stdin io.Reader, stderr io.Writer) interactiveProviderHandler {
+	return providerprompt.NewHandler(stdin, stderr, providerprompt.Options{})
+}
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	os.Exit(runClient(ctx, os.Stdout, os.Stderr, os.Args[1:], newRegistry()))
+	os.Exit(runClient(ctx, os.Stdin, os.Stdout, os.Stderr, os.Args[1:], newRegistry()))
 }
 
-func runClient(ctx context.Context, stdout io.Writer, stderr io.Writer, args []string, registry *provider.Registry) int {
-	cfg, logLevel, metricsListen, err := parseClientFlags(stderr, args)
+func runClient(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, args []string, registry *provider.Registry) int {
+	cfg, logLevel, metricsListen, interactiveProvider, err := parseClientFlags(stderr, args)
 	if err != nil {
 		return 2
 	}
@@ -60,6 +70,11 @@ func runClient(ctx context.Context, stdout io.Writer, stderr io.Writer, args []s
 		fmt.Fprintf(stderr, "client metrics failed: %v\n", err)
 		return 1
 	}
+	if interactiveProvider {
+		handler := newInteractiveProviderHandler(stdin, stderr)
+		ctx = provider.WithInteractionHandler(ctx, handler)
+		ctx = provider.WithBrowserContinuationHandler(ctx, handler)
+	}
 	err = session.Run(ctx, cfg, session.Dependencies{
 		Registry:  registry,
 		Logger:    logger,
@@ -79,14 +94,16 @@ func runClient(ctx context.Context, stdout io.Writer, stderr io.Writer, args []s
 	return 0
 }
 
-func parseClientFlags(stderr io.Writer, args []string) (config.ClientConfig, string, string, error) {
+func parseClientFlags(stderr io.Writer, args []string) (config.ClientConfig, string, string, bool, error) {
 	cfg := config.DefaultClientConfig()
 	logLevel := "info"
 	metricsListen := ""
+	interactiveProvider := false
 	flags := flag.NewFlagSet("tunnel-client", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	flags.StringVar(&logLevel, "log-level", logLevel, "log level: debug|info|warn|error")
 	flags.StringVar(&metricsListen, "metrics-listen", metricsListen, "optional metrics listen address")
+	flags.BoolVar(&interactiveProvider, "interactive-provider", interactiveProvider, "allow operator-assisted provider challenges, including browser-assisted VK captcha continuation")
 	flags.StringVar(&cfg.Provider, "provider", cfg.Provider, "provider name")
 	flags.StringVar(&cfg.Link, "link", cfg.Link, "provider link or invite")
 	flags.StringVar(&cfg.ListenAddr, "listen", cfg.ListenAddr, "local UDP listen address")
@@ -101,7 +118,7 @@ func parseClientFlags(stderr io.Writer, args []string) (config.ClientConfig, str
 		return nil
 	})
 
-	return cfg, logLevel, metricsListen, flags.Parse(args)
+	return cfg, logLevel, metricsListen, interactiveProvider, flags.Parse(args)
 }
 
 func exitCode(err error) int {

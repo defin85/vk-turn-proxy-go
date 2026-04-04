@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pion/turn/v4"
+	"github.com/pion/turn/v5"
 
 	"github.com/defin85/vk-turn-proxy-go/internal/config"
 	"github.com/defin85/vk-turn-proxy-go/internal/tunnelserver"
@@ -33,6 +33,9 @@ type TURNCredentials struct {
 
 type Options struct {
 	AcceptedCredentials []TURNCredentials
+	AllocationLifetime  time.Duration
+	PermissionTimeout   time.Duration
+	ChannelBindTimeout  time.Duration
 }
 
 type Descriptor struct {
@@ -67,6 +70,7 @@ type Harness struct {
 	Descriptor Descriptor
 
 	upstream *upstreamController
+	events   *maintenanceEvents
 	turnTCP  *trackingListener
 	cancel   context.CancelFunc
 	done     chan struct{}
@@ -93,6 +97,7 @@ func StartWithOptions(parent context.Context, logger *slog.Logger, opts Options)
 	harness := &Harness{
 		cancel: cancel,
 		done:   make(chan struct{}),
+		events: newMaintenanceEvents(),
 		Descriptor: Descriptor{
 			TURNCredentials: TURNCredentials{
 				Username: turnUsername,
@@ -168,8 +173,18 @@ func StartWithOptions(parent context.Context, logger *slog.Logger, opts Options)
 	harness.turnTCP = trackingTCPListener
 
 	turnServer, err := turn.NewServer(turn.ServerConfig{
-		Realm:       turnRealm,
-		AuthHandler: staticAuthHandler(opts.AcceptedCredentials),
+		Realm:              turnRealm,
+		AuthHandler:        staticAuthHandler(opts.AcceptedCredentials),
+		AllocationLifetime: opts.AllocationLifetime,
+		PermissionTimeout:  opts.PermissionTimeout,
+		ChannelBindTimeout: opts.ChannelBindTimeout,
+		EventHandler: turn.EventHandler{
+			OnAuth: func(_, _ net.Addr, _, _, _, method string, verdict bool) {
+				if method == "Refresh" {
+					harness.events.recordRefreshAuth(verdict)
+				}
+			},
+		},
 		PacketConnConfigs: []turn.PacketConnConfig{
 			{
 				PacketConn: turnConn,
@@ -285,7 +300,23 @@ func (h *Harness) WaitNoActiveTURNTCPConns(ctx context.Context) error {
 	return h.turnTCP.WaitZero(ctx)
 }
 
-func staticAuthHandler(extra []TURNCredentials) func(string, string, net.Addr) ([]byte, bool) {
+func (h *Harness) WaitRefreshCount(ctx context.Context, want int) error {
+	if h == nil || h.events == nil {
+		return errors.New("harness maintenance events are not available")
+	}
+
+	return h.events.waitRefreshCount(ctx, want)
+}
+
+func (h *Harness) RefreshCount() int {
+	if h == nil || h.events == nil {
+		return 0
+	}
+
+	return h.events.refreshCount()
+}
+
+func staticAuthHandler(extra []TURNCredentials) func(*turn.RequestAttributes) (string, []byte, bool) {
 	keys := map[string][]byte{
 		authIdentity(turnUsername, turnRealm): turn.GenerateAuthKey(turnUsername, turnRealm, turnPassword),
 	}
@@ -306,9 +337,13 @@ func staticAuthHandler(extra []TURNCredentials) func(string, string, net.Addr) (
 		keys[authIdentity(username, realm)] = turn.GenerateAuthKey(username, realm, creds.Password)
 	}
 
-	return func(username string, realm string, _ net.Addr) ([]byte, bool) {
-		key, ok := keys[authIdentity(username, realm)]
-		return key, ok
+	return func(attrs *turn.RequestAttributes) (string, []byte, bool) {
+		if attrs == nil {
+			return "", nil, false
+		}
+
+		key, ok := keys[authIdentity(attrs.Username, attrs.Realm)]
+		return attrs.Username, key, ok
 	}
 }
 

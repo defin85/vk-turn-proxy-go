@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 )
 
@@ -113,6 +114,29 @@ func stringArrayField(payload map[string]any, key string) ([]string, error) {
 	}
 
 	return result, nil
+}
+
+func numericField(payload map[string]any, key string) (int, error) {
+	value, ok := payload[key]
+	if !ok {
+		return 0, fmt.Errorf("%s is required", key)
+	}
+
+	switch typed := value.(type) {
+	case float64:
+		if math.Trunc(typed) != typed {
+			return 0, fmt.Errorf("%s must be an integer", key)
+		}
+		return int(typed), nil
+	case int:
+		return typed, nil
+	case int32:
+		return int(typed), nil
+	case int64:
+		return int(typed), nil
+	default:
+		return 0, fmt.Errorf("%s must be numeric", key)
+	}
 }
 
 func normalizeTurnAddress(raw string) (string, error) {

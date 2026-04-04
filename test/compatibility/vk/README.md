@@ -7,6 +7,7 @@ It is intentionally limited to:
 
 - invite normalization from `https://vk.com/call/join/...`
 - staged VK/OK HTTP resolution
+- explicit browser-assisted captcha continuation for stage 2 when VK requires it
 - normalized TURN credential output
 - explicit provider-stage failures
 
@@ -25,6 +26,7 @@ The compatibility baseline is the four-stage sequence already present in the leg
 
 The rewrite must preserve this stage order for the initial debug contour.
 If a required field is missing or malformed, the provider must fail at the stage where the field becomes unavailable.
+If VK returns `Captcha needed` at stage 2, the rewrite may pause for an explicit browser-assisted retry, but it must not skip directly to stages 3 or 4 without a successful repeated stage-2 response.
 
 ## First scenarios
 
@@ -63,6 +65,54 @@ Expected behavior:
 - no fallback URL or alternative provider behavior is attempted
 - sanitized artifacts still contain stages 1 through 4, including the failing stage payload
 
+### `vk_call_debug_captcha_required_v1`
+
+Input contract:
+
+- stage 1 succeeds
+- stage 2 returns `error_code=14` with a VK challenge continuation URL
+- interactive provider handling is disabled
+
+Expected behavior:
+
+- the provider returns an explicit provider error
+- the reported failing stage is `vk_calls_get_anonymous_token`
+- the machine-readable error code is `captcha_required`
+- sanitized artifacts redact the challenge URL and related captcha identifiers
+
+### `vk_call_debug_captcha_resume_success_v1`
+
+Input contract:
+
+- stage 1 succeeds
+- stage 2 first returns `captcha_required`
+- the operator completes the challenge inside a controlled browser session and confirms continuation in interactive mode
+- the repeated stage 2 response returns `response.token`
+- stages 3 and 4 then succeed
+
+Expected behavior:
+
+- the provider records the initial challenge stage and the repeated successful stage 2 attempt
+- the repeated stage 2 attempt uses browser-assisted continuation state instead of the original plain HTTP client alone
+- the provider returns normalized TURN credentials after the resumed staged flow completes
+- no TURN or session transport is started by the probe itself
+
+### `vk_call_debug_browser_continuation_failed_v1`
+
+Input contract:
+
+- stage 1 succeeds
+- stage 2 first returns `captcha_required`
+- interactive provider handling is enabled
+- the controlled browser session cannot be started, queried, or converted into usable continuation state
+
+Expected behavior:
+
+- the provider returns an explicit provider error
+- the reported failing stage is `vk_calls_get_anonymous_token`
+- the machine-readable error code is `browser_continuation_failed`
+- sanitized artifacts still preserve the initial captcha-gated stage and must not persist raw browser cookies or session identifiers
+
 ## Fixture layout
 
 The fixture directory for this contract is:
@@ -72,6 +122,9 @@ test/compatibility/vk/
   fixture.schema.json
   fixtures/
     .gitkeep
+    vk_call_debug_browser_continuation_failed_v1.json
+    vk_call_debug_captcha_required_v1.json
+    vk_call_debug_captcha_resume_success_v1.json
     vk_call_debug_success_v1.json
     vk_call_debug_stage4_missing_turn_url_v1.json
 ```
@@ -89,7 +142,8 @@ Fixtures and probe artifacts must preserve structure while removing live secrets
 - Replace the raw invite token everywhere with `<redacted:vk-join-token>`.
 - Replace stage tokens with descriptive placeholders such as `<redacted:vk-access-token-1>`, `<redacted:vk-anonym-token>`, and `<redacted:ok-session-key>`.
 - Replace TURN username and password with `<redacted:turn-username>` and `<redacted:turn-password>`.
-- Do not persist raw cookies, authorization headers, IP-bound session identifiers, or unredacted request bodies.
+- Replace captcha continuation URLs and challenge-specific identifiers with descriptive placeholders such as `<redacted:vk-captcha-redirect-uri>` and `<redacted:vk-captcha-sid>`.
+- Do not persist raw cookies, authorization headers, browser profile paths, IP-bound session identifiers, or unredacted request bodies.
 - Preserve endpoint IDs, HTTP status codes, field names, stage ordering, and normalized TURN address semantics.
 - If a live TURN host must not be committed, replace it with a synthetic host that preserves normalization behavior, for example `turn.example.test:3478`.
 
@@ -131,12 +185,22 @@ Use the probe to execute the current VK provider-only debug contour:
 go run ./cmd/probe -provider vk -link 'https://vk.com/call/join/<invite>' -output-dir artifacts
 ```
 
+For invites that hit VK captcha gating, use browser-assisted continuation:
+
+```bash
+go run ./cmd/probe -provider vk -link 'https://vk.com/call/join/<invite>' -output-dir artifacts -interactive-provider
+```
+
 Expected operator workflow:
 
 1. Run the probe with a VK invite.
-2. Inspect the one-line summary on stdout for `turn_addr`, `stages`, and `artifact`.
-3. Inspect `artifacts/vk/probe-artifact.json` for the sanitized stage trace.
-4. Compare the resulting stage sequence and normalized address semantics with the committed fixtures in `test/compatibility/vk/fixtures/`.
+2. If VK requires captcha, the tool opens a controlled Chromium session for the challenge.
+3. Complete the challenge in that browser window and type `continue` in the terminal.
+4. Inspect the one-line summary on stdout for `turn_addr`, `stages`, and `artifact`.
+5. Inspect `artifacts/vk/probe-artifact.json` for the sanitized stage trace.
+6. Compare the resulting stage sequence and normalized address semantics with the committed fixtures in `test/compatibility/vk/fixtures/`.
+
+If Chromium is not discoverable on `PATH`, set `VK_PROVIDER_BROWSER=/path/to/chromium` before running the probe.
 
 This contour is the bridge between fixture-driven provider parity work and the next transport-porting change.
 Do not use it as evidence that TURN allocation, DTLS handshake, or end-to-end tunneling is already compatible.

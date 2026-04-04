@@ -23,12 +23,16 @@ type fakeAdapter struct {
 	resolution provider.Resolution
 	err        error
 	calls      int
+	resolve    func(context.Context, string) (provider.Resolution, error)
 }
 
 func (f *fakeAdapter) Name() string { return f.name }
 
-func (f *fakeAdapter) Resolve(context.Context, string) (provider.Resolution, error) {
+func (f *fakeAdapter) Resolve(ctx context.Context, link string) (provider.Resolution, error) {
 	f.calls++
+	if f.resolve != nil {
+		return f.resolve(ctx, link)
+	}
 	return f.resolution, f.err
 }
 
@@ -124,6 +128,55 @@ func TestRunWrapsProviderResolutionFailure(t *testing.T) {
 	if runnerCalled {
 		t.Fatal("runner should not be created for provider failure")
 	}
+}
+
+func TestRunPassesBrowserContinuationHandlerBeforeLocalBind(t *testing.T) {
+	cfg := validClientConfig()
+	cfg.ListenAddr = reserveUDPAddr(t)
+
+	adapter := &fakeAdapter{
+		name: "fake",
+		resolve: func(ctx context.Context, link string) (provider.Resolution, error) {
+			handler := provider.BrowserContinuationHandlerFromContext(ctx)
+			if handler == nil {
+				t.Fatal("browser continuation handler is required")
+			}
+			if _, err := handler.Continue(ctx, fakeRuntimeChallenge{
+				provider: "vk",
+				stage:    "vk_calls_get_anonymous_token",
+				kind:     "captcha",
+				prompt:   "complete captcha",
+				openURL:  "https://example.test/challenge",
+			}); err != nil {
+				return provider.Resolution{}, err
+			}
+			return provider.Resolution{}, errors.New("provider interaction completed")
+		},
+	}
+	runnerCalled := false
+	ctx := provider.WithBrowserContinuationHandler(context.Background(), provider.BrowserContinuationHandlerFunc(func(ctx context.Context, challenge provider.InteractiveChallenge) (*provider.BrowserContinuation, error) {
+		return &provider.BrowserContinuation{}, nil
+	}))
+
+	err := Run(ctx, cfg, Dependencies{
+		Registry: provider.NewRegistry(adapter),
+		Logger:   testLogger(),
+		NewRunner: func(cfg transport.ClientConfig) transport.Runner {
+			runnerCalled = true
+			return fakeRunner{}
+		},
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	stage, ok := runstage.FromError(err)
+	if !ok || stage != runstage.ProviderResolve {
+		t.Fatalf("unexpected stage: %v", err)
+	}
+	if runnerCalled {
+		t.Fatal("runner should not be created before browser-assisted provider resolution succeeds")
+	}
+	mustRebindPacket(t, cfg.ListenAddr)
 }
 
 func TestRunAppliesTURNOverrides(t *testing.T) {
@@ -702,6 +755,21 @@ func validClientConfig() config.ClientConfig {
 func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
+
+type fakeRuntimeChallenge struct {
+	provider string
+	stage    string
+	kind     string
+	prompt   string
+	openURL  string
+}
+
+func (f fakeRuntimeChallenge) ProviderName() string { return f.provider }
+func (f fakeRuntimeChallenge) StageName() string    { return f.stage }
+func (f fakeRuntimeChallenge) Kind() string         { return f.kind }
+func (f fakeRuntimeChallenge) Prompt() string       { return f.prompt }
+func (f fakeRuntimeChallenge) OpenURL() string      { return f.openURL }
+func (f fakeRuntimeChallenge) CookieURLs() []string { return []string{"https://api.vk.ru/"} }
 
 func sessionIDValueString(value any) string {
 	switch id := value.(type) {

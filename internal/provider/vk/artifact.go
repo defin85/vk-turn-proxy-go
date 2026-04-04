@@ -14,6 +14,10 @@ const (
 	placeholderSessionKey     = "<redacted:ok-session-key>"
 	placeholderTurnUsername   = "<redacted:turn-username>"
 	placeholderTurnPassword   = "<redacted:turn-password>"
+	placeholderCaptchaURL     = "<redacted:vk-captcha-redirect-uri>"
+	placeholderCaptchaImage   = "<redacted:vk-captcha-image-uri>"
+	placeholderCaptchaSID     = "<redacted:vk-captcha-sid>"
+	placeholderRemixSTLID     = "<redacted:vk-remixstlid>"
 )
 
 type artifactBuilder struct {
@@ -48,6 +52,16 @@ func (b *artifactBuilder) resolve(address string) {
 	}
 }
 
+func (b *artifactBuilder) fail(stage string, code string) {
+	b.artifact.Outcome = provider.ProbeArtifactOutcome{
+		ResultKind: "provider_error",
+		ProviderError: &provider.ProbeArtifactProviderError{
+			Stage: stage,
+			Code:  code,
+		},
+	}
+}
+
 func (b *artifactBuilder) newSyntheticStage(stage string, formKeys []string, redactedFields []string) provider.ProbeArtifactStage {
 	return provider.ProbeArtifactStage{
 		Name:       stage,
@@ -71,13 +85,7 @@ func (b *artifactBuilder) wrapError(err error, stage provider.ProbeArtifactStage
 
 	var stageErr *stageError
 	if errors.As(err, &stageErr) {
-		b.artifact.Outcome = provider.ProbeArtifactOutcome{
-			ResultKind: "provider_error",
-			ProviderError: &provider.ProbeArtifactProviderError{
-				Stage: stageErr.stage,
-				Code:  stageErr.code,
-			},
-		}
+		b.fail(stageErr.stage, stageErr.code)
 	}
 
 	return &provider.ArtifactError{
@@ -94,7 +102,11 @@ func sanitizeResponseBody(stage string, payload map[string]any) map[string]any {
 		})
 	case stageGetAnonymousToken:
 		return redactKeys(payload, map[string]string{
-			"token": placeholderAnonymousToken,
+			"token":        placeholderAnonymousToken,
+			"redirect_uri": placeholderCaptchaURL,
+			"captcha_img":  placeholderCaptchaImage,
+			"captcha_sid":  placeholderCaptchaSID,
+			"remixstlid":   placeholderRemixSTLID,
 		})
 	case stageOKAnonymLogin:
 		return redactKeys(payload, map[string]string{

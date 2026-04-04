@@ -15,19 +15,29 @@ import (
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider/genericturn"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider/vk"
+	"github.com/defin85/vk-turn-proxy-go/internal/providerprompt"
 )
+
+type interactiveProviderHandler interface {
+	provider.InteractionHandler
+	provider.BrowserContinuationHandler
+}
+
+var newInteractiveProviderHandler = func(stdin io.Reader, stderr io.Writer) interactiveProviderHandler {
+	return providerprompt.NewHandler(stdin, stderr, providerprompt.Options{})
+}
 
 func main() {
 	registry := newRegistry()
-	os.Exit(runProbe(context.Background(), os.Stdout, os.Stderr, os.Args[1:], registry))
+	os.Exit(runProbe(context.Background(), os.Stdin, os.Stdout, os.Stderr, os.Args[1:], registry))
 }
 
 func newRegistry() *provider.Registry {
 	return provider.NewRegistry(genericturn.New(), vk.New())
 }
 
-func runProbe(ctx context.Context, stdout io.Writer, stderr io.Writer, args []string, registry *provider.Registry) int {
-	cfg, err := parseProbeFlags(stderr, args)
+func runProbe(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, args []string, registry *provider.Registry) int {
+	cfg, interactiveProvider, err := parseProbeFlags(stderr, args)
 	if err != nil {
 		return 2
 	}
@@ -44,6 +54,11 @@ func runProbe(ctx context.Context, stdout io.Writer, stderr io.Writer, args []st
 	if err := cfg.Validate(); err != nil {
 		fmt.Fprintf(stderr, "invalid probe config: %v\n", err)
 		return 2
+	}
+	if interactiveProvider {
+		handler := newInteractiveProviderHandler(stdin, stderr)
+		ctx = provider.WithInteractionHandler(ctx, handler)
+		ctx = provider.WithBrowserContinuationHandler(ctx, handler)
 	}
 
 	adapter, err := registry.Get(cfg.Provider)
@@ -90,8 +105,9 @@ func runProbe(ctx context.Context, stdout io.Writer, stderr io.Writer, args []st
 	return 0
 }
 
-func parseProbeFlags(stderr io.Writer, args []string) (config.ProbeConfig, error) {
+func parseProbeFlags(stderr io.Writer, args []string) (config.ProbeConfig, bool, error) {
 	cfg := config.DefaultProbeConfig()
+	interactiveProvider := false
 	flags := flag.NewFlagSet("probe", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	flags.StringVar(&cfg.Provider, "provider", cfg.Provider, "provider name")
@@ -99,8 +115,9 @@ func parseProbeFlags(stderr io.Writer, args []string) (config.ProbeConfig, error
 	flags.StringVar(&cfg.BindInterface, "bind-interface", cfg.BindInterface, "preferred local interface or address")
 	flags.StringVar(&cfg.OutputDir, "output-dir", cfg.OutputDir, "directory for collected artifacts")
 	flags.BoolVar(&cfg.ListProviders, "list-providers", cfg.ListProviders, "list available providers and exit")
+	flags.BoolVar(&interactiveProvider, "interactive-provider", interactiveProvider, "allow operator-assisted provider challenges, including browser-assisted VK captcha continuation")
 
-	return cfg, flags.Parse(args)
+	return cfg, interactiveProvider, flags.Parse(args)
 }
 
 func artifactFromError(err error) *provider.ProbeArtifact {

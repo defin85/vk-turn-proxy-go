@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/pion/dtls/v3"
-	"github.com/pion/turn/v4"
+	"github.com/pion/turn/v5"
 
 	"github.com/defin85/vk-turn-proxy-go/test/turnlab"
 )
@@ -97,6 +97,38 @@ func TestHarnessTCPRelayRoundTrip(t *testing.T) {
 	if !bytes.Equal(buf[:n], payload) {
 		t.Fatalf("unexpected payload: got %q want %q", buf[:n], payload)
 	}
+}
+
+func TestHarnessRelayRoundTripAfterAllocationRefresh(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	harness, err := turnlab.StartWithOptions(ctx, nil, turnlab.Options{
+		AllocationLifetime: 2 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("start harness: %v", err)
+	}
+	t.Cleanup(func() {
+		cancel()
+		if err := harness.Close(); err != nil {
+			t.Errorf("close harness: %v", err)
+		}
+	})
+
+	dtlsConn, _, cleanup := dialHarnessDTLS(t, harness, "udp")
+	t.Cleanup(cleanup)
+
+	mustReadDTLSEcho(t, dtlsConn, []byte("before-refresh"))
+
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer waitCancel()
+	if err := harness.WaitRefreshCount(waitCtx, 1); err != nil {
+		t.Fatalf("wait refresh count: %v", err)
+	}
+	if got := harness.RefreshCount(); got < 1 {
+		t.Fatalf("refresh count = %d, want >= 1", got)
+	}
+
+	mustReadDTLSEcho(t, dtlsConn, []byte("after-refresh"))
 }
 
 func TestHarnessPlainRelayRoundTrip(t *testing.T) {
@@ -225,6 +257,26 @@ func dialHarnessDTLS(t *testing.T, harness *turnlab.Harness, turnNetwork string)
 	return dtlsConn, relayConn.LocalAddr().String(), func() {
 		_ = dtlsConn.Close()
 		cleanup()
+	}
+}
+
+func mustReadDTLSEcho(t *testing.T, conn *dtls.Conn, payload []byte) {
+	t.Helper()
+
+	if err := conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatalf("set deadline: %v", err)
+	}
+	if _, err := conn.Write(payload); err != nil {
+		t.Fatalf("write payload: %v", err)
+	}
+
+	buf := make([]byte, 64)
+	n, err := conn.Read(buf)
+	if err != nil {
+		t.Fatalf("read payload: %v", err)
+	}
+	if !bytes.Equal(buf[:n], payload) {
+		t.Fatalf("unexpected payload: got %q want %q", buf[:n], payload)
 	}
 }
 

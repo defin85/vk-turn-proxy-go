@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/pion/turn/v4"
+	"github.com/pion/turn/v5"
 )
 
 func openTURNBaseConn(ctx context.Context, cfg ClientConfig) (net.PacketConn, error) {
