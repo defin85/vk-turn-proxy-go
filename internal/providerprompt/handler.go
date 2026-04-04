@@ -121,30 +121,43 @@ func (h *Handler) Continue(ctx context.Context, challenge provider.InteractiveCh
 		_ = session.Close()
 	}()
 
-	h.printIntro(challenge)
-	if err := session.Open(ctx, challengeURL); err != nil {
-		return nil, fmt.Errorf("open controlled browser challenge: %w", err)
-	}
-	fmt.Fprintln(h.stderr, "controlled browser opened for provider challenge")
-
 	var (
 		observedResultsCh chan []provider.BrowserStageResult
 		observationErrCh  chan error
+		observationReady  chan struct{}
+		observationCtx    context.Context
+		cancelObservation context.CancelFunc
 		confirmed         chan struct{}
 	)
 	if observedChallenge, ok := challenge.(provider.BrowserObservedStageChallenge); ok {
+		observationCtx, cancelObservation = context.WithCancel(ctx)
+		defer cancelObservation()
 		confirmed = make(chan struct{})
 		observedResultsCh = make(chan []provider.BrowserStageResult, 1)
 		observationErrCh = make(chan error, 1)
+		observationReady = make(chan struct{})
 		go func() {
-			stageResults, err := session.ObserveStageResults(ctx, observedChallenge.BrowserStageObservations(), confirmed)
+			stageResults, err := session.ObserveStageResults(observationCtx, observedChallenge.BrowserStageObservations(), confirmed, observationReady)
 			if err != nil {
 				observationErrCh <- err
 				return
 			}
 			observedResultsCh <- stageResults
 		}()
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("observe browser continuation stage: %w", ctx.Err())
+		case err := <-observationErrCh:
+			return nil, fmt.Errorf("observe browser continuation stage: %w", err)
+		case <-observationReady:
+		}
 	}
+
+	h.printIntro(challenge)
+	if err := session.Open(ctx, challengeURL); err != nil {
+		return nil, fmt.Errorf("open controlled browser challenge: %w", err)
+	}
+	fmt.Fprintln(h.stderr, "controlled browser opened for provider challenge")
 
 	if err := h.waitForContinue(ctx); err != nil {
 		if confirmed != nil {

@@ -68,11 +68,15 @@ type fakeBrowserSession struct {
 	cookies        []*http.Cookie
 	stageResults   []provider.BrowserStageResult
 	observeResults []provider.BrowserStageResult
+	observeStarted bool
 	errOpen        error
 	errFetch       error
 }
 
 func (s *fakeBrowserSession) Open(ctx context.Context, challengeURL string) error {
+	if len(s.observeResults) > 0 && !s.observeStarted {
+		return errors.New("observation was not armed before open")
+	}
 	s.openURL = challengeURL
 	return s.errOpen
 }
@@ -91,9 +95,13 @@ func (s *fakeBrowserSession) ExecuteStageRequests(ctx context.Context, requests 
 	return append([]provider.BrowserStageResult(nil), s.stageResults...), nil
 }
 
-func (s *fakeBrowserSession) ObserveStageResults(ctx context.Context, observations []provider.BrowserStageObservation, confirmed <-chan struct{}) ([]provider.BrowserStageResult, error) {
+func (s *fakeBrowserSession) ObserveStageResults(ctx context.Context, observations []provider.BrowserStageObservation, confirmed <-chan struct{}, ready chan<- struct{}) ([]provider.BrowserStageResult, error) {
 	if s.errFetch != nil {
 		return nil, s.errFetch
+	}
+	s.observeStarted = true
+	if ready != nil {
+		close(ready)
 	}
 	<-confirmed
 	return append([]provider.BrowserStageResult(nil), s.observeResults...), nil
@@ -288,6 +296,44 @@ func TestHandlerContinueReturnsBrowserObservedStageResults(t *testing.T) {
 	}
 	if got := result.StageResults[0].FormKeys; len(got) != 7 {
 		t.Fatalf("unexpected observed form keys %#v", got)
+	}
+}
+
+func TestHandlerContinueArmsObservationBeforeOpen(t *testing.T) {
+	var stderr bytes.Buffer
+	session := &fakeBrowserSession{
+		observeResults: []provider.BrowserStageResult{
+			{
+				Stage:      "vk_calls_get_anonymous_token",
+				Method:     http.MethodPost,
+				URL:        "https://api.vk.ru/method/calls.getAnonymousToken?v=5.275&client_id=6287487",
+				StatusCode: http.StatusOK,
+				Body: map[string]any{
+					"response": map[string]any{
+						"token": "<redacted:vk-anonym-token>",
+					},
+				},
+			},
+		},
+	}
+	handler := NewHandler(strings.NewReader("continue\n"), &stderr, Options{
+		NewBrowserSession: func(ctx context.Context) (browserSession, error) {
+			return session, nil
+		},
+	})
+
+	_, err := handler.Continue(context.Background(), fakeObservedChallenge{fakeChallenge: fakeChallenge{
+		provider: "vk",
+		stage:    "vk_calls_get_anonymous_token",
+		kind:     "captcha",
+		prompt:   "complete captcha",
+		openURL:  "https://vk.com/call/join/test-token",
+	}})
+	if err != nil {
+		t.Fatalf("Continue() error = %v", err)
+	}
+	if !session.observeStarted {
+		t.Fatal("expected observation to start before open")
 	}
 }
 

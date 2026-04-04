@@ -30,7 +30,7 @@ type browserSession interface {
 	Open(context.Context, string) error
 	Cookies(context.Context, []string) ([]*http.Cookie, error)
 	ExecuteStageRequests(context.Context, []provider.BrowserStageRequest) ([]provider.BrowserStageResult, error)
-	ObserveStageResults(context.Context, []provider.BrowserStageObservation, <-chan struct{}) ([]provider.BrowserStageResult, error)
+	ObserveStageResults(context.Context, []provider.BrowserStageObservation, <-chan struct{}, chan<- struct{}) ([]provider.BrowserStageResult, error)
 	Close() error
 }
 
@@ -179,6 +179,7 @@ func (s *chromiumSession) ObserveStageResults(
 	ctx context.Context,
 	observations []provider.BrowserStageObservation,
 	confirmed <-chan struct{},
+	ready chan<- struct{},
 ) ([]provider.BrowserStageResult, error) {
 	if s == nil {
 		return nil, errors.New("browser session is required")
@@ -298,6 +299,10 @@ func (s *chromiumSession) ObserveStageResults(
 			}(ev.RequestID, meta)
 		}
 	})
+
+	if ready != nil {
+		close(ready)
+	}
 
 	var (
 		results         []provider.BrowserStageResult
