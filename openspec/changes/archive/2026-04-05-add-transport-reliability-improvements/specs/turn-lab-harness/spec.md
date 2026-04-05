@@ -1,5 +1,5 @@
 ## MODIFIED Requirements
-### Requirement: TURN lab harness provides a deterministic local compatibility fixture
+### Requirement: Repository provides a deterministic TURN lab harness
 
 The repository SHALL provide a reusable local TURN lab harness for deterministic transport integration tests.
 

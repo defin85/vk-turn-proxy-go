@@ -5,19 +5,19 @@ Define the reusable local TURN lab harness contract for deterministic transport 
 ## Requirements
 ### Requirement: Repository provides a deterministic TURN lab harness
 
-The system SHALL provide a reusable local lab harness that exercises a real TURN allocation path plus the DTLS tunnel server and UDP peer path.
+The repository SHALL provide a reusable local TURN lab harness for deterministic transport integration tests.
 
-#### Scenario: Start the harness for an integration test
+#### Scenario: Runtime integration test boots the harness
 
-- **GIVEN** an integration test or local smoke workflow
-- **WHEN** the harness starts successfully
-- **THEN** it exposes deterministic TURN credentials and a TURN endpoint
-- **AND** it exposes a reachable DTLS peer server address
-- **AND** it exposes an upstream UDP target that can be used to verify round-trip forwarding
+- **GIVEN** an integration test that needs a local TURN-backed path
+- **WHEN** the test starts the harness
+- **THEN** the harness exposes deterministic TURN credentials and peer endpoints that the runtime can consume without external services
+- **AND** the harness can be shut down cleanly by the test process
 
-#### Scenario: Stop the harness cleanly
+#### Scenario: Long-lived transport maintenance is exercised deterministically
 
-- **GIVEN** a running harness instance
-- **WHEN** the owning test or workflow cancels it
-- **THEN** the TURN server, peer server, and upstream target stop cleanly
-- **AND** the harness releases bound ports and background goroutines
+- **GIVEN** an integration test that needs to hold a supported session across a maintenance window
+- **WHEN** the test starts the harness in long-lived mode
+- **THEN** the harness provides deterministic conditions for allocation or permission maintenance to occur
+- **AND** the test can verify whether the runtime stayed healthy through that window without relying on live external providers
+

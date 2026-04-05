@@ -5,50 +5,41 @@ Define the provider-only VK invite debug contour that resolves normalized TURN c
 ## Requirements
 ### Requirement: VK probe resolves invites into normalized TURN credentials
 
-The system SHALL provide a provider-only debug contour for VK call invites that resolves a VK join link into normalized TURN credentials without starting transport sessions.
+The system SHALL provide a provider-only VK invite debug contour that can distinguish deterministic legacy staged behavior, browser-observed preview behavior, and browser-observed post-preview behavior without starting transport sessions.
 
-#### Scenario: Successful VK invite resolution
+#### Scenario: Browser-observed post-preview contour is captured after live preview
 
-- **GIVEN** a valid VK call invite link and a staged VK provider exchange that returns the required tokens and TURN server fields
-- **WHEN** the operator runs the probe against the VK provider
-- **THEN** the system returns normalized TURN credentials including username, password, and TURN address
-- **AND** the returned TURN address omits the `turn:` or `turns:` prefix and any query string suffix
-- **AND** the probe does not start TURN, DTLS, or session transport loops
+- **GIVEN** a live VK browser contour that reaches the pre-join preview page after captcha completion
+- **WHEN** the operator proceeds in the controlled browser past the preview UI and the probe continues observing the live browser session
+- **THEN** the provider records the ordered post-preview browser contour explicitly
+- **AND** it does not collapse that evidence into the earlier preview-only result
 
-#### Scenario: Malformed invite input
+#### Scenario: Browser-observed post-preview contour still does not yield TURN credentials
 
-- **GIVEN** an empty or malformed VK invite input
-- **WHEN** the operator runs the probe against the VK provider
-- **THEN** the system fails before network stage execution
-- **AND** the error explicitly identifies the invalid VK link input
+- **GIVEN** a live VK browser contour that progresses beyond `calls.getCallPreview`
+- **WHEN** the observed post-preview requests still do not expose normalized TURN credentials
+- **THEN** the provider fails closed with an explicit post-preview provider-stage result
+- **AND** the probe still does not start TURN, DTLS, or session transport loops
 
 ### Requirement: VK probe persists sanitized stage artifacts
 
-The system SHALL persist sanitized debug artifacts for the VK provider exchange so compatibility work can compare the Go rewrite with the legacy oracle.
+The system SHALL persist sanitized debug artifacts for deterministic legacy VK exchanges, browser-observed preview exchanges, and browser-observed post-preview exchanges.
 
-#### Scenario: Successful probe artifact capture
+#### Scenario: Post-preview artifact capture
 
-- **GIVEN** a successful VK invite resolution run
+- **GIVEN** a controlled browser run that progresses beyond preview
 - **WHEN** the probe writes its debug output
-- **THEN** it stores structured artifacts under the configured output directory
-- **AND** the artifacts record the executed stage order and normalized outcome
-- **AND** secrets such as tokens, TURN credentials, and raw invite tokens are redacted before persistence
-
-#### Scenario: Provider stage failure artifact capture
-
-- **GIVEN** a VK provider exchange that fails at a specific stage
-- **WHEN** the probe exits with an error
-- **THEN** it stores sanitized artifacts up to the failing stage
-- **AND** the final error identifies the failing stage explicitly
-- **AND** the system does not silently retry with fallback behavior
+- **THEN** the artifact preserves the ordered post-preview request and outcome labels for that live contour
+- **AND** it redacts invite tokens, browser tokens, short links, profile PII, cookies, and other live browser-only state
 
 ### Requirement: VK compatibility fixtures anchor provider behavior
 
-The system SHALL keep compatibility fixtures and tests for the VK debug contour so provider behavior can be ported from the legacy repository with explicit evidence.
+The system SHALL keep compatibility fixtures and tests for live browser preview and post-preview contours so new evidence can be replayed deterministically in the Go rewrite.
 
-#### Scenario: Fixture-backed compatibility verification
+#### Scenario: Fixture-backed post-preview verification
 
-- **GIVEN** sanitized fixtures derived from the legacy `getVkCreds` flow
+- **GIVEN** sanitized fixtures derived from browser-observed post-preview live evidence
 - **WHEN** compatibility tests replay the VK provider stages in the Go rewrite
-- **THEN** the normalized TURN credentials and explicit failure cases match the fixture contract
-- **AND** regressions in stage parsing or normalization fail the test suite
+- **THEN** the explicit contour outcome matches the fixture contract
+- **AND** regressions in post-preview parsing, ordering, or sanitization fail the test suite
+

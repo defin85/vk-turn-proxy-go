@@ -36,6 +36,14 @@ The system SHALL start the provider-backed transport path that corresponds to th
 - **AND** starts the configured number of supervised transport workers for the selected TURN and peer modes
 - **AND** it reports a single session identity across those workers
 
+#### Scenario: Long-lived supported session keeps transport maintenance active
+
+- **GIVEN** a supported client policy whose provider resolution and transport startup succeed
+- **AND** the TURN allocation remains active long enough to require normal maintenance behavior
+- **WHEN** the runtime keeps the session alive through that maintenance window
+- **THEN** the transport path remains usable without recreating the whole session
+- **AND** the runtime does not silently widen provider behavior or transport policy to achieve that result
+
 ### Requirement: Tunnel client forwards UDP traffic through the relay path
 
 The system SHALL forward datagrams between the local UDP listener and the configured UDP peer through the established relay path for the accepted supervised client policy.
@@ -77,10 +85,10 @@ The system SHALL honor operator-supplied TURN endpoint overrides and supported o
 
 The system SHALL surface provider, transport, and supervised lifecycle failures explicitly with stage-aware errors for the accepted transport path.
 
-#### Scenario: Supervised worker restart budget is exhausted
+#### Scenario: Reliability plumbing fails during startup
 
-- **GIVEN** a running supervised client session and a worker that keeps failing after readiness
-- **WHEN** the supervisor exhausts the documented restart budget for that worker
-- **THEN** the system exits non-zero with an error that identifies `session_supervision` as the failing stage
-- **AND** it cleans up the shared local listener and all partially running workers
+- **GIVEN** a supported client policy whose transport path depends on the improved TURN client plumbing
+- **WHEN** that plumbing fails before the worker becomes ready
+- **THEN** the client exits non-zero with the responsible transport stage
+- **AND** it releases partial local and TURN resources before returning
 
