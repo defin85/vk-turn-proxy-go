@@ -1,6 +1,7 @@
 package clientcontrol
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -93,7 +94,8 @@ func Handler(host *Host) http.Handler {
 				writeError(w, http.StatusBadRequest, "invalid_json", err)
 				return
 			}
-			session, err := host.StartSession(r.Context(), req)
+			// Session lifetime must outlive the HTTP request that created it.
+			session, err := host.StartSession(context.WithoutCancel(r.Context()), req)
 			if err != nil {
 				writeError(w, http.StatusBadRequest, "start_session_failed", err)
 				return

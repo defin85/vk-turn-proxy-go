@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
 	"github.com/defin85/vk-turn-proxy-go/internal/transport"
@@ -126,6 +127,85 @@ func TestHandlerSessionDiagnosticsAndMetrics(t *testing.T) {
 	if !bytes.Contains(rec.Body.Bytes(), []byte("vk_turn_proxy_runtime_session_starts_total")) {
 		t.Fatalf("metrics output missing session starts: %s", rec.Body.String())
 	}
+
+	if _, err := host.StopSession(sessionState.ID); err != nil {
+		t.Fatalf("StopSession() error = %v", err)
+	}
+	if _, err := host.WaitSession(context.Background(), sessionState.ID); err != nil {
+		t.Fatalf("WaitSession() error = %v", err)
+	}
+}
+
+func TestHandlerStartSessionOutlivesRequestContext(t *testing.T) {
+	readyCh := make(chan struct{})
+	releaseCh := make(chan struct{})
+	host := New(
+		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+		WithSessionIDSource(func() string { return "session-detached" }),
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name: "generic-turn",
+			resolve: func(ctx context.Context, link string) (provider.Resolution, error) {
+				return provider.Resolution{
+					Credentials: provider.Credentials{
+						Username: "turn-user",
+						Password: "turn-pass",
+						Address:  "turn.example.test:3478",
+					},
+				}, nil
+			},
+		})),
+		withRunnerFactory(func(cfg transport.ClientConfig) transport.Runner {
+			return fakeRunner{run: func(ctx context.Context) error {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-releaseCh:
+				}
+				if cfg.Hooks.OnReady != nil {
+					cfg.Hooks.OnReady()
+				}
+				close(readyCh)
+				<-ctx.Done()
+				return nil
+			}}
+		}),
+	)
+	handler := Handler(host)
+
+	payload, _ := json.Marshal(StartSessionRequest{
+		Spec: &ProfileSpec{
+			Provider:    "generic-turn",
+			Link:        "generic-turn://user:pass@turn.example.test:3478",
+			ListenAddr:  reserveUDPAddr(t),
+			PeerAddr:    "127.0.0.1:56000",
+			Connections: 1,
+			Mode:        TransportModeAuto,
+			UseDTLS:     boolRef(true),
+		},
+	})
+	reqCtx, cancelReq := context.WithCancel(context.Background())
+	req := httptest.NewRequest(http.MethodPost, "/v1/sessions", bytes.NewReader(payload)).WithContext(reqCtx)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("POST /v1/sessions code = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var sessionState Session
+	if err := json.Unmarshal(rec.Body.Bytes(), &sessionState); err != nil {
+		t.Fatalf("decode session response: %v", err)
+	}
+
+	cancelReq()
+	close(releaseCh)
+
+	select {
+	case <-readyCh:
+	case <-time.After(3 * time.Second):
+		t.Fatal("session did not outlive request context cancellation")
+	}
+
+	waitForSessionState(t, host, sessionState.ID, SessionStateReady)
 
 	if _, err := host.StopSession(sessionState.ID); err != nil {
 		t.Fatalf("StopSession() error = %v", err)

@@ -12,6 +12,7 @@ If the change crosses package boundaries or affects runtime behavior, escalate t
 | Provider-only behavior | `test/compatibility/AGENTS.md`, provider README, relevant spec | `go test ./internal/provider/... ./cmd/probe` | wire behavior, artifacts, or shared runtime flow changed |
 | VK contour, fixture, or sanitization work | `test/compatibility/AGENTS.md`, `test/compatibility/vk/README.md` | `go test ./internal/provider/vk ./cmd/probe` | runtime evidence or shared client behavior changed |
 | VK runtime evidence or replay expectations | `test/compatibility/vk/runtime/README.md` | `go test ./test/compatibility/vk/runtime -run 'TestRuntimeEvidence(Assets|Replay)'` | runtime/session code changed beyond the evidence layer |
+| Desktop Flutter shell or sidecar discovery | `desktop/gui_shell/README.md`, `docs/agent/architecture-map.md`, relevant OpenSpec change | `cd desktop/gui_shell && flutter analyze && flutter test` | packaging/startup behavior changed, sidecar/runtime coupling changed, or a Linux desktop build is part of the acceptance surface |
 | Client runtime, routing, or supervision | `openspec/specs/tunnel-client-runtime/spec.md`, `docs/runtime-observability.md` | `go test ./internal/session` | transport, observability, or multiple entrypoints changed |
 | TURN/DTLS transport or server runtime | `docs/adr/0001-go-monorepo.md`, `docs/agent/architecture-map.md` | `go test ./internal/transport ./internal/tunnelserver` | relay behavior changed end-to-end or lab harness coverage is needed |
 | TURN lab harness changes | `test/turnlab/doc.go`, `README.md` harness section | `go test ./test/turnlab -run TestHarnessRelayRoundTrip` | changes affect runtime/session integration coverage |
@@ -28,6 +29,12 @@ go build ./...
 ```
 
 Compatibility claims should also stay backed by committed fixtures, replay tests, or explicit deviation notes.
+
+For desktop-shell changes that launch the real local host, keep the focused Go verification close to the control-plane boundary:
+
+```bash
+go test ./pkg/clientcontrol ./cmd/clientd
+```
 
 ## GitHub Actions reproduction
 

@@ -36,6 +36,8 @@ type Options struct {
 	AllocationLifetime  time.Duration
 	PermissionTimeout   time.Duration
 	ChannelBindTimeout  time.Duration
+	BindAddress         string
+	AdvertiseAddress    string
 }
 
 type Descriptor struct {
@@ -92,6 +94,10 @@ func StartWithOptions(parent context.Context, logger *slog.Logger, opts Options)
 	if err := parent.Err(); err != nil {
 		return nil, fmt.Errorf("start harness: %w", err)
 	}
+	bindAddress, advertiseAddress, advertiseIP, err := resolveAddresses(opts)
+	if err != nil {
+		return nil, fmt.Errorf("start harness: %w", err)
+	}
 
 	ctx, cancel := context.WithCancel(parent)
 	harness := &Harness{
@@ -123,7 +129,7 @@ func StartWithOptions(parent context.Context, logger *slog.Logger, opts Options)
 	harness.Descriptor.UpstreamAddress = echoConn.LocalAddr().String()
 
 	peerServer, err := tunnelserver.New(config.ServerConfig{
-		ListenAddr:       loopbackAddress + ":0",
+		ListenAddr:       net.JoinHostPort(bindAddress, "0"),
 		UpstreamAddr:     harness.Descriptor.UpstreamAddress,
 		HandshakeTimeout: handshakeTimeout,
 		IdleTimeout:      idleTimeout,
@@ -148,9 +154,9 @@ func StartWithOptions(parent context.Context, logger *slog.Logger, opts Options)
 		peerErrCh <- peerServer.Serve(ctx, peerListener)
 		close(peerErrCh)
 	}()
-	harness.Descriptor.PeerAddress = peerListener.Addr().String()
+	harness.Descriptor.PeerAddress = publishAddress(peerListener.Addr(), advertiseAddress)
 
-	turnConn, err := net.ListenPacket("udp4", loopbackAddress+":0")
+	turnConn, err := net.ListenPacket("udp4", net.JoinHostPort(bindAddress, "0"))
 	if err != nil {
 		cancel()
 		_ = peerListener.Close()
@@ -159,7 +165,7 @@ func StartWithOptions(parent context.Context, logger *slog.Logger, opts Options)
 		<-echoErrCh
 		return nil, fmt.Errorf("listen turn server: %w", err)
 	}
-	tcpListener, err := net.Listen("tcp4", loopbackAddress+":0")
+	tcpListener, err := net.Listen("tcp4", net.JoinHostPort(bindAddress, "0"))
 	if err != nil {
 		cancel()
 		_ = turnConn.Close()
@@ -189,8 +195,8 @@ func StartWithOptions(parent context.Context, logger *slog.Logger, opts Options)
 			{
 				PacketConn: turnConn,
 				RelayAddressGenerator: &turn.RelayAddressGeneratorStatic{
-					RelayAddress: net.ParseIP(loopbackAddress),
-					Address:      loopbackAddress,
+					RelayAddress: advertiseIP,
+					Address:      advertiseAddress,
 				},
 			},
 		},
@@ -198,8 +204,8 @@ func StartWithOptions(parent context.Context, logger *slog.Logger, opts Options)
 			{
 				Listener: trackingTCPListener,
 				RelayAddressGenerator: &turn.RelayAddressGeneratorStatic{
-					RelayAddress: net.ParseIP(loopbackAddress),
-					Address:      loopbackAddress,
+					RelayAddress: advertiseIP,
+					Address:      advertiseAddress,
 				},
 			},
 		},
@@ -214,8 +220,8 @@ func StartWithOptions(parent context.Context, logger *slog.Logger, opts Options)
 		<-echoErrCh
 		return nil, fmt.Errorf("start turn server: %w", err)
 	}
-	harness.Descriptor.TURNAddress = turnConn.LocalAddr().String()
-	harness.Descriptor.TURNTCPAddress = trackingTCPListener.Addr().String()
+	harness.Descriptor.TURNAddress = publishAddress(turnConn.LocalAddr(), advertiseAddress)
+	harness.Descriptor.TURNTCPAddress = publishAddress(trackingTCPListener.Addr(), advertiseAddress)
 
 	go func() {
 		<-ctx.Done()
@@ -253,6 +259,38 @@ func StartWithOptions(parent context.Context, logger *slog.Logger, opts Options)
 	}
 
 	return harness, nil
+}
+
+func resolveAddresses(opts Options) (string, string, net.IP, error) {
+	bindAddress := opts.BindAddress
+	if bindAddress == "" {
+		bindAddress = loopbackAddress
+	}
+	advertiseAddress := opts.AdvertiseAddress
+	if advertiseAddress == "" {
+		if parsed := net.ParseIP(bindAddress); parsed != nil && parsed.IsUnspecified() {
+			return "", "", nil, fmt.Errorf("advertise address is required when bind address %q is unspecified", bindAddress)
+		}
+		advertiseAddress = bindAddress
+	}
+
+	advertiseIP := net.ParseIP(advertiseAddress)
+	if advertiseIP == nil || advertiseIP.To4() == nil {
+		return "", "", nil, fmt.Errorf("advertise address %q must be an IPv4 literal", advertiseAddress)
+	}
+	return bindAddress, advertiseAddress, advertiseIP, nil
+}
+
+func publishAddress(addr net.Addr, host string) string {
+	if addr == nil {
+		return ""
+	}
+	value := addr.String()
+	_, port, err := net.SplitHostPort(value)
+	if err != nil {
+		return value
+	}
+	return net.JoinHostPort(host, port)
 }
 
 func (h *Harness) Close() error {

@@ -28,6 +28,8 @@ cmd/
   probe/
   tunnel-client/
   tunnel-server/
+desktop/
+  gui_shell/
 pkg/
   clientcontrol/
 docs/
@@ -148,6 +150,36 @@ go run ./cmd/clientd -listen 127.0.0.1:7777
 Desktop shells should use the HTTP surface from `cmd/clientd`.
 Embedded/mobile hosts should use `pkg/clientcontrol` directly so they share the same profile, session, challenge, and diagnostics semantics without a second contract.
 
+## Desktop GUI shell
+
+The first desktop shell lives in `desktop/gui_shell` and uses Flutter as the canonical GUI stack for Windows, macOS, and Linux.
+It talks to the local client control plane on `127.0.0.1:7777`, supervises a compatible `clientd` sidecar, and renders typed profiles, sessions, challenge state, and diagnostics export without requiring terminal-only workflows.
+
+Run the shell locally on Linux with:
+
+```bash
+cd desktop/gui_shell
+flutter run -d linux
+```
+
+The shell resolves the local host in this order:
+- `GUI_SHELL_CLIENTD_PATH`
+- bundled `clientd` next to the app executable
+- bundled `Frameworks/clientd` on macOS
+- `clientd` from `PATH`
+- repo-local `go run ./cmd/clientd -listen 127.0.0.1:7777` during development
+
+If one launched candidate exits early or negotiates as incompatible, the shell disposes it and continues to the next candidate before declaring startup blocked.
+If a previously ready host disappears, the shell blocks session actions, reports the failure explicitly, and re-runs compatible host discovery before the operator has to retry manually.
+
+Diagnostics export writes one JSON bundle per session under:
+- Linux and macOS: `~/.vk-turn-proxy-go/diagnostics`
+- Windows: `%APPDATA%\\vk-turn-proxy-go\\diagnostics`
+
+Browser challenge continuation stays host-driven in this change.
+The GUI triggers the typed challenge continue/cancel operations and surfaces the resulting session events, but it does not embed provider-specific browser flows.
+Tray and system-notification behavior are intentionally kept explicit and non-magical for this slice: the shell uses in-app status banners and action buttons rather than background-only runtime control.
+
 `cmd/tunnel-client` now runs the supported supervised client runtime matrix after provider resolution.
 Supported startup policy for this slice:
 - `connections >= 1` through supervised transport workers sharing one local UDP listener
@@ -191,6 +223,28 @@ Run the harness smoke test locally with:
 ```bash
 go test -v ./test/turnlab -run TestHarnessRelayRoundTrip
 ```
+
+Keep a long-lived local harness running for manual desktop-shell or CLI checks with:
+
+```bash
+go run ./cmd/turnlab-shell
+```
+
+The command prints a ready-to-paste `generic-turn://...` link plus the matching `peer_addr`.
+For the desktop GUI, create a profile with:
+- `Provider`: `generic-turn`
+- `Provider link`: the printed `link=...`
+- `Peer address`: the printed `peer_addr=...`
+- `Local UDP listen`: for example `127.0.0.1:9001`
+
+When the desktop GUI runs on Windows and the harness runs inside WSL, use the cross-host mode instead of the loopback default:
+
+```bash
+go run ./cmd/turnlab-shell -windows-gui
+```
+
+That mode prints desktop-consumable `link=...` and `peer_addr=...` values backed by a non-loopback IPv4 address.
+Advanced runs can override the listener and published addresses explicitly with `-bind-address` and `-advertise-address`.
 
 Future runtime and integration tests should call `turnlab.Start(ctx, logger)` and consume the returned descriptor:
 - `Descriptor.TURNAddress` plus `Descriptor.TURNCredentials` for TURN client setup

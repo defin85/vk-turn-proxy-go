@@ -208,6 +208,55 @@ func TestHarnessCleanupReleasesPorts(t *testing.T) {
 	}
 }
 
+func TestHarnessSupportsSplitBindAndAdvertiseAddresses(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	harness, err := turnlab.StartWithOptions(ctx, nil, turnlab.Options{
+		BindAddress:      "0.0.0.0",
+		AdvertiseAddress: "127.0.0.1",
+	})
+	if err != nil {
+		t.Fatalf("start harness: %v", err)
+	}
+	t.Cleanup(func() {
+		cancel()
+		if err := harness.Close(); err != nil {
+			t.Errorf("close harness: %v", err)
+		}
+	})
+
+	if got, want := hostPart(t, harness.Descriptor.TURNAddress), "127.0.0.1"; got != want {
+		t.Fatalf("TURNAddress host = %q, want %q", got, want)
+	}
+	if got, want := hostPart(t, harness.Descriptor.PeerAddress), "127.0.0.1"; got != want {
+		t.Fatalf("PeerAddress host = %q, want %q", got, want)
+	}
+	if link := harness.GenericTurnLink(); !strings.Contains(link, "@127.0.0.1:") {
+		t.Fatalf("unexpected generic-turn link %q", link)
+	}
+
+	dtlsConn, _, cleanup := dialHarnessDTLS(t, harness, "udp")
+	t.Cleanup(cleanup)
+	mustReadDTLSEcho(t, dtlsConn, []byte("turn-lab-split-addresses"))
+}
+
+func TestHarnessRejectsNonIPv4AdvertiseAddress(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	harness, err := turnlab.StartWithOptions(ctx, nil, turnlab.Options{
+		AdvertiseAddress: "turn.example.test",
+	})
+	if err == nil {
+		if harness != nil {
+			_ = harness.Close()
+		}
+		t.Fatal("expected start to fail for non-ip advertise address")
+	}
+	if !strings.Contains(err.Error(), "must be an IPv4 literal") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestHarnessStartRejectsCanceledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -354,4 +403,13 @@ func closeBaseConn(conn net.PacketConn) {
 		return
 	}
 	_ = conn.Close()
+}
+
+func hostPart(t *testing.T, value string) string {
+	t.Helper()
+	host, _, err := net.SplitHostPort(value)
+	if err != nil {
+		t.Fatalf("SplitHostPort(%q): %v", value, err)
+	}
+	return host
 }
