@@ -19,6 +19,7 @@ It points to the smallest set of files needed to understand the repo, choose the
 | Planning or behavior/architecture changes | `openspec/AGENTS.md`, `openspec/project.md`, relevant `openspec/specs/*/spec.md` | `openspec list`, `openspec show`, matching code/tests |
 | Provider resolution or VK contour behavior | `test/compatibility/AGENTS.md`, `test/compatibility/vk/README.md`, `docs/provider-matrix.md` | `internal/provider/...`, committed fixtures, probe tests |
 | Client runtime or supervision | `docs/agent/architecture-map.md`, `openspec/specs/tunnel-client-runtime/spec.md`, `docs/runtime-observability.md` | `internal/session`, `test/turnlab`, runtime compatibility tests |
+| Local client control plane or GUI host wiring | `pkg/clientcontrol`, `cmd/clientd`, `openspec/changes/add-01-client-control-plane/*` | `go test ./pkg/clientcontrol ./cmd/clientd` |
 | TURN/DTLS transport or server behavior | `docs/agent/architecture-map.md`, `docs/adr/0001-go-monorepo.md` | `internal/transport`, `internal/tunnelserver`, harness tests |
 | Observability | `docs/runtime-observability.md`, `openspec/specs/runtime-observability/spec.md` | `internal/observe`, runtime entrypoint tests |
 | Code review | `code_review.md` | diff + relevant specs/tests |

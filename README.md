@@ -18,14 +18,18 @@ Phase 1 is next:
 - port the legacy client behavior behind provider and transport boundaries
 - add compatibility tests against the legacy Go implementation
 - add runtime observability
+- add GUI shells on top of the local client control plane
 
 ## Repository layout
 
 ```text
 cmd/
+  clientd/
   probe/
   tunnel-client/
   tunnel-server/
+pkg/
+  clientcontrol/
 docs/
   agent/
   adr/
@@ -127,6 +131,23 @@ CI-like environments automatically switch the helper to headless Chromium; overr
 
 Use the persisted artifact together with the fixture contract in `test/compatibility/vk/` before porting broader legacy client behavior into transport/session code.
 
+`cmd/clientd` now exposes the first local client control plane for GUI shells and embedded hosts.
+The contract is versioned, local-only, and exposes:
+- profile create/read/delete
+- session start/stop/read
+- typed challenge continue/cancel resources
+- NDJSON event streaming at `/v1/events`
+- diagnostics export with per-session metrics and event history
+
+Start the daemon on loopback with:
+
+```bash
+go run ./cmd/clientd -listen 127.0.0.1:7777
+```
+
+Desktop shells should use the HTTP surface from `cmd/clientd`.
+Embedded/mobile hosts should use `pkg/clientcontrol` directly so they share the same profile, session, challenge, and diagnostics semantics without a second contract.
+
 `cmd/tunnel-client` now runs the supported supervised client runtime matrix after provider resolution.
 Supported startup policy for this slice:
 - `connections >= 1` through supervised transport workers sharing one local UDP listener
@@ -148,6 +169,7 @@ Lifecycle policy for supervised sessions:
 When startup fails after policy validation, the command reports a stage-aware error such as `provider_resolve`, `turn_dial`, `turn_allocate`, `peer_setup`, `dtls_handshake`, or `session_supervision`.
 `-turn` and `-port` overrides remain supported and are applied after provider credential resolution.
 If the selected provider returns an interactive VK captcha challenge, start the client with `-interactive-provider` so provider resolution can pause for a controlled browser step before any local listener or TURN transport is started.
+Internally the CLI now runs through the same client-control runtime host that backs `cmd/clientd`, while keeping the existing operator-facing flags and stderr behavior.
 Long-lived reliability is currently evidenced by deterministic TURN allocation-refresh coverage in `turnlab` and runtime integration tests; the repository still does not claim live mobile-network or NAT parity from that alone.
 
 Client and server runtimes now expose an optional Prometheus-style metrics surface through `-metrics-listen <addr>`.

@@ -7,27 +7,39 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
+	"time"
 
 	"github.com/defin85/vk-turn-proxy-go/internal/config"
 	"github.com/defin85/vk-turn-proxy-go/internal/observe"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider/genericturn"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider/vk"
-	"github.com/defin85/vk-turn-proxy-go/internal/providerprompt"
 	"github.com/defin85/vk-turn-proxy-go/internal/runstage"
-	"github.com/defin85/vk-turn-proxy-go/internal/session"
+	"github.com/defin85/vk-turn-proxy-go/pkg/clientcontrol"
 )
 
-type interactiveProviderHandler interface {
-	provider.InteractionHandler
-	provider.BrowserContinuationHandler
+type clientHost interface {
+	StartSession(context.Context, clientcontrol.StartSessionRequest) (clientcontrol.Session, error)
+	WaitSession(context.Context, string) (clientcontrol.Session, error)
+	StopSession(string) (clientcontrol.Session, error)
+	MetricsHandler(string) (http.Handler, error)
 }
 
-var newInteractiveProviderHandler = func(stdin io.Reader, stderr io.Writer) interactiveProviderHandler {
-	return providerprompt.NewHandler(stdin, stderr, providerprompt.Options{})
+var newClientHost = func(logger *slog.Logger, stdin io.Reader, stderr io.Writer, interactiveProvider bool, sessionID string) clientHost {
+	options := []clientcontrol.Option{
+		clientcontrol.WithLogger(logger),
+		clientcontrol.WithSessionIDSource(func() string { return sessionID }),
+	}
+	if interactiveProvider {
+		options = append(options, clientcontrol.WithCLIInteractivePrompts(stdin, stderr))
+	}
+	return clientcontrol.New(options...)
 }
 
 func main() {
@@ -37,16 +49,16 @@ func main() {
 	os.Exit(runClient(ctx, os.Stdin, os.Stdout, os.Stderr, os.Args[1:], newRegistry()))
 }
 
-func runClient(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, args []string, registry *provider.Registry) int {
+func runClient(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, args []string, _ *provider.Registry) int {
 	cfg, logLevel, metricsListen, interactiveProvider, err := parseClientFlags(stderr, args)
 	if err != nil {
 		return 2
 	}
 	logger := observe.NewLoggerWriter(logLevel, stdout)
-	sessionID := session.NewID()
+	sessionID := observe.NewSessionID()
 	metrics := observe.NewMetrics()
 	observer := observe.NewObserver(observe.RuntimeClient, logger, metrics, observe.Metadata{
-		SessionID: string(sessionID),
+		SessionID: sessionID,
 		Provider:  cfg.Provider,
 	})
 	if err := cfg.Validate(); err != nil {
@@ -60,37 +72,76 @@ func runClient(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io
 		return 2
 	}
 
-	if _, err := observe.StartMetricsServer(ctx, metricsListen, metrics, logger); err != nil {
-		observer.RecordSessionFailure("metrics_listen", true)
+	host := newClientHost(logger, stdin, stderr, interactiveProvider, sessionID)
+	sessionState, err := host.StartSession(ctx, clientcontrol.StartSessionRequest{
+		Spec: &clientcontrol.ProfileSpec{
+			Provider:            cfg.Provider,
+			Link:                cfg.Link,
+			ListenAddr:          cfg.ListenAddr,
+			PeerAddr:            cfg.PeerAddr,
+			Connections:         cfg.Connections,
+			TURNServer:          cfg.TURNServer,
+			TURNPort:            cfg.TURNPort,
+			BindInterface:       cfg.BindInterface,
+			Mode:                clientcontrol.TransportMode(cfg.Mode),
+			UseDTLS:             boolRef(cfg.UseDTLS),
+			InteractiveProvider: interactiveProvider,
+			LogLevel:            logLevel,
+		},
+	})
+	if err != nil {
+		observer.RecordSessionFailure(string(runstage.PolicyValidate), true)
 		observer.Emit(ctx, slog.LevelError, "runtime_failure",
-			"stage", "metrics_listen",
+			"stage", runstage.PolicyValidate,
 			"result", "failed",
 			"error", err,
 		)
-		fmt.Fprintf(stderr, "client metrics failed: %v\n", err)
+		fmt.Fprintf(stderr, "invalid client config: %v\n", err)
+		return 2
+	}
+
+	if metricsListen != "" {
+		handler, err := host.MetricsHandler(sessionState.ID)
+		if err != nil {
+			observer.RecordSessionFailure("metrics_attach", true)
+			observer.Emit(ctx, slog.LevelError, "runtime_failure",
+				"stage", "metrics_attach",
+				"result", "failed",
+				"error", err,
+			)
+			fmt.Fprintf(stderr, "client metrics failed: %v\n", err)
+			_, _ = host.StopSession(sessionState.ID)
+			return 1
+		}
+		if _, err := startMetricsServer(ctx, metricsListen, handler, logger); err != nil {
+			observer.RecordSessionFailure("metrics_listen", true)
+			observer.Emit(ctx, slog.LevelError, "runtime_failure",
+				"stage", "metrics_listen",
+				"result", "failed",
+				"error", err,
+			)
+			fmt.Fprintf(stderr, "client metrics failed: %v\n", err)
+			_, _ = host.StopSession(sessionState.ID)
+			return 1
+		}
+	}
+
+	sessionState, err = host.WaitSession(ctx, sessionState.ID)
+	if err != nil && !errors.Is(err, context.Canceled) {
+		fmt.Fprintf(stderr, "client runtime failed: %v\n", err)
 		return 1
 	}
-	if interactiveProvider {
-		handler := newInteractiveProviderHandler(stdin, stderr)
-		ctx = provider.WithInteractionHandler(ctx, handler)
-		ctx = provider.WithBrowserContinuationHandler(ctx, handler)
-	}
-	err = session.Run(ctx, cfg, session.Dependencies{
-		Registry:  registry,
-		Logger:    logger,
-		Metrics:   metrics,
-		SessionID: sessionID,
-	})
-	if err != nil {
-		if stage, ok := runstage.FromError(err); ok {
-			fmt.Fprintf(stderr, "client runtime failed stage=%s: %v\n", stage, err)
+	if sessionState.Failure != nil {
+		if stage := sessionState.Failure.Stage; stage != "" {
+			fmt.Fprintf(stderr, "client runtime failed stage=%s: %s\n", stage, sessionState.Failure.Message)
 		} else {
-			fmt.Fprintf(stderr, "client runtime failed: %v\n", err)
+			fmt.Fprintf(stderr, "client runtime failed: %s\n", sessionState.Failure.Message)
 		}
-
-		return exitCode(err)
+		if sessionState.Failure.NotImplemented || strings.Contains(sessionState.Failure.Message, provider.ErrNotImplemented.Error()) {
+			return 3
+		}
+		return 1
 	}
-
 	return 0
 }
 
@@ -121,14 +172,34 @@ func parseClientFlags(stderr io.Writer, args []string) (config.ClientConfig, str
 	return cfg, logLevel, metricsListen, interactiveProvider, flags.Parse(args)
 }
 
-func exitCode(err error) int {
-	if errors.Is(err, provider.ErrNotImplemented) {
-		return 3
-	}
-
-	return 1
+func boolRef(value bool) *bool {
+	out := value
+	return &out
 }
 
 func newRegistry() *provider.Registry {
 	return provider.NewRegistry(genericturn.New(), vk.New())
+}
+
+func startMetricsServer(ctx context.Context, listenAddr string, handler http.Handler, logger *slog.Logger) (net.Addr, error) {
+	if strings.TrimSpace(listenAddr) == "" {
+		return nil, nil
+	}
+	listener, err := net.Listen("tcp", listenAddr)
+	if err != nil {
+		return nil, err
+	}
+	server := &http.Server{Handler: handler}
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = server.Shutdown(shutdownCtx)
+	}()
+	go func() {
+		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) && logger != nil {
+			logger.Error("client metrics server stopped", "error", err)
+		}
+	}()
+	return listener.Addr(), nil
 }
