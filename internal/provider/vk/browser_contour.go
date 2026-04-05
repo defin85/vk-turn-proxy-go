@@ -30,6 +30,9 @@ func liveBrowserObservedStageObservations(joinToken string) []provider.BrowserSt
 			Stage:     stageOKAnonymLogin,
 			Method:    http.MethodPost,
 			URLPrefix: okAPIURL,
+			RequiredFormKeys: []string{
+				"session_data",
+			},
 			RequiredFormValues: map[string]string{
 				"method":          "auth.anonymLogin",
 				"format":          "JSON",
@@ -40,6 +43,10 @@ func liveBrowserObservedStageObservations(joinToken string) []provider.BrowserSt
 			Stage:     stageJoinConversationByURL,
 			Method:    http.MethodPost,
 			URLPrefix: okAPIURL,
+			RequiredFormKeys: []string{
+				"anonymToken",
+				"session_key",
+			},
 			RequiredFormValues: map[string]string{
 				"method":          "vchat.joinConversationByLink",
 				"format":          "JSON",

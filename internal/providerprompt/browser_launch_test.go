@@ -1,9 +1,12 @@
 package providerprompt
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
 )
@@ -87,6 +90,27 @@ func TestMatchObservationUsesRequiredFormValues(t *testing.T) {
 	}
 }
 
+func TestMatchObservationRejectsMissingRequiredFormKeys(t *testing.T) {
+	observations := []provider.BrowserStageObservation{
+		{
+			Stage:            "ok_join_conversation_by_link",
+			Method:           http.MethodPost,
+			URLPrefix:        "https://calls.okcdn.ru/fb.do",
+			RequiredFormKeys: []string{"anonymToken", "session_key"},
+			RequiredFormValues: map[string]string{
+				"method": "vchat.joinConversationByLink",
+			},
+		},
+	}
+
+	if _, ok := matchObservation(observations, http.MethodPost, "https://calls.okcdn.ru/fb.do", map[string]string{
+		"method":      "vchat.joinConversationByLink",
+		"anonymToken": "anon-token",
+	}); ok {
+		t.Fatal("expected observation mismatch when session_key is missing")
+	}
+}
+
 func TestMatchObservationRejectsMismatchedRequiredFormValues(t *testing.T) {
 	observations := []provider.BrowserStageObservation{
 		{
@@ -130,5 +154,42 @@ func TestMatchObservationUsesAlternativeFormValues(t *testing.T) {
 	}
 	if observation.Stage != "ok_join_conversation_by_link" {
 		t.Fatalf("matched stage = %q, want ok_join_conversation_by_link", observation.Stage)
+	}
+}
+
+func TestNewBrowserOperationContextFollowsCallerCancellation(t *testing.T) {
+	baseCtx, baseCancel := context.WithCancel(context.Background())
+	defer baseCancel()
+	callerCtx, callerCancel := context.WithCancel(context.Background())
+
+	opCtx, cancel := newBrowserOperationContext(baseCtx, callerCtx, 0)
+	defer cancel()
+
+	callerCancel()
+
+	select {
+	case <-opCtx.Done():
+	case <-time.After(time.Second):
+		t.Fatal("operation context did not cancel after caller cancellation")
+	}
+	if !errors.Is(opCtx.Err(), context.Canceled) {
+		t.Fatalf("operation context error = %v, want context.Canceled", opCtx.Err())
+	}
+}
+
+func TestNewBrowserOperationContextFollowsTimeout(t *testing.T) {
+	baseCtx, baseCancel := context.WithCancel(context.Background())
+	defer baseCancel()
+
+	opCtx, cancel := newBrowserOperationContext(baseCtx, context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	select {
+	case <-opCtx.Done():
+	case <-time.After(time.Second):
+		t.Fatal("operation context did not time out")
+	}
+	if !errors.Is(opCtx.Err(), context.DeadlineExceeded) {
+		t.Fatalf("operation context error = %v, want context.DeadlineExceeded", opCtx.Err())
 	}
 }

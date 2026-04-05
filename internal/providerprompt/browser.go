@@ -38,17 +38,22 @@ type browserSession interface {
 }
 
 type chromiumSession struct {
-	process      *exec.Cmd
-	debugURL     string
-	userDataDir  string
-	remoteCtx    context.Context
-	remoteCancel context.CancelFunc
-	targetCtx    context.Context
-	targetCancel context.CancelFunc
-	launchLog    *bytes.Buffer
+	process       *exec.Cmd
+	debugURL      string
+	userDataDir   string
+	sessionCancel context.CancelFunc
+	remoteCtx     context.Context
+	remoteCancel  context.CancelFunc
+	targetCtx     context.Context
+	targetCancel  context.CancelFunc
+	launchLog     *bytes.Buffer
 }
 
 func newChromiumSession(ctx context.Context) (browserSession, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	browserPath, err := resolveBrowserPath()
 	if err != nil {
 		return nil, err
@@ -62,37 +67,41 @@ func newChromiumSession(ctx context.Context) (browserSession, error) {
 		return nil, fmt.Errorf("create browser profile dir: %w", err)
 	}
 
+	sessionCtx, sessionCancel := context.WithCancel(context.Background())
 	launchLog := &bytes.Buffer{}
-	cmd := exec.CommandContext(ctx, browserPath, chromiumLaunchArgs(userDataDir, debugPort)...)
+	cmd := exec.Command(browserPath, chromiumLaunchArgs(userDataDir, debugPort)...)
 	cmd.Stdout = launchLog
 	cmd.Stderr = launchLog
 	if err := cmd.Start(); err != nil {
+		sessionCancel()
 		_ = os.RemoveAll(userDataDir)
 		return nil, fmt.Errorf("start chromium: %w", err)
 	}
 
 	debugURL := fmt.Sprintf("http://127.0.0.1:%d", debugPort)
-	startupCtx, cancel := context.WithTimeout(ctx, browserStartupTimeout)
+	startupCtx, cancel := newBrowserOperationContext(sessionCtx, ctx, browserStartupTimeout)
 	defer cancel()
 	if err := waitForDevTools(startupCtx, debugURL); err != nil {
+		sessionCancel()
 		_ = cmd.Process.Kill()
 		_, _ = cmd.Process.Wait()
 		_ = os.RemoveAll(userDataDir)
 		return nil, fmt.Errorf("wait for browser devtools: %w%s", err, browserStartupLogSuffix(launchLog.String()))
 	}
 
-	remoteCtx, remoteCancel := chromedp.NewRemoteAllocator(ctx, debugURL)
+	remoteCtx, remoteCancel := chromedp.NewRemoteAllocator(sessionCtx, debugURL)
 	targetCtx, targetCancel := chromedp.NewContext(remoteCtx)
 
 	return &chromiumSession{
-		process:      cmd,
-		debugURL:     debugURL,
-		userDataDir:  userDataDir,
-		remoteCtx:    remoteCtx,
-		remoteCancel: remoteCancel,
-		targetCtx:    targetCtx,
-		targetCancel: targetCancel,
-		launchLog:    launchLog,
+		process:       cmd,
+		debugURL:      debugURL,
+		userDataDir:   userDataDir,
+		sessionCancel: sessionCancel,
+		remoteCtx:     remoteCtx,
+		remoteCancel:  remoteCancel,
+		targetCtx:     targetCtx,
+		targetCancel:  targetCancel,
+		launchLog:     launchLog,
 	}, nil
 }
 
@@ -442,6 +451,9 @@ func matchObservation(observations []provider.BrowserStageObservation, method st
 			continue
 		}
 		if strings.HasPrefix(requestURL, observation.URLPrefix) {
+			if !matchesObservedFormKeys(observation.RequiredFormKeys, formValues) {
+				continue
+			}
 			if !matchesObservedFormValues(observation.RequiredFormValues, formValues) {
 				continue
 			}
@@ -453,6 +465,20 @@ func matchObservation(observations []provider.BrowserStageObservation, method st
 	}
 
 	return provider.BrowserStageObservation{}, false
+}
+
+func matchesObservedFormKeys(required []string, observed map[string]string) bool {
+	if len(required) == 0 {
+		return true
+	}
+
+	for _, key := range required {
+		if _, ok := observed[key]; !ok {
+			return false
+		}
+	}
+
+	return true
 }
 
 func matchesObservedFormValues(required map[string]string, observed map[string]string) bool {
@@ -554,6 +580,32 @@ func uniqueSorted(values []string) []string {
 	return keys
 }
 
+func newBrowserOperationContext(baseCtx context.Context, callerCtx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
+
+	opCtx, cancel := context.WithCancel(baseCtx)
+	stopCallerCancel := func() bool { return false }
+	if callerCtx != nil {
+		stopCallerCancel = context.AfterFunc(callerCtx, cancel)
+	}
+
+	if timeout <= 0 {
+		return opCtx, func() {
+			stopCallerCancel()
+			cancel()
+		}
+	}
+
+	timeoutCtx, timeoutCancel := context.WithTimeout(opCtx, timeout)
+	return timeoutCtx, func() {
+		timeoutCancel()
+		stopCallerCancel()
+		cancel()
+	}
+}
+
 func submitStageRequestScript(request provider.BrowserStageRequest) (string, error) {
 	methodJSON, err := json.Marshal(strings.ToUpper(request.Method))
 	if err != nil {
@@ -614,6 +666,10 @@ func (s *chromiumSession) Close() error {
 	if s.remoteCancel != nil {
 		s.remoteCancel()
 		s.remoteCancel = nil
+	}
+	if s.sessionCancel != nil {
+		s.sessionCancel()
+		s.sessionCancel = nil
 	}
 	if s.process != nil && s.process.Process != nil {
 		if err := s.process.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {

@@ -233,7 +233,10 @@ func TestResolveContinuesAfterBrowserObservedChallenge(t *testing.T) {
 		assertObservedStage(t, observations, stageGetCallPreview, getCallPreviewURL)
 		assertObservedStage(t, observations, stageOKAnonymLogin, okAPIURL)
 		assertObservedStage(t, observations, stageJoinConversationByURL, okAPIURL)
+		assertObservedStageRequiredFormKey(t, observations, stageOKAnonymLogin, "session_data")
 		assertObservedStageExactFormValue(t, observations, stageJoinConversationByURL, "method", "vchat.joinConversationByLink")
+		assertObservedStageRequiredFormKey(t, observations, stageJoinConversationByURL, "anonymToken")
+		assertObservedStageRequiredFormKey(t, observations, stageJoinConversationByURL, "session_key")
 		assertObservedStageAlternativeFormValue(t, observations, stageJoinConversationByURL, "joinLink", "test-token")
 		assertObservedStageAlternativeFormValue(t, observations, stageJoinConversationByURL, "joinLink", "https://vk.com/call/join/test-token")
 		return &provider.BrowserContinuation{
@@ -608,6 +611,24 @@ func assertObservedStageExactFormValue(t *testing.T, observations []provider.Bro
 			t.Fatalf("browser stage observation exact form value for %s.%s = %q, want %q", stage, key, got, want)
 		}
 		return
+	}
+
+	t.Fatalf("missing browser stage observation for %s", stage)
+}
+
+func assertObservedStageRequiredFormKey(t *testing.T, observations []provider.BrowserStageObservation, stage string, key string) {
+	t.Helper()
+
+	for _, observation := range observations {
+		if observation.Stage != stage {
+			continue
+		}
+		for _, observedKey := range observation.RequiredFormKeys {
+			if observedKey == key {
+				return
+			}
+		}
+		t.Fatalf("browser stage observation required form keys for %s = %#v, want to contain %q", stage, observation.RequiredFormKeys, key)
 	}
 
 	t.Fatalf("missing browser stage observation for %s", stage)

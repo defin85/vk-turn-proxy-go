@@ -1,0 +1,392 @@
+{
+  "provider": "vk",
+  "resolution_method": "staged_http",
+  "input": {
+    "invite_url_redacted": "https://vk.com/call/join/\u003credacted:vk-join-token\u003e",
+    "normalized_join_token_redacted": "\u003credacted:vk-join-token\u003e"
+  },
+  "stages": [
+    {
+      "name": "vk_login_anonym_token",
+      "endpoint_id": "vk_login_anonym_token",
+      "request": {
+        "method": "POST",
+        "form_keys": [
+          "client_id",
+          "token_type",
+          "client_secret",
+          "version",
+          "app_id"
+        ],
+        "redacted_fields": [
+          "client_secret"
+        ]
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "data": {
+            "access_token": "\u003credacted:vk-access-token-1\u003e",
+            "expired_at": 1775412281
+          },
+          "type": "okay"
+        }
+      },
+      "outcome": {
+        "kind": "continue",
+        "extracted": {
+          "access_token": "\u003credacted:vk-access-token-1\u003e"
+        }
+      }
+    },
+    {
+      "name": "vk_calls_get_anonymous_token",
+      "endpoint_id": "vk_calls_get_anonymous_token",
+      "request": {
+        "method": "POST",
+        "form_keys": [
+          "vk_join_link",
+          "name",
+          "access_token"
+        ],
+        "redacted_fields": [
+          "vk_join_link",
+          "access_token"
+        ]
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "error": {
+            "captcha_attempt": "\u003credacted:vk-captcha-attempt\u003e",
+            "captcha_img": "\u003credacted:vk-captcha-image-uri\u003e",
+            "captcha_ratio": 2.6,
+            "captcha_sid": "\u003credacted:vk-captcha-sid\u003e",
+            "captcha_ts": "\u003credacted:vk-captcha-ts\u003e",
+            "error_code": 14,
+            "error_msg": "Captcha needed",
+            "is_refresh_enabled": true,
+            "is_sound_captcha_available": false,
+            "redirect_uri": "\u003credacted:vk-captcha-redirect-uri\u003e",
+            "remixstlid": "\u003credacted:vk-remixstlid\u003e",
+            "request_params": [
+              {
+                "key": "v",
+                "value": "5.274"
+              },
+              {
+                "key": "client_id",
+                "value": "6287487"
+              },
+              {
+                "key": "method",
+                "value": "calls.getAnonymousToken"
+              },
+              {
+                "key": "oauth",
+                "value": "1"
+              },
+              {
+                "key": "name",
+                "value": "123"
+              },
+              {
+                "key": "vk_join_link",
+                "value": "https://vk.com/call/join/\u003credacted:vk-join-token\u003e"
+              }
+            ]
+          }
+        }
+      },
+      "outcome": {
+        "kind": "provider_error",
+        "error_code": "captcha_required"
+      }
+    },
+    {
+      "name": "vk_browser_login_anonym_token_messages",
+      "endpoint_id": "vk_browser_login_anonym_token_messages",
+      "request": {
+        "method": "POST",
+        "form_keys": [
+          "app_id",
+          "client_id",
+          "client_secret",
+          "isApiOauthAnonymEnabled",
+          "scopes",
+          "version"
+        ],
+        "redacted_fields": [
+          "client_secret"
+        ]
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "data": {
+            "access_token": "\u003credacted:vk-browser-access-token\u003e",
+            "expired_at": 1775412287
+          },
+          "type": "okay"
+        }
+      },
+      "outcome": {
+        "kind": "continue",
+        "extracted": {
+          "access_token": "\u003credacted:vk-browser-access-token\u003e"
+        }
+      }
+    },
+    {
+      "name": "vk_browser_login_anonym_token_messages",
+      "endpoint_id": "vk_browser_login_anonym_token_messages",
+      "request": {
+        "method": "POST",
+        "form_keys": [
+          "app_id",
+          "client_id",
+          "client_secret",
+          "token_type",
+          "version"
+        ],
+        "redacted_fields": [
+          "client_secret"
+        ]
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "data": {
+            "access_token": "\u003credacted:vk-browser-access-token\u003e",
+            "expired_at": 1775412289
+          },
+          "type": "okay"
+        }
+      },
+      "outcome": {
+        "kind": "continue",
+        "extracted": {
+          "access_token": "\u003credacted:vk-browser-access-token\u003e"
+        }
+      }
+    },
+    {
+      "name": "vk_calls_get_call_preview",
+      "endpoint_id": "vk_calls_get_call_preview",
+      "request": {
+        "method": "POST",
+        "form_keys": [
+          "access_token",
+          "fields",
+          "vk_join_link"
+        ],
+        "redacted_fields": [
+          "access_token",
+          "anonym_token",
+          "anonymous_token",
+          "vk_join_link",
+          "join_link",
+          "join_url"
+        ]
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "response": {
+            "call_id": "\u003credacted:vk-call-preview-id\u003e",
+            "is_edu": false,
+            "members_count": 1,
+            "ok_join_link": "\u003credacted:vk-ok-join-link\u003e",
+            "photo_400": "\u003credacted:vk-call-preview-photo-uri\u003e",
+            "photo_base": "\u003credacted:vk-call-preview-photo-uri\u003e",
+            "profiles": [
+              {
+                "can_access_closed": true,
+                "first_name": "\u003credacted:vk-profile-first-name\u003e",
+                "id": "\u003credacted:vk-profile-id\u003e",
+                "is_closed": false,
+                "last_name": "\u003credacted:vk-profile-last-name\u003e",
+                "photo_200": "\u003credacted:vk-profile-photo-uri\u003e",
+                "photo_base": "\u003credacted:vk-profile-photo-uri\u003e"
+              }
+            ],
+            "short_credentials": {
+              "id": "\u003credacted:vk-short-call-id\u003e",
+              "link_with_password": "https://vk.com/call/\u003credacted:vk-short-call-id\u003e?p=\u003credacted:vk-short-call-password\u003e",
+              "link_without_password": "https://vk.com/call/\u003credacted:vk-short-call-id\u003e",
+              "password": "\u003credacted:vk-short-call-password\u003e"
+            },
+            "title": "\u003credacted:vk-call-preview-title\u003e",
+            "vk_join_link": "https://vk.com/call/join/\u003credacted:vk-join-token\u003e"
+          }
+        }
+      },
+      "outcome": {
+        "kind": "continue"
+      }
+    },
+    {
+      "name": "vk_browser_login_anonym_token_messages",
+      "endpoint_id": "vk_browser_login_anonym_token_messages",
+      "request": {
+        "method": "POST",
+        "form_keys": [
+          "app_id",
+          "client_id",
+          "client_secret",
+          "isApiOauthAnonymEnabled",
+          "scopes",
+          "version"
+        ],
+        "redacted_fields": [
+          "client_secret"
+        ]
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "data": {
+            "access_token": "\u003credacted:vk-browser-access-token\u003e",
+            "expired_at": 1775412309
+          },
+          "type": "okay"
+        }
+      },
+      "outcome": {
+        "kind": "continue",
+        "extracted": {
+          "access_token": "\u003credacted:vk-browser-access-token\u003e"
+        }
+      }
+    },
+    {
+      "name": "vk_browser_login_anonym_token_messages",
+      "endpoint_id": "vk_browser_login_anonym_token_messages",
+      "request": {
+        "method": "POST",
+        "form_keys": [
+          "app_id",
+          "client_id",
+          "client_secret",
+          "token_type",
+          "version"
+        ],
+        "redacted_fields": [
+          "client_secret"
+        ]
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "data": {
+            "access_token": "\u003credacted:vk-browser-access-token\u003e",
+            "expired_at": 1775412310
+          },
+          "type": "okay"
+        }
+      },
+      "outcome": {
+        "kind": "continue",
+        "extracted": {
+          "access_token": "\u003credacted:vk-browser-access-token\u003e"
+        }
+      }
+    },
+    {
+      "name": "vk_calls_get_call_preview",
+      "endpoint_id": "vk_calls_get_call_preview",
+      "request": {
+        "method": "POST",
+        "form_keys": [
+          "access_token",
+          "fields",
+          "vk_join_link"
+        ],
+        "redacted_fields": [
+          "access_token",
+          "anonym_token",
+          "anonymous_token",
+          "vk_join_link",
+          "join_link",
+          "join_url"
+        ]
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "response": {
+            "call_id": "\u003credacted:vk-call-preview-id\u003e",
+            "is_edu": false,
+            "members_count": 1,
+            "ok_join_link": "\u003credacted:vk-ok-join-link\u003e",
+            "photo_400": "\u003credacted:vk-call-preview-photo-uri\u003e",
+            "photo_base": "\u003credacted:vk-call-preview-photo-uri\u003e",
+            "profiles": [
+              {
+                "can_access_closed": true,
+                "first_name": "\u003credacted:vk-profile-first-name\u003e",
+                "id": "\u003credacted:vk-profile-id\u003e",
+                "is_closed": false,
+                "last_name": "\u003credacted:vk-profile-last-name\u003e",
+                "photo_200": "\u003credacted:vk-profile-photo-uri\u003e",
+                "photo_base": "\u003credacted:vk-profile-photo-uri\u003e"
+              }
+            ],
+            "short_credentials": {
+              "id": "\u003credacted:vk-short-call-id\u003e",
+              "link_with_password": "https://vk.com/call/\u003credacted:vk-short-call-id\u003e?p=\u003credacted:vk-short-call-password\u003e",
+              "link_without_password": "https://vk.com/call/\u003credacted:vk-short-call-id\u003e",
+              "password": "\u003credacted:vk-short-call-password\u003e"
+            },
+            "title": "\u003credacted:vk-call-preview-title\u003e",
+            "vk_join_link": "https://vk.com/call/join/\u003credacted:vk-join-token\u003e"
+          }
+        }
+      },
+      "outcome": {
+        "kind": "continue"
+      }
+    },
+    {
+      "name": "ok_join_conversation_by_link",
+      "endpoint_id": "ok_join_conversation_by_link",
+      "request": {
+        "method": "POST",
+        "form_keys": [
+          "anonymToken",
+          "application_key",
+          "capabilities",
+          "format",
+          "isVideo",
+          "joinLink",
+          "method",
+          "protocolVersion"
+        ],
+        "redacted_fields": [
+          "joinLink",
+          "anonymToken",
+          "session_key"
+        ]
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "error_code": 103,
+          "error_data": null,
+          "error_msg": "PARAM_SESSION_KEY : Session key is required"
+        }
+      },
+      "outcome": {
+        "kind": "provider_error",
+        "error_code": "browser_post_preview_unsupported"
+      }
+    }
+  ],
+  "outcome": {
+    "result_kind": "provider_error",
+    "provider_error": {
+      "stage": "ok_join_conversation_by_link",
+      "code": "browser_post_preview_unsupported"
+    }
+  }
+}

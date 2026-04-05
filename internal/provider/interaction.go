@@ -58,6 +58,7 @@ type BrowserStageObservation struct {
 	Stage                         string
 	Method                        string
 	URLPrefix                     string
+	RequiredFormKeys              []string
 	RequiredFormValues            map[string]string
 	RequiredFormValueAlternatives map[string][]string
 }

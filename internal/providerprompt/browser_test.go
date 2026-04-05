@@ -69,6 +69,25 @@ func TestChromiumSessionCollectsCookies(t *testing.T) {
 	t.Fatalf("expected browser cookie for %s, got %#v", server.URL, cookies)
 }
 
+func TestChromiumSessionSurvivesCreationContextCancellation(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = writer.Write([]byte("<html><body>challenge</body></html>"))
+	}))
+	defer server.Close()
+
+	sessionCtx, cancelSessionCtx := context.WithCancel(context.Background())
+	session := newBrowserTestSession(t, sessionCtx)
+	cancelSessionCtx()
+
+	opCtx, cancelOp := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelOp()
+
+	if err := session.Open(opCtx, server.URL); err != nil {
+		t.Fatalf("Open() after creation context cancellation error = %v", err)
+	}
+}
+
 func TestChromiumSessionExecutesBrowserOwnedStageRequest(t *testing.T) {
 	var challengeOrigin string
 	stageServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -262,7 +281,7 @@ setTimeout(() => {
     method: "POST",
     credentials: "include",
     headers: {"Content-Type": "application/x-www-form-urlencoded"},
-    body: new URLSearchParams({"method": "auth.anonymLogin", "format": "JSON", "application_key": "CGMMEJLGDIHBABABA"})
+    body: new URLSearchParams({"method": "auth.anonymLogin", "format": "JSON", "application_key": "CGMMEJLGDIHBABABA", "session_data": "{\"device_id\":\"test-device\"}"})
   });
   fetch(%q, {
     method: "POST",
@@ -274,7 +293,9 @@ setTimeout(() => {
       "application_key": "CGMMEJLGDIHBABABA",
       "protocolVersion": "5",
       "isVideo": "false",
-      "joinLink": "https://vk.com/call/join/test-token"
+      "joinLink": "https://vk.com/call/join/test-token",
+      "anonymToken": "test-anonym-token",
+      "session_key": "test-session-key"
     })
   });
 }, 200);
@@ -301,6 +322,9 @@ setTimeout(() => {
 				Stage:     "ok_anonym_login",
 				Method:    http.MethodPost,
 				URLPrefix: stageServer.URL,
+				RequiredFormKeys: []string{
+					"session_data",
+				},
 				RequiredFormValues: map[string]string{
 					"method":          "auth.anonymLogin",
 					"format":          "JSON",
@@ -311,6 +335,10 @@ setTimeout(() => {
 				Stage:     "ok_join_conversation_by_link",
 				Method:    http.MethodPost,
 				URLPrefix: stageServer.URL,
+				RequiredFormKeys: []string{
+					"anonymToken",
+					"session_key",
+				},
 				RequiredFormValues: map[string]string{
 					"method":          "vchat.joinConversationByLink",
 					"format":          "JSON",
