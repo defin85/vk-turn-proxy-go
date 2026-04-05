@@ -210,17 +210,46 @@ Run the first runtime slice locally against the harness-backed deterministic pro
 go test -v ./internal/session -run TestRunRelayRoundTrip
 ```
 
-## Local GitHub Actions reproduction
+## Local CI and GitHub Actions reproduction
 
-The repository includes a repo-local `.actrc` for `act`.
-Use it to run the GitHub Actions `test` job locally through Docker:
+Use the repo-local `Makefile` as the canonical local CI entrypoint:
 
 ```bash
-act -j test -W .github/workflows/ci.yml
+make ci
 ```
 
-The default `act` runner image is intentionally a full GitHub-like Ubuntu snapshot because the CI job exercises browser-backed Chromium tests.
-If you need to override the runner image for a one-off run, pass your own `-P ubuntu-latest=...` value on the command line.
+`make ci` is the fast local smoke path and runs the same `go test ./...` and `go build ./...` pair as the current CI workflow.
+
+Use `act` through `make` when you want a GitHub-like workflow run through Docker:
+
+```bash
+make ci-act
+```
+
+Additional `act` helpers:
+
+```bash
+make ci-act-dry
+make ci-act-verbose
+```
+
+The repository includes a repo-local `.actrc` for `act`.
+It pins `ubuntu-latest` to a full GitHub-like Ubuntu snapshot because the CI job may exercise browser-backed Chromium tests.
+If you need to override the runner image for a one-off run, pass your own variables on the command line, for example:
+
+```bash
+act -j test -W .github/workflows/ci.yml -P ubuntu-latest=<your-image>
+make ci-act ACT_JOB=test ACT_WORKFLOW=.github/workflows/ci.yml
+```
+
+If you want pushes to be gated by the local GitHub-like CI run, opt in to the repo-local hook path:
+
+```bash
+git config core.hooksPath .githooks
+chmod +x .githooks/pre-push
+```
+
+The provided `pre-push` hook runs `make ci-act` and is never installed automatically.
 
 ## Planning and tracking
 

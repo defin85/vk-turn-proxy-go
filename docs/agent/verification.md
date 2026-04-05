@@ -31,10 +31,23 @@ Compatibility claims should also stay backed by committed fixtures, replay tests
 
 ## GitHub Actions reproduction
 
-Use `act` when the change is sensitive to the GitHub Actions environment rather than just local `go test` behavior:
+Prefer the repo-local `Makefile` entrypoints when the change is sensitive to the GitHub Actions environment rather than just local `go test` behavior:
 
 ```bash
-act -j test -W .github/workflows/ci.yml
+make ci-act
 ```
 
-The repo-local `.actrc` pins `ubuntu-latest` to a full GitHub-like runner image because the `ci` workflow includes browser-backed tests.
+Use the faster local smoke path when you only need the current Go test/build pair without Docker:
+
+```bash
+make ci
+```
+
+Use the dry-run path to inspect the job graph without executing containers:
+
+```bash
+make ci-act-dry
+```
+
+The repo-local `.actrc` still pins `ubuntu-latest` to a full GitHub-like runner image because the `ci` workflow may include browser-backed tests.
+The `Makefile` is only a wrapper around the same `act -j test -W .github/workflows/ci.yml` invocation.
