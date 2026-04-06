@@ -55,6 +55,7 @@ Use these repo-local documents when working through Codex or other agents:
 
 - `docs/agent/index.md`: task routing and the smallest useful doc set
 - `docs/agent/architecture-map.md`: subsystem ownership and navigation
+- `docs/build-workflows.md`: reproducible local and CI build entrypoints
 - `docs/agent/verification.md`: change-specific verification matrix
 - `code_review.md`: repository review rubric
 
@@ -78,11 +79,25 @@ Invariants:
 
 ## Quick start
 
-Build all binaries:
+Build the fast Go-only smoke path:
 
 ```bash
 go build ./...
 ```
+
+Build reproducible Go artifact bundles from WSL with:
+
+```bash
+make build-go
+```
+
+Build the Windows GUI bundle from WSL through the `E:\Projects\vk-turn-proxy-go` mirror with:
+
+```bash
+make build-gui-windows
+```
+
+The full build workflow contract lives in `docs/build-workflows.md`.
 
 Run the server baseline:
 
@@ -162,6 +177,8 @@ cd desktop/gui_shell
 flutter run -d linux
 ```
 
+Pinned Flutter version and reproducible GUI build entrypoints are documented in `docs/build-workflows.md`.
+
 The shell resolves the local host in this order:
 - `GUI_SHELL_CLIENTD_PATH`
 - bundled `clientd` next to the app executable
@@ -231,6 +248,13 @@ go run ./cmd/turnlab-shell
 ```
 
 The command prints a ready-to-paste `generic-turn://...` link plus the matching `peer_addr`.
+By default, the shell keeps the peer path alive for a 30-second manual inspection window before enforcing idle cleanup.
+Override that window explicitly when needed:
+
+```bash
+go run ./cmd/turnlab-shell -peer-idle-timeout 45s
+```
+
 For the desktop GUI, create a profile with:
 - `Provider`: `generic-turn`
 - `Provider link`: the printed `link=...`
@@ -244,7 +268,7 @@ go run ./cmd/turnlab-shell -windows-gui
 ```
 
 That mode prints desktop-consumable `link=...` and `peer_addr=...` values backed by a non-loopback IPv4 address.
-Advanced runs can override the listener and published addresses explicitly with `-bind-address` and `-advertise-address`.
+Advanced runs can override the listener and published addresses explicitly with `-bind-address` and `-advertise-address`, and can shorten or extend the manual idle window with `-peer-idle-timeout`.
 
 Future runtime and integration tests should call `turnlab.Start(ctx, logger)` and consume the returned descriptor:
 - `Descriptor.TURNAddress` plus `Descriptor.TURNCredentials` for TURN client setup
@@ -255,6 +279,7 @@ Future runtime and integration tests should call `turnlab.Start(ctx, logger)` an
 - `Descriptor.GenericTurnTCPLink()` when a test wants a `generic-turn` link anchored to the TCP TURN listener
 - `WaitUpstreamPeer(ctx)` plus `InjectUpstream(payload)` when a test needs to assert reply routing independently from the automatic echo path
 - `StartWithOptions(... AllocationLifetime ...)` plus `WaitRefreshCount(ctx, n)` when a test needs a short deterministic maintenance window for allocation refresh
+- `StartWithOptions(... PeerIdleTimeout ...)` when a test or manual harness run needs a peer idle window different from the default deterministic timeout
 
 CI picks the harness up automatically through the existing `go test ./...` workflow.
 

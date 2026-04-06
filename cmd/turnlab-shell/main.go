@@ -22,10 +22,13 @@ type shellConfig struct {
 	jsonOutput         bool
 	logLevel           string
 	allocationLifetime time.Duration
+	peerIdleTimeout    time.Duration
 	bindAddress        string
 	advertiseAddress   string
 	windowsGUI         bool
 }
+
+const defaultShellPeerIdleTimeout = 30 * time.Second
 
 type shellDescriptor struct {
 	TURNAddress          string `json:"turn_address"`
@@ -112,13 +115,15 @@ func runTurnlabShell(ctx context.Context, stdout io.Writer, stderr io.Writer, ar
 
 func parseTurnlabShellFlags(stderr io.Writer, args []string) (shellConfig, error) {
 	cfg := shellConfig{
-		logLevel: "info",
+		logLevel:        "info",
+		peerIdleTimeout: defaultShellPeerIdleTimeout,
 	}
 	flags := flag.NewFlagSet("turnlab-shell", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	flags.BoolVar(&cfg.jsonOutput, "json", cfg.jsonOutput, "emit the harness descriptor as JSON")
 	flags.StringVar(&cfg.logLevel, "log-level", cfg.logLevel, "log level: debug|info|warn|error")
 	flags.DurationVar(&cfg.allocationLifetime, "allocation-lifetime", cfg.allocationLifetime, "optional TURN allocation lifetime override")
+	flags.DurationVar(&cfg.peerIdleTimeout, "peer-idle-timeout", cfg.peerIdleTimeout, "idle timeout for the shell-managed peer path")
 	flags.StringVar(&cfg.bindAddress, "bind-address", cfg.bindAddress, "listener bind address for TURN and peer endpoints")
 	flags.StringVar(&cfg.advertiseAddress, "advertise-address", cfg.advertiseAddress, "published address for TURN links and peer endpoints")
 	flags.BoolVar(&cfg.windowsGUI, "windows-gui", cfg.windowsGUI, "publish desktop-consumable addresses for a Windows GUI using a harness started inside WSL or another sibling host")
@@ -157,9 +162,16 @@ func resolveTurnlabOptions(
 	if advertiseAddress == "" {
 		advertiseAddress = bindAddress
 	}
+	if cfg.peerIdleTimeout < 0 {
+		return turnlab.Options{}, "", "", errors.New("peer idle timeout must be positive")
+	}
+	if cfg.peerIdleTimeout == 0 {
+		cfg.peerIdleTimeout = defaultShellPeerIdleTimeout
+	}
 
 	return turnlab.Options{
 		AllocationLifetime: cfg.allocationLifetime,
+		PeerIdleTimeout:    cfg.peerIdleTimeout,
 		BindAddress:        bindAddress,
 		AdvertiseAddress:   advertiseAddress,
 	}, bindAddress, advertiseAddress, nil

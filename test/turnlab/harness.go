@@ -17,12 +17,12 @@ import (
 )
 
 const (
-	loopbackAddress  = "127.0.0.1"
-	turnUsername     = "turn-lab-user"
-	turnPassword     = "turn-lab-pass"
-	turnRealm        = "turn.lab"
-	handshakeTimeout = 5 * time.Second
-	idleTimeout      = 5 * time.Second
+	loopbackAddress        = "127.0.0.1"
+	turnUsername           = "turn-lab-user"
+	turnPassword           = "turn-lab-pass"
+	turnRealm              = "turn.lab"
+	handshakeTimeout       = 5 * time.Second
+	defaultPeerIdleTimeout = 5 * time.Second
 )
 
 type TURNCredentials struct {
@@ -36,6 +36,7 @@ type Options struct {
 	AllocationLifetime  time.Duration
 	PermissionTimeout   time.Duration
 	ChannelBindTimeout  time.Duration
+	PeerIdleTimeout     time.Duration
 	BindAddress         string
 	AdvertiseAddress    string
 }
@@ -94,9 +95,16 @@ func StartWithOptions(parent context.Context, logger *slog.Logger, opts Options)
 	if err := parent.Err(); err != nil {
 		return nil, fmt.Errorf("start harness: %w", err)
 	}
+	if opts.PeerIdleTimeout < 0 {
+		return nil, fmt.Errorf("start harness: peer idle timeout must be positive")
+	}
 	bindAddress, advertiseAddress, advertiseIP, err := resolveAddresses(opts)
 	if err != nil {
 		return nil, fmt.Errorf("start harness: %w", err)
+	}
+	peerIdleTimeout := opts.PeerIdleTimeout
+	if peerIdleTimeout == 0 {
+		peerIdleTimeout = defaultPeerIdleTimeout
 	}
 
 	ctx, cancel := context.WithCancel(parent)
@@ -132,7 +140,7 @@ func StartWithOptions(parent context.Context, logger *slog.Logger, opts Options)
 		ListenAddr:       net.JoinHostPort(bindAddress, "0"),
 		UpstreamAddr:     harness.Descriptor.UpstreamAddress,
 		HandshakeTimeout: handshakeTimeout,
-		IdleTimeout:      idleTimeout,
+		IdleTimeout:      peerIdleTimeout,
 	}, logger)
 	if err != nil {
 		cancel()

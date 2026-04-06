@@ -131,6 +131,27 @@ func TestHarnessRelayRoundTripAfterAllocationRefresh(t *testing.T) {
 	mustReadDTLSEcho(t, dtlsConn, []byte("after-refresh"))
 }
 
+func TestHarnessCustomPeerIdleTimeoutClosesIdleDTLSSession(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	harness, err := turnlab.StartWithOptions(ctx, nil, turnlab.Options{
+		PeerIdleTimeout: 100 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("start harness: %v", err)
+	}
+	t.Cleanup(func() {
+		cancel()
+		if err := harness.Close(); err != nil {
+			t.Errorf("close harness: %v", err)
+		}
+	})
+
+	dtlsConn, _, cleanup := dialHarnessDTLS(t, harness, "udp")
+	t.Cleanup(cleanup)
+
+	waitForIdleClose(t, dtlsConn, 2*time.Second)
+}
+
 func TestHarnessPlainRelayRoundTrip(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	harness, err := turnlab.Start(ctx, nil)
@@ -276,6 +297,24 @@ func TestHarnessStartRejectsCanceledContext(t *testing.T) {
 	}
 }
 
+func TestHarnessRejectsNegativePeerIdleTimeout(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	harness, err := turnlab.StartWithOptions(ctx, nil, turnlab.Options{
+		PeerIdleTimeout: -time.Second,
+	})
+	if err == nil {
+		if harness != nil {
+			_ = harness.Close()
+		}
+		t.Fatal("expected start to fail for negative peer idle timeout")
+	}
+	if !strings.Contains(err.Error(), "peer idle timeout must be positive") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func dialHarnessDTLS(t *testing.T, harness *turnlab.Harness, turnNetwork string) (*dtls.Conn, string, func()) {
 	t.Helper()
 
@@ -403,6 +442,28 @@ func closeBaseConn(conn net.PacketConn) {
 		return
 	}
 	_ = conn.Close()
+}
+
+func waitForIdleClose(t *testing.T, conn net.Conn, timeout time.Duration) {
+	t.Helper()
+
+	buf := make([]byte, 1)
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if err := conn.SetReadDeadline(time.Now().Add(50 * time.Millisecond)); err != nil {
+			t.Fatalf("set deadline: %v", err)
+		}
+		_, err := conn.Read(buf)
+		if err == nil {
+			t.Fatal("expected idle connection to close")
+		}
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+			continue
+		}
+		return
+	}
+
+	t.Fatalf("timed out waiting for idle close after %s", timeout)
 }
 
 func hostPart(t *testing.T, value string) string {

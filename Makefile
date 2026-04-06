@@ -3,11 +3,17 @@
 ACT_WORKFLOW ?= .github/workflows/ci.yml
 ACT_JOB ?= test
 
-.PHONY: ci ci-act ci-act-dry ci-act-verbose deps-act
+.PHONY: ci build-go build-gui-windows ci-act ci-act-dry ci-act-verbose deps-act
 
 ci:
 	go test ./...
 	go build ./...
+
+build-go:
+	./scripts/build-go-matrix.sh
+
+build-gui-windows:
+	./scripts/build-windows-gui-from-wsl.sh
 
 ci-act: deps-act
 	act -j $(ACT_JOB) -W $(ACT_WORKFLOW)

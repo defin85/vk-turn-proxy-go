@@ -2,4 +2,8 @@ bin/
 dist/
 coverage.out
 *.log
-
+/clientd
+/probe
+/tunnel-client
+/tunnel-server
+/turnlab-shell

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -163,6 +164,40 @@ func TestResolveTurnlabOptionsPreservesExplicitBindWithWindowsGUI(t *testing.T) 
 	}
 	if got, want := opts.AdvertiseAddress, "172.29.240.1"; got != want {
 		t.Fatalf("opts.AdvertiseAddress = %q, want %q", got, want)
+	}
+}
+
+func TestParseTurnlabShellFlagsUsesManualPeerIdleTimeoutDefault(t *testing.T) {
+	cfg, err := parseTurnlabShellFlags(io.Discard, nil)
+	if err != nil {
+		t.Fatalf("parseTurnlabShellFlags() error = %v", err)
+	}
+	if got, want := cfg.peerIdleTimeout, defaultShellPeerIdleTimeout; got != want {
+		t.Fatalf("peerIdleTimeout = %s, want %s", got, want)
+	}
+}
+
+func TestParseTurnlabShellFlagsAcceptsPeerIdleTimeoutOverride(t *testing.T) {
+	cfg, err := parseTurnlabShellFlags(io.Discard, []string{"-peer-idle-timeout", "45s"})
+	if err != nil {
+		t.Fatalf("parseTurnlabShellFlags() error = %v", err)
+	}
+	if got, want := cfg.peerIdleTimeout, 45*time.Second; got != want {
+		t.Fatalf("peerIdleTimeout = %s, want %s", got, want)
+	}
+}
+
+func TestResolveTurnlabOptionsUsesPeerIdleTimeoutOverride(t *testing.T) {
+	opts, _, _, err := resolveTurnlabOptions(shellConfig{
+		peerIdleTimeout: 45 * time.Second,
+	}, func() (string, error) {
+		return "172.29.240.1", nil
+	})
+	if err != nil {
+		t.Fatalf("resolveTurnlabOptions() error = %v", err)
+	}
+	if got, want := opts.PeerIdleTimeout, 45*time.Second; got != want {
+		t.Fatalf("opts.PeerIdleTimeout = %s, want %s", got, want)
 	}
 }
 

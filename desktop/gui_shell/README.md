@@ -26,6 +26,16 @@ flutter build linux
 The current shell is verified on Linux.
 The project also includes generated `macos/` and `windows/` runners so packaging and sidecar placement can follow the same control-plane contract there.
 
+The pinned Flutter SDK version for this project is stored in `desktop/gui_shell/.flutter-version`.
+
+For Windows packaging from the canonical WSL checkout, use the repo-owned wrapper instead of running Flutter directly from `\\wsl.localhost\...`:
+
+```bash
+./scripts/build-windows-gui-from-wsl.sh
+```
+
+That workflow synchronizes the repository into `E:\Projects\vk-turn-proxy-go`, runs the Windows-native Flutter build there, and stages the packaged bundle under `dist/windows-gui/`.
+
 ## Control-plane contract
 
 The shell talks to `cmd/clientd` on `127.0.0.1:7777` through the versioned HTTP surface from `pkg/clientcontrol`.
