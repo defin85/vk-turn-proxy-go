@@ -47,56 +47,54 @@ class DashboardPage extends StatelessWidget {
                   const SizedBox(height: 20),
                   Expanded(
                     child: LayoutBuilder(
-                      builder: (BuildContext context, BoxConstraints constraints) {
-                        final profilePanel = ProfileEditorPanel(
-                          profiles: controller.profiles,
-                          selectedProfileId: controller.selectedProfileId,
-                          draft: controller.draft,
-                          busy: controller.busy || controller.status != ShellStatus.ready,
-                          onSelectProfile: controller.selectProfile,
-                          onDraftChanged: controller.updateDraft,
-                          onSave: controller.saveDraft,
-                          onDelete: controller.deleteSelectedProfile,
-                          onReset: controller.resetDraft,
-                          onStart: controller.startSelectedProfile,
-                        );
-                        final sessionsPanel = _SessionsPanel(controller: controller);
-                        final eventsPanel = _EventsPanel(controller: controller);
+                      builder:
+                          (BuildContext context, BoxConstraints constraints) {
+                            final profilePanel = ProfileEditorPanel(
+                              profiles: controller.profiles,
+                              selectedProfileId: controller.selectedProfileId,
+                              draft: controller.draft,
+                              busy:
+                                  controller.busy ||
+                                  controller.status != ShellStatus.ready,
+                              onSelectProfile: controller.selectProfile,
+                              onDraftChanged: controller.updateDraft,
+                              onSave: controller.saveDraft,
+                              onDelete: controller.deleteSelectedProfile,
+                              onReset: controller.resetDraft,
+                              onStart: controller.startSelectedProfile,
+                            );
+                            final sessionsPanel = _SessionsPanel(
+                              controller: controller,
+                            );
+                            final eventsPanel = _EventsPanel(
+                              controller: controller,
+                            );
 
-                        if (constraints.maxWidth >= 1260) {
-                          return Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: <Widget>[
-                              SizedBox(width: 380, child: profilePanel),
-                              const SizedBox(width: 20),
-                              Expanded(child: sessionsPanel),
-                              const SizedBox(width: 20),
-                              SizedBox(width: 360, child: eventsPanel),
-                            ],
-                          );
-                        }
+                            if (constraints.maxWidth >= 1260) {
+                              return Row(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: <Widget>[
+                                  SizedBox(width: 380, child: profilePanel),
+                                  const SizedBox(width: 20),
+                                  Expanded(child: sessionsPanel),
+                                  const SizedBox(width: 20),
+                                  SizedBox(width: 360, child: eventsPanel),
+                                ],
+                              );
+                            }
 
-                        return SingleChildScrollView(
-                          child: Column(
-                            children: <Widget>[
-                              SizedBox(
-                                height: 720,
-                                child: profilePanel,
+                            return SingleChildScrollView(
+                              child: Column(
+                                children: <Widget>[
+                                  SizedBox(height: 720, child: profilePanel),
+                                  const SizedBox(height: 20),
+                                  SizedBox(height: 420, child: sessionsPanel),
+                                  const SizedBox(height: 20),
+                                  SizedBox(height: 320, child: eventsPanel),
+                                ],
                               ),
-                              const SizedBox(height: 20),
-                              SizedBox(
-                                height: 420,
-                                child: sessionsPanel,
-                              ),
-                              const SizedBox(height: 20),
-                              SizedBox(
-                                height: 320,
-                                child: eventsPanel,
-                              ),
-                            ],
-                          ),
-                        );
-                      },
+                            );
+                          },
                     ),
                   ),
                 ],
@@ -118,6 +116,7 @@ class _HostBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final connection = controller.hostConnection;
+    final hostInfo = connection?.info;
     final ready = connection?.isReady == true;
     final color = switch (connection?.state) {
       HostLifecycleState.ready => const Color(0xFFDEF2E1),
@@ -138,33 +137,44 @@ class _HostBanner extends StatelessWidget {
                 children: <Widget>[
                   Text(
                     ready ? 'Local host ready' : 'Local host blocked',
-                    style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                   const SizedBox(height: 6),
-                  Text(connection?.message ?? 'Waiting for local host negotiation.'),
-                  if (connection?.info != null) ...<Widget>[
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: <Widget>[
-                        _Tag(label: 'version ${connection!.info!.version}'),
-                        if (connection.launched) _Tag(label: 'launched'),
-                        if (connection.launchSpec != null) _Tag(label: connection.launchSpec!.description),
-                      ],
-                    ),
-                  ],
+                  Text(
+                    connection?.message ??
+                        'Waiting for local host negotiation.',
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: <Widget>[
+                      _Tag(label: 'GUI ${controller.appBuild.shortLabel}'),
+                      if (hostInfo != null)
+                        _Tag(label: 'Host ${hostInfo.build.shortLabel}'),
+                      if (hostInfo != null)
+                        _Tag(label: 'Contract ${hostInfo.contractVersion}'),
+                      if (connection?.launched == true) _Tag(label: 'launched'),
+                      if (connection?.launchSpec != null)
+                        _Tag(label: connection!.launchSpec!.description),
+                    ],
+                  ),
                 ],
               ),
             ),
             const SizedBox(width: 16),
             FilledButton.tonal(
-              onPressed: controller.busy ? null : () => unawaited(controller.reconnect()),
+              onPressed: controller.busy
+                  ? null
+                  : () => unawaited(controller.reconnect()),
               child: const Text('Reconnect'),
             ),
             const SizedBox(width: 8),
             FilledButton(
-              onPressed: controller.busy || controller.status != ShellStatus.ready
+              onPressed:
+                  controller.busy || controller.status != ShellStatus.ready
                   ? null
                   : () => unawaited(controller.refresh()),
               child: const Text('Refresh'),
@@ -193,7 +203,9 @@ class _SessionsPanel extends StatelessWidget {
           children: <Widget>[
             Text(
               'Sessions',
-              style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
             ),
             const SizedBox(height: 16),
             Expanded(
@@ -208,21 +220,28 @@ class _SessionsPanel extends StatelessWidget {
                     )
                   : ListView.separated(
                       itemCount: controller.sessions.length,
-                      separatorBuilder: (_, int index) => const SizedBox(height: 14),
+                      separatorBuilder: (_, int index) =>
+                          const SizedBox(height: 14),
                       itemBuilder: (BuildContext context, int index) {
                         final session = controller.sessions[index];
-                        final challenge = controller.activeChallengeFor(session);
+                        final challenge = controller.activeChallengeFor(
+                          session,
+                        );
                         return _SessionCard(
                           session: session,
                           challenge: challenge,
-                          busy: controller.busy || controller.status != ShellStatus.ready,
+                          busy:
+                              controller.busy ||
+                              controller.status != ShellStatus.ready,
                           selected: controller.selectedSessionId == session.id,
                           onSelect: () => controller.selectSession(session.id),
                           onStop: () => controller.stopSession(session.id),
-                          onExport: () => controller.exportDiagnostics(session.id),
+                          onExport: () =>
+                              controller.exportDiagnostics(session.id),
                           onContinueChallenge: challenge == null
                               ? null
-                              : () => controller.continueChallenge(challenge.id),
+                              : () =>
+                                    controller.continueChallenge(challenge.id),
                           onCancelChallenge: challenge == null
                               ? null
                               : () => controller.cancelChallenge(challenge.id),
@@ -282,15 +301,21 @@ class _SessionCard extends StatelessWidget {
                 children: <Widget>[
                   Expanded(
                     child: Text(
-                      session.profileName?.isNotEmpty == true ? session.profileName! : session.id,
-                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                      session.profileName?.isNotEmpty == true
+                          ? session.profileName!
+                          : session.id,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
                   _SessionStateChip(state: session.state),
                 ],
               ),
               const SizedBox(height: 8),
-              Text('${session.profile.provider} -> ${session.profile.peerAddress}'),
+              Text(
+                '${session.profile.provider} -> ${session.profile.peerAddress}',
+              ),
               Text(
                 'listen ${session.profile.listenAddress} | connections ${session.profile.connections}',
                 style: theme.textTheme.bodySmall,
@@ -318,7 +343,9 @@ class _SessionCard extends StatelessWidget {
                     children: <Widget>[
                       Text(
                         'Challenge: ${challenge!.kind}',
-                        style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(challenge!.prompt ?? challenge!.stage),
@@ -354,7 +381,8 @@ class _SessionCard extends StatelessWidget {
                     onPressed: busy ? null : () => unawaited(onExport()),
                     child: const Text('Export diagnostics'),
                   ),
-                  if (session.state != SessionState.stopped && session.state != SessionState.failed)
+                  if (session.state != SessionState.stopped &&
+                      session.state != SessionState.failed)
                     OutlinedButton(
                       onPressed: busy ? null : () => unawaited(onStop()),
                       child: const Text('Stop session'),
@@ -386,7 +414,9 @@ class _EventsPanel extends StatelessWidget {
           children: <Widget>[
             Text(
               'Event stream',
-              style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
@@ -408,13 +438,15 @@ class _EventsPanel extends StatelessWidget {
                     )
                   : ListView.separated(
                       itemCount: controller.events.length,
-                      separatorBuilder: (_, int index) => const SizedBox(height: 10),
+                      separatorBuilder: (_, int index) =>
+                          const SizedBox(height: 10),
                       itemBuilder: (BuildContext context, int index) {
                         final event = controller.events[index];
                         return Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                            color: theme.colorScheme.surfaceContainerHighest
+                                .withValues(alpha: 0.35),
                             borderRadius: BorderRadius.circular(14),
                           ),
                           child: Column(
@@ -427,7 +459,9 @@ class _EventsPanel extends StatelessWidget {
                               const SizedBox(height: 4),
                               Text(
                                 event.summary(),
-                                style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                               const SizedBox(height: 4),
                               Text(
@@ -456,9 +490,15 @@ class _SessionStateChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final (Color background, Color foreground) = switch (state) {
       SessionState.ready => (const Color(0xFFDEF2E1), const Color(0xFF285B38)),
-      SessionState.challengeRequired => (const Color(0xFFFFF1D6), const Color(0xFF7E5514)),
+      SessionState.challengeRequired => (
+        const Color(0xFFFFF1D6),
+        const Color(0xFF7E5514),
+      ),
       SessionState.failed => (const Color(0xFFFFE0DF), const Color(0xFF7A1F16)),
-      SessionState.stopped => (const Color(0xFFE1E6EC), const Color(0xFF334A5E)),
+      SessionState.stopped => (
+        const Color(0xFFE1E6EC),
+        const Color(0xFF334A5E),
+      ),
       _ => (const Color(0xFFE6EDF7), const Color(0xFF245070)),
     };
 
@@ -470,10 +510,7 @@ class _SessionStateChip extends StatelessWidget {
       ),
       child: Text(
         state.value,
-        style: TextStyle(
-          color: foreground,
-          fontWeight: FontWeight.w700,
-        ),
+        style: TextStyle(color: foreground, fontWeight: FontWeight.w700),
       ),
     );
   }

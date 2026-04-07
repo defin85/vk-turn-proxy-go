@@ -16,7 +16,19 @@ import (
 )
 
 func TestHandlerHostAndNegotiate(t *testing.T) {
-	host := New(WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))))
+	host := New(
+		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+		WithBuildIdentity(BuildIdentity{
+			Product:     "vk-turn-proxy-go",
+			Version:     "0.1.0",
+			BuildNumber: "1",
+			Revision:    "deadbeefcafe",
+			Dirty:       true,
+			BuiltAt:     "2026-04-07T12:00:00Z",
+			Role:        "clientd",
+			Target:      "linux/amd64",
+		}),
+	)
 	handler := Handler(host)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/host", nil)
@@ -31,6 +43,12 @@ func TestHandlerHostAndNegotiate(t *testing.T) {
 	}
 	if info.Version != ContractVersion {
 		t.Fatalf("version = %q, want %q", info.Version, ContractVersion)
+	}
+	if info.ContractVersion != ContractVersion {
+		t.Fatalf("contract_version = %q, want %q", info.ContractVersion, ContractVersion)
+	}
+	if info.Build.Version != "0.1.0" {
+		t.Fatalf("build version = %q, want 0.1.0", info.Build.Version)
 	}
 
 	body, _ := json.Marshal(NegotiateRequest{
@@ -47,6 +65,16 @@ func TestHandlerHostAndNegotiate(t *testing.T) {
 func TestHandlerSessionDiagnosticsAndMetrics(t *testing.T) {
 	host := New(
 		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+		WithBuildIdentity(BuildIdentity{
+			Product:     "vk-turn-proxy-go",
+			Version:     "0.1.0",
+			BuildNumber: "1",
+			Revision:    "deadbeefcafe",
+			Dirty:       true,
+			BuiltAt:     "2026-04-07T12:00:00Z",
+			Role:        "clientd",
+			Target:      "linux/amd64",
+		}),
 		WithSessionIDSource(func() string { return "session-http" }),
 		withRegistry(provider.NewRegistry(fakeAdapter{
 			name: "generic-turn",
@@ -112,6 +140,12 @@ func TestHandlerSessionDiagnosticsAndMetrics(t *testing.T) {
 	}
 	if diagnostics.Session.ID != sessionState.ID {
 		t.Fatalf("diagnostics session_id = %q, want %q", diagnostics.Session.ID, sessionState.ID)
+	}
+	if diagnostics.ContractVersion != ContractVersion {
+		t.Fatalf("diagnostics contract_version = %q, want %q", diagnostics.ContractVersion, ContractVersion)
+	}
+	if diagnostics.HostBuild.Version != "0.1.0" {
+		t.Fatalf("diagnostics host build version = %q, want 0.1.0", diagnostics.HostBuild.Version)
 	}
 
 	metricsHandler, err := host.MetricsHandler(sessionState.ID)

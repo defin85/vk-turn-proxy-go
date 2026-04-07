@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:gui_shell/src/build/app_build_identity.dart';
 import 'package:gui_shell/src/control/control_plane_client.dart';
 import 'package:gui_shell/src/control/control_plane_models.dart';
 import 'package:gui_shell/src/control/desktop_host_supervisor.dart';
@@ -10,11 +11,7 @@ import 'package:gui_shell/src/control/shell_state_store.dart';
 
 typedef DirectoryProvider = Future<Directory> Function();
 
-enum ShellStatus {
-  booting,
-  ready,
-  blocked,
-}
+enum ShellStatus { booting, ready, blocked }
 
 class DesktopShellController extends ChangeNotifier {
   DesktopShellController({
@@ -23,15 +20,19 @@ class DesktopShellController extends ChangeNotifier {
     DesktopShellStateStore? stateStore,
     DirectoryProvider? diagnosticsDirectoryProvider,
     DateTime Function()? clock,
-  })  : _diagnosticsDirectoryProvider = diagnosticsDirectoryProvider ?? _defaultDiagnosticsDirectory,
-        _stateStore = stateStore ?? FileDesktopShellStateStore(),
-        _clock = clock ?? DateTime.now;
+    BuildIdentity? appBuild,
+  }) : _diagnosticsDirectoryProvider =
+           diagnosticsDirectoryProvider ?? _defaultDiagnosticsDirectory,
+       _stateStore = stateStore ?? FileDesktopShellStateStore(),
+       _clock = clock ?? DateTime.now,
+       appBuild = appBuild ?? AppBuildIdentity.current;
 
   final ControlPlaneApi api;
   final HostSupervisor supervisor;
   final DirectoryProvider _diagnosticsDirectoryProvider;
   final DesktopShellStateStore _stateStore;
   final DateTime Function() _clock;
+  final BuildIdentity appBuild;
 
   ShellStatus status = ShellStatus.booting;
   HostConnectionResult? hostConnection;
@@ -44,7 +45,8 @@ class DesktopShellController extends ChangeNotifier {
   String? notice;
   bool busy = false;
 
-  final Map<String, ChallengeRecord> _challengeCache = <String, ChallengeRecord>{};
+  final Map<String, ChallengeRecord> _challengeCache =
+      <String, ChallengeRecord>{};
   StreamSubscription<EventRecord>? _eventSubscription;
   Timer? _pollTimer;
   Timer? _debounceTimer;
@@ -128,7 +130,9 @@ class DesktopShellController extends ChangeNotifier {
         selectProfile(profiles.first.id);
         return;
       } else if (selectedProfileId != null &&
-          !profiles.any((ProfileRecord profile) => profile.id == selectedProfileId)) {
+          !profiles.any(
+            (ProfileRecord profile) => profile.id == selectedProfileId,
+          )) {
         selectedProfileId = null;
         draft = ProfileDraft.defaults();
       }
@@ -136,7 +140,9 @@ class DesktopShellController extends ChangeNotifier {
       if (selectedSessionId == null && sessions.isNotEmpty) {
         selectedSessionId = sessions.first.id;
       } else if (selectedSessionId != null &&
-          !sessions.any((SessionRecord session) => session.id == selectedSessionId)) {
+          !sessions.any(
+            (SessionRecord session) => session.id == selectedSessionId,
+          )) {
         selectedSessionId = null;
       }
 
@@ -243,12 +249,24 @@ class DesktopShellController extends ChangeNotifier {
   Future<void> exportDiagnostics(String sessionId) async {
     await _runMutation(() async {
       final diagnostics = await api.diagnostics(sessionId);
+      final hostInfo = hostConnection?.info;
+      final enriched = diagnostics.copyWith(
+        guiBuild: appBuild,
+        hostBuild: diagnostics.hostBuild.isKnown
+            ? diagnostics.hostBuild
+            : (hostInfo?.build ?? BuildIdentity.unknown),
+        contractVersion: diagnostics.contractVersion.isNotEmpty
+            ? diagnostics.contractVersion
+            : (hostInfo?.contractVersion ?? ControlPlaneClient.contractVersion),
+      );
       final directory = await _diagnosticsDirectoryProvider();
       await directory.create(recursive: true);
 
       final timestamp = _clock().toUtc().toIso8601String().replaceAll(':', '-');
-      final file = File(_join(<String>[directory.path, '$sessionId-$timestamp.json']));
-      await file.writeAsString(diagnostics.toPrettyJson());
+      final file = File(
+        _join(<String>[directory.path, '$sessionId-$timestamp.json']),
+      );
+      await file.writeAsString(enriched.toPrettyJson());
 
       notice = 'Exported diagnostics to ${file.path}.';
       selectedSessionId = sessionId;
@@ -307,27 +325,38 @@ class DesktopShellController extends ChangeNotifier {
         unawaited(_handleHostFailure(error));
       },
       onDone: () {
-        if (_disposed || _suppressEventStreamClosure || status != ShellStatus.ready) {
+        if (_disposed ||
+            _suppressEventStreamClosure ||
+            status != ShellStatus.ready) {
           return;
         }
-        unawaited(_handleHostFailure(const ControlPlaneError(
-          statusCode: 0,
-          code: 'connection_closed',
-          message: 'event stream closed',
-        )));
+        unawaited(
+          _handleHostFailure(
+            const ControlPlaneError(
+              statusCode: 0,
+              code: 'connection_closed',
+              message: 'event stream closed',
+            ),
+          ),
+        );
       },
     );
   }
 
   void _applyEvent(EventRecord event) {
-    final index = sessions.indexWhere((SessionRecord session) => session.id == event.sessionId);
+    final index = sessions.indexWhere(
+      (SessionRecord session) => session.id == event.sessionId,
+    );
     if (index < 0) {
       return;
     }
     final current = sessions[index];
     final nextActiveChallengeId = switch (event.challenge?.status) {
-      ChallengeStatus.pending || ChallengeStatus.continuing => event.challenge!.id,
-      ChallengeStatus.completed || ChallengeStatus.cancelled || ChallengeStatus.failed => '',
+      ChallengeStatus.pending ||
+      ChallengeStatus.continuing => event.challenge!.id,
+      ChallengeStatus.completed ||
+      ChallengeStatus.cancelled ||
+      ChallengeStatus.failed => '',
       null => current.activeChallengeId,
     };
     final next = current.copyWith(
@@ -337,7 +366,9 @@ class DesktopShellController extends ChangeNotifier {
       failure: event.type == EventType.sessionFailed
           ? FailureInfo(stage: event.stage, message: event.message)
           : current.failure,
-      stoppedAt: event.type == EventType.sessionStopped ? event.timestamp : current.stoppedAt,
+      stoppedAt: event.type == EventType.sessionStopped
+          ? event.timestamp
+          : current.stoppedAt,
     );
     final updated = sessions.toList(growable: true);
     updated[index] = next;
@@ -362,7 +393,9 @@ class DesktopShellController extends ChangeNotifier {
     try {
       await action();
     } on ControlPlaneError catch (error) {
-      if (error.statusCode == 0 || error.incompatibleHost || error.statusCode >= 500) {
+      if (error.statusCode == 0 ||
+          error.incompatibleHost ||
+          error.statusCode >= 500) {
         await _handleHostFailure(error, scheduleRecovery: true);
         return;
       }
@@ -375,7 +408,9 @@ class DesktopShellController extends ChangeNotifier {
     }
   }
 
-  Future<List<ChallengeRecord>> _loadActiveChallenges(List<SessionRecord> nextSessions) async {
+  Future<List<ChallengeRecord>> _loadActiveChallenges(
+    List<SessionRecord> nextSessions,
+  ) async {
     final ids = nextSessions
         .map((SessionRecord session) => session.activeChallengeId)
         .whereType<String>()
@@ -413,7 +448,9 @@ class DesktopShellController extends ChangeNotifier {
         .where((String id) => id.isNotEmpty)
         .toSet();
 
-    _challengeCache.removeWhere((String id, ChallengeRecord _) => !activeIDs.contains(id));
+    _challengeCache.removeWhere(
+      (String id, ChallengeRecord _) => !activeIDs.contains(id),
+    );
     for (final challenge in challenges) {
       _challengeCache[challenge.id] = challenge;
     }
@@ -432,7 +469,10 @@ class DesktopShellController extends ChangeNotifier {
     _suppressEventStreamClosure = false;
   }
 
-  Future<void> _handleHostFailure(Object error, {bool scheduleRecovery = true}) async {
+  Future<void> _handleHostFailure(
+    Object error, {
+    bool scheduleRecovery = true,
+  }) async {
     await _stopRuntimeMonitoring();
     final message = error is ControlPlaneError ? error.message : '$error';
     hostConnection = HostConnectionResult(
@@ -529,7 +569,9 @@ Future<Directory> _defaultDiagnosticsDirectory() async {
   if (Platform.isWindows) {
     final appData = environment['APPDATA'] ?? environment['USERPROFILE'];
     if (appData != null && appData.isNotEmpty) {
-      return Directory(_join(<String>[appData, 'vk-turn-proxy-go', 'diagnostics']));
+      return Directory(
+        _join(<String>[appData, 'vk-turn-proxy-go', 'diagnostics']),
+      );
     }
   }
 
@@ -537,11 +579,15 @@ Future<Directory> _defaultDiagnosticsDirectory() async {
   if (home != null && home.isNotEmpty) {
     return Directory(_join(<String>[home, '.vk-turn-proxy-go', 'diagnostics']));
   }
-  return Directory(_join(<String>[Directory.systemTemp.path, 'vk-turn-proxy-go-diagnostics']));
+  return Directory(
+    _join(<String>[Directory.systemTemp.path, 'vk-turn-proxy-go-diagnostics']),
+  );
 }
 
 String _join(List<String> parts) {
-  final filtered = parts.where((String part) => part.isNotEmpty).toList(growable: false);
+  final filtered = parts
+      .where((String part) => part.isNotEmpty)
+      .toList(growable: false);
   if (filtered.isEmpty) {
     return '';
   }
@@ -551,7 +597,8 @@ String _join(List<String> parts) {
       value = '$value${part.replaceFirst(RegExp(r'^[\\/]+'), '')}';
       continue;
     }
-    value = '$value${Platform.pathSeparator}${part.replaceFirst(RegExp(r'^[\\/]+'), '')}';
+    value =
+        '$value${Platform.pathSeparator}${part.replaceFirst(RegExp(r'^[\\/]+'), '')}';
   }
   return value;
 }

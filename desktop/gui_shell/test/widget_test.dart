@@ -9,8 +9,41 @@ import 'package:gui_shell/src/control/desktop_shell_controller.dart';
 import 'package:gui_shell/src/control/shell_state_store.dart';
 import 'package:gui_shell/src/ui/dashboard_page.dart';
 
+const BuildIdentity _testGuiBuild = BuildIdentity(
+  product: 'vk-turn-proxy-go',
+  version: '0.1.0',
+  buildNumber: '1',
+  revision: 'gui123456789',
+  role: 'gui_shell',
+  target: 'windows/x64',
+);
+
+const BuildIdentity _testHostBuild = BuildIdentity(
+  product: 'vk-turn-proxy-go',
+  version: '0.1.0',
+  buildNumber: '1',
+  revision: 'deadbeefcafe',
+  role: 'clientd',
+  target: 'windows/amd64',
+);
+
+const HostInfo _readyHostInfo = HostInfo(
+  contractVersion: '1',
+  build: _testHostBuild,
+  capabilities: <Capability>[
+    Capability.desktopSidecar,
+    Capability.profiles,
+    Capability.sessions,
+    Capability.challenges,
+    Capability.diagnostics,
+    Capability.eventStream,
+  ],
+);
+
 void main() {
-  testWidgets('desktop shell starts a saved profile from the GUI', (WidgetTester tester) async {
+  testWidgets('desktop shell starts a saved profile from the GUI', (
+    WidgetTester tester,
+  ) async {
     tester.view.physicalSize = const Size(1600, 1200);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -20,19 +53,21 @@ void main() {
       api: api,
       supervisor: _FakeHostSupervisor(),
       stateStore: const _InMemoryShellStateStore(),
+      appBuild: _testGuiBuild,
     );
 
     await controller.initialize();
     await tester.pumpWidget(
-      MaterialApp(
-        home: DashboardPage(controller: controller),
-      ),
+      MaterialApp(home: DashboardPage(controller: controller)),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
     expect(find.text('Local host ready'), findsOneWidget);
     expect(find.text('alpha', skipOffstage: false), findsOneWidget);
+    expect(find.text('GUI 0.1.0+1 @gui123456789'), findsOneWidget);
+    expect(find.text('Host 0.1.0+1 @deadbeefcafe'), findsOneWidget);
+    expect(find.text('Contract 1'), findsOneWidget);
 
     final startButton = find.widgetWithText(
       FilledButton,
@@ -81,7 +116,8 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
       ),
     ),
   ];
-  final StreamController<EventRecord> _events = StreamController<EventRecord>.broadcast();
+  final StreamController<EventRecord> _events =
+      StreamController<EventRecord>.broadcast();
   List<SessionRecord> _sessions = const <SessionRecord>[];
 
   @override
@@ -111,6 +147,8 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
       events: const <EventRecord>[],
       challenges: const <ChallengeRecord>[],
       metrics: 'vk_turn_proxy_runtime_session_starts_total 1',
+      hostBuild: _testHostBuild,
+      contractVersion: '1',
     );
   }
 
@@ -119,17 +157,7 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
 
   @override
   Future<HostInfo> hostInfo() async {
-    return const HostInfo(
-      version: '1',
-      capabilities: <Capability>[
-        Capability.desktopSidecar,
-        Capability.profiles,
-        Capability.sessions,
-        Capability.challenges,
-        Capability.diagnostics,
-        Capability.eventStream,
-      ],
-    );
+    return _readyHostInfo;
   }
 
   @override
@@ -144,7 +172,10 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   Future<List<ProfileRecord>> profiles() async => _profiles;
 
   @override
-  Future<SessionRecord> startSession({String? profileId, ProfileSpec? spec}) async {
+  Future<SessionRecord> startSession({
+    String? profileId,
+    ProfileSpec? spec,
+  }) async {
     startedProfileIDs.add(profileId ?? '');
     final now = DateTime(2026, 4, 5, 17, 0);
     final session = SessionRecord(
@@ -200,17 +231,7 @@ class _FakeHostSupervisor implements HostSupervisor {
     return const HostConnectionResult(
       state: HostLifecycleState.ready,
       message: 'Connected to local host 127.0.0.1:7777',
-      info: HostInfo(
-        version: '1',
-        capabilities: <Capability>[
-          Capability.desktopSidecar,
-          Capability.profiles,
-          Capability.sessions,
-          Capability.challenges,
-          Capability.diagnostics,
-          Capability.eventStream,
-        ],
-      ),
+      info: _readyHostInfo,
     );
   }
 }

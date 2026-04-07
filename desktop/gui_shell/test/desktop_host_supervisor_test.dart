@@ -8,48 +8,71 @@ import 'package:gui_shell/src/control/control_plane_models.dart';
 import 'package:gui_shell/src/control/desktop_host_supervisor.dart';
 
 void main() {
-  test('supervisor reports incompatible host without launching sidecar', () async {
-    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    addTearDown(server.close);
+  test(
+    'supervisor reports incompatible host without launching sidecar',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(server.close);
 
-    server.listen((HttpRequest request) async {
-      if (request.uri.path == '/v1/negotiate') {
-        request.response.statusCode = HttpStatus.conflict;
-        request.response.headers.contentType = ContentType.json;
-        request.response.write(
-          jsonEncode(<String, dynamic>{
-            'code': 'incompatible_host',
-            'message': 'client control host missing capabilities: event_stream',
-          }),
-        );
-      } else {
-        request.response.statusCode = HttpStatus.notFound;
-      }
-      await request.response.close();
-    });
+      server.listen((HttpRequest request) async {
+        if (request.uri.path == '/v1/host') {
+          request.response.headers.contentType = ContentType.json;
+          request.response.write(
+            jsonEncode(<String, dynamic>{
+              'contract_version': '0',
+              'version': '0',
+              'build': <String, dynamic>{
+                'product': 'vk-turn-proxy-go',
+                'version': '0.0.9',
+                'build_number': '7',
+                'revision': 'badcafe12345',
+                'role': 'clientd',
+                'target': 'linux/amd64',
+              },
+              'capabilities': <String>['profiles'],
+            }),
+          );
+        } else if (request.uri.path == '/v1/negotiate') {
+          request.response.statusCode = HttpStatus.conflict;
+          request.response.headers.contentType = ContentType.json;
+          request.response.write(
+            jsonEncode(<String, dynamic>{
+              'code': 'incompatible_host',
+              'message':
+                  'client control host missing capabilities: event_stream',
+            }),
+          );
+        } else {
+          request.response.statusCode = HttpStatus.notFound;
+        }
+        await request.response.close();
+      });
 
-    final client = ControlPlaneClient(
-      baseUri: Uri.parse('http://${server.address.address}:${server.port}'),
-    );
-    var launched = false;
-    final supervisor = DesktopHostSupervisor(
-      client: client,
-      listenAddress: '${server.address.address}:${server.port}',
-      locator: _StaticLocator(
-        const <SidecarLaunchSpec>[
-          SidecarLaunchSpec(executable: 'clientd', description: 'should-not-launch'),
-        ],
-      ),
-      starter: (SidecarLaunchSpec spec) async {
-        launched = true;
-        return _FakeManagedProcess();
-      },
-    );
+      final client = ControlPlaneClient(
+        baseUri: Uri.parse('http://${server.address.address}:${server.port}'),
+      );
+      var launched = false;
+      final supervisor = DesktopHostSupervisor(
+        client: client,
+        listenAddress: '${server.address.address}:${server.port}',
+        locator: _StaticLocator(const <SidecarLaunchSpec>[
+          SidecarLaunchSpec(
+            executable: 'clientd',
+            description: 'should-not-launch',
+          ),
+        ]),
+        starter: (SidecarLaunchSpec spec) async {
+          launched = true;
+          return _FakeManagedProcess();
+        },
+      );
 
-    final result = await supervisor.ensureReady();
-    expect(result.state, HostLifecycleState.incompatible);
-    expect(launched, isFalse);
-  });
+      final result = await supervisor.ensureReady();
+      expect(result.state, HostLifecycleState.incompatible);
+      expect(result.info?.build.version, '0.0.9');
+      expect(launched, isFalse);
+    },
+  );
 
   test(
     'supervisor launches repo-local clientd and negotiates contract',
@@ -59,20 +82,25 @@ void main() {
 
       final listenPort = await _reservePort();
       final listenAddress = '127.0.0.1:$listenPort';
-      final client = ControlPlaneClient(baseUri: Uri.parse('http://$listenAddress'));
+      final client = ControlPlaneClient(
+        baseUri: Uri.parse('http://$listenAddress'),
+      );
       final supervisor = DesktopHostSupervisor(
         client: client,
         listenAddress: listenAddress,
-        locator: _StaticLocator(
-          <SidecarLaunchSpec>[
-            SidecarLaunchSpec(
-              executable: 'go',
-              arguments: <String>['run', './cmd/clientd', '-listen', listenAddress],
-              workingDirectory: repoRoot!.path,
-              description: 'repo-local go run fallback',
-            ),
-          ],
-        ),
+        locator: _StaticLocator(<SidecarLaunchSpec>[
+          SidecarLaunchSpec(
+            executable: 'go',
+            arguments: <String>[
+              'run',
+              './cmd/clientd',
+              '-listen',
+              listenAddress,
+            ],
+            workingDirectory: repoRoot!.path,
+            description: 'repo-local go run fallback',
+          ),
+        ]),
         startupTimeout: const Duration(seconds: 60),
       );
       addTearDown(supervisor.dispose);
@@ -80,73 +108,142 @@ void main() {
       final result = await supervisor.ensureReady();
       expect(result.isReady, isTrue);
       expect(result.launched, isTrue);
-      expect(result.info?.version, '1');
+      expect(result.info?.contractVersion, '1');
+      expect(result.info?.build.version, isNotEmpty);
       expect(result.info?.capabilities, contains(Capability.desktopSidecar));
     },
     timeout: const Timeout(Duration(seconds: 90)),
   );
 
-  test('supervisor falls through launched incompatible candidate to the next sidecar', () async {
-    final listenPort = await _reservePort();
-    final listenAddress = '127.0.0.1:$listenPort';
-    final client = ControlPlaneClient(baseUri: Uri.parse('http://$listenAddress'));
-    final supervisor = DesktopHostSupervisor(
-      client: client,
-      listenAddress: listenAddress,
-      locator: _StaticLocator(
-        const <SidecarLaunchSpec>[
-          SidecarLaunchSpec(executable: 'clientd-a', description: 'bad-sidecar'),
-          SidecarLaunchSpec(executable: 'clientd-b', description: 'good-sidecar'),
-        ],
-      ),
-      starter: (SidecarLaunchSpec spec) async {
-        final host = await HttpServer.bind(InternetAddress.loopbackIPv4, listenPort);
-        host.listen((HttpRequest request) async {
-          if (request.uri.path != '/v1/negotiate') {
-            request.response.statusCode = HttpStatus.notFound;
-            await request.response.close();
-            return;
-          }
+  test(
+    'supervisor falls through launched incompatible candidate to the next sidecar',
+    () async {
+      final listenPort = await _reservePort();
+      final listenAddress = '127.0.0.1:$listenPort';
+      final client = ControlPlaneClient(
+        baseUri: Uri.parse('http://$listenAddress'),
+      );
+      final supervisor = DesktopHostSupervisor(
+        client: client,
+        listenAddress: listenAddress,
+        locator: _StaticLocator(const <SidecarLaunchSpec>[
+          SidecarLaunchSpec(
+            executable: 'clientd-a',
+            description: 'bad-sidecar',
+          ),
+          SidecarLaunchSpec(
+            executable: 'clientd-b',
+            description: 'good-sidecar',
+          ),
+        ]),
+        starter: (SidecarLaunchSpec spec) async {
+          final host = await HttpServer.bind(
+            InternetAddress.loopbackIPv4,
+            listenPort,
+          );
+          host.listen((HttpRequest request) async {
+            if (request.uri.path == '/v1/host') {
+              request.response.headers.contentType = ContentType.json;
+              if (spec.description == 'bad-sidecar') {
+                request.response.write(
+                  jsonEncode(<String, dynamic>{
+                    'contract_version': '0',
+                    'version': '0',
+                    'build': <String, dynamic>{
+                      'product': 'vk-turn-proxy-go',
+                      'version': '0.0.9',
+                      'build_number': '7',
+                      'revision': 'badcafe12345',
+                      'role': 'clientd',
+                      'target': 'linux/amd64',
+                    },
+                    'capabilities': <String>['profiles'],
+                  }),
+                );
+              } else {
+                request.response.write(
+                  jsonEncode(<String, dynamic>{
+                    'contract_version': '1',
+                    'version': '1',
+                    'build': <String, dynamic>{
+                      'product': 'vk-turn-proxy-go',
+                      'version': '0.1.0',
+                      'build_number': '1',
+                      'revision': 'deadbeefcafe',
+                      'role': 'clientd',
+                      'target': 'linux/amd64',
+                    },
+                    'capabilities': <String>[
+                      'profiles',
+                      'sessions',
+                      'challenges',
+                      'diagnostics',
+                      'event_stream',
+                      'desktop_sidecar',
+                    ],
+                  }),
+                );
+              }
+              await request.response.close();
+              return;
+            }
 
-          if (spec.description == 'bad-sidecar') {
-            request.response.statusCode = HttpStatus.conflict;
+            if (request.uri.path != '/v1/negotiate') {
+              request.response.statusCode = HttpStatus.notFound;
+              await request.response.close();
+              return;
+            }
+
+            if (spec.description == 'bad-sidecar') {
+              request.response.statusCode = HttpStatus.conflict;
+              request.response.headers.contentType = ContentType.json;
+              request.response.write(
+                jsonEncode(<String, dynamic>{
+                  'code': 'incompatible_host',
+                  'message':
+                      'incompatible client control host version=0 supported=1',
+                }),
+              );
+              await request.response.close();
+              return;
+            }
+
             request.response.headers.contentType = ContentType.json;
             request.response.write(
               jsonEncode(<String, dynamic>{
-                'code': 'incompatible_host',
-                'message': 'incompatible client control host version=0 supported=1',
+                'contract_version': '1',
+                'version': '1',
+                'build': <String, dynamic>{
+                  'product': 'vk-turn-proxy-go',
+                  'version': '0.1.0',
+                  'build_number': '1',
+                  'revision': 'deadbeefcafe',
+                  'role': 'clientd',
+                  'target': 'linux/amd64',
+                },
+                'capabilities': <String>[
+                  'profiles',
+                  'sessions',
+                  'challenges',
+                  'diagnostics',
+                  'event_stream',
+                  'desktop_sidecar',
+                ],
               }),
             );
             await request.response.close();
-            return;
-          }
+          });
+          return _ServerManagedProcess(host);
+        },
+      );
+      addTearDown(supervisor.dispose);
 
-          request.response.headers.contentType = ContentType.json;
-          request.response.write(
-            jsonEncode(<String, dynamic>{
-              'version': '1',
-              'capabilities': <String>[
-                'profiles',
-                'sessions',
-                'challenges',
-                'diagnostics',
-                'event_stream',
-                'desktop_sidecar',
-              ],
-            }),
-          );
-          await request.response.close();
-        });
-        return _ServerManagedProcess(host);
-      },
-    );
-    addTearDown(supervisor.dispose);
-
-    final result = await supervisor.ensureReady();
-    expect(result.isReady, isTrue);
-    expect(result.launched, isTrue);
-    expect(result.launchSpec?.description, 'good-sidecar');
-  });
+      final result = await supervisor.ensureReady();
+      expect(result.isReady, isTrue);
+      expect(result.launched, isTrue);
+      expect(result.launchSpec?.description, 'good-sidecar');
+    },
+  );
 
   test('macOS bundled sidecar path resolves inside Contents/Frameworks', () {
     expect(
@@ -189,11 +286,13 @@ class _ServerManagedProcess implements ManagedSidecarProcess {
 
   @override
   bool kill([ProcessSignal signal = ProcessSignal.sigterm]) {
-    unawaited(_server.close(force: true).whenComplete(() {
-      if (!_exitCode.isCompleted) {
-        _exitCode.complete(0);
-      }
-    }));
+    unawaited(
+      _server.close(force: true).whenComplete(() {
+        if (!_exitCode.isCompleted) {
+          _exitCode.complete(0);
+        }
+      }),
+    );
     return true;
   }
 }

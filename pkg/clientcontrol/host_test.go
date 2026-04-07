@@ -61,6 +61,24 @@ func (c fakeContinuation) Complete(context.Context) (*provider.BrowserContinuati
 
 func (c fakeContinuation) Close() error { return nil }
 
+func TestHostInfoExposesContractVersionAndBuildIdentity(t *testing.T) {
+	host := New(WithBuildIdentity(testBuildIdentity()))
+
+	info := host.Info()
+	if info.ContractVersion != ContractVersion {
+		t.Fatalf("contract_version = %q, want %q", info.ContractVersion, ContractVersion)
+	}
+	if info.Version != ContractVersion {
+		t.Fatalf("version alias = %q, want %q", info.Version, ContractVersion)
+	}
+	if info.Build.Version != "0.1.0" {
+		t.Fatalf("build version = %q, want 0.1.0", info.Build.Version)
+	}
+	if info.Build.BuildNumber != "1" {
+		t.Fatalf("build number = %q, want 1", info.Build.BuildNumber)
+	}
+}
+
 func TestHostNegotiateRejectsIncompatibleVersionAndCapability(t *testing.T) {
 	host := New()
 
@@ -81,6 +99,7 @@ func TestHostNegotiateRejectsIncompatibleVersionAndCapability(t *testing.T) {
 func TestHostStartsReadySessionAndExportsDiagnostics(t *testing.T) {
 	host := New(
 		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+		WithBuildIdentity(testBuildIdentity()),
 		WithSessionIDSource(func() string { return "session-ready" }),
 		withRegistry(provider.NewRegistry(fakeAdapter{
 			name: "generic-turn",
@@ -157,6 +176,12 @@ func TestHostStartsReadySessionAndExportsDiagnostics(t *testing.T) {
 	}
 	if !strings.Contains(diagnostics.Metrics, "vk_turn_proxy_runtime_session_starts_total") {
 		t.Fatalf("diagnostics metrics missing session starts:\n%s", diagnostics.Metrics)
+	}
+	if diagnostics.ContractVersion != ContractVersion {
+		t.Fatalf("diagnostics contract_version = %q, want %q", diagnostics.ContractVersion, ContractVersion)
+	}
+	if diagnostics.HostBuild.Version != "0.1.0" {
+		t.Fatalf("diagnostics host build version = %q, want 0.1.0", diagnostics.HostBuild.Version)
 	}
 }
 
@@ -328,6 +353,19 @@ func waitForEvent(t *testing.T, events <-chan Event, eventType EventType) Event 
 				return event
 			}
 		}
+	}
+}
+
+func testBuildIdentity() BuildIdentity {
+	return BuildIdentity{
+		Product:     "vk-turn-proxy-go",
+		Version:     "0.1.0",
+		BuildNumber: "1",
+		Revision:    "deadbeefcafe",
+		Dirty:       true,
+		BuiltAt:     "2026-04-07T12:00:00Z",
+		Role:        "clientd",
+		Target:      "linux/amd64",
 	}
 }
 

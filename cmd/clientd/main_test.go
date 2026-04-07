@@ -66,6 +66,15 @@ func TestRunClientdServesHostInfo(t *testing.T) {
 	if info.Version != clientcontrol.ContractVersion {
 		t.Fatalf("version = %q, want %q", info.Version, clientcontrol.ContractVersion)
 	}
+	if info.ContractVersion != clientcontrol.ContractVersion {
+		t.Fatalf("contract_version = %q, want %q", info.ContractVersion, clientcontrol.ContractVersion)
+	}
+	if info.Build.Product == "" {
+		t.Fatal("expected host build product")
+	}
+	if info.Build.Version == "" {
+		t.Fatal("expected host build version")
+	}
 
 	cancel()
 	select {

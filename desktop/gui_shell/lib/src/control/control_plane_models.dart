@@ -109,15 +109,113 @@ enum EventType {
   }
 }
 
+class BuildIdentity {
+  const BuildIdentity({
+    required this.product,
+    required this.version,
+    required this.buildNumber,
+    this.revision = '',
+    this.dirty = false,
+    this.builtAt = '',
+    this.role = '',
+    this.target = '',
+  });
+
+  static const BuildIdentity unknown = BuildIdentity(
+    product: 'vk-turn-proxy-go',
+    version: 'unknown',
+    buildNumber: '0',
+  );
+
+  factory BuildIdentity.fromJson(Map<String, dynamic> json) {
+    return BuildIdentity(
+      product: json['product'] as String? ?? 'vk-turn-proxy-go',
+      version: json['version'] as String? ?? 'unknown',
+      buildNumber: '${json['build_number'] ?? '0'}',
+      revision: json['revision'] as String? ?? '',
+      dirty: json['dirty'] as bool? ?? false,
+      builtAt: json['built_at'] as String? ?? '',
+      role: json['role'] as String? ?? '',
+      target: json['target'] as String? ?? '',
+    );
+  }
+
+  final String product;
+  final String version;
+  final String buildNumber;
+  final String revision;
+  final bool dirty;
+  final String builtAt;
+  final String role;
+  final String target;
+
+  bool get isKnown => version.isNotEmpty && version != 'unknown';
+
+  String get versionLabel => '$version+$buildNumber';
+
+  String get shortLabel {
+    final buffer = StringBuffer(versionLabel);
+    if (revision.isNotEmpty) {
+      buffer.write(' @$revision');
+      if (dirty) {
+        buffer.write('*');
+      }
+    }
+    return buffer.toString();
+  }
+
+  BuildIdentity copyWith({
+    String? product,
+    String? version,
+    String? buildNumber,
+    String? revision,
+    bool? dirty,
+    String? builtAt,
+    String? role,
+    String? target,
+  }) {
+    return BuildIdentity(
+      product: product ?? this.product,
+      version: version ?? this.version,
+      buildNumber: buildNumber ?? this.buildNumber,
+      revision: revision ?? this.revision,
+      dirty: dirty ?? this.dirty,
+      builtAt: builtAt ?? this.builtAt,
+      role: role ?? this.role,
+      target: target ?? this.target,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{
+      'product': product,
+      'version': version,
+      'build_number': buildNumber,
+      'revision': revision.isEmpty ? null : revision,
+      'dirty': dirty ? true : null,
+      'built_at': builtAt.isEmpty ? null : builtAt,
+      'role': role.isEmpty ? null : role,
+      'target': target.isEmpty ? null : target,
+    });
+  }
+}
+
 class HostInfo {
   const HostInfo({
-    required this.version,
+    required this.contractVersion,
+    required this.build,
     required this.capabilities,
   });
 
   factory HostInfo.fromJson(Map<String, dynamic> json) {
     return HostInfo(
-      version: json['version'] as String? ?? '',
+      contractVersion:
+          json['contract_version'] as String? ??
+          json['version'] as String? ??
+          '',
+      build: json['build'] is Map<String, dynamic>
+          ? BuildIdentity.fromJson(json['build'] as Map<String, dynamic>)
+          : BuildIdentity.unknown,
       capabilities: (json['capabilities'] as List<dynamic>? ?? const [])
           .map((dynamic raw) => Capability.fromJson(raw as String? ?? ''))
           .whereType<Capability>()
@@ -125,16 +223,15 @@ class HostInfo {
     );
   }
 
-  final String version;
+  final String contractVersion;
+  final BuildIdentity build;
   final List<Capability> capabilities;
+
+  String get version => contractVersion;
 }
 
 class FailureInfo {
-  const FailureInfo({
-    this.stage,
-    this.message,
-    this.notImplemented = false,
-  });
+  const FailureInfo({this.stage, this.message, this.notImplemented = false});
 
   factory FailureInfo.fromJson(Map<String, dynamic> json) {
     return FailureInfo(
@@ -262,7 +359,9 @@ class ProfileRecord {
     return ProfileRecord(
       id: json['id'] as String? ?? '',
       name: json['name'] as String? ?? '',
-      spec: ProfileSpec.fromJson(json['spec'] as Map<String, dynamic>? ?? const <String, dynamic>{}),
+      spec: ProfileSpec.fromJson(
+        json['spec'] as Map<String, dynamic>? ?? const <String, dynamic>{},
+      ),
     );
   }
 
@@ -270,11 +369,7 @@ class ProfileRecord {
   final String name;
   final ProfileSpec spec;
 
-  ProfileRecord copyWith({
-    String? id,
-    String? name,
-    ProfileSpec? spec,
-  }) {
+  ProfileRecord copyWith({String? id, String? name, ProfileSpec? spec}) {
     return ProfileRecord(
       id: id ?? this.id,
       name: name ?? this.name,
@@ -314,7 +409,9 @@ class ChallengeRecord {
       kind: json['kind'] as String? ?? '',
       prompt: json['prompt'] as String?,
       openUrl: json['open_url'] as String?,
-      status: ChallengeStatus.fromJson(json['status'] as String?) ?? ChallengeStatus.pending,
+      status:
+          ChallengeStatus.fromJson(json['status'] as String?) ??
+          ChallengeStatus.pending,
       createdAt: _readTimestamp(json['created_at']),
       updatedAt: _readTimestamp(json['updated_at']),
     );
@@ -331,10 +428,7 @@ class ChallengeRecord {
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  ChallengeRecord copyWith({
-    ChallengeStatus? status,
-    DateTime? updatedAt,
-  }) {
+  ChallengeRecord copyWith({ChallengeStatus? status, DateTime? updatedAt}) {
     return ChallengeRecord(
       id: id,
       sessionId: sessionId,
@@ -384,15 +478,21 @@ class SessionRecord {
       id: json['id'] as String? ?? '',
       profileId: json['profile_id'] as String?,
       profileName: json['profile_name'] as String?,
-      profile: ProfileSpec.fromJson(json['profile'] as Map<String, dynamic>? ?? const <String, dynamic>{}),
-      state: SessionState.fromJson(json['state'] as String?) ?? SessionState.starting,
+      profile: ProfileSpec.fromJson(
+        json['profile'] as Map<String, dynamic>? ?? const <String, dynamic>{},
+      ),
+      state:
+          SessionState.fromJson(json['state'] as String?) ??
+          SessionState.starting,
       failure: json['failure'] is Map<String, dynamic>
           ? FailureInfo.fromJson(json['failure'] as Map<String, dynamic>)
           : null,
       activeChallengeId: json['active_challenge_id'] as String?,
       startedAt: _readTimestamp(json['started_at']),
       updatedAt: _readTimestamp(json['updated_at']),
-      stoppedAt: json['stopped_at'] == null ? null : _readTimestamp(json['stopped_at']),
+      stoppedAt: json['stopped_at'] == null
+          ? null
+          : _readTimestamp(json['stopped_at']),
     );
   }
 
@@ -465,7 +565,9 @@ class EventRecord {
       id: json['id'] as String? ?? '',
       timestamp: _readTimestamp(json['timestamp']),
       sessionId: json['session_id'] as String? ?? '',
-      type: EventType.fromJson(json['type'] as String?) ?? EventType.sessionStarting,
+      type:
+          EventType.fromJson(json['type'] as String?) ??
+          EventType.sessionStarting,
       state: SessionState.fromJson(json['state'] as String?),
       stage: json['stage'] as String?,
       message: json['message'] as String?,
@@ -504,7 +606,9 @@ class EventRecord {
       buffer.write(' | $message');
     }
     if (challenge != null) {
-      buffer.write(' | challenge=${challenge!.kind}/${challenge!.status.value}');
+      buffer.write(
+        ' | challenge=${challenge!.kind}/${challenge!.status.value}',
+      );
     }
     return buffer.toString();
   }
@@ -533,18 +637,35 @@ class DiagnosticsBundle {
     required this.events,
     required this.challenges,
     required this.metrics,
+    this.guiBuild,
+    this.hostBuild = BuildIdentity.unknown,
+    this.contractVersion = '',
   });
 
   factory DiagnosticsBundle.fromJson(Map<String, dynamic> json) {
     return DiagnosticsBundle(
-      session: SessionRecord.fromJson(json['session'] as Map<String, dynamic>? ?? const <String, dynamic>{}),
+      session: SessionRecord.fromJson(
+        json['session'] as Map<String, dynamic>? ?? const <String, dynamic>{},
+      ),
       events: (json['events'] as List<dynamic>? ?? const [])
-          .map((dynamic raw) => EventRecord.fromJson(raw as Map<String, dynamic>))
+          .map(
+            (dynamic raw) => EventRecord.fromJson(raw as Map<String, dynamic>),
+          )
           .toList(growable: false),
       challenges: (json['challenges'] as List<dynamic>? ?? const [])
-          .map((dynamic raw) => ChallengeRecord.fromJson(raw as Map<String, dynamic>))
+          .map(
+            (dynamic raw) =>
+                ChallengeRecord.fromJson(raw as Map<String, dynamic>),
+          )
           .toList(growable: false),
       metrics: json['metrics'] as String? ?? '',
+      guiBuild: json['gui_build'] is Map<String, dynamic>
+          ? BuildIdentity.fromJson(json['gui_build'] as Map<String, dynamic>)
+          : null,
+      hostBuild: json['host_build'] is Map<String, dynamic>
+          ? BuildIdentity.fromJson(json['host_build'] as Map<String, dynamic>)
+          : BuildIdentity.unknown,
+      contractVersion: json['contract_version'] as String? ?? '',
     );
   }
 
@@ -552,14 +673,43 @@ class DiagnosticsBundle {
   final List<EventRecord> events;
   final List<ChallengeRecord> challenges;
   final String metrics;
+  final BuildIdentity? guiBuild;
+  final BuildIdentity hostBuild;
+  final String contractVersion;
+
+  DiagnosticsBundle copyWith({
+    SessionRecord? session,
+    List<EventRecord>? events,
+    List<ChallengeRecord>? challenges,
+    String? metrics,
+    BuildIdentity? guiBuild,
+    bool clearGuiBuild = false,
+    BuildIdentity? hostBuild,
+    String? contractVersion,
+  }) {
+    return DiagnosticsBundle(
+      session: session ?? this.session,
+      events: events ?? this.events,
+      challenges: challenges ?? this.challenges,
+      metrics: metrics ?? this.metrics,
+      guiBuild: clearGuiBuild ? null : (guiBuild ?? this.guiBuild),
+      hostBuild: hostBuild ?? this.hostBuild,
+      contractVersion: contractVersion ?? this.contractVersion,
+    );
+  }
 
   Map<String, dynamic> toJson() {
-    return <String, dynamic>{
+    return _compact(<String, dynamic>{
       'session': session.toJson(),
       'events': events.map((event) => event.toJson()).toList(growable: false),
-      'challenges': challenges.map((challenge) => challenge.toJson()).toList(growable: false),
+      'challenges': challenges
+          .map((challenge) => challenge.toJson())
+          .toList(growable: false),
       'metrics': metrics,
-    };
+      'gui_build': guiBuild?.toJson(),
+      'host_build': hostBuild.toJson(),
+      'contract_version': contractVersion.isEmpty ? null : contractVersion,
+    });
   }
 
   String toPrettyJson() {

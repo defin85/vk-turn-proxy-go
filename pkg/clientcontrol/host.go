@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/defin85/vk-turn-proxy-go/internal/buildinfo"
 	"github.com/defin85/vk-turn-proxy-go/internal/config"
 	"github.com/defin85/vk-turn-proxy-go/internal/observe"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
@@ -68,6 +69,7 @@ const (
 type hostConfig struct {
 	logger            *slog.Logger
 	registry          *provider.Registry
+	build             BuildIdentity
 	now               func() time.Time
 	newID             func() string
 	newSessionID      func() string
@@ -84,6 +86,7 @@ type Host struct {
 	mu                sync.Mutex
 	logger            *slog.Logger
 	registry          *provider.Registry
+	build             BuildIdentity
 	now               func() time.Time
 	newID             func() string
 	newSessionID      func() string
@@ -134,6 +137,7 @@ func New(opts ...Option) *Host {
 	cfg := hostConfig{
 		logger:            slog.Default(),
 		registry:          provider.NewRegistry(genericturn.New(), vk.New()),
+		build:             toBuildIdentity(buildinfo.Current(buildinfo.Options{Role: "clientd"})),
 		now:               time.Now,
 		newID:             observe.NewSessionID,
 		newSessionID:      observe.NewSessionID,
@@ -174,6 +178,7 @@ func New(opts ...Option) *Host {
 	return &Host{
 		logger:            cfg.logger,
 		registry:          cfg.registry,
+		build:             cfg.build,
 		now:               cfg.now,
 		newID:             cfg.newID,
 		newSessionID:      cfg.newSessionID,
@@ -194,6 +199,12 @@ func New(opts ...Option) *Host {
 func WithLogger(logger *slog.Logger) Option {
 	return func(cfg *hostConfig) {
 		cfg.logger = logger
+	}
+}
+
+func WithBuildIdentity(identity BuildIdentity) Option {
+	return func(cfg *hostConfig) {
+		cfg.build = identity
 	}
 }
 
@@ -249,7 +260,9 @@ func withContinuationStarter(start func(context.Context, provider.InteractiveCha
 
 func (h *Host) Info() HostInfo {
 	return HostInfo{
-		Version: ContractVersion,
+		Version:         ContractVersion,
+		ContractVersion: ContractVersion,
+		Build:           h.build,
 		Capabilities: []Capability{
 			CapabilityChallenges,
 			CapabilityDesktopSidecar,
@@ -267,14 +280,14 @@ func (h *Host) Negotiate(req NegotiateRequest) (HostInfo, error) {
 	if len(req.SupportedVersions) > 0 {
 		compatible := false
 		for _, version := range req.SupportedVersions {
-			if strings.TrimSpace(version) == info.Version {
+			if strings.TrimSpace(version) == info.ContractVersion {
 				compatible = true
 				break
 			}
 		}
 		if !compatible {
 			return HostInfo{}, &IncompatibleHostError{
-				Version:           info.Version,
+				Version:           info.ContractVersion,
 				SupportedVersions: append([]string(nil), req.SupportedVersions...),
 			}
 		}
@@ -283,7 +296,7 @@ func (h *Host) Negotiate(req NegotiateRequest) (HostInfo, error) {
 	missing := missingCapabilities(info.Capabilities, req.RequiredCapabilities)
 	if len(missing) > 0 {
 		return HostInfo{}, &IncompatibleHostError{
-			Version:             info.Version,
+			Version:             info.ContractVersion,
 			MissingCapabilities: missing,
 		}
 	}
@@ -485,11 +498,26 @@ func (h *Host) ExportDiagnostics(sessionID string) (Diagnostics, error) {
 	events := append([]Event(nil), managed.events...)
 	challenges := append([]Challenge(nil), managed.challenges...)
 	return Diagnostics{
-		Session:    managed.snapshot,
-		Events:     events,
-		Challenges: challenges,
-		Metrics:    managed.metrics.Prometheus(),
+		Session:         managed.snapshot,
+		Events:          events,
+		Challenges:      challenges,
+		Metrics:         managed.metrics.Prometheus(),
+		HostBuild:       h.build,
+		ContractVersion: ContractVersion,
 	}, nil
+}
+
+func toBuildIdentity(identity buildinfo.Identity) BuildIdentity {
+	return BuildIdentity{
+		Product:     identity.Product,
+		Version:     identity.Version,
+		BuildNumber: identity.BuildNumber,
+		Revision:    identity.Revision,
+		Dirty:       identity.Dirty,
+		BuiltAt:     identity.BuiltAt,
+		Role:        identity.Role,
+		Target:      identity.Target,
+	}
 }
 
 func (h *Host) Subscribe(buffer int) (<-chan Event, func()) {

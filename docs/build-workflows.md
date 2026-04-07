@@ -1,6 +1,7 @@
 # Build Workflows
 
 Use repo-owned scripts for reproducible local and CI builds instead of ad-hoc commands.
+The canonical human-facing product version source for supported artifacts is `version.json` at the repository root.
 
 ## Go artifacts from WSL
 
@@ -17,6 +18,7 @@ Build a narrower target set when needed:
 ```
 
 Artifacts are staged under `dist/go/<goos>-<goarch>/`.
+Repo-owned Go builds stamp product version, build number, revision, dirty state, build timestamp, and artifact role/target into the binaries.
 The default matrix currently includes:
 - `linux/amd64`
 - `windows/amd64`
@@ -45,6 +47,7 @@ That workflow:
 4. stages the packaged bundle under `dist/windows-gui/`
 
 The Windows GUI package includes a sibling `clientd.exe` next to `gui_shell.exe`.
+The workflow also validates that `desktop/gui_shell/pubspec.yaml` matches `version.json` before packaging.
 
 ## Native Windows GUI build
 
@@ -59,6 +62,7 @@ The script fails closed if:
 - the pinned Flutter version is missing or mismatched
 - `flutter doctor -v` does not confirm the required Windows desktop toolchain
 - `dist\go\windows-amd64\clientd.exe` is missing
+- `desktop\gui_shell\pubspec.yaml` does not match the canonical version in `version.json`
 
 ## Local entrypoints
 

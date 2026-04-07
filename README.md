@@ -98,6 +98,7 @@ make build-gui-windows
 ```
 
 The full build workflow contract lives in `docs/build-workflows.md`.
+Supported artifact builds derive their human-facing product version from the repo root `version.json`.
 
 Run the server baseline:
 
@@ -192,6 +193,11 @@ If a previously ready host disappears, the shell blocks session actions, reports
 Diagnostics export writes one JSON bundle per session under:
 - Linux and macOS: `~/.vk-turn-proxy-go/diagnostics`
 - Windows: `%APPDATA%\\vk-turn-proxy-go\\diagnostics`
+
+The desktop banner labels three separate version concepts:
+- the local GUI build identity
+- the connected host build identity
+- the control-plane contract version
 
 Browser challenge continuation stays host-driven in this change.
 The GUI triggers the typed challenge continue/cancel operations and surfaces the resulting session events, but it does not embed provider-specific browser flows.

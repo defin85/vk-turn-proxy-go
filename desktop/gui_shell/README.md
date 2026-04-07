@@ -27,6 +27,7 @@ The current shell is verified on Linux.
 The project also includes generated `macos/` and `windows/` runners so packaging and sidecar placement can follow the same control-plane contract there.
 
 The pinned Flutter SDK version for this project is stored in `desktop/gui_shell/.flutter-version`.
+The canonical product version source for supported builds is `version.json` at the repository root.
 
 For Windows packaging from the canonical WSL checkout, use the repo-owned wrapper instead of running Flutter directly from `\\wsl.localhost\...`:
 
@@ -49,6 +50,7 @@ The required host capabilities for this shell are:
 - `event_stream`
 
 If negotiation fails because the host is missing one of those capabilities or reports an incompatible version, the shell blocks session management and reports the incompatibility explicitly.
+When host metadata is available, the banner shows the local GUI build identity, the connected host build identity, and the control-plane contract version as distinct values.
 
 ## Sidecar discovery order
 
@@ -105,3 +107,4 @@ Default export paths:
 - Windows: `%APPDATA%\\vk-turn-proxy-go\\diagnostics`
 
 Diagnostics bundles come from the host and include the typed session snapshot, recent events, active challenges, and metrics text for that session.
+On export, the GUI also persists its own build identity alongside the host build identity and contract version so support bundles preserve the same version context shown in the shell.

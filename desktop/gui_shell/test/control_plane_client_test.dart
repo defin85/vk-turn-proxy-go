@@ -16,7 +16,17 @@ void main() {
           request.response.headers.contentType = ContentType.json;
           request.response.write(
             jsonEncode(<String, dynamic>{
+              'contract_version': '1',
               'version': '1',
+              'build': <String, dynamic>{
+                'product': 'vk-turn-proxy-go',
+                'version': '0.1.0',
+                'build_number': '1',
+                'revision': 'deadbeefcafe',
+                'dirty': true,
+                'role': 'clientd',
+                'target': 'windows/amd64',
+              },
               'capabilities': <String>[
                 'profiles',
                 'sessions',
@@ -30,7 +40,10 @@ void main() {
           await request.response.close();
           return;
         case '/v1/events':
-          request.response.headers.contentType = ContentType('application', 'x-ndjson');
+          request.response.headers.contentType = ContentType(
+            'application',
+            'x-ndjson',
+          );
           request.response.write(
             jsonEncode(<String, dynamic>{
               'id': 'event-1',
@@ -87,7 +100,8 @@ void main() {
         Capability.sessions,
       ],
     );
-    expect(info.version, '1');
+    expect(info.contractVersion, '1');
+    expect(info.build.version, '0.1.0');
     expect(info.capabilities, contains(Capability.desktopSidecar));
 
     final events = await client.events().toList();

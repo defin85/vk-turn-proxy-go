@@ -5,12 +5,7 @@ import 'dart:io';
 import 'package:gui_shell/src/control/control_plane_client.dart';
 import 'package:gui_shell/src/control/control_plane_models.dart';
 
-enum HostLifecycleState {
-  ready,
-  unavailable,
-  incompatible,
-  failed,
-}
+enum HostLifecycleState { ready, unavailable, incompatible, failed }
 
 class HostConnectionResult {
   const HostConnectionResult({
@@ -126,7 +121,8 @@ abstract class ManagedSidecarProcess {
   bool kill([ProcessSignal signal]);
 }
 
-typedef SidecarStarter = Future<ManagedSidecarProcess> Function(SidecarLaunchSpec spec);
+typedef SidecarStarter =
+    Future<ManagedSidecarProcess> Function(SidecarLaunchSpec spec);
 
 class DesktopHostSupervisor implements HostSupervisor {
   DesktopHostSupervisor({
@@ -169,7 +165,8 @@ class DesktopHostSupervisor implements HostSupervisor {
     if (candidates.isEmpty) {
       return const HostConnectionResult(
         state: HostLifecycleState.unavailable,
-        message: 'No compatible local host was found and no launch candidates are configured.',
+        message:
+            'No compatible local host was found and no launch candidates are configured.',
       );
     }
 
@@ -210,23 +207,19 @@ class DesktopHostSupervisor implements HostSupervisor {
       return;
     }
     process.kill(ProcessSignal.sigterm);
-    await process.exitCode.timeout(const Duration(seconds: 5), onTimeout: () {
-      process.kill(ProcessSignal.sigkill);
-      return -1;
-    });
+    await process.exitCode.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () {
+        process.kill(ProcessSignal.sigkill);
+        return -1;
+      },
+    );
   }
 
   Future<HostConnectionResult> _probeHost() async {
+    HostInfo? discoveredInfo;
     try {
-      final info = await client.negotiate(
-        supportedVersions: supportedVersions,
-        requiredCapabilities: requiredCapabilities,
-      );
-      return HostConnectionResult(
-        state: HostLifecycleState.ready,
-        info: info,
-        message: 'Connected to local host $listenAddress',
-      );
+      discoveredInfo = await client.hostInfo();
     } on ControlPlaneError catch (error) {
       if (error.incompatibleHost) {
         return HostConnectionResult(
@@ -234,9 +227,30 @@ class DesktopHostSupervisor implements HostSupervisor {
           message: error.message,
         );
       }
+    }
+
+    try {
+      final negotiated = await client.negotiate(
+        supportedVersions: supportedVersions,
+        requiredCapabilities: requiredCapabilities,
+      );
+      return HostConnectionResult(
+        state: HostLifecycleState.ready,
+        info: negotiated,
+        message: 'Connected to local host $listenAddress',
+      );
+    } on ControlPlaneError catch (error) {
+      if (error.incompatibleHost) {
+        return HostConnectionResult(
+          state: HostLifecycleState.incompatible,
+          message: error.message,
+          info: discoveredInfo,
+        );
+      }
       return HostConnectionResult(
         state: HostLifecycleState.unavailable,
         message: error.message,
+        info: discoveredInfo,
       );
     }
   }
@@ -261,6 +275,7 @@ class DesktopHostSupervisor implements HostSupervisor {
         return HostConnectionResult(
           state: HostLifecycleState.incompatible,
           message: result.message,
+          info: result.info,
           launchSpec: spec,
         );
       }
@@ -272,14 +287,16 @@ class DesktopHostSupervisor implements HostSupervisor {
       if (exit != _processStillRunning) {
         return HostConnectionResult(
           state: HostLifecycleState.failed,
-          message: '${spec.description} exited with code $exit before the control plane became ready.',
+          message:
+              '${spec.description} exited with code $exit before the control plane became ready.',
           launchSpec: spec,
         );
       }
     }
     return HostConnectionResult(
       state: HostLifecycleState.failed,
-      message: '${spec.description} did not become ready within ${startupTimeout.inSeconds}s.',
+      message:
+          '${spec.description} did not become ready within ${startupTimeout.inSeconds}s.',
       launchSpec: spec,
     );
   }
@@ -302,7 +319,9 @@ class _SystemManagedSidecarProcess implements ManagedSidecarProcess {
   }
 }
 
-Future<ManagedSidecarProcess> _startSystemProcess(SidecarLaunchSpec spec) async {
+Future<ManagedSidecarProcess> _startSystemProcess(
+  SidecarLaunchSpec spec,
+) async {
   final process = await Process.start(
     spec.executable,
     spec.arguments,
@@ -311,16 +330,25 @@ Future<ManagedSidecarProcess> _startSystemProcess(SidecarLaunchSpec spec) async 
   return _SystemManagedSidecarProcess(process);
 }
 
-String macOSBundledSidecarPath(String resolvedExecutablePath, String executableName) {
+String macOSBundledSidecarPath(
+  String resolvedExecutablePath,
+  String executableName,
+) {
   final resolved = File(resolvedExecutablePath);
-  return _join(<String>[resolved.parent.parent.path, 'Frameworks', executableName]);
+  return _join(<String>[
+    resolved.parent.parent.path,
+    'Frameworks',
+    executableName,
+  ]);
 }
 
 Directory? _findRepoRoot(Directory start) {
   Directory current = start.absolute;
   while (true) {
     if (File(_join(<String>[current.path, 'go.mod'])).existsSync() &&
-        Directory(_join(<String>[current.path, 'cmd', 'clientd'])).existsSync()) {
+        Directory(
+          _join(<String>[current.path, 'cmd', 'clientd']),
+        ).existsSync()) {
       return current;
     }
     if (current.parent.path == current.path) {
@@ -331,7 +359,9 @@ Directory? _findRepoRoot(Directory start) {
 }
 
 String _join(List<String> parts) {
-  final filtered = parts.where((String part) => part.isNotEmpty).toList(growable: false);
+  final filtered = parts
+      .where((String part) => part.isNotEmpty)
+      .toList(growable: false);
   if (filtered.isEmpty) {
     return '';
   }
@@ -341,7 +371,8 @@ String _join(List<String> parts) {
       value = '$value${part.replaceFirst(RegExp(r'^[\\/]+'), '')}';
       continue;
     }
-    value = '$value${Platform.pathSeparator}${part.replaceFirst(RegExp(r'^[\\/]+'), '')}';
+    value =
+        '$value${Platform.pathSeparator}${part.replaceFirst(RegExp(r'^[\\/]+'), '')}';
   }
   return value;
 }

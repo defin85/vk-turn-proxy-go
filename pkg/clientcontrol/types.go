@@ -59,8 +59,21 @@ const (
 )
 
 type HostInfo struct {
-	Version      string       `json:"version"`
-	Capabilities []Capability `json:"capabilities"`
+	Version         string        `json:"version,omitempty"`
+	ContractVersion string        `json:"contract_version,omitempty"`
+	Build           BuildIdentity `json:"build"`
+	Capabilities    []Capability  `json:"capabilities"`
+}
+
+type BuildIdentity struct {
+	Product     string `json:"product"`
+	Version     string `json:"version"`
+	BuildNumber string `json:"build_number"`
+	Revision    string `json:"revision,omitempty"`
+	Dirty       bool   `json:"dirty,omitempty"`
+	BuiltAt     string `json:"built_at,omitempty"`
+	Role        string `json:"role,omitempty"`
+	Target      string `json:"target,omitempty"`
 }
 
 type NegotiateRequest struct {
@@ -137,10 +150,13 @@ type Event struct {
 }
 
 type Diagnostics struct {
-	Session    Session     `json:"session"`
-	Events     []Event     `json:"events"`
-	Challenges []Challenge `json:"challenges"`
-	Metrics    string      `json:"metrics"`
+	Session         Session        `json:"session"`
+	Events          []Event        `json:"events"`
+	Challenges      []Challenge    `json:"challenges"`
+	Metrics         string         `json:"metrics"`
+	GUIBuild        *BuildIdentity `json:"gui_build,omitempty"`
+	HostBuild       BuildIdentity  `json:"host_build"`
+	ContractVersion string         `json:"contract_version"`
 }
 
 type StartSessionRequest struct {

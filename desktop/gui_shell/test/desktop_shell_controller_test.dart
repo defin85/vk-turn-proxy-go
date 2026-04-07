@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gui_shell/src/control/control_plane_client.dart';
@@ -8,15 +10,42 @@ import 'package:gui_shell/src/control/desktop_shell_controller.dart';
 import 'package:gui_shell/src/control/profile_draft.dart';
 import 'package:gui_shell/src/control/shell_state_store.dart';
 
+const BuildIdentity _testGuiBuild = BuildIdentity(
+  product: 'vk-turn-proxy-go',
+  version: '0.1.0',
+  buildNumber: '1',
+  revision: 'gui123456789',
+  role: 'gui_shell',
+  target: 'windows/x64',
+);
+
+const BuildIdentity _testHostBuild = BuildIdentity(
+  product: 'vk-turn-proxy-go',
+  version: '0.1.0',
+  buildNumber: '1',
+  revision: 'deadbeefcafe',
+  role: 'clientd',
+  target: 'windows/amd64',
+);
+
+const HostInfo _readyHostInfo = HostInfo(
+  contractVersion: '1',
+  build: _testHostBuild,
+  capabilities: <Capability>[
+    Capability.desktopSidecar,
+    Capability.profiles,
+    Capability.sessions,
+    Capability.challenges,
+    Capability.diagnostics,
+    Capability.eventStream,
+  ],
+);
+
 void main() {
   test('controller restores active challenge details during refresh', () async {
     final api = _FakeControlPlaneApi(
       profiles: <ProfileRecord>[
-        ProfileRecord(
-          id: 'profile-1',
-          name: 'alpha',
-          spec: _profileSpec(),
-        ),
+        ProfileRecord(id: 'profile-1', name: 'alpha', spec: _profileSpec()),
       ],
       sessions: <SessionRecord>[
         SessionRecord(
@@ -47,25 +76,13 @@ void main() {
     );
     final controller = DesktopShellController(
       api: api,
-      supervisor: _SequencedHostSupervisor(
-        const <HostConnectionResult>[
-          HostConnectionResult(
-            state: HostLifecycleState.ready,
-            message: 'ready',
-            info: HostInfo(
-              version: '1',
-              capabilities: <Capability>[
-                Capability.desktopSidecar,
-                Capability.profiles,
-                Capability.sessions,
-                Capability.challenges,
-                Capability.diagnostics,
-                Capability.eventStream,
-              ],
-            ),
-          ),
-        ],
-      ),
+      supervisor: _SequencedHostSupervisor(const <HostConnectionResult>[
+        HostConnectionResult(
+          state: HostLifecycleState.ready,
+          message: 'ready',
+          info: _readyHostInfo,
+        ),
+      ]),
     );
     addTearDown(controller.dispose);
 
@@ -78,289 +95,296 @@ void main() {
     expect(challenge?.prompt, 'continue in browser');
   });
 
-  test('controller clears active challenge after challenge-updated completion event', () async {
-    final api = _FakeControlPlaneApi(
-      profiles: <ProfileRecord>[
-        ProfileRecord(
-          id: 'profile-1',
-          name: 'alpha',
-          spec: _profileSpec(),
-        ),
-      ],
-      sessions: <SessionRecord>[
-        SessionRecord(
-          id: 'session-1',
-          profileId: 'profile-1',
-          profileName: 'alpha',
-          profile: _profileSpec(),
-          state: SessionState.challengeRequired,
-          activeChallengeId: 'challenge-1',
-          startedAt: DateTime.utc(2026, 4, 5, 17, 0),
-          updatedAt: DateTime.utc(2026, 4, 5, 17, 1),
-        ),
-      ],
-      challenges: <String, ChallengeRecord>{
-        'challenge-1': ChallengeRecord(
-          id: 'challenge-1',
-          sessionId: 'session-1',
-          provider: 'vk',
-          stage: 'provider_resolve',
-          kind: 'browser',
-          prompt: 'continue in browser',
-          openUrl: 'https://vk.com/call/join/test',
-          status: ChallengeStatus.pending,
-          createdAt: DateTime.utc(2026, 4, 5, 17, 0),
-          updatedAt: DateTime.utc(2026, 4, 5, 17, 1),
-        ),
-      },
-    );
-    final controller = DesktopShellController(
-      api: api,
-      supervisor: _SequencedHostSupervisor(
-        const <HostConnectionResult>[
+  test(
+    'controller clears active challenge after challenge-updated completion event',
+    () async {
+      final api = _FakeControlPlaneApi(
+        profiles: <ProfileRecord>[
+          ProfileRecord(id: 'profile-1', name: 'alpha', spec: _profileSpec()),
+        ],
+        sessions: <SessionRecord>[
+          SessionRecord(
+            id: 'session-1',
+            profileId: 'profile-1',
+            profileName: 'alpha',
+            profile: _profileSpec(),
+            state: SessionState.challengeRequired,
+            activeChallengeId: 'challenge-1',
+            startedAt: DateTime.utc(2026, 4, 5, 17, 0),
+            updatedAt: DateTime.utc(2026, 4, 5, 17, 1),
+          ),
+        ],
+        challenges: <String, ChallengeRecord>{
+          'challenge-1': ChallengeRecord(
+            id: 'challenge-1',
+            sessionId: 'session-1',
+            provider: 'vk',
+            stage: 'provider_resolve',
+            kind: 'browser',
+            prompt: 'continue in browser',
+            openUrl: 'https://vk.com/call/join/test',
+            status: ChallengeStatus.pending,
+            createdAt: DateTime.utc(2026, 4, 5, 17, 0),
+            updatedAt: DateTime.utc(2026, 4, 5, 17, 1),
+          ),
+        },
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(const <HostConnectionResult>[
           HostConnectionResult(
             state: HostLifecycleState.ready,
             message: 'ready',
-            info: HostInfo(
-              version: '1',
-              capabilities: <Capability>[
-                Capability.desktopSidecar,
-                Capability.profiles,
-                Capability.sessions,
-                Capability.challenges,
-                Capability.diagnostics,
-                Capability.eventStream,
-              ],
-            ),
+            info: _readyHostInfo,
           ),
-        ],
-      ),
-    );
-    addTearDown(controller.dispose);
+        ]),
+      );
+      addTearDown(controller.dispose);
 
-    await controller.initialize();
-    api.emitEvent(
-      EventRecord(
-        id: 'event-2',
-        timestamp: DateTime.utc(2026, 4, 5, 17, 2),
-        sessionId: 'session-1',
-        type: EventType.challengeUpdated,
-        challenge: ChallengeRecord(
-          id: 'challenge-1',
+      await controller.initialize();
+      api.emitEvent(
+        EventRecord(
+          id: 'event-2',
+          timestamp: DateTime.utc(2026, 4, 5, 17, 2),
           sessionId: 'session-1',
-          provider: 'vk',
-          stage: 'provider_resolve',
-          kind: 'browser',
-          prompt: 'continue in browser',
-          openUrl: 'https://vk.com/call/join/test',
-          status: ChallengeStatus.completed,
-          createdAt: DateTime.utc(2026, 4, 5, 17, 0),
-          updatedAt: DateTime.utc(2026, 4, 5, 17, 2),
+          type: EventType.challengeUpdated,
+          challenge: ChallengeRecord(
+            id: 'challenge-1',
+            sessionId: 'session-1',
+            provider: 'vk',
+            stage: 'provider_resolve',
+            kind: 'browser',
+            prompt: 'continue in browser',
+            openUrl: 'https://vk.com/call/join/test',
+            status: ChallengeStatus.completed,
+            createdAt: DateTime.utc(2026, 4, 5, 17, 0),
+            updatedAt: DateTime.utc(2026, 4, 5, 17, 2),
+          ),
         ),
-      ),
-    );
+      );
 
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+      await Future<void>.delayed(const Duration(milliseconds: 20));
 
-    expect(controller.sessions.single.activeChallengeId, isEmpty);
-    expect(controller.activeChallengeFor(controller.sessions.single), isNull);
-  });
+      expect(controller.sessions.single.activeChallengeId, isEmpty);
+      expect(controller.activeChallengeFor(controller.sessions.single), isNull);
+    },
+  );
 
-  test('controller blocks and asks the supervisor to recover when host access is lost', () async {
-    final api = _FakeControlPlaneApi(
-      profiles: <ProfileRecord>[
-        ProfileRecord(
-          id: 'profile-1',
-          name: 'alpha',
-          spec: _profileSpec(),
-        ),
-      ],
-      sessions: const <SessionRecord>[],
-    );
-    final supervisor = _SequencedHostSupervisor(
-      const <HostConnectionResult>[
+  test(
+    'controller blocks and asks the supervisor to recover when host access is lost',
+    () async {
+      final api = _FakeControlPlaneApi(
+        profiles: <ProfileRecord>[
+          ProfileRecord(id: 'profile-1', name: 'alpha', spec: _profileSpec()),
+        ],
+        sessions: const <SessionRecord>[],
+      );
+      final supervisor = _SequencedHostSupervisor(const <HostConnectionResult>[
         HostConnectionResult(
           state: HostLifecycleState.ready,
           message: 'ready',
-          info: HostInfo(
-            version: '1',
-            capabilities: <Capability>[
-              Capability.desktopSidecar,
-              Capability.profiles,
-              Capability.sessions,
-              Capability.challenges,
-              Capability.diagnostics,
-              Capability.eventStream,
-            ],
-          ),
+          info: _readyHostInfo,
         ),
         HostConnectionResult(
           state: HostLifecycleState.unavailable,
           message: 'local host disappeared',
         ),
-      ],
-    );
-    final controller = DesktopShellController(
-      api: api,
-      supervisor: supervisor,
-    );
-    addTearDown(controller.dispose);
+      ]);
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: supervisor,
+      );
+      addTearDown(controller.dispose);
 
-    await controller.initialize();
-    api.failReads = true;
+      await controller.initialize();
+      api.failReads = true;
 
-    await controller.refresh();
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+      await controller.refresh();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
 
-    expect(supervisor.calls, 2);
-    expect(controller.status, ShellStatus.blocked);
-    expect(controller.hostConnection?.state, HostLifecycleState.unavailable);
-    expect(controller.notice, contains('local host disappeared'));
-  });
+      expect(supervisor.calls, 2);
+      expect(controller.status, ShellStatus.blocked);
+      expect(controller.hostConnection?.state, HostLifecycleState.unavailable);
+      expect(controller.notice, contains('local host disappeared'));
+    },
+  );
 
-  test('controller does not attempt session mutations while host is blocked', () async {
-    final api = _FakeControlPlaneApi(
-      profiles: <ProfileRecord>[
-        ProfileRecord(
-          id: 'profile-1',
-          name: 'alpha',
-          spec: _profileSpec(),
-        ),
-      ],
-      sessions: const <SessionRecord>[],
-    );
-    final controller = DesktopShellController(
-      api: api,
-      supervisor: _SequencedHostSupervisor(
-        const <HostConnectionResult>[
+  test(
+    'controller does not attempt session mutations while host is blocked',
+    () async {
+      final api = _FakeControlPlaneApi(
+        profiles: <ProfileRecord>[
+          ProfileRecord(id: 'profile-1', name: 'alpha', spec: _profileSpec()),
+        ],
+        sessions: const <SessionRecord>[],
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(const <HostConnectionResult>[
           HostConnectionResult(
             state: HostLifecycleState.unavailable,
             message: 'local host unavailable',
           ),
-        ],
-      ),
-    );
-    addTearDown(controller.dispose);
+        ]),
+      );
+      addTearDown(controller.dispose);
 
-    await controller.initialize();
-    controller.selectProfile('profile-1');
-    await controller.startSelectedProfile();
+      await controller.initialize();
+      controller.selectProfile('profile-1');
+      await controller.startSelectedProfile();
 
-    expect(api.startSessionCalls, 0);
-    expect(controller.notice, contains('local host unavailable'));
-  });
+      expect(api.startSessionCalls, 0);
+      expect(controller.notice, contains('local host unavailable'));
+    },
+  );
 
-  test('controller restores persisted profiles and draft into the host', () async {
-    final persistedProfile = ProfileRecord(
-      id: 'profile-1',
-      name: 'saved',
-      spec: _profileSpec(),
-    );
-    final api = _FakeControlPlaneApi(
-      profiles: const <ProfileRecord>[],
-      sessions: const <SessionRecord>[],
-    );
-    final store = _FakeShellStateStore(
-      loaded: DesktopShellState(
-        profiles: <ProfileRecord>[persistedProfile],
-        selectedProfileId: 'profile-1',
-        draft: ProfileDraft(
-          id: 'profile-1',
-          name: 'saved draft',
-          spec: _profileSpec().copyWith(link: 'generic-turn://saved'),
+  test(
+    'controller restores persisted profiles and draft into the host',
+    () async {
+      final persistedProfile = ProfileRecord(
+        id: 'profile-1',
+        name: 'saved',
+        spec: _profileSpec(),
+      );
+      final api = _FakeControlPlaneApi(
+        profiles: const <ProfileRecord>[],
+        sessions: const <SessionRecord>[],
+      );
+      final store = _FakeShellStateStore(
+        loaded: DesktopShellState(
+          profiles: <ProfileRecord>[persistedProfile],
+          selectedProfileId: 'profile-1',
+          draft: ProfileDraft(
+            id: 'profile-1',
+            name: 'saved draft',
+            spec: _profileSpec().copyWith(link: 'generic-turn://saved'),
+          ),
         ),
-      ),
-    );
-    final controller = DesktopShellController(
-      api: api,
-      supervisor: _SequencedHostSupervisor(
-        const <HostConnectionResult>[
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(const <HostConnectionResult>[
           HostConnectionResult(
             state: HostLifecycleState.ready,
             message: 'ready',
-            info: HostInfo(
-              version: '1',
-              capabilities: <Capability>[
-                Capability.desktopSidecar,
-                Capability.profiles,
-                Capability.sessions,
-                Capability.challenges,
-                Capability.diagnostics,
-                Capability.eventStream,
-              ],
-            ),
+            info: _readyHostInfo,
           ),
+        ]),
+        stateStore: store,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(api.upsertedProfiles, hasLength(1));
+      expect(api.upsertedProfiles.single.id, 'profile-1');
+      expect(controller.profiles, hasLength(1));
+      expect(controller.selectedProfileId, 'profile-1');
+      expect(controller.draft.name, 'saved draft');
+      expect(controller.draft.spec.link, 'generic-turn://saved');
+    },
+  );
+
+  test(
+    'controller persists profiles, selection, and draft mutations',
+    () async {
+      final api = _FakeControlPlaneApi(
+        profiles: <ProfileRecord>[
+          ProfileRecord(id: 'profile-1', name: 'alpha', spec: _profileSpec()),
         ],
-      ),
-      stateStore: store,
-    );
-    addTearDown(controller.dispose);
-
-    await controller.initialize();
-
-    expect(api.upsertedProfiles, hasLength(1));
-    expect(api.upsertedProfiles.single.id, 'profile-1');
-    expect(controller.profiles, hasLength(1));
-    expect(controller.selectedProfileId, 'profile-1');
-    expect(controller.draft.name, 'saved draft');
-    expect(controller.draft.spec.link, 'generic-turn://saved');
-  });
-
-  test('controller persists profiles, selection, and draft mutations', () async {
-    final api = _FakeControlPlaneApi(
-      profiles: <ProfileRecord>[
-        ProfileRecord(
-          id: 'profile-1',
-          name: 'alpha',
-          spec: _profileSpec(),
-        ),
-      ],
-      sessions: const <SessionRecord>[],
-    );
-    final store = _FakeShellStateStore();
-    final controller = DesktopShellController(
-      api: api,
-      supervisor: _SequencedHostSupervisor(
-        const <HostConnectionResult>[
+        sessions: const <SessionRecord>[],
+      );
+      final store = _FakeShellStateStore();
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(const <HostConnectionResult>[
           HostConnectionResult(
             state: HostLifecycleState.ready,
             message: 'ready',
-            info: HostInfo(
-              version: '1',
-              capabilities: <Capability>[
-                Capability.desktopSidecar,
-                Capability.profiles,
-                Capability.sessions,
-                Capability.challenges,
-                Capability.diagnostics,
-                Capability.eventStream,
-              ],
-            ),
+            info: _readyHostInfo,
+          ),
+        ]),
+        stateStore: store,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      controller.selectProfile('profile-1');
+      controller.updateDraft(
+        controller.draft.copyWith(
+          name: 'edited alpha',
+          spec: controller.draft.spec.copyWith(link: 'generic-turn://edited'),
+        ),
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+
+      expect(store.savedStates, isNotEmpty);
+      final saved = store.savedStates.last;
+      expect(saved.profiles, hasLength(1));
+      expect(saved.selectedProfileId, 'profile-1');
+      expect(saved.draft.name, 'edited alpha');
+      expect(saved.draft.spec.link, 'generic-turn://edited');
+    },
+  );
+
+  test(
+    'controller export diagnostics includes gui and host build identity',
+    () async {
+      final api = _FakeControlPlaneApi(
+        profiles: const <ProfileRecord>[],
+        sessions: <SessionRecord>[
+          SessionRecord(
+            id: 'session-1',
+            profile: _profileSpec(),
+            state: SessionState.ready,
+            startedAt: DateTime.utc(2026, 4, 5, 17, 0),
+            updatedAt: DateTime.utc(2026, 4, 5, 17, 1),
           ),
         ],
-      ),
-      stateStore: store,
-    );
-    addTearDown(controller.dispose);
+      );
+      final directory = await Directory.systemTemp.createTemp(
+        'gui-shell-diagnostics-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
 
-    await controller.initialize();
-    controller.selectProfile('profile-1');
-    controller.updateDraft(
-      controller.draft.copyWith(
-        name: 'edited alpha',
-        spec: controller.draft.spec.copyWith(link: 'generic-turn://edited'),
-      ),
-    );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(const <HostConnectionResult>[
+          HostConnectionResult(
+            state: HostLifecycleState.ready,
+            message: 'ready',
+            info: _readyHostInfo,
+          ),
+        ]),
+        diagnosticsDirectoryProvider: () async => directory,
+        clock: () => DateTime.utc(2026, 4, 7, 10, 11, 12),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
 
-    await Future<void>.delayed(const Duration(milliseconds: 250));
+      await controller.initialize();
+      await controller.exportDiagnostics('session-1');
 
-    expect(store.savedStates, isNotEmpty);
-    final saved = store.savedStates.last;
-    expect(saved.profiles, hasLength(1));
-    expect(saved.selectedProfileId, 'profile-1');
-    expect(saved.draft.name, 'edited alpha');
-    expect(saved.draft.spec.link, 'generic-turn://edited');
-  });
+      final exportedFiles = directory.listSync().whereType<File>().toList(
+        growable: false,
+      );
+      expect(exportedFiles, hasLength(1));
+
+      final payload =
+          jsonDecode(await exportedFiles.single.readAsString())
+              as Map<String, dynamic>;
+      expect(payload['contract_version'], '1');
+      expect(
+        (payload['host_build'] as Map<String, dynamic>)['version'],
+        '0.1.0',
+      );
+      expect(
+        (payload['gui_build'] as Map<String, dynamic>)['revision'],
+        'gui123456789',
+      );
+    },
+  );
 }
 
 class _FakeControlPlaneApi implements ControlPlaneApi {
@@ -368,14 +392,17 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
     required List<ProfileRecord> profiles,
     required List<SessionRecord> sessions,
     Map<String, ChallengeRecord>? challenges,
-  })  : _profiles = List<ProfileRecord>.of(profiles),
-        _sessions = List<SessionRecord>.of(sessions),
-        _challenges = Map<String, ChallengeRecord>.of(challenges ?? <String, ChallengeRecord>{});
+  }) : _profiles = List<ProfileRecord>.of(profiles),
+       _sessions = List<SessionRecord>.of(sessions),
+       _challenges = Map<String, ChallengeRecord>.of(
+         challenges ?? <String, ChallengeRecord>{},
+       );
 
   final List<ProfileRecord> _profiles;
   final List<SessionRecord> _sessions;
   final Map<String, ChallengeRecord> _challenges;
-  final StreamController<EventRecord> _events = StreamController<EventRecord>.broadcast();
+  final StreamController<EventRecord> _events =
+      StreamController<EventRecord>.broadcast();
   final List<String> challengeRequests = <String>[];
   final List<ProfileRecord> upsertedProfiles = <ProfileRecord>[];
   bool failReads = false;
@@ -415,6 +442,8 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
       events: const <EventRecord>[],
       challenges: _challenges.values.toList(growable: false),
       metrics: 'vk_turn_proxy_runtime_session_starts_total 1',
+      hostBuild: _testHostBuild,
+      contractVersion: '1',
     );
   }
 
@@ -427,17 +456,7 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
 
   @override
   Future<HostInfo> hostInfo() async {
-    return const HostInfo(
-      version: '1',
-      capabilities: <Capability>[
-        Capability.desktopSidecar,
-        Capability.profiles,
-        Capability.sessions,
-        Capability.challenges,
-        Capability.diagnostics,
-        Capability.eventStream,
-      ],
-    );
+    return _readyHostInfo;
   }
 
   @override
@@ -473,7 +492,10 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   }
 
   @override
-  Future<SessionRecord> startSession({String? profileId, ProfileSpec? spec}) async {
+  Future<SessionRecord> startSession({
+    String? profileId,
+    ProfileSpec? spec,
+  }) async {
     startSessionCalls++;
     return _sessions.first;
   }
@@ -486,7 +508,9 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   @override
   Future<ProfileRecord> upsertProfile(ProfileRecord profile) async {
     upsertedProfiles.add(profile);
-    final index = _profiles.indexWhere((ProfileRecord existing) => existing.id == profile.id);
+    final index = _profiles.indexWhere(
+      (ProfileRecord existing) => existing.id == profile.id,
+    );
     if (index >= 0) {
       _profiles[index] = profile;
     } else {
