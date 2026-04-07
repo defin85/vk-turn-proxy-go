@@ -196,6 +196,21 @@ function Invoke-FlutterChecked {
     }
 }
 
+function Normalize-ConsoleText {
+    param(
+        [AllowNull()]
+        [string]$Text
+    )
+
+    if ($null -eq $Text) {
+        return ""
+    }
+
+    $escape = [regex]::Escape([string][char]27)
+    $withoutAnsi = [regex]::Replace($Text, "${escape}\[[0-9;?]*[ -/]*[@-~]", "")
+    return $withoutAnsi.Replace("`r`n", "`n")
+}
+
 $resolvedRepoRoot = (Resolve-Path $RepoRoot).Path
 Assert-WindowsNativePath -PathValue $resolvedRepoRoot -Label "RepoRoot"
 
@@ -279,7 +294,7 @@ $resolvedClientdPath = (Resolve-Path $ClientdPath).Path
 Assert-WindowsNativePath -PathValue $resolvedClientdPath -Label "ClientdPath"
 Push-Location $resolvedRepoRoot
 try {
-    $flutterVersionText = (& flutter --version 2>&1 | Out-String)
+    $flutterVersionText = Normalize-ConsoleText ((& flutter --version 2>&1 | Out-String))
     if ($LASTEXITCODE -ne 0) {
         throw "flutter --version failed"
     }
@@ -288,14 +303,14 @@ try {
         throw "Windows Flutter version mismatch. Expected $requiredFlutterVersion based on desktop/gui_shell/.flutter-version."
     }
 
-    $doctorText = (& flutter doctor -v 2>&1 | Out-String)
+    $doctorText = Normalize-ConsoleText ((& flutter doctor -v 2>&1 | Out-String))
     if ($LASTEXITCODE -ne 0) {
         throw "flutter doctor -v failed"
     }
-    if ($doctorText -notmatch "\[✓\]\s+Windows Version") {
+    if ($doctorText -notmatch "\[(?:✓|√)\]\s+Windows Version") {
         throw "flutter doctor -v did not confirm a working Windows host."
     }
-    if ($doctorText -notmatch "\[✓\]\s+Visual Studio - develop Windows apps") {
+    if ($doctorText -notmatch "\[(?:✓|√)\]\s+Visual Studio - develop Windows apps") {
         throw "flutter doctor -v did not confirm the required Visual Studio Windows desktop toolchain."
     }
 
