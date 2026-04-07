@@ -1,0 +1,30 @@
+flowchart LR
+  subgraph Outside["Вне продукта"]
+    O["Организатор / диспетчер"]
+    VK["VK call + signaling"]
+    TURN["VK TURN relay"]
+  end
+
+  subgraph UserSide["Сторона пользователя"]
+    U["Пользователь"]
+    APP["Приложение\nvk-turn-proxy-go GUI/CLI"]
+    B["Контролируемый браузер"]
+  end
+
+  subgraph Infra["Ваша инфраструктура"]
+    S["Ваш VPS / peer server\n176.109.104.105:38218"]
+    X["Целевой UDP upstream\nваш сервис / агент / приложение"]
+  end
+
+  O -->|"создает звонок\nи отправляет invite link"| U
+  U -->|"вставляет invite link"| APP
+  APP -->|"continue in browser"| B
+  B -->|"login / preview / Join"| VK
+  VK -->|"TURN credentials"| APP
+
+  APP -->|"строит сессию через TURN"| TURN
+  TURN -->|"relay UDP/DTLS"| S
+  S -->|"проксирует UDP"| X
+  X -->|"ответ"| S
+  S -->|"обратный трафик"| TURN
+  TURN -->|"обратный трафик"| APP
