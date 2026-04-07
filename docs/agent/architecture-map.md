@@ -8,11 +8,12 @@ Use this map to find the owning package before changing code or making claims ab
 1. `cmd/*` parses flags, builds dependencies, and maps runtime errors to process exit behavior.
 2. `cmd/clientd` and `pkg/clientcontrol` expose the local client control plane for desktop and embedded hosts.
 3. `desktop/gui_shell` is the first Flutter shell over that control plane and sidecar lifecycle.
-4. `internal/provider/*` resolves provider credentials and probe artifacts.
-5. `internal/session` runs the client runtime after provider resolution.
-6. `internal/transport` and `internal/tunnelserver` own TURN/DTLS/UDP data-path mechanics.
-7. `internal/observe` emits structured events and metrics around runtime stages.
-8. `test/compatibility/*` and `test/turnlab` anchor compatibility and integration claims with replayable evidence.
+4. `mobile/gui_shell` is the mobile Flutter shell over the same typed control-plane semantics through a mobile bridge.
+5. `internal/provider/*` resolves provider credentials and probe artifacts.
+6. `internal/session` runs the client runtime after provider resolution.
+7. `internal/transport` and `internal/tunnelserver` own TURN/DTLS/UDP data-path mechanics.
+8. `internal/observe` emits structured events and metrics around runtime stages.
+9. `test/compatibility/*` and `test/turnlab` anchor compatibility and integration claims with replayable evidence.
 
 ## Subsystem map
 
@@ -21,6 +22,7 @@ Use this map to find the owning package before changing code or making claims ab
 | `cmd/probe`, `cmd/tunnel-client`, `cmd/tunnel-server`, `cmd/clientd` | CLI flags, dependency wiring, exit/error mapping | Changing flags, startup behavior, stdout/stderr output | `go test ./cmd/...` |
 | `pkg/clientcontrol` | local profile/session/challenge API, event streaming, diagnostics export | Adding GUI-facing control-plane behavior or host wiring | `go test ./pkg/clientcontrol` |
 | `desktop/gui_shell` | Flutter desktop shell, sidecar supervision, desktop-only UX, diagnostics export workflow | Changing the GUI, sidecar discovery, or desktop lifecycle assumptions | `flutter analyze && flutter test` |
+| `mobile/gui_shell` | Flutter mobile shell, secure local state, browser handoff, mobile host bridge lifecycle | Changing the mobile GUI, secure storage behavior, or bridge lifecycle assumptions | `flutter analyze && flutter test` |
 | `internal/config` | shared config structs and validation | Adding flags or policy validation | `go test ./internal/config` |
 | `internal/provider` | provider registry, artifact shapes, adapter boundary | Any provider-facing behavior change | `go test ./internal/provider/...` |
 | `internal/provider/vk` | VK staged resolution, captcha/browser contours, artifact sanitization | VK contour, fixture, or provider failure changes | `go test ./internal/provider/vk ./cmd/probe` |

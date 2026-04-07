@@ -30,6 +30,8 @@ cmd/
   tunnel-server/
 desktop/
   gui_shell/
+mobile/
+  gui_shell/
 pkg/
   clientcontrol/
 docs/
@@ -99,7 +101,7 @@ make build-gui-windows
 
 The full build workflow contract lives in `docs/build-workflows.md`.
 Supported artifact builds derive their human-facing product version from the repo root `version.json`.
-Use `./scripts/sync-version-assets.py` when that manifest changes so Flutter dev/runtime defaults stay in sync.
+Use `./scripts/sync-version-assets.py` when that manifest changes so Flutter dev/runtime defaults stay in sync across desktop and mobile Flutter workspaces.
 
 Run the server baseline:
 
@@ -203,6 +205,29 @@ The desktop banner labels three separate version concepts:
 Browser challenge continuation stays host-driven in this change.
 The GUI triggers the typed challenge continue/cancel operations and surfaces the resulting session events, but it does not embed provider-specific browser flows.
 Tray and system-notification behavior are intentionally kept explicit and non-magical for this slice: the shell uses in-app status banners and action buttons rather than background-only runtime control.
+
+## Mobile GUI shell
+
+The first mobile shell lives in `mobile/gui_shell` and uses Flutter as the canonical Android/iOS UI stack.
+It keeps the same profile, session, challenge, and diagnostics semantics as `pkg/clientcontrol`, but expects an embedded or bridged mobile host instead of spawning CLI processes.
+
+Run the mobile shell checks with:
+
+```bash
+cd mobile/gui_shell
+flutter analyze
+flutter test
+```
+
+During development, the current shell can point at an HTTP bridge with:
+
+```bash
+flutter run --dart-define=VKTP_MOBILE_HOST_URL=http://127.0.0.1:7777
+```
+
+The mobile slice persists non-secret app state in general preferences and keeps provider/runtime secrets in platform-native secure storage.
+Browser challenge continuation uses platform-native handoff and explicit in-app confirmation.
+This slice does not yet claim Android `VpnService`, iOS Network Extension, or device-wide tunnel capture support.
 
 `cmd/tunnel-client` now runs the supported supervised client runtime matrix after provider resolution.
 Supported startup policy for this slice:

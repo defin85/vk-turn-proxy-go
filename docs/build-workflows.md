@@ -2,7 +2,7 @@
 
 Use repo-owned scripts for reproducible local and CI builds instead of ad-hoc commands.
 The canonical human-facing product version source for supported artifacts is `version.json` at the repository root.
-Run `./scripts/sync-version-assets.py` when `version.json` changes so Flutter-facing defaults stay aligned during local development.
+Run `./scripts/sync-version-assets.py` when `version.json` changes so Flutter-facing defaults stay aligned during local development across desktop and mobile Flutter workspaces.
 
 ## Go artifacts from WSL
 
@@ -65,6 +65,31 @@ The script fails closed if:
 - `flutter doctor -v` does not confirm the required Windows desktop toolchain
 - `dist\go\windows-amd64\clientd.exe` is missing
 - `desktop\gui_shell\pubspec.yaml` does not match the canonical version in `version.json`
+
+## Mobile GUI shell local development
+
+The first mobile shell is app-focused and currently targets local development plus mocked or bridged host verification.
+There is no repo-owned Android or iOS release-packaging workflow in this change.
+
+Prerequisites:
+- Flutter SDK version matches `mobile/gui_shell/.flutter-version`
+- platform SDKs are installed locally when running on a real Android or iOS target
+- `./scripts/sync-version-assets.py` has been run after any `version.json` change
+
+Use the local verification path from the mobile workspace:
+
+```bash
+cd mobile/gui_shell
+flutter analyze
+flutter test
+```
+
+For development against an HTTP bridge:
+
+```bash
+cd mobile/gui_shell
+flutter run --dart-define=VKTP_MOBILE_HOST_URL=http://127.0.0.1:7777
+```
 
 ## Local entrypoints
 

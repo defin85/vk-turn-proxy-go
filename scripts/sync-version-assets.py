@@ -27,7 +27,7 @@ def load_manifest(path: pathlib.Path) -> dict[str, str]:
 def sync_pubspec(path: pathlib.Path, expected_version: str, check: bool) -> bool:
     content = path.read_text(encoding="utf-8")
     next_content, count = re.subn(
-        r"(?m)^version:\s*[^\r\n]+\s*$",
+        r"(?m)^version:[ \t]*[^\r\n]+[ \t]*$",
         f"version: {expected_version}",
         content,
         count=1,
@@ -88,8 +88,18 @@ def main() -> int:
         expected_version,
         args.check,
     )
+    changed |= sync_pubspec(
+        repo_root / "mobile/gui_shell/pubspec.yaml",
+        expected_version,
+        args.check,
+    )
     changed |= sync_dart_defaults(
         repo_root / "desktop/gui_shell/lib/src/build/version_defaults.g.dart",
+        manifest,
+        args.check,
+    )
+    changed |= sync_dart_defaults(
+        repo_root / "mobile/gui_shell/lib/src/build/version_defaults.g.dart",
         manifest,
         args.check,
     )
