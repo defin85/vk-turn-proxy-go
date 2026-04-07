@@ -33,12 +33,18 @@ The control plane instead exposes two separate concepts:
 - `contract_version`: compatibility for negotiation
 - `build`: human-facing product/build identity for the running host
 
-### Decision: Use one repo-managed product version source
+### Decision: Use one repo-managed structured manifest as the canonical version source
 
-The repository should own one canonical product version source that build scripts use for both Go binaries and Flutter artifacts.
-The exact file format is implementation detail, but it must be script-readable and reusable by desktop and future mobile packaging.
+The repository should own one canonical structured manifest that build scripts use for both Go binaries and Flutter artifacts.
+The manifest must be script-readable and reusable by desktop and future mobile packaging.
 
-The design assumption for this change is a single repo-wide version string plus build number that is valid for Flutter packaging and human display.
+The manifest carries, at minimum:
+- product version
+- build number
+- optional channel or prerelease metadata if the repository later needs it
+
+This manifest is the source of truth for human-facing version identity.
+Derived build metadata such as revision, dirty state, and build timestamp may still be computed at build time.
 
 ### Decision: Stamp build metadata into both Go and Flutter artifacts
 
@@ -51,6 +57,17 @@ Supported build entrypoints should stamp at least:
 
 Go binaries should expose this through a shared runtime helper.
 Flutter builds should expose the same product version and supplemental build identity to the GUI at runtime.
+
+### Decision: Include build identity in diagnostics bundles from the first slice
+
+Diagnostics export should include version context for support from the first implementation slice.
+
+The diagnostics shape should carry enough metadata to answer:
+- which GUI build produced the bundle
+- which host build backed the session
+- which contract version governed compatibility
+
+This avoids a split-brain support workflow where the GUI banner shows useful version context but exported diagnostics do not.
 
 ### Decision: Keep dev-mode fallbacks explicit
 
@@ -100,12 +117,9 @@ The repository is already converging on Flutter shells across desktop and mobile
   Mitigation: keep concise version labels in the primary banner and push lower-level metadata into secondary details or diagnostics surfaces.
 
 ## Migration Plan
-1. Add the canonical version source and shared build metadata helpers.
+1. Add the canonical structured version manifest and shared build metadata helpers.
 2. Stamp Go and Flutter build outputs through the repo-owned build scripts.
 3. Extend the control-plane host info shape with separate build identity fields.
-4. Update the desktop GUI to surface local and host versions explicitly.
-5. Reuse the same version source for future mobile packaging once the mobile shell exists.
-
-## Open Questions
-- Whether the canonical version source should live as a root `VERSION` file or a small structured manifest that also carries build number.
-- Whether diagnostics export should include both GUI and host build identity in the first implementation, or whether GUI surfacing alone is sufficient for the initial slice.
+4. Extend diagnostics export so GUI and host build identity are persisted with the session bundle.
+5. Update the desktop GUI to surface local and host versions explicitly.
+6. Reuse the same version source for future mobile packaging once the mobile shell exists.

@@ -1,11 +1,12 @@
 ## 1. Contract
 - [ ] 1.1 Define the canonical split between control-plane contract version and human-facing product/build identity
-- [ ] 1.2 Define the shared host/build metadata shape that the GUI consumes
+- [ ] 1.2 Define the structured version manifest with build number and the shared host/build metadata shape that the GUI and diagnostics consume
 
 ## 2. Build and Runtime Plumbing
 - [ ] 2.1 Add a repo-managed version source and validate it in repo-owned build workflows
 - [ ] 2.2 Stamp Go binaries and Flutter GUI artifacts with consistent product version and build metadata
 - [ ] 2.3 Extend the local control plane so host build identity is exposed separately from negotiation version
+- [ ] 2.4 Extend diagnostics export so session bundles carry GUI build identity, host build identity, and contract version context
 
 ## 3. GUI Surfacing
 - [ ] 3.1 Show the local GUI version/build identity in the desktop shell

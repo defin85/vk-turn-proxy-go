@@ -1,7 +1,14 @@
 ## ADDED Requirements
 ### Requirement: Supported artifacts use a canonical product version and build identity
 
-The system SHALL stamp supported Go and Flutter artifacts with a canonical product version and build identity that is separate from local control-plane contract negotiation.
+The system SHALL stamp supported Go and Flutter artifacts with a canonical product version and build identity derived from one repo-managed structured version manifest that is separate from local control-plane contract negotiation.
+
+#### Scenario: Structured manifest defines the canonical version source
+
+- **GIVEN** the repository build workflows for supported artifacts
+- **WHEN** a supported artifact is built through a repo-owned workflow
+- **THEN** the workflow reads product version and build number from one structured manifest
+- **AND** it does not rely on unrelated ad-hoc version files as an alternative source of truth
 
 #### Scenario: Repo-owned Go build stamps product version and revision
 
@@ -53,3 +60,15 @@ The system SHALL surface the desktop GUI build identity and the connected host b
 - **WHEN** the blocked-state banner is rendered
 - **THEN** the GUI reports the incompatibility explicitly
 - **AND** it still shows enough version context for the operator to tell which GUI build and which host build are involved
+
+### Requirement: Diagnostics bundles persist build identity context
+
+The system SHALL include build identity context in diagnostics bundles so exported support artifacts preserve the same version information surfaced by the GUI and control plane.
+
+#### Scenario: Session diagnostics bundle includes GUI and host build identity
+
+- **GIVEN** a desktop GUI exports diagnostics for a session
+- **WHEN** the diagnostics bundle is written
+- **THEN** the bundle includes the GUI build identity that initiated the export
+- **AND** it includes the host build identity associated with the session
+- **AND** it includes the relevant control-plane contract version separately from the human-facing build identity
