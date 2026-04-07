@@ -138,9 +138,18 @@ class _HostBanner extends StatelessWidget {
                 FilledButton.tonal(
                   onPressed: controller.busy
                       ? null
+                      : controller.requiresLocalStateReset
+                      ? null
                       : () => unawaited(controller.reconnect()),
                   child: const Text('Reconnect'),
                 ),
+                if (controller.requiresLocalStateReset)
+                  OutlinedButton(
+                    onPressed: controller.busy
+                        ? null
+                        : () => unawaited(controller.clearLocalState()),
+                    child: const Text('Reset local state'),
+                  ),
                 FilledButton(
                   onPressed:
                       controller.busy ||
@@ -322,6 +331,13 @@ class _SessionCard extends StatelessWidget {
               Text(
                 'listen ${session.profile.listenAddress} | connections ${session.profile.connections}',
                 style: theme.textTheme.bodySmall,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Updated ${_formatSessionTimestamp(session.updatedAt)} | session ${_shortSessionId(session.id)}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
               if (session.failure != null) ...<Widget>[
                 const SizedBox(height: 10),
@@ -565,3 +581,19 @@ class _NoticeBanner extends StatelessWidget {
     );
   }
 }
+
+String _formatSessionTimestamp(DateTime value) {
+  final local = value.toLocal();
+  return '${local.year}-${_twoDigits(local.month)}-${_twoDigits(local.day)} '
+      '${_twoDigits(local.hour)}:${_twoDigits(local.minute)}:${_twoDigits(local.second)}';
+}
+
+String _shortSessionId(String value) {
+  final trimmed = value.trim();
+  if (trimmed.length <= 12) {
+    return trimmed;
+  }
+  return '${trimmed.substring(0, 12)}...';
+}
+
+String _twoDigits(int value) => value.toString().padLeft(2, '0');

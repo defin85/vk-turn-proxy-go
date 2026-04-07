@@ -75,6 +75,107 @@ void main() {
     expect(find.text("I've completed it", skipOffstage: false), findsOneWidget);
     expect(find.text('vk live'), findsWidgets);
   });
+
+  testWidgets('mobile shell exposes reset action for blocked local state', (
+    WidgetTester tester,
+  ) async {
+    final controller = MobileShellController(
+      bridge: _FakeMobileHostBridge(),
+      stateStore: _ThrowingStateStore(
+        StateError(
+          'Secure profile secrets are unavailable. Restore secure storage or clear the saved mobile shell state.',
+        ),
+      ),
+    );
+    await controller.initialize();
+    await tester.pumpWidget(MobileShellApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mobile host blocked'), findsOneWidget);
+    expect(find.text('Reset local state'), findsOneWidget);
+    expect(
+      find.textContaining('Secure profile secrets are unavailable'),
+      findsWidgets,
+    );
+  });
+
+  testWidgets('mobile shell shows freshest sessions first with session metadata', (
+    WidgetTester tester,
+  ) async {
+    final controller = MobileShellController(
+      bridge: _FakeMobileHostBridge(
+        sessionsList: <SessionRecord>[
+          SessionRecord(
+            id: 'session-failed',
+            profileId: 'profile-1',
+            profileName: 'older failed',
+            profile: _profileSpec(),
+            state: SessionState.failed,
+            failure: const FailureInfo(
+              stage: 'turn_allocate',
+              message: 'timed out',
+            ),
+            startedAt: DateTime.utc(2026, 4, 7, 12, 0),
+            updatedAt: DateTime.utc(2026, 4, 7, 12, 1),
+            stoppedAt: DateTime.utc(2026, 4, 7, 12, 1),
+          ),
+          SessionRecord(
+            id: 'session-new',
+            profileId: 'profile-1',
+            profileName: 'newer stopped',
+            profile: _profileSpec(),
+            state: SessionState.stopped,
+            startedAt: DateTime.utc(2026, 4, 7, 12, 2),
+            updatedAt: DateTime.utc(2026, 4, 7, 12, 3),
+            stoppedAt: DateTime.utc(2026, 4, 7, 12, 3),
+          ),
+        ],
+      ),
+      stateStore: _InMemoryStateStore(
+        MobileShellState(
+          profiles: <ProfileRecord>[
+            ProfileRecord(
+              id: 'profile-1',
+              name: 'vk live',
+              spec: _profileSpec(),
+            ),
+          ],
+          selectedProfileId: 'profile-1',
+          draft: ProfileDraft.fromProfile(
+            ProfileRecord(
+              id: 'profile-1',
+              name: 'vk live',
+              spec: _profileSpec(),
+            ),
+          ),
+        ),
+      ),
+    );
+    await controller.initialize();
+    await tester.pumpWidget(MobileShellApp(controller: controller));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -900));
+    await tester.pumpAndSettle();
+    final updatedAt = DateTime.utc(2026, 4, 7, 12, 3).toLocal();
+    final updatedLabel =
+        'Updated ${updatedAt.year}-${_twoDigits(updatedAt.month)}-${_twoDigits(updatedAt.day)} '
+        '${_twoDigits(updatedAt.hour)}:${_twoDigits(updatedAt.minute)}:${_twoDigits(updatedAt.second)}';
+
+    expect(
+      tester.getTopLeft(find.text('newer stopped', skipOffstage: false)).dy,
+      lessThan(
+        tester.getTopLeft(find.text('older failed', skipOffstage: false)).dy,
+      ),
+    );
+    expect(
+      find.textContaining(updatedLabel, skipOffstage: false),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('session session-new', skipOffstage: false),
+      findsOneWidget,
+    );
+  });
 }
 
 const HostInfo _readyHostInfo = HostInfo(
@@ -117,6 +218,9 @@ class _InMemoryStateStore implements MobileShellStateStore {
 
   @override
   Future<void> save(MobileShellState state) async {}
+
+  @override
+  Future<void> clear() async {}
 }
 
 class _FakeMobileHostBridge implements MobileHostBridge {
@@ -206,3 +310,22 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   @override
   Future<ProfileRecord> upsertProfile(ProfileRecord profile) async => profile;
 }
+
+class _ThrowingStateStore implements MobileShellStateStore {
+  const _ThrowingStateStore(this.error);
+
+  final Object error;
+
+  @override
+  Future<void> clear() async {}
+
+  @override
+  Future<MobileShellState?> load() async {
+    throw error;
+  }
+
+  @override
+  Future<void> save(MobileShellState state) async {}
+}
+
+String _twoDigits(int value) => value.toString().padLeft(2, '0');

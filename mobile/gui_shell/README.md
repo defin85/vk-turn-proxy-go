@@ -45,13 +45,45 @@ Required capabilities for the first slice are:
 - `diagnostics`
 - `event_stream`
 
-During development, the Flutter app can talk to an HTTP bridge by supplying:
+By default, the app resolves the control-plane endpoint through a native platform bridge.
+On Android packaged builds, that native bridge now starts and returns the bundled embedded host by default.
+On iOS, the current native bridge resolves either `VKTMobileHostURL` or the local loopback development host.
+Platform packaging can override that endpoint with:
+
+- Android manifest meta-data: `com.defin85.vk_turn_proxy_go.MOBILE_HOST_URL`
+- iOS `Info.plist`: `VKTMobileHostURL`
+
+For explicit development overrides, the Flutter app can still talk to an HTTP bridge by supplying:
 
 ```bash
 flutter run --dart-define=VKTP_MOBILE_HOST_URL=http://127.0.0.1:7777
 ```
 
 If the bridge is missing or incompatible, the app fails closed for session control and reports that state explicitly instead of pretending tunnel support exists.
+If native bridge discovery fails during startup, the shell stays blocked in-app and reports that resolver error instead of crashing before the first screen.
+On Android, default/release packaging keeps cleartext HTTP limited to the local bridge path, while `debug` and `profile` variants keep broader cleartext enabled for explicit development bridge overrides.
+
+## Android packaging
+
+From the repository root on WSL, build the packaged Android app with:
+
+```bash
+bash ./scripts/build-android-gui-from-wsl.sh
+```
+
+That wrapper mirrors the repository into `E:\Projects\vk-turn-proxy-go`, rebuilds the embedded Android host, writes Windows-native `android/local.properties`, builds the debug APK with the pinned Flutter SDK, and stages the result under `dist/mobile/android-gui-shell/`.
+
+For a repo-owned smoke that proves the packaged-host shared-library path reaches `ready` without an external `clientd` or `VKTP_MOBILE_HOST_URL`:
+
+```bash
+make smoke-android-embedded-host
+```
+
+For a Windows-native build from the mirror:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File E:\Projects\vk-turn-proxy-go\scripts\build-gui-android.ps1
+```
 
 ## Secure storage
 
@@ -63,6 +95,8 @@ The shell persists:
 
 Non-secret profile state stays in general app preferences.
 Runtime secrets such as invite links and TURN overrides are stored separately through platform-native secure storage.
+If secure storage becomes unavailable while sanitized profile metadata still exists, the shell fails closed during restore instead of silently rehydrating empty secrets.
+Recovery for that case is explicit: the operator must use `Reset local state` before the shell will reconnect and resume runtime control.
 
 ## Lifecycle and browser handoff
 

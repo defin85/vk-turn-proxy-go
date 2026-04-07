@@ -71,6 +71,8 @@ class MobileShellController extends ChangeNotifier {
   String? selectedSessionId;
   String? notice;
   bool busy = false;
+  bool _requiresLocalStateReset = false;
+  String? _blockedLocalStateMessage;
 
   final Map<String, ChallengeRecord> _challengeCache =
       <String, ChallengeRecord>{};
@@ -90,12 +92,34 @@ class MobileShellController extends ChangeNotifier {
     Capability.eventStream,
   ];
 
+  bool get requiresLocalStateReset => _requiresLocalStateReset;
+
   Future<void> initialize() async {
     await _restorePersistedState();
+    if (_requiresLocalStateReset) {
+      hostConnection = MobileHostConnectionResult(
+        state: MobileHostLifecycleState.failed,
+        message:
+            _blockedLocalStateMessage ??
+            'Local mobile shell state must be reset before runtime control can continue.',
+        description: 'local mobile shell state',
+      );
+      status = ShellStatus.blocked;
+      busy = false;
+      _notify();
+      return;
+    }
     await _connectBridge();
   }
 
   Future<void> reconnect() async {
+    if (_requiresLocalStateReset) {
+      notice =
+          _blockedLocalStateMessage ??
+          'Reset local mobile shell state before reconnecting.';
+      _notify();
+      return;
+    }
     await _stopRuntimeMonitoring();
     await _connectBridge();
   }
@@ -121,19 +145,10 @@ class MobileShellController extends ChangeNotifier {
       return;
     }
     try {
-      final nextSessions = await bridge.sessions();
+      final nextSessions = _orderedSessions(await bridge.sessions());
       final nextChallenges = await _loadActiveChallenges(nextSessions);
-      sessions = nextSessions;
+      _replaceSessions(nextSessions);
       _mergeChallenges(nextChallenges);
-
-      if (selectedSessionId == null && sessions.isNotEmpty) {
-        selectedSessionId = sessions.first.id;
-      } else if (selectedSessionId != null &&
-          !sessions.any(
-            (SessionRecord session) => session.id == selectedSessionId,
-          )) {
-        selectedSessionId = null;
-      }
       _notify();
     } catch (error) {
       await _handleBridgeFailure(error);
@@ -167,6 +182,37 @@ class MobileShellController extends ChangeNotifier {
     draft = ProfileDraft.defaults();
     _scheduleStatePersist();
     notifyListeners();
+  }
+
+  Future<void> clearLocalState() async {
+    busy = true;
+    _notify();
+    try {
+      await _stopRuntimeMonitoring();
+      await stateStore.clear();
+      _challengeCache.clear();
+      profiles = const <ProfileRecord>[];
+      sessions = const <SessionRecord>[];
+      events = const <EventRecord>[];
+      draft = ProfileDraft.defaults();
+      selectedProfileId = null;
+      selectedSessionId = null;
+      _persistedStateSignature = MobileShellState.empty().signature();
+      _requiresLocalStateReset = false;
+      _blockedLocalStateMessage = null;
+      notice = 'Cleared local mobile shell state.';
+      hostConnection = null;
+      status = ShellStatus.booting;
+    } catch (error) {
+      notice = 'Failed to clear local mobile shell state: $error';
+      status = ShellStatus.blocked;
+      busy = false;
+      _notify();
+      return;
+    }
+    busy = false;
+    _notify();
+    await _connectBridge();
   }
 
   Future<void> saveDraft() async {
@@ -474,7 +520,70 @@ class MobileShellController extends ChangeNotifier {
     );
     final updated = sessions.toList(growable: true);
     updated[index] = next;
-    sessions = updated;
+    _replaceSessions(updated);
+  }
+
+  void _replaceSessions(List<SessionRecord> nextSessions) {
+    sessions = _orderedSessions(nextSessions);
+    selectedSessionId = _resolveSelectedSessionId(sessions);
+  }
+
+  List<SessionRecord> _orderedSessions(List<SessionRecord> nextSessions) {
+    final ordered = nextSessions.toList(growable: true);
+    ordered.sort((SessionRecord left, SessionRecord right) {
+      final updatedAt = right.updatedAt.compareTo(left.updatedAt);
+      if (updatedAt != 0) {
+        return updatedAt;
+      }
+      final startedAt = right.startedAt.compareTo(left.startedAt);
+      if (startedAt != 0) {
+        return startedAt;
+      }
+      return left.id.compareTo(right.id);
+    });
+    return ordered;
+  }
+
+  String? _resolveSelectedSessionId(List<SessionRecord> nextSessions) {
+    if (nextSessions.isEmpty) {
+      return null;
+    }
+
+    final preferredActive = _firstActiveSession(nextSessions);
+    final preferred = preferredActive?.id ?? nextSessions.first.id;
+    final currentID = selectedSessionId?.trim() ?? '';
+    if (currentID.isEmpty) {
+      return preferred;
+    }
+
+    SessionRecord? current;
+    for (final session in nextSessions) {
+      if (session.id == currentID) {
+        current = session;
+        break;
+      }
+    }
+    if (current == null) {
+      return preferred;
+    }
+    if (_isTerminalSession(current) && preferredActive != null) {
+      return preferredActive.id;
+    }
+    return current.id;
+  }
+
+  SessionRecord? _firstActiveSession(List<SessionRecord> nextSessions) {
+    for (final session in nextSessions) {
+      if (!_isTerminalSession(session)) {
+        return session;
+      }
+    }
+    return null;
+  }
+
+  bool _isTerminalSession(SessionRecord session) {
+    return session.state == SessionState.stopped ||
+        session.state == SessionState.failed;
   }
 
   Future<void> _rehydrateProfiles() async {
@@ -577,9 +686,14 @@ class MobileShellController extends ChangeNotifier {
   Future<void> _handleBridgeFailure(Object error) async {
     await _stopRuntimeMonitoring();
     final message = error is ControlPlaneError ? error.message : '$error';
+    final state = error is ControlPlaneError && error.incompatibleHost
+        ? MobileHostLifecycleState.incompatible
+        : MobileHostLifecycleState.unavailable;
     hostConnection = MobileHostConnectionResult(
-      state: MobileHostLifecycleState.unavailable,
+      state: state,
       message: message,
+      info: hostConnection?.info,
+      description: hostConnection?.description ?? '',
     );
     status = ShellStatus.blocked;
     notice = message;
@@ -609,7 +723,10 @@ class MobileShellController extends ChangeNotifier {
       draft = state.draft;
       _persistedStateSignature = state.signature();
     } catch (error) {
-      notice = 'Failed to restore mobile shell state: $error';
+      _requiresLocalStateReset = true;
+      _blockedLocalStateMessage =
+          'Failed to restore mobile shell state: $error';
+      notice = _blockedLocalStateMessage;
     }
   }
 

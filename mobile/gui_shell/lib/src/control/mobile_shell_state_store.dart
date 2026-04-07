@@ -105,6 +105,7 @@ class FlutterSecureBlobStore implements StringBlobStore {
 abstract class MobileShellStateStore {
   Future<MobileShellState?> load();
   Future<void> save(MobileShellState state);
+  Future<void> clear();
 
   static Future<MobileShellStateStore> defaultStore() async {
     return SecureMobileShellStateStore(
@@ -130,10 +131,20 @@ class SecureMobileShellStateStore implements MobileShellStateStore {
       return null;
     }
 
-    final sanitized = MobileShellState.fromJson(
-      jsonDecode(payload) as Map<String, dynamic>,
+    final rawState = jsonDecode(payload) as Map<String, dynamic>;
+    final sanitized = MobileShellState.fromJson(rawState);
+    final secretManifest = _SecretManifest.fromJson(
+      rawState['secret_manifest'] as Map<String, dynamic>?,
+      fallbackProfiles: sanitized.profiles,
+      fallbackDraft: sanitized.draft,
     );
     final secretPayload = await secrets.read(_secureSecretsKey);
+    if (secretManifest.requiresSecrets &&
+        (secretPayload == null || secretPayload.trim().isEmpty)) {
+      throw StateError(
+        'Secure profile secrets are unavailable. Restore secure storage or clear the saved mobile shell state.',
+      );
+    }
     final secretState = secretPayload == null || secretPayload.trim().isEmpty
         ? const <String, dynamic>{}
         : jsonDecode(secretPayload) as Map<String, dynamic>;
@@ -144,6 +155,19 @@ class SecureMobileShellStateStore implements MobileShellStateStore {
     final draftSecrets =
         secretState['draft'] as Map<String, dynamic>? ??
         const <String, dynamic>{};
+
+    for (final profileId in secretManifest.profileIds) {
+      if (!profileSecrets.containsKey(profileId)) {
+        throw StateError(
+          'Secure profile secrets are missing for saved profile $profileId.',
+        );
+      }
+    }
+    if (secretManifest.hasDraft && !secretState.containsKey('draft')) {
+      throw StateError(
+        'Secure draft secrets are unavailable. Restore secure storage or reset the draft.',
+      );
+    }
 
     return MobileShellState(
       profiles: sanitized.profiles
@@ -161,6 +185,7 @@ class SecureMobileShellStateStore implements MobileShellStateStore {
 
   @override
   Future<void> save(MobileShellState state) async {
+    final secretManifest = _SecretManifest.fromState(state);
     final sanitized = MobileShellState(
       profiles: state.profiles
           .map(
@@ -183,14 +208,74 @@ class SecureMobileShellStateStore implements MobileShellStateStore {
         state.draft.toJson()['spec'] as Map<String, dynamic>,
       ),
     };
+    final sanitizedJson = sanitized.toJson()
+      ..['secret_manifest'] = secretManifest.toJson();
 
     final encoder = const JsonEncoder.withIndent('  ');
-    await preferences.write(
-      _prefsStateKey,
-      encoder.convert(sanitized.toJson()),
-    );
+    await preferences.write(_prefsStateKey, encoder.convert(sanitizedJson));
     await secrets.write(_secureSecretsKey, encoder.convert(secretState));
   }
+
+  @override
+  Future<void> clear() async {
+    await preferences.delete(_prefsStateKey);
+    await secrets.delete(_secureSecretsKey);
+  }
+}
+
+class _SecretManifest {
+  const _SecretManifest({required this.profileIds, required this.hasDraft});
+
+  factory _SecretManifest.fromJson(
+    Map<String, dynamic>? json, {
+    required List<ProfileRecord> fallbackProfiles,
+    required ProfileDraft fallbackDraft,
+  }) {
+    if (json == null) {
+      return _SecretManifest(
+        profileIds: fallbackProfiles
+            .map((ProfileRecord profile) => profile.id.trim())
+            .where((String id) => id.isNotEmpty)
+            .toList(growable: false),
+        hasDraft: _draftRequiresSecretState(fallbackDraft),
+      );
+    }
+    final ids = (json['profile_ids'] as List<dynamic>? ?? const <dynamic>[])
+        .map((dynamic raw) => (raw as String? ?? '').trim())
+        .where((String id) => id.isNotEmpty)
+        .toList(growable: false);
+    return _SecretManifest(
+      profileIds: ids,
+      hasDraft: json['has_draft'] as bool? ?? false,
+    );
+  }
+
+  factory _SecretManifest.fromState(MobileShellState state) {
+    return _SecretManifest(
+      profileIds: state.profiles
+          .map((ProfileRecord profile) => profile.id.trim())
+          .where((String id) => id.isNotEmpty)
+          .toList(growable: false),
+      hasDraft: _draftRequiresSecretState(state.draft),
+    );
+  }
+
+  final List<String> profileIds;
+  final bool hasDraft;
+
+  bool get requiresSecrets => profileIds.isNotEmpty || hasDraft;
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{'profile_ids': profileIds, 'has_draft': hasDraft};
+  }
+}
+
+bool _draftRequiresSecretState(ProfileDraft draft) {
+  return draft.id != null ||
+      draft.name.trim().isNotEmpty ||
+      draft.spec.link.trim().isNotEmpty ||
+      (draft.spec.turnServer ?? '').trim().isNotEmpty ||
+      (draft.spec.turnPort ?? '').trim().isNotEmpty;
 }
 
 Map<String, dynamic> _sanitizeProfile(Map<String, dynamic> json) {

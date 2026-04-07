@@ -3,7 +3,7 @@
 ACT_WORKFLOW ?= .github/workflows/ci.yml
 ACT_JOB ?= test
 
-.PHONY: ci build-go build-gui-windows sync-version-assets check-version-assets ci-act ci-act-dry ci-act-verbose deps-act
+.PHONY: ci build-go build-gui-windows build-gui-android smoke-android-embedded-host sync-version-assets check-version-assets ci-act ci-act-dry ci-act-verbose deps-act
 
 ci:
 	./scripts/sync-version-assets.py --check
@@ -15,6 +15,12 @@ build-go:
 
 build-gui-windows:
 	./scripts/build-windows-gui-from-wsl.sh
+
+build-gui-android:
+	bash ./scripts/build-android-gui-from-wsl.sh
+
+smoke-android-embedded-host:
+	bash ./scripts/smoke-android-embedded-host.sh
 
 sync-version-assets:
 	./scripts/sync-version-assets.py

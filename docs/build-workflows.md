@@ -68,8 +68,8 @@ The script fails closed if:
 
 ## Mobile GUI shell local development
 
-The first mobile shell is app-focused and currently targets local development plus mocked or bridged host verification.
-There is no repo-owned Android or iOS release-packaging workflow in this change.
+The first mobile shell is app-focused and now ships with a repo-owned Android packaged-host workflow.
+The iOS side still has no native packaging workflow in this change.
 
 Prerequisites:
 - Flutter SDK version matches `mobile/gui_shell/.flutter-version`
@@ -91,6 +91,69 @@ cd mobile/gui_shell
 flutter run --dart-define=VKTP_MOBILE_HOST_URL=http://127.0.0.1:7777
 ```
 
+Without that override, the mobile shell requires the native platform layer to provide a host endpoint.
+Android packaged builds start the bundled embedded host through that native bridge; the current iOS bridge resolves either `VKTMobileHostURL` or the local loopback development host.
+Use these platform keys when packaging a specific bridged or embedded host endpoint:
+- Android manifest meta-data: `com.defin85.vk_turn_proxy_go.MOBILE_HOST_URL`
+- iOS `Info.plist`: `VKTMobileHostURL`
+
+If native bridge discovery fails during app bootstrap, the shell now surfaces a blocked startup state inside the UI instead of crashing before the first frame.
+If previously persisted secure state cannot be restored, use the in-app `Reset local state` recovery action before attempting to reconnect.
+Android `main` packaging limits cleartext HTTP to the loopback bridge path; `debug` and `profile` overlays keep broader cleartext enabled for explicit development bridge overrides.
+
+## Android GUI packaging from WSL
+
+The Android packaged-host workflow is standardized through the Windows mirror at `E:\Projects\vk-turn-proxy-go`.
+
+Run the repo-owned wrapper from WSL:
+
+```bash
+bash ./scripts/build-android-gui-from-wsl.sh
+```
+
+That workflow:
+1. synchronizes Flutter version assets from `version.json`
+2. mirrors the repository into `E:\Projects\vk-turn-proxy-go`
+3. rebuilds the packaged Android embedded host in the mirror
+4. writes Windows-native `android/local.properties` with the active Android SDK and Flutter SDK roots
+5. builds the debug APK through the pinned Windows Flutter SDK with stamped build identity
+6. validates that the APK contains the packaged JNI and embedded-host `.so` files
+7. stages the final APK under `dist/mobile/android-gui-shell/`
+
+The staged directory includes:
+- `app-debug.apk`
+- `app-debug.apk.sha1`
+- `build-metadata.json`
+
+For a repo-owned smoke of the packaged-host shared-library path reaching control-plane `ready` without an external `clientd` or `VKTP_MOBILE_HOST_URL`:
+
+```bash
+make smoke-android-embedded-host
+```
+
+## Native Android GUI build
+
+When the mirror already exists at `E:\Projects\vk-turn-proxy-go`, run the Windows-native build script directly:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File E:\Projects\vk-turn-proxy-go\scripts\build-gui-android.ps1
+```
+
+The native script fails closed if:
+- it is run from a UNC path
+- the pinned Flutter version is missing or mismatched
+- `flutter doctor -v` does not confirm the Android toolchain
+- the Android embedded host build fails
+- the final APK does not contain the packaged `libvk_turn_mobile_host.so` and `libandroid_mobile_host_jni.so` entries
+
+For ad-hoc native Android packaging smoke on Windows when the mirror exists at `E:\Projects\vk-turn-proxy-go`:
+
+```powershell
+cd E:\Projects\vk-turn-proxy-go\mobile\gui_shell
+flutter pub get
+flutter build apk --debug
+```
+
 ## Local entrypoints
 
 From the repository root:
@@ -98,6 +161,7 @@ From the repository root:
 ```bash
 make build-go
 make build-gui-windows
+make build-gui-android
 make sync-version-assets
 ```
 

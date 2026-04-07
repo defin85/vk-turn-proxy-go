@@ -52,7 +52,8 @@ func TestHandlerHostAndNegotiate(t *testing.T) {
 	}
 
 	body, _ := json.Marshal(NegotiateRequest{
-		SupportedVersions: []string{ContractVersion},
+		SupportedVersions:    []string{ContractVersion},
+		RequiredCapabilities: []Capability{CapabilityMobileHostBridge, CapabilityProfiles, CapabilitySessions, CapabilityChallenges, CapabilityDiagnostics, CapabilityEventStream},
 	})
 	req = httptest.NewRequest(http.MethodPost, "/v1/negotiate", bytes.NewReader(body))
 	rec = httptest.NewRecorder()
@@ -246,5 +247,26 @@ func TestHandlerStartSessionOutlivesRequestContext(t *testing.T) {
 	}
 	if _, err := host.WaitSession(context.Background(), sessionState.ID); err != nil {
 		t.Fatalf("WaitSession() error = %v", err)
+	}
+}
+
+func TestEventsStreamFlushesHeadersWithoutEvents(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(Handler(New()))
+	t.Cleanup(server.Close)
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(server.URL + "/v1/events")
+	if err != nil {
+		t.Fatalf("GET /v1/events error = %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /v1/events status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	if got := resp.Header.Get("Content-Type"); got != "application/x-ndjson" {
+		t.Fatalf("GET /v1/events content-type = %q, want %q", got, "application/x-ndjson")
 	}
 }

@@ -8,7 +8,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   final controller = MobileShellController(
-    bridge: MobileHostBridgeFactory.fromEnvironment(),
+    bridge: await MobileHostBridgeFactory.fromEnvironment(),
     stateStore: await MobileShellStateStore.defaultStore(),
   );
   await controller.initialize();

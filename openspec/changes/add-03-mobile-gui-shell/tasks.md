@@ -7,5 +7,5 @@
 - [x] 2.2 Define browser handoff behavior for mobile challenge flows without claiming system tunnel support
 
 ## 3. Verification
-- [x] 3.1 Add integration coverage for mobile shell to host interactions
+- [x] 3.1 Add mobile shell integration coverage for host interactions and one native packaging smoke path on an active target
 - [x] 3.2 Run `openspec validate add-03-mobile-gui-shell --strict --no-interactive`

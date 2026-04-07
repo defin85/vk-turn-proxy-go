@@ -10,10 +10,12 @@ That requires platform-specific tunnel integrations that should be designed only
 - Unblocks: first end-to-end universal client delivery
 
 ## What Changes
-- Add platform-specific tunnel integrations for desktop and mobile environments with explicit capability detection and fail-closed startup.
+- Add platform-specific tunnel integrations for desktop and mobile environments with explicit capability detection, startup-stage reporting, and fail-closed startup.
+- Define the control-plane contract by which platform hosts report mode-specific tunnel capabilities and startup failures to shells.
 - Define how desktop and mobile shells request device or system traffic capture without hard-coding one OS model into the shared runtime.
-- Define routing, exclusion, entitlement, and permissions boundaries needed for safe tunnel startup.
+- Define routing, exclusion, DNS, entitlement, and permission boundaries needed for safe tunnel startup.
+- Keep packet capture and route preparation inside privileged platform hosts or extensions while handing traffic to the shared runtime through a neutral host boundary.
 
 ## Impact
 - Affected specs: `platform-tunnel-integration`
-- Affected code: future platform host modules, desktop/mobile shells, control-plane capability reporting, docs
+- Affected code: future platform host modules, desktop/mobile shells, control-plane capability and startup reporting, host bridges/extensions, docs

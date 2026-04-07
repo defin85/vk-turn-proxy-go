@@ -12,15 +12,19 @@ The legacy prototype was often used that way in practice, but the canonical repo
 
 The goal of this change is not to promise every protocol in one step.
 The goal is to define a safe native overlay architecture that keeps provider resolution and TURN/DTLS underlay behavior intact while making room for native adapters above that underlay.
+External VPN references validate the value of separating stream and datagram handling, but they often bind that separation to protocol-specific constructs such as HTTP CONNECT, pseudo-authorities, or QUIC/HTTP stream identifiers.
+This repository cannot adopt those wire-level shapes directly because the overlay here must remain stable even if provider or underlay mechanics evolve.
 
 This change intentionally lands after the client control plane so future desktop and mobile shells can bind to stable runtime semantics instead of directly binding themselves to pre-overlay plumbing.
 
 ## Goals
 
 - Introduce explicit client ingress and server egress adapters above the current underlay
+- Keep the overlay contract repository-owned and underlay-neutral
 - Preserve provider-specific signaling boundaries and the current UDP baseline behavior
 - Support both datagram-class and stream-class overlay sessions with explicit identity and teardown
 - Define a realistic first native stream slice so future work does not need another architectural reset
+- Define support as an explicit ingress -> egress pairing matrix instead of generic adapter availability
 - Keep unsupported adapter pairings fail-closed during startup
 
 ## Non-Goals
@@ -38,10 +42,20 @@ This change intentionally lands after the client control plane so future desktop
 The current provider-backed TURN/DTLS/plain path remains the underlay.
 New local and upstream protocol support belongs in a distinct overlay layer above `internal/session` and `internal/transport`, not inside provider adapters.
 
+### Decision: Keep the overlay contract underlay-neutral and repository-owned
+
+The overlay contract should express repository-owned stream and datagram lifecycle semantics.
+It must not depend on HTTP CONNECT methods, pseudo-hosts, QUIC stream identifiers, or any other provider-specific or underlay-specific wire mechanism.
+
 ### Decision: Separate ingress adapters from egress adapters
 
 Client-side local protocol handling and server-side upstream protocol handling have different responsibilities and failure modes.
 The architecture should model them independently instead of hard-coding "UDP on both ends" into the session contract.
+
+### Decision: Treat support as an explicit ingress -> egress pairing matrix
+
+Support claims belong to documented pairings, not to adapters in isolation.
+Adding `ingress=tcp` does not imply every egress can safely handle that ingress, and startup validation should operate on the full pairing matrix.
 
 ### Decision: Distinguish datagram sessions from stream sessions explicitly
 
@@ -75,6 +89,11 @@ That keeps the canonical codebase from owning the "general transport" story and 
 Rejected.
 That would entangle application-proxy concerns with runtime plumbing before stream identity and teardown semantics are defined.
 
+### Reuse protocol-level shapes from external HTTP/QUIC VPN references
+
+Rejected.
+Those references are useful for validating the stream/datagram split, but importing their wire semantics would couple this overlay contract to mechanisms that are outside the repository's provider-backed underlay boundary.
+
 ### Tunnel raw TCP by coercing it into datagram-only routing
 
 Rejected.
@@ -91,7 +110,7 @@ Native stream support needs explicit session identity, teardown propagation, and
 
 - Deterministic tests that preserve the current UDP baseline through the adapter layer
 - Integration coverage for at least one native stream adapter pair before that pair is claimed as supported
-- Explicit docs and compatibility notes for every supported adapter pairing
+- Explicit docs and compatibility notes for every supported adapter pairing, including the fact that support is pair-specific and the overlay contract is underlay-neutral
 - `go test ./...`, `go build ./...`, and `openspec validate add-04-native-transport-overlay --strict --no-interactive`
 
 ## Open Questions

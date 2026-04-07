@@ -75,6 +75,62 @@ void main() {
   );
 
   test(
+    'controller fails closed when secure local state restore is unavailable',
+    () async {
+      final bridge = _FakeMobileHostBridge();
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _ThrowingStateStore(
+          StateError(
+            'Secure profile secrets are unavailable. Restore secure storage or clear the saved mobile shell state.',
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(controller.status, ShellStatus.blocked);
+      expect(controller.requiresLocalStateReset, isTrue);
+      expect(controller.hostConnection?.state, MobileHostLifecycleState.failed);
+      expect(
+        controller.notice,
+        contains('Secure profile secrets are unavailable'),
+      );
+      expect(bridge.ensureReadyCalls, 0);
+    },
+  );
+
+  test(
+    'controller can clear local state and reconnect after restore failure',
+    () async {
+      final bridge = _FakeMobileHostBridge();
+      final stateStore = _RecoverableThrowingStateStore(
+        StateError(
+          'Secure profile secrets are unavailable. Restore secure storage or clear the saved mobile shell state.',
+        ),
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: stateStore,
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.clearLocalState();
+
+      expect(stateStore.clearCalls, 1);
+      expect(controller.requiresLocalStateReset, isFalse);
+      expect(controller.status, ShellStatus.ready);
+      expect(controller.hostConnection?.isReady, isTrue);
+      expect(bridge.ensureReadyCalls, 1);
+      expect(controller.profiles, isEmpty);
+    },
+  );
+
+  test(
     'controller blocks incompatible bridge and does not start sessions',
     () async {
       final profile = ProfileRecord(
@@ -117,6 +173,64 @@ void main() {
       );
       expect(controller.notice, contains('contract mismatch'));
       expect(bridge.startSessionCalls, 0);
+    },
+  );
+
+  test(
+    'controller preserves incompatible state when a ready bridge later fails closed',
+    () async {
+      final bridge = _FakeMobileHostBridge(
+        sessionsList: <SessionRecord>[
+          SessionRecord(
+            id: 'session-1',
+            profileId: 'profile-1',
+            profileName: 'vk live',
+            profile: _profileSpec(),
+            state: SessionState.starting,
+            startedAt: DateTime.utc(2026, 4, 7, 14, 0),
+            updatedAt: DateTime.utc(2026, 4, 7, 14, 1),
+          ),
+        ],
+        startSessionError: const ControlPlaneError(
+          statusCode: 409,
+          code: 'incompatible_host',
+          message: 'native bridge contract drifted',
+        ),
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ],
+            selectedProfileId: 'profile-1',
+            draft: ProfileDraft.fromProfile(
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.startSelectedProfile();
+
+      expect(controller.status, ShellStatus.blocked);
+      expect(
+        controller.hostConnection?.state,
+        MobileHostLifecycleState.incompatible,
+      );
+      expect(controller.notice, contains('contract drifted'));
     },
   );
 
@@ -188,6 +302,71 @@ void main() {
 
       await controller.continueChallenge(challenge.id);
       expect(bridge.continueChallengeCalls, <String>[challenge.id]);
+    },
+  );
+
+  test(
+    'controller sorts sessions newest first and auto-selects the latest active session',
+    () async {
+      final bridge = _FakeMobileHostBridge(
+        sessionsList: <SessionRecord>[
+          SessionRecord(
+            id: 'session-failed',
+            profileId: 'profile-1',
+            profileName: 'older failed',
+            profile: _profileSpec(),
+            state: SessionState.failed,
+            failure: const FailureInfo(
+              stage: 'turn_allocate',
+              message: 'timed out',
+            ),
+            startedAt: DateTime.utc(2026, 4, 7, 14, 0),
+            updatedAt: DateTime.utc(2026, 4, 7, 14, 1),
+            stoppedAt: DateTime.utc(2026, 4, 7, 14, 1),
+          ),
+          SessionRecord(
+            id: 'session-ready',
+            profileId: 'profile-1',
+            profileName: 'newer ready',
+            profile: _profileSpec(),
+            state: SessionState.ready,
+            startedAt: DateTime.utc(2026, 4, 7, 14, 2),
+            updatedAt: DateTime.utc(2026, 4, 7, 14, 3),
+          ),
+        ],
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ],
+            selectedProfileId: 'profile-1',
+            draft: ProfileDraft.fromProfile(
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(
+        controller.sessions.map((SessionRecord session) => session.id).toList(),
+        <String>['session-ready', 'session-failed'],
+      );
+      expect(controller.selectedSessionId, 'session-ready');
     },
   );
 
@@ -282,6 +461,9 @@ class _InMemoryStateStore implements MobileShellStateStore {
 
   @override
   Future<void> save(MobileShellState state) async {}
+
+  @override
+  Future<void> clear() async {}
 }
 
 class _FakeBrowserLauncher implements BrowserLauncher {
@@ -304,6 +486,7 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     ),
     this.sessionsList = const <SessionRecord>[],
     this.challengeMap = const <String, ChallengeRecord>{},
+    this.startSessionError,
     DiagnosticsBundle? diagnosticsBundle,
   }) : diagnosticsBundle =
            diagnosticsBundle ??
@@ -329,10 +512,12 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   final MobileHostConnectionResult ensureReadyResult;
   final List<SessionRecord> sessionsList;
   final Map<String, ChallengeRecord> challengeMap;
+  final ControlPlaneError? startSessionError;
   final DiagnosticsBundle diagnosticsBundle;
 
   final List<ProfileRecord> upsertedProfiles = <ProfileRecord>[];
   final List<String> continueChallengeCalls = <String>[];
+  int ensureReadyCalls = 0;
   int startSessionCalls = 0;
   final StreamController<EventRecord> _events =
       StreamController<EventRecord>.broadcast();
@@ -367,7 +552,10 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   }
 
   @override
-  Future<MobileHostConnectionResult> ensureReady() async => ensureReadyResult;
+  Future<MobileHostConnectionResult> ensureReady() async {
+    ensureReadyCalls += 1;
+    return ensureReadyResult;
+  }
 
   @override
   Stream<EventRecord> events() => _events.stream;
@@ -404,6 +592,9 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     ProfileSpec? spec,
   }) async {
     startSessionCalls += 1;
+    if (startSessionError != null) {
+      throw startSessionError!;
+    }
     return sessionsList.first;
   }
 
@@ -416,4 +607,45 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     upsertedProfiles.add(profile);
     return profile;
   }
+}
+
+class _ThrowingStateStore implements MobileShellStateStore {
+  const _ThrowingStateStore(this.error);
+
+  final Object error;
+
+  @override
+  Future<void> clear() async {}
+
+  @override
+  Future<MobileShellState?> load() async {
+    throw error;
+  }
+
+  @override
+  Future<void> save(MobileShellState state) async {}
+}
+
+class _RecoverableThrowingStateStore implements MobileShellStateStore {
+  _RecoverableThrowingStateStore(this.error);
+
+  Object? error;
+  int clearCalls = 0;
+
+  @override
+  Future<void> clear() async {
+    clearCalls += 1;
+    error = null;
+  }
+
+  @override
+  Future<MobileShellState?> load() async {
+    if (error != null) {
+      throw error!;
+    }
+    return null;
+  }
+
+  @override
+  Future<void> save(MobileShellState state) async {}
 }

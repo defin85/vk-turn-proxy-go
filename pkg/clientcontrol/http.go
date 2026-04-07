@@ -214,6 +214,9 @@ func Handler(host *Host) http.Handler {
 			return
 		}
 
+		w.WriteHeader(http.StatusOK)
+		flusher.Flush()
+
 		encoder := json.NewEncoder(w)
 		for {
 			select {

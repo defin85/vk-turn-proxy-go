@@ -219,13 +219,39 @@ flutter analyze
 flutter test
 ```
 
-During development, the current shell can point at an HTTP bridge with:
+The mobile app resolves its control-plane endpoint through a native platform bridge first.
+On Android packaged builds, that bridge starts and returns the bundled embedded host over loopback by default.
+The Flutter layer no longer invents a loopback fallback on its own: if the native bridge is missing or misconfigured, the app stays blocked and reports that bootstrap failure explicitly.
+On iOS, the current native bridge still resolves either `VKTMobileHostURL` or the local loopback development host.
+For explicit development overrides, the shell can still point at an HTTP bridge with:
 
 ```bash
 flutter run --dart-define=VKTP_MOBILE_HOST_URL=http://127.0.0.1:7777
 ```
 
+Native packaging can still override the default Android embedded-host path when needed for debugging:
+- Android manifest meta-data: `com.defin85.vk_turn_proxy_go.MOBILE_HOST_URL`
+- iOS `Info.plist`: `VKTMobileHostURL`
+
+If the native bridge resolver itself fails, the app stays in a blocked state and surfaces that bootstrap error instead of crashing before the first screen.
+Android release/default packaging keeps cleartext HTTP limited to the documented local host bridge path.
+Android `debug` and `profile` variants keep broader cleartext enabled so explicit development HTTP bridge overrides still work.
+The repo-owned Android packaging workflow now stages a packaged debug APK under `dist/mobile/android-gui-shell/`:
+
+```bash
+bash ./scripts/build-android-gui-from-wsl.sh
+```
+
+That workflow rebuilds the Android embedded host, writes Windows-native `local.properties` inside the mirror, builds the APK through the pinned Windows Flutter SDK, and syncs the staged artifact back into the canonical WSL checkout.
+
+For a repo-owned smoke that proves the packaged-host shared-library path reaches control-plane `ready` without an external `clientd` or `VKTP_MOBILE_HOST_URL`:
+
+```bash
+make smoke-android-embedded-host
+```
+
 The mobile slice persists non-secret app state in general preferences and keeps provider/runtime secrets in platform-native secure storage.
+If previously saved secure state is missing, the app blocks runtime control until the operator explicitly resets local state from the UI.
 Browser challenge continuation uses platform-native handoff and explicit in-app confirmation.
 This slice does not yet claim Android `VpnService`, iOS Network Extension, or device-wide tunnel capture support.
 

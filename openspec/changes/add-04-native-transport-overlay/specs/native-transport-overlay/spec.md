@@ -1,7 +1,7 @@
 ## ADDED Requirements
 ### Requirement: Native transport overlay exposes explicit ingress and egress adapters
 
-The system SHALL support pluggable client ingress and server egress adapters above the existing provider-backed relay underlay.
+The system SHALL support pluggable client ingress and server egress adapters above the existing provider-backed relay underlay through a repository-owned overlay contract.
 
 #### Scenario: UDP baseline adapter pair preserves current behavior
 
@@ -17,6 +17,17 @@ The system SHALL support pluggable client ingress and server egress adapters abo
 - **THEN** the runtimes create a distinct overlay stream identity for that connection
 - **AND** the server side dials the configured upstream TCP target for that stream
 - **AND** traffic for one stream does not reuse another stream's identity or teardown state
+
+### Requirement: Native transport overlay contract remains underlay-neutral
+
+The system SHALL define overlay stream and datagram semantics independently of provider-specific or underlay-specific wire mechanisms.
+
+#### Scenario: Overlay contract survives underlay evolution
+
+- **GIVEN** a supported overlay adapter pairing above the current provider-backed relay underlay
+- **WHEN** the repository evolves provider or underlay mechanics without changing the documented overlay capability
+- **THEN** the overlay continues to use repository-owned stream and datagram lifecycle terms
+- **AND** adapter contracts do not depend on importing HTTP CONNECT, pseudo-host, or QUIC stream identifier semantics
 
 ### Requirement: Native transport overlay distinguishes datagram and stream session classes
 
@@ -38,14 +49,21 @@ The system SHALL encode enough overlay metadata to preserve datagram reply routi
 
 ### Requirement: Unsupported adapter pairings fail closed
 
-The system SHALL reject unsupported ingress and egress combinations before claiming readiness.
+The system SHALL reject unsupported ingress and egress combinations outside the documented pairing matrix before claiming readiness.
 
 #### Scenario: Unsupported adapter combination
 
-- **GIVEN** an ingress or egress adapter pairing that the runtime does not explicitly support
+- **GIVEN** an ingress or egress adapter pairing that the runtime does not explicitly list as supported
 - **WHEN** the operator starts the client or server
 - **THEN** the process exits non-zero with `policy_validate` or another documented startup stage
 - **AND** it does not silently fall back to UDP-only forwarding
+
+#### Scenario: Adapter availability does not imply generic support
+
+- **GIVEN** a newly added ingress or egress adapter with no matching supported pairing
+- **WHEN** an operator configures that adapter outside the documented pairing matrix
+- **THEN** startup fails before TURN allocation or peer setup begins
+- **AND** docs do not describe the adapter as generically supported on its own
 
 #### Scenario: Stream adapter is missing required session guarantees
 
@@ -63,3 +81,4 @@ The system SHALL back new adapter-pair support claims with deterministic tests o
 - **WHEN** that change is merged
 - **THEN** deterministic tests or replayable compatibility evidence cover startup, data transfer, and teardown for that pair
 - **AND** docs and specs state any remaining limitations explicitly
+- **AND** the support claim stays scoped to that documented pairing instead of implying support for every other adapter combination

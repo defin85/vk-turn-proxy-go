@@ -1,7 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_client.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_models.dart';
+
+const String _bridgeChannelName =
+    'com.defin85.vk_turn_proxy_go/mobile_host_bridge';
 
 enum MobileHostLifecycleState { ready, unavailable, incompatible, failed }
 
@@ -21,25 +25,151 @@ class MobileHostConnectionResult {
   bool get isReady => state == MobileHostLifecycleState.ready;
 }
 
+class ResolvedMobileHostConfig {
+  const ResolvedMobileHostConfig({
+    required this.baseUri,
+    required this.description,
+  });
+
+  final Uri baseUri;
+  final String description;
+}
+
+class MobileHostConfigResolutionError implements Exception {
+  const MobileHostConfigResolutionError(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+abstract class MobileHostConfigResolver {
+  Future<ResolvedMobileHostConfig?> resolve();
+}
+
+class PlatformMobileHostConfigResolver implements MobileHostConfigResolver {
+  PlatformMobileHostConfigResolver({MethodChannel? methodChannel})
+    : _methodChannel = methodChannel ?? const MethodChannel(_bridgeChannelName);
+
+  final MethodChannel _methodChannel;
+
+  @override
+  Future<ResolvedMobileHostConfig?> resolve() async {
+    try {
+      final payload = await _methodChannel.invokeMapMethod<String, dynamic>(
+        'resolveHost',
+      );
+      if (payload == null) {
+        throw const MobileHostConfigResolutionError(
+          'Native mobile host bridge did not return a host configuration.',
+        );
+      }
+      final baseUrl = (payload['base_url'] as String? ?? '').trim();
+      if (baseUrl.isEmpty) {
+        throw const MobileHostConfigResolutionError(
+          'Native mobile host bridge returned an empty host URL.',
+        );
+      }
+      final uri = Uri.tryParse(baseUrl);
+      final validUri =
+          uri != null &&
+          uri.hasScheme &&
+          (uri.scheme == 'http' || uri.scheme == 'https') &&
+          uri.host.isNotEmpty;
+      if (!validUri) {
+        throw MobileHostConfigResolutionError(
+          'Native mobile host bridge returned an invalid host URL: $baseUrl',
+        );
+      }
+      final description = (payload['description'] as String? ?? baseUrl).trim();
+      return ResolvedMobileHostConfig(
+        baseUri: uri,
+        description: description.isEmpty ? baseUrl : description,
+      );
+    } on MissingPluginException {
+      throw const MobileHostConfigResolutionError(
+        'Native mobile host bridge plugin is unavailable.',
+      );
+    } on PlatformException catch (error) {
+      throw MobileHostConfigResolutionError(
+        'Failed to resolve the mobile host bridge from the native platform: ${error.message ?? error.code}',
+      );
+    } catch (error) {
+      throw MobileHostConfigResolutionError(
+        'Failed to resolve the mobile host bridge from the native platform: $error',
+      );
+    }
+  }
+}
+
 abstract class MobileHostBridge implements ControlPlaneApi {
   Future<MobileHostConnectionResult> ensureReady();
   Future<void> dispose();
 }
 
 class MobileHostBridgeFactory {
-  static MobileHostBridge fromEnvironment() {
-    final baseUrl = const String.fromEnvironment('VKTP_MOBILE_HOST_URL');
-    if (baseUrl.trim().isNotEmpty) {
-      return HttpMobileHostBridge(baseUri: Uri.parse(baseUrl.trim()));
+  static Future<MobileHostBridge> fromEnvironment({
+    String? configuredBaseUrl,
+    MobileHostConfigResolver? resolver,
+    ControlPlaneApi Function(Uri baseUri)? clientFactory,
+  }) async {
+    final override =
+        (configuredBaseUrl ??
+                const String.fromEnvironment('VKTP_MOBILE_HOST_URL'))
+            .trim();
+    if (override.isNotEmpty) {
+      final uri = Uri.tryParse(override);
+      if (uri == null) {
+        return const UnavailableMobileHostBridge(
+          message:
+              'VKTP_MOBILE_HOST_URL is not a valid URI for the mobile host bridge.',
+          description: 'invalid VKTP_MOBILE_HOST_URL',
+        );
+      }
+      return HttpMobileHostBridge(
+        baseUri: uri,
+        client: clientFactory?.call(uri),
+        description: 'VKTP_MOBILE_HOST_URL',
+      );
     }
-    return const UnavailableMobileHostBridge();
+
+    ResolvedMobileHostConfig? resolved;
+    try {
+      resolved = await (resolver ?? PlatformMobileHostConfigResolver())
+          .resolve();
+    } on MobileHostConfigResolutionError catch (error) {
+      return UnavailableMobileHostBridge(
+        message: error.message,
+        description: 'native mobile host bridge',
+      );
+    } catch (error) {
+      return UnavailableMobileHostBridge(
+        message:
+            'Failed to resolve the mobile host bridge from the native platform: $error',
+        description: 'native mobile host bridge',
+      );
+    }
+    if (resolved == null) {
+      return const UnavailableMobileHostBridge(
+        message:
+            'Native mobile host bridge did not provide a control-plane endpoint.',
+        description: 'native mobile host bridge',
+      );
+    }
+    return HttpMobileHostBridge(
+      baseUri: resolved.baseUri,
+      client: clientFactory?.call(resolved.baseUri),
+      description: resolved.description,
+    );
   }
 }
 
 class HttpMobileHostBridge implements MobileHostBridge {
   HttpMobileHostBridge({
     required this.baseUri,
-    ControlPlaneClient? client,
+    ControlPlaneApi? client,
+    this.description = '',
     this.supportedVersions = const <String>[ControlPlaneClient.contractVersion],
     this.requiredCapabilities = const <Capability>[
       Capability.mobileHostBridge,
@@ -52,9 +182,13 @@ class HttpMobileHostBridge implements MobileHostBridge {
   }) : _client = client ?? ControlPlaneClient(baseUri: baseUri);
 
   final Uri baseUri;
-  final ControlPlaneClient _client;
+  final ControlPlaneApi _client;
+  final String description;
   final List<String> supportedVersions;
   final List<Capability> requiredCapabilities;
+
+  String get _descriptionLabel =>
+      description.isEmpty ? baseUri.toString() : description;
 
   @override
   Future<ChallengeRecord> cancelChallenge(String challengeId) {
@@ -94,13 +228,14 @@ class HttpMobileHostBridge implements MobileHostBridge {
         return MobileHostConnectionResult(
           state: MobileHostLifecycleState.incompatible,
           message: error.message,
+          description: _descriptionLabel,
         );
       }
     } catch (error) {
       return MobileHostConnectionResult(
         state: MobileHostLifecycleState.failed,
         message: '$error',
-        description: baseUri.toString(),
+        description: _descriptionLabel,
       );
     }
 
@@ -111,9 +246,9 @@ class HttpMobileHostBridge implements MobileHostBridge {
       );
       return MobileHostConnectionResult(
         state: MobileHostLifecycleState.ready,
-        message: 'Connected to mobile host bridge ${baseUri.toString()}',
+        message: 'Connected to mobile host bridge $baseUri',
         info: negotiated,
-        description: baseUri.toString(),
+        description: _descriptionLabel,
       );
     } on ControlPlaneError catch (error) {
       return MobileHostConnectionResult(
@@ -122,14 +257,14 @@ class HttpMobileHostBridge implements MobileHostBridge {
             : MobileHostLifecycleState.unavailable,
         message: error.message,
         info: discoveredInfo,
-        description: baseUri.toString(),
+        description: _descriptionLabel,
       );
     } catch (error) {
       return MobileHostConnectionResult(
         state: MobileHostLifecycleState.failed,
         message: '$error',
         info: discoveredInfo,
-        description: baseUri.toString(),
+        description: _descriptionLabel,
       );
     }
   }
@@ -174,10 +309,16 @@ class HttpMobileHostBridge implements MobileHostBridge {
 }
 
 class UnavailableMobileHostBridge implements MobileHostBridge {
-  const UnavailableMobileHostBridge();
+  const UnavailableMobileHostBridge({
+    this.message = _defaultMessage,
+    this.description = 'unconfigured mobile bridge',
+  });
 
-  static const String _message =
-      'Mobile host bridge is not configured. Wire a native bridge or set VKTP_MOBILE_HOST_URL for development.';
+  static const String _defaultMessage =
+      'Mobile host bridge is not configured. Package a compatible loopback host or set VKTP_MOBILE_HOST_URL for development.';
+
+  final String message;
+  final String description;
 
   @override
   Future<ChallengeRecord> cancelChallenge(String challengeId) => _fail();
@@ -199,10 +340,10 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
 
   @override
   Future<MobileHostConnectionResult> ensureReady() async {
-    return const MobileHostConnectionResult(
+    return MobileHostConnectionResult(
       state: MobileHostLifecycleState.unavailable,
-      message: _message,
-      description: 'unconfigured mobile bridge',
+      message: message,
+      description: description,
     );
   }
 
@@ -235,10 +376,10 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
   Future<ProfileRecord> upsertProfile(ProfileRecord profile) => _fail();
 
   Future<T> _fail<T>() {
-    throw const ControlPlaneError(
+    throw ControlPlaneError(
       statusCode: 0,
       code: 'bridge_unavailable',
-      message: _message,
+      message: message,
     );
   }
 }

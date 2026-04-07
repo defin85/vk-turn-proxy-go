@@ -49,5 +49,5 @@ Android `VpnService`, iOS Network Extension, and related routing concerns are de
 ## Validation Plan
 
 - Mobile integration tests for profile/session/challenge flows against a mocked host
-- At least one embedded-host smoke flow per mobile platform
+- At least one native mobile packaging smoke on an actively built target during implementation; Android debug APK build is the current baseline evidence outside macOS/Xcode environments
 - `openspec validate add-03-mobile-gui-shell --strict --no-interactive`

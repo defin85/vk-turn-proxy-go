@@ -10,10 +10,11 @@ The repository itself still exposes a UDP local ingress on the client and a UDP 
 - Unblocks: `add-05-platform-tunnel-integrations`
 
 ## What Changes
-- Introduce an adapter-based native transport overlay above the existing provider-backed TURN/DTLS/plain underlay.
+- Introduce an adapter-based, underlay-neutral native transport overlay above the existing provider-backed TURN/DTLS/plain underlay.
 - Preserve the current UDP path as the reference adapter pair while defining first-class stream semantics for future native TCP and proxy adapters.
+- Define support in terms of explicit ingress -> egress adapter pairings instead of generic per-adapter claims.
 - Add explicit policy gating, lifecycle, cleanup, and compatibility-evidence requirements so new adapters fail closed instead of silently degrading into the current UDP-only slice.
 
 ## Impact
 - Affected specs: `tunnel-client-runtime`, `native-transport-overlay`
-- Affected code: `cmd/tunnel-client`, `cmd/tunnel-server`, `internal/session`, `internal/transport`, `internal/tunnelserver`, future adapter packages, integration/compatibility docs and tests
+- Affected code: `cmd/tunnel-client`, `cmd/tunnel-server`, `internal/session`, `internal/transport`, `internal/tunnelserver`, future adapter packages, pairing-policy validation, integration/compatibility docs and tests
