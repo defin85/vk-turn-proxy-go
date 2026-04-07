@@ -2,6 +2,7 @@
 
 Use repo-owned scripts for reproducible local and CI builds instead of ad-hoc commands.
 The canonical human-facing product version source for supported artifacts is `version.json` at the repository root.
+Run `./scripts/sync-version-assets.py` when `version.json` changes so Flutter-facing defaults stay aligned during local development.
 
 ## Go artifacts from WSL
 
@@ -48,6 +49,7 @@ That workflow:
 
 The Windows GUI package includes a sibling `clientd.exe` next to `gui_shell.exe`.
 The workflow also validates that `desktop/gui_shell/pubspec.yaml` matches `version.json` before packaging.
+The WSL wrapper also writes `dist/build/windows-gui-build-metadata.json` so the mirrored native Windows build path can keep revision/dirty stamping even when the mirror does not include `.git`.
 
 ## Native Windows GUI build
 
@@ -71,6 +73,7 @@ From the repository root:
 ```bash
 make build-go
 make build-gui-windows
+make sync-version-assets
 ```
 
 `make ci` remains the fast Go-only smoke path.

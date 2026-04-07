@@ -3,9 +3,10 @@
 ACT_WORKFLOW ?= .github/workflows/ci.yml
 ACT_JOB ?= test
 
-.PHONY: ci build-go build-gui-windows ci-act ci-act-dry ci-act-verbose deps-act
+.PHONY: ci build-go build-gui-windows sync-version-assets check-version-assets ci-act ci-act-dry ci-act-verbose deps-act
 
 ci:
+	./scripts/sync-version-assets.py --check
 	go test ./...
 	go build ./...
 
@@ -14,6 +15,12 @@ build-go:
 
 build-gui-windows:
 	./scripts/build-windows-gui-from-wsl.sh
+
+sync-version-assets:
+	./scripts/sync-version-assets.py
+
+check-version-assets:
+	./scripts/sync-version-assets.py --check
 
 ci-act: deps-act
 	act -j $(ACT_JOB) -W $(ACT_WORKFLOW)

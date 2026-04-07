@@ -61,6 +61,30 @@ if [[ -n "$(git -C "${ROOT_DIR}" status --porcelain --untracked-files=no)" ]]; t
   DIRTY="true"
 fi
 BUILT_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+WINDOWS_GUI_BUILD_METADATA="${ROOT_DIR}/dist/build/windows-gui-build-metadata.json"
+
+python3 "${ROOT_DIR}/scripts/sync-version-assets.py" --repo-root "${ROOT_DIR}"
+
+mkdir -p "$(dirname "${WINDOWS_GUI_BUILD_METADATA}")"
+python3 -c '
+import json
+import pathlib
+import sys
+
+payload = {
+    "product": sys.argv[2],
+    "version": sys.argv[3],
+    "build_number": sys.argv[4],
+    "revision": sys.argv[5],
+    "dirty": sys.argv[6].lower() == "true",
+    "built_at": sys.argv[7],
+    "role": "gui_shell",
+    "target": "windows/x64",
+}
+path = pathlib.Path(sys.argv[1])
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+' "${WINDOWS_GUI_BUILD_METADATA}" "${PRODUCT_NAME}" "${PRODUCT_VERSION}" "${BUILD_NUMBER}" "${REVISION}" "${DIRTY}" "${BUILT_AT}"
 
 "${ROOT_DIR}/scripts/build-go-matrix.sh" windows/amd64
 

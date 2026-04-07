@@ -99,6 +99,7 @@ make build-gui-windows
 
 The full build workflow contract lives in `docs/build-workflows.md`.
 Supported artifact builds derive their human-facing product version from the repo root `version.json`.
+Use `./scripts/sync-version-assets.py` when that manifest changes so Flutter dev/runtime defaults stay in sync.
 
 Run the server baseline:
 

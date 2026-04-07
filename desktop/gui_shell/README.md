@@ -28,6 +28,11 @@ The project also includes generated `macos/` and `windows/` runners so packaging
 
 The pinned Flutter SDK version for this project is stored in `desktop/gui_shell/.flutter-version`.
 The canonical product version source for supported builds is `version.json` at the repository root.
+Keep the Flutter-facing defaults aligned with that manifest through:
+
+```bash
+./scripts/sync-version-assets.py
+```
 
 For Windows packaging from the canonical WSL checkout, use the repo-owned wrapper instead of running Flutter directly from `\\wsl.localhost\...`:
 
@@ -36,6 +41,7 @@ For Windows packaging from the canonical WSL checkout, use the repo-owned wrappe
 ```
 
 That workflow synchronizes the repository into `E:\Projects\vk-turn-proxy-go`, runs the Windows-native Flutter build there, and stages the packaged bundle under `dist/windows-gui/`.
+It also refreshes the mirrored build metadata stamp used by the direct native Windows build path when the mirror has no `.git` checkout.
 
 ## Control-plane contract
 

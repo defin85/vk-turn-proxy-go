@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"os/exec"
+	"path/filepath"
 	"slices"
 	"testing"
 	"time"
@@ -191,5 +193,74 @@ func TestNewBrowserOperationContextFollowsTimeout(t *testing.T) {
 	}
 	if !errors.Is(opCtx.Err(), context.DeadlineExceeded) {
 		t.Fatalf("operation context error = %v, want context.DeadlineExceeded", opCtx.Err())
+	}
+}
+
+func TestResolveBrowserPathWithExplicitEnvWins(t *testing.T) {
+	path, err := resolveBrowserPathWith("windows", func(key string) string {
+		if key == "VK_PROVIDER_BROWSER" {
+			return `C:\Tools\Chrome\chrome.exe`
+		}
+		return ""
+	}, func(string) (string, error) {
+		t.Fatal("lookPath should not be called when VK_PROVIDER_BROWSER is set")
+		return "", nil
+	}, func(string) bool {
+		t.Fatal("pathExists should not be called when VK_PROVIDER_BROWSER is set")
+		return false
+	})
+	if err != nil {
+		t.Fatalf("resolveBrowserPathWith() error = %v", err)
+	}
+	if path != `C:\Tools\Chrome\chrome.exe` {
+		t.Fatalf("resolveBrowserPathWith() path = %q", path)
+	}
+}
+
+func TestResolveBrowserPathWithWindowsUsesPATHCandidates(t *testing.T) {
+	var lookedUp []string
+	path, err := resolveBrowserPathWith("windows", func(string) string {
+		return ""
+	}, func(name string) (string, error) {
+		lookedUp = append(lookedUp, name)
+		if name == "msedge.exe" {
+			return `C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`, nil
+		}
+		return "", exec.ErrNotFound
+	}, func(string) bool {
+		t.Fatal("pathExists should not be called when browser is found in PATH")
+		return false
+	})
+	if err != nil {
+		t.Fatalf("resolveBrowserPathWith() error = %v", err)
+	}
+	if path != `C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe` {
+		t.Fatalf("resolveBrowserPathWith() path = %q", path)
+	}
+	if !slices.Contains(lookedUp, "chrome.exe") || !slices.Contains(lookedUp, "msedge.exe") {
+		t.Fatalf("resolveBrowserPathWith() looked up %#v, want chrome.exe and msedge.exe", lookedUp)
+	}
+}
+
+func TestResolveBrowserPathWithWindowsFallsBackToInstallPaths(t *testing.T) {
+	localAppData := `C:/Users/Egor/AppData/Local`
+	expected := filepath.Clean(filepath.Join(localAppData, "Google", "Chrome", "Application", "chrome.exe"))
+	path, err := resolveBrowserPathWith("windows", func(key string) string {
+		switch key {
+		case "LOCALAPPDATA":
+			return localAppData
+		default:
+			return ""
+		}
+	}, func(string) (string, error) {
+		return "", exec.ErrNotFound
+	}, func(candidate string) bool {
+		return filepath.Clean(candidate) == expected
+	})
+	if err != nil {
+		t.Fatalf("resolveBrowserPathWith() error = %v", err)
+	}
+	if filepath.Clean(path) != expected {
+		t.Fatalf("resolveBrowserPathWith() path = %q, want %q", path, expected)
 	}
 }

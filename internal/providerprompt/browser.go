@@ -12,13 +12,15 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/chromedp/cdproto/network"
-	"github.com/chromedp/cdproto/runtime"
+	chromedpruntime "github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
@@ -411,7 +413,7 @@ func (s *chromiumSession) executeStageRequest(ctx context.Context, request provi
 		Body       map[string]any `json:"body"`
 	}
 	if err := chromedp.Run(s.targetCtx, chromedp.ActionFunc(func(execCtx context.Context) error {
-		result, exception, err := runtime.Evaluate(script).
+		result, exception, err := chromedpruntime.Evaluate(script).
 			WithAwaitPromise(true).
 			WithReturnByValue(true).
 			Do(execCtx)
@@ -689,17 +691,102 @@ func (s *chromiumSession) Close() error {
 }
 
 func resolveBrowserPath() (string, error) {
-	if configured := strings.TrimSpace(os.Getenv("VK_PROVIDER_BROWSER")); configured != "" {
+	return resolveBrowserPathWith(runtime.GOOS, os.Getenv, exec.LookPath, browserExecutableExists)
+}
+
+func resolveBrowserPathWith(
+	goos string,
+	getenv func(string) string,
+	lookPath func(string) (string, error),
+	pathExists func(string) bool,
+) (string, error) {
+	if configured := strings.TrimSpace(getenv("VK_PROVIDER_BROWSER")); configured != "" {
 		return configured, nil
 	}
-	for _, candidate := range []string{"chromium", "chromium-browser", "google-chrome", "google-chrome-stable"} {
-		path, err := exec.LookPath(candidate)
+	for _, candidate := range browserLookupCandidates(goos) {
+		path, err := lookPath(candidate)
 		if err == nil {
 			return path, nil
 		}
 	}
+	for _, candidate := range browserInstallPathCandidates(goos, getenv) {
+		if pathExists(candidate) {
+			return candidate, nil
+		}
+	}
 
 	return "", errors.New("no supported browser executable found")
+}
+
+func browserLookupCandidates(goos string) []string {
+	if goos == "windows" {
+		return []string{
+			"chrome.exe",
+			"chrome",
+			"msedge.exe",
+			"msedge",
+			"chromium.exe",
+			"chromium",
+			"chromium-browser.exe",
+			"chromium-browser",
+			"google-chrome.exe",
+			"google-chrome",
+			"google-chrome-stable.exe",
+			"google-chrome-stable",
+		}
+	}
+
+	return []string{"chromium", "chromium-browser", "google-chrome", "google-chrome-stable"}
+}
+
+func browserInstallPathCandidates(goos string, getenv func(string) string) []string {
+	if goos != "windows" {
+		return nil
+	}
+
+	var candidates []string
+	seen := make(map[string]struct{})
+	appendCandidate := func(root string, parts ...string) {
+		root = strings.TrimSpace(root)
+		if root == "" {
+			return
+		}
+		path := filepath.Clean(filepath.Join(append([]string{root}, parts...)...))
+		key := strings.ToLower(path)
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		candidates = append(candidates, path)
+	}
+
+	for _, root := range []string{
+		windowsEnv(getenv, "ProgramFiles", "PROGRAMFILES"),
+		windowsEnv(getenv, "ProgramFiles(x86)", "PROGRAMFILES(X86)"),
+		windowsEnv(getenv, "LocalAppData", "LOCALAPPDATA"),
+	} {
+		appendCandidate(root, "Google", "Chrome", "Application", "chrome.exe")
+		appendCandidate(root, "Microsoft", "Edge", "Application", "msedge.exe")
+	}
+
+	return candidates
+}
+
+func windowsEnv(getenv func(string) string, keys ...string) string {
+	for _, key := range keys {
+		if value := strings.TrimSpace(getenv(key)); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func browserExecutableExists(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return !info.IsDir()
 }
 
 func chromiumLaunchArgs(userDataDir string, debugPort int) []string {
