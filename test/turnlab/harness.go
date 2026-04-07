@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/url"
+	"strconv"
 	"sync"
 	"time"
 
@@ -39,6 +40,9 @@ type Options struct {
 	PeerIdleTimeout     time.Duration
 	BindAddress         string
 	AdvertiseAddress    string
+	TURNPort            int
+	TURNTCPPort         int
+	PeerPort            int
 }
 
 type Descriptor struct {
@@ -98,6 +102,15 @@ func StartWithOptions(parent context.Context, logger *slog.Logger, opts Options)
 	if opts.PeerIdleTimeout < 0 {
 		return nil, fmt.Errorf("start harness: peer idle timeout must be positive")
 	}
+	if err := validateOptionalPort("turn", opts.TURNPort); err != nil {
+		return nil, fmt.Errorf("start harness: %w", err)
+	}
+	if err := validateOptionalPort("turn tcp", opts.TURNTCPPort); err != nil {
+		return nil, fmt.Errorf("start harness: %w", err)
+	}
+	if err := validateOptionalPort("peer", opts.PeerPort); err != nil {
+		return nil, fmt.Errorf("start harness: %w", err)
+	}
 	bindAddress, advertiseAddress, advertiseIP, err := resolveAddresses(opts)
 	if err != nil {
 		return nil, fmt.Errorf("start harness: %w", err)
@@ -137,7 +150,7 @@ func StartWithOptions(parent context.Context, logger *slog.Logger, opts Options)
 	harness.Descriptor.UpstreamAddress = echoConn.LocalAddr().String()
 
 	peerServer, err := tunnelserver.New(config.ServerConfig{
-		ListenAddr:       net.JoinHostPort(bindAddress, "0"),
+		ListenAddr:       listenAddress(bindAddress, opts.PeerPort),
 		UpstreamAddr:     harness.Descriptor.UpstreamAddress,
 		HandshakeTimeout: handshakeTimeout,
 		IdleTimeout:      peerIdleTimeout,
@@ -164,7 +177,7 @@ func StartWithOptions(parent context.Context, logger *slog.Logger, opts Options)
 	}()
 	harness.Descriptor.PeerAddress = publishAddress(peerListener.Addr(), advertiseAddress)
 
-	turnConn, err := net.ListenPacket("udp4", net.JoinHostPort(bindAddress, "0"))
+	turnConn, err := net.ListenPacket("udp4", listenAddress(bindAddress, opts.TURNPort))
 	if err != nil {
 		cancel()
 		_ = peerListener.Close()
@@ -173,7 +186,7 @@ func StartWithOptions(parent context.Context, logger *slog.Logger, opts Options)
 		<-echoErrCh
 		return nil, fmt.Errorf("listen turn server: %w", err)
 	}
-	tcpListener, err := net.Listen("tcp4", net.JoinHostPort(bindAddress, "0"))
+	tcpListener, err := net.Listen("tcp4", listenAddress(bindAddress, opts.TURNTCPPort))
 	if err != nil {
 		cancel()
 		_ = turnConn.Close()
@@ -287,6 +300,18 @@ func resolveAddresses(opts Options) (string, string, net.IP, error) {
 		return "", "", nil, fmt.Errorf("advertise address %q must be an IPv4 literal", advertiseAddress)
 	}
 	return bindAddress, advertiseAddress, advertiseIP, nil
+}
+
+func validateOptionalPort(name string, port int) error {
+	if port < 0 || port > 65535 {
+		return fmt.Errorf("%s port %d must be between 0 and 65535", name, port)
+	}
+
+	return nil
+}
+
+func listenAddress(host string, port int) string {
+	return net.JoinHostPort(host, strconv.Itoa(port))
 }
 
 func publishAddress(addr net.Addr, host string) string {

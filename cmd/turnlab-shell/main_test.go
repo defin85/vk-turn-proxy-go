@@ -172,7 +172,7 @@ func TestParseTurnlabShellFlagsUsesManualPeerIdleTimeoutDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseTurnlabShellFlags() error = %v", err)
 	}
-	if got, want := cfg.peerIdleTimeout, defaultShellPeerIdleTimeout; got != want {
+	if got, want := cfg.peerIdleTimeout, 5*time.Minute; got != want {
 		t.Fatalf("peerIdleTimeout = %s, want %s", got, want)
 	}
 }
@@ -198,6 +198,48 @@ func TestResolveTurnlabOptionsUsesPeerIdleTimeoutOverride(t *testing.T) {
 	}
 	if got, want := opts.PeerIdleTimeout, 45*time.Second; got != want {
 		t.Fatalf("opts.PeerIdleTimeout = %s, want %s", got, want)
+	}
+}
+
+func TestParseTurnlabShellFlagsAcceptsFixedPortOverrides(t *testing.T) {
+	cfg, err := parseTurnlabShellFlags(io.Discard, []string{
+		"-turn-port", "3478",
+		"-turn-tcp-port", "3478",
+		"-peer-port", "56000",
+	})
+	if err != nil {
+		t.Fatalf("parseTurnlabShellFlags() error = %v", err)
+	}
+	if got, want := cfg.turnPort, 3478; got != want {
+		t.Fatalf("turnPort = %d, want %d", got, want)
+	}
+	if got, want := cfg.turnTCPPort, 3478; got != want {
+		t.Fatalf("turnTCPPort = %d, want %d", got, want)
+	}
+	if got, want := cfg.peerPort, 56000; got != want {
+		t.Fatalf("peerPort = %d, want %d", got, want)
+	}
+}
+
+func TestResolveTurnlabOptionsUsesFixedPortOverrides(t *testing.T) {
+	opts, _, _, err := resolveTurnlabOptions(shellConfig{
+		turnPort:    3478,
+		turnTCPPort: 3478,
+		peerPort:    56000,
+	}, func() (string, error) {
+		return "172.29.240.1", nil
+	})
+	if err != nil {
+		t.Fatalf("resolveTurnlabOptions() error = %v", err)
+	}
+	if got, want := opts.TURNPort, 3478; got != want {
+		t.Fatalf("opts.TURNPort = %d, want %d", got, want)
+	}
+	if got, want := opts.TURNTCPPort, 3478; got != want {
+		t.Fatalf("opts.TURNTCPPort = %d, want %d", got, want)
+	}
+	if got, want := opts.PeerPort, 56000; got != want {
+		t.Fatalf("opts.PeerPort = %d, want %d", got, want)
 	}
 }
 

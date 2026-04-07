@@ -58,3 +58,10 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - Use `docs/agent/verification.md` to choose the smallest relevant verification set.
 - For Go changes, escalate to `go test ./...` and `go build ./...` when the smaller relevant checks pass.
 - Run `bd prime` for workflow context, track work in Beads, and keep approved OpenSpec tasks aligned with Beads.
+
+## Local infrastructure
+- The operator VPS is reachable as `ssh vk-turn-proxy-go`.
+- Connection details: host `176.109.104.105`, user `egor`, port `22`.
+- Use that alias for repo-related remote checks when the user asks to inspect or run something on the VPS.
+- `egor-vps` remains as a compatibility alias, but `vk-turn-proxy-go` is the canonical name.
+- Keep remote actions non-destructive unless the user explicitly requests otherwise.

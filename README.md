@@ -248,7 +248,7 @@ go run ./cmd/turnlab-shell
 ```
 
 The command prints a ready-to-paste `generic-turn://...` link plus the matching `peer_addr`.
-By default, the shell keeps the peer path alive for a 30-second manual inspection window before enforcing idle cleanup.
+By default, the shell keeps the peer path alive for a 5-minute manual inspection window before enforcing idle cleanup.
 Override that window explicitly when needed:
 
 ```bash
@@ -268,7 +268,23 @@ go run ./cmd/turnlab-shell -windows-gui
 ```
 
 That mode prints desktop-consumable `link=...` and `peer_addr=...` values backed by a non-loopback IPv4 address.
-Advanced runs can override the listener and published addresses explicitly with `-bind-address` and `-advertise-address`, and can shorten or extend the manual idle window with `-peer-idle-timeout`.
+Advanced runs can override the listener and published addresses explicitly with `-bind-address` and `-advertise-address`, can pin stable published ports with `-turn-port`, `-turn-tcp-port`, and `-peer-port`, and can shorten or extend the manual idle window with `-peer-idle-timeout`.
+
+For a stable remote contour whose firewall rules survive shell restarts, pin the published ports explicitly:
+
+```bash
+go run ./cmd/turnlab-shell \
+  -bind-address 0.0.0.0 \
+  -advertise-address 176.109.104.105 \
+  -turn-port 3478 \
+  -turn-tcp-port 3478 \
+  -peer-port 56000
+```
+
+Open matching firewall rules for the protocols you plan to exercise:
+- TURN UDP: UDP `3478`
+- TURN TCP: TCP `3478`
+- DTLS peer: UDP `56000`
 
 Future runtime and integration tests should call `turnlab.Start(ctx, logger)` and consume the returned descriptor:
 - `Descriptor.TURNAddress` plus `Descriptor.TURNCredentials` for TURN client setup

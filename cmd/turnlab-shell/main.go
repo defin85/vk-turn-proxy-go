@@ -25,10 +25,13 @@ type shellConfig struct {
 	peerIdleTimeout    time.Duration
 	bindAddress        string
 	advertiseAddress   string
+	turnPort           int
+	turnTCPPort        int
+	peerPort           int
 	windowsGUI         bool
 }
 
-const defaultShellPeerIdleTimeout = 30 * time.Second
+const defaultShellPeerIdleTimeout = 5 * time.Minute
 
 type shellDescriptor struct {
 	TURNAddress          string `json:"turn_address"`
@@ -126,6 +129,9 @@ func parseTurnlabShellFlags(stderr io.Writer, args []string) (shellConfig, error
 	flags.DurationVar(&cfg.peerIdleTimeout, "peer-idle-timeout", cfg.peerIdleTimeout, "idle timeout for the shell-managed peer path")
 	flags.StringVar(&cfg.bindAddress, "bind-address", cfg.bindAddress, "listener bind address for TURN and peer endpoints")
 	flags.StringVar(&cfg.advertiseAddress, "advertise-address", cfg.advertiseAddress, "published address for TURN links and peer endpoints")
+	flags.IntVar(&cfg.turnPort, "turn-port", cfg.turnPort, "fixed TURN UDP listen port; 0 keeps the current dynamic port behavior")
+	flags.IntVar(&cfg.turnTCPPort, "turn-tcp-port", cfg.turnTCPPort, "fixed TURN TCP listen port; 0 keeps the current dynamic port behavior")
+	flags.IntVar(&cfg.peerPort, "peer-port", cfg.peerPort, "fixed DTLS peer listen port; 0 keeps the current dynamic port behavior")
 	flags.BoolVar(&cfg.windowsGUI, "windows-gui", cfg.windowsGUI, "publish desktop-consumable addresses for a Windows GUI using a harness started inside WSL or another sibling host")
 	return cfg, flags.Parse(args)
 }
@@ -174,6 +180,9 @@ func resolveTurnlabOptions(
 		PeerIdleTimeout:    cfg.peerIdleTimeout,
 		BindAddress:        bindAddress,
 		AdvertiseAddress:   advertiseAddress,
+		TURNPort:           cfg.turnPort,
+		TURNTCPPort:        cfg.turnTCPPort,
+		PeerPort:           cfg.peerPort,
 	}, bindAddress, advertiseAddress, nil
 }
 

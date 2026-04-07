@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -260,6 +261,44 @@ func TestHarnessSupportsSplitBindAndAdvertiseAddresses(t *testing.T) {
 	mustReadDTLSEcho(t, dtlsConn, []byte("turn-lab-split-addresses"))
 }
 
+func TestHarnessSupportsFixedPorts(t *testing.T) {
+	turnPort := reserveUDPPort(t)
+	turnTCPPort := reserveTCPPort(t)
+	peerPort := reserveUDPPort(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	harness, err := turnlab.StartWithOptions(ctx, nil, turnlab.Options{
+		BindAddress:      "127.0.0.1",
+		AdvertiseAddress: "127.0.0.1",
+		TURNPort:         turnPort,
+		TURNTCPPort:      turnTCPPort,
+		PeerPort:         peerPort,
+	})
+	if err != nil {
+		t.Fatalf("start harness: %v", err)
+	}
+	t.Cleanup(func() {
+		cancel()
+		if err := harness.Close(); err != nil {
+			t.Errorf("close harness: %v", err)
+		}
+	})
+
+	if got, want := harness.Descriptor.TURNAddress, net.JoinHostPort("127.0.0.1", strconv.Itoa(turnPort)); got != want {
+		t.Fatalf("TURNAddress = %q, want %q", got, want)
+	}
+	if got, want := harness.Descriptor.TURNTCPAddress, net.JoinHostPort("127.0.0.1", strconv.Itoa(turnTCPPort)); got != want {
+		t.Fatalf("TURNTCPAddress = %q, want %q", got, want)
+	}
+	if got, want := harness.Descriptor.PeerAddress, net.JoinHostPort("127.0.0.1", strconv.Itoa(peerPort)); got != want {
+		t.Fatalf("PeerAddress = %q, want %q", got, want)
+	}
+
+	dtlsConn, _, cleanup := dialHarnessDTLS(t, harness, "tcp")
+	t.Cleanup(cleanup)
+	mustReadDTLSEcho(t, dtlsConn, []byte("turn-lab-fixed-ports"))
+}
+
 func TestHarnessRejectsNonIPv4AdvertiseAddress(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -311,6 +350,24 @@ func TestHarnessRejectsNegativePeerIdleTimeout(t *testing.T) {
 		t.Fatal("expected start to fail for negative peer idle timeout")
 	}
 	if !strings.Contains(err.Error(), "peer idle timeout must be positive") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestHarnessRejectsOutOfRangeFixedPort(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	harness, err := turnlab.StartWithOptions(ctx, nil, turnlab.Options{
+		TURNTCPPort: 70000,
+	})
+	if err == nil {
+		if harness != nil {
+			_ = harness.Close()
+		}
+		t.Fatal("expected start to fail for out-of-range fixed port")
+	}
+	if !strings.Contains(err.Error(), "turn tcp port 70000 must be between 0 and 65535") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -473,4 +530,36 @@ func hostPart(t *testing.T, value string) string {
 		t.Fatalf("SplitHostPort(%q): %v", value, err)
 	}
 	return host
+}
+
+func reserveUDPPort(t *testing.T) int {
+	t.Helper()
+
+	conn, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve udp port: %v", err)
+	}
+	defer conn.Close()
+
+	addr, ok := conn.LocalAddr().(*net.UDPAddr)
+	if !ok {
+		t.Fatalf("unexpected udp addr type %T", conn.LocalAddr())
+	}
+	return addr.Port
+}
+
+func reserveTCPPort(t *testing.T) int {
+	t.Helper()
+
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve tcp port: %v", err)
+	}
+	defer listener.Close()
+
+	addr, ok := listener.Addr().(*net.TCPAddr)
+	if !ok {
+		t.Fatalf("unexpected tcp addr type %T", listener.Addr())
+	}
+	return addr.Port
 }
