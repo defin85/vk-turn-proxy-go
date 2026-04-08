@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_client.dart';
@@ -38,6 +41,7 @@ void main() {
     'mobile host bridge factory uses the native-resolved host path',
     () async {
       Uri? createdUri;
+      final api = _ReadyControlPlaneApi();
       final bridge = await MobileHostBridgeFactory.fromEnvironment(
         configuredBaseUrl: '',
         resolver: _FakeResolver(
@@ -48,7 +52,7 @@ void main() {
         ),
         clientFactory: (Uri uri) {
           createdUri = uri;
-          return const _ReadyControlPlaneApi();
+          return api;
         },
       );
 
@@ -59,6 +63,13 @@ void main() {
       expect(result.state, MobileHostLifecycleState.ready);
       expect(result.description, 'ios loopback default');
       expect(result.info?.capabilities, contains(Capability.mobileHostBridge));
+      expect(result.info?.capabilities, contains(Capability.platformTunnels));
+      expect(
+        result.info?.platformTunnels.single.mode,
+        PlatformTunnelMode.appleNetworkExtension,
+      );
+      expect(api.negotiateCalls, hasLength(1));
+      expect(api.negotiateCalls.single, contains(Capability.platformTunnels));
     },
   );
 
@@ -146,6 +157,214 @@ void main() {
       ),
     );
   });
+
+  test(
+    'mobile host bridge forwards typed platform tunnel startup results',
+    () async {
+      final bridge = await MobileHostBridgeFactory.fromEnvironment(
+        configuredBaseUrl: 'http://127.0.0.1:7777',
+        clientFactory: (_) => _ReadyControlPlaneApi(),
+      );
+
+      final result = await bridge.startPlatformTunnel(
+        mode: PlatformTunnelMode.appleNetworkExtension,
+      );
+
+      expect(result.ready, isFalse);
+      expect(result.stage, PlatformTunnelStartupStage.capabilityCheck);
+      expect(
+        result.missingPrerequisite,
+        PlatformTunnelPrerequisite.hostImplementation,
+      );
+    },
+  );
+
+  test(
+    'mobile control plane client fails closed on invalid platform modes',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(server.close);
+
+      server.listen((HttpRequest request) async {
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(
+          jsonEncode(<String, dynamic>{
+            'contract_version': '1',
+            'build': <String, dynamic>{
+              'product': 'vk-turn-proxy-go',
+              'version': '0.1.0',
+              'build_number': '1',
+            },
+            'capabilities': <String>[
+              'mobile_host_bridge',
+              'platform_tunnels',
+              'profiles',
+              'sessions',
+              'challenges',
+              'diagnostics',
+              'event_stream',
+            ],
+            'platform_tunnels': <Map<String, dynamic>>[
+              <String, dynamic>{
+                'mode': 'future_platform_mode',
+                'available': false,
+                'missing_prerequisite': 'host_implementation',
+              },
+            ],
+          }),
+        );
+        await request.response.close();
+      });
+
+      final realHttpOverrides = _RealHttpOverrides();
+      final client = ControlPlaneClient(
+        baseUri: Uri.parse('http://${server.address.address}:${server.port}'),
+        httpClientFactory: () => realHttpOverrides.createHttpClient(null),
+      );
+
+      await expectLater(
+        client.negotiate(
+          supportedVersions: const <String>['1'],
+          requiredCapabilities: const <Capability>[
+            Capability.mobileHostBridge,
+            Capability.platformTunnels,
+          ],
+        ),
+        throwsA(isA<FormatException>()),
+      );
+    },
+  );
+
+  test(
+    'mobile control plane client fails closed on invalid startup result payloads',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(server.close);
+
+      server.listen((HttpRequest request) async {
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(
+          jsonEncode(<String, dynamic>{
+            'mode': 'apple_network_extension',
+            'ready': false,
+            'message': 'missing startup stage',
+          }),
+        );
+        await request.response.close();
+      });
+
+      final realHttpOverrides = _RealHttpOverrides();
+      final client = ControlPlaneClient(
+        baseUri: Uri.parse('http://${server.address.address}:${server.port}'),
+        httpClientFactory: () => realHttpOverrides.createHttpClient(null),
+      );
+
+      await expectLater(
+        client.startPlatformTunnel(
+          mode: PlatformTunnelMode.appleNetworkExtension,
+        ),
+        throwsA(isA<FormatException>()),
+      );
+    },
+  );
+
+  test(
+    'mobile control plane client fails closed when available platform tunnel omits satisfied prerequisites',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(server.close);
+
+      server.listen((HttpRequest request) async {
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(
+          jsonEncode(<String, dynamic>{
+            'contract_version': '1',
+            'build': <String, dynamic>{
+              'product': 'vk-turn-proxy-go',
+              'version': '0.1.0',
+              'build_number': '1',
+            },
+            'capabilities': <String>[
+              'mobile_host_bridge',
+              'platform_tunnels',
+              'profiles',
+              'sessions',
+              'challenges',
+              'diagnostics',
+              'event_stream',
+            ],
+            'platform_tunnels': <Map<String, dynamic>>[
+              <String, dynamic>{
+                'mode': 'apple_network_extension',
+                'available': true,
+              },
+            ],
+          }),
+        );
+        await request.response.close();
+      });
+
+      final realHttpOverrides = _RealHttpOverrides();
+      final client = ControlPlaneClient(
+        baseUri: Uri.parse('http://${server.address.address}:${server.port}'),
+        httpClientFactory: () => realHttpOverrides.createHttpClient(null),
+      );
+
+      await expectLater(
+        client.negotiate(
+          supportedVersions: const <String>['1'],
+          requiredCapabilities: const <Capability>[
+            Capability.mobileHostBridge,
+            Capability.platformTunnels,
+          ],
+        ),
+        throwsA(isA<FormatException>()),
+      );
+    },
+  );
+
+  test(
+    'mobile control plane client fails closed on startup results missing failing prerequisite',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(server.close);
+
+      server.listen((HttpRequest request) async {
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(
+          jsonEncode(<String, dynamic>{
+            'mode': 'apple_network_extension',
+            'ready': false,
+            'stage': 'runtime_attach',
+            'message': 'runtime attach failed without a typed prerequisite',
+          }),
+        );
+        await request.response.close();
+      });
+
+      final realHttpOverrides = _RealHttpOverrides();
+      final client = ControlPlaneClient(
+        baseUri: Uri.parse('http://${server.address.address}:${server.port}'),
+        httpClientFactory: () => realHttpOverrides.createHttpClient(null),
+      );
+
+      await expectLater(
+        client.startPlatformTunnel(
+          mode: PlatformTunnelMode.appleNetworkExtension,
+        ),
+        throwsA(isA<FormatException>()),
+      );
+    },
+  );
+}
+
+class _RealHttpOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    final client = super.createHttpClient(context);
+    client.connectionTimeout = const Duration(seconds: 5);
+    return client;
+  }
 }
 
 class _FakeResolver implements MobileHostConfigResolver {
@@ -158,7 +377,7 @@ class _FakeResolver implements MobileHostConfigResolver {
 }
 
 class _ReadyControlPlaneApi implements ControlPlaneApi {
-  const _ReadyControlPlaneApi();
+  _ReadyControlPlaneApi();
 
   static const HostInfo _hostInfo = HostInfo(
     contractVersion: '1',
@@ -172,13 +391,24 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
     ),
     capabilities: <Capability>[
       Capability.mobileHostBridge,
+      Capability.platformTunnels,
       Capability.profiles,
       Capability.sessions,
       Capability.challenges,
       Capability.diagnostics,
       Capability.eventStream,
     ],
+    platformTunnels: <PlatformTunnelCapability>[
+      PlatformTunnelCapability(
+        mode: PlatformTunnelMode.appleNetworkExtension,
+        available: false,
+        missingPrerequisite: PlatformTunnelPrerequisite.hostImplementation,
+        message: 'native bridge does not implement tunnel startup yet',
+      ),
+    ],
   );
+
+  final List<List<Capability>> negotiateCalls = <List<Capability>>[];
 
   @override
   Future<ChallengeRecord> cancelChallenge(String challengeId) {
@@ -214,7 +444,21 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
     required List<String> supportedVersions,
     required List<Capability> requiredCapabilities,
   }) async {
+    negotiateCalls.add(List<Capability>.of(requiredCapabilities));
     return _hostInfo;
+  }
+
+  @override
+  Future<PlatformTunnelStartResult> startPlatformTunnel({
+    required PlatformTunnelMode mode,
+  }) async {
+    return const PlatformTunnelStartResult(
+      mode: PlatformTunnelMode.appleNetworkExtension,
+      ready: false,
+      stage: PlatformTunnelStartupStage.capabilityCheck,
+      missingPrerequisite: PlatformTunnelPrerequisite.hostImplementation,
+      message: 'native bridge does not implement tunnel startup yet',
+    );
   }
 
   @override

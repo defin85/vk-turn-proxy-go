@@ -14,6 +14,7 @@ const (
 	CapabilityEventStream      Capability = "event_stream"
 	CapabilityDesktopSidecar   Capability = "desktop_sidecar"
 	CapabilityMobileHostBridge Capability = "mobile_host_bridge"
+	CapabilityPlatformTunnels  Capability = "platform_tunnels"
 )
 
 type TransportMode string
@@ -65,11 +66,53 @@ const (
 	EventChallengeUpdated  EventType = "challenge_updated"
 )
 
+type PlatformTunnelMode string
+
+const (
+	PlatformTunnelModeAndroidVPNService     PlatformTunnelMode = "android_vpn_service"
+	PlatformTunnelModeAppleNetworkExtension PlatformTunnelMode = "apple_network_extension"
+	PlatformTunnelModeWindowsWintun         PlatformTunnelMode = "windows_wintun"
+	PlatformTunnelModeLinuxTun              PlatformTunnelMode = "linux_tun"
+)
+
+type PlatformTunnelPrerequisite string
+
+const (
+	PlatformTunnelPrerequisitePermission          PlatformTunnelPrerequisite = "permission"
+	PlatformTunnelPrerequisiteEntitlement         PlatformTunnelPrerequisite = "entitlement"
+	PlatformTunnelPrerequisitePrivilegedExtension PlatformTunnelPrerequisite = "privileged_extension"
+	PlatformTunnelPrerequisiteDriver              PlatformTunnelPrerequisite = "driver"
+	PlatformTunnelPrerequisiteRouteExclusion      PlatformTunnelPrerequisite = "route_exclusion"
+	PlatformTunnelPrerequisiteDNSBypass           PlatformTunnelPrerequisite = "dns_bypass"
+	PlatformTunnelPrerequisiteHostImplementation  PlatformTunnelPrerequisite = "host_implementation"
+)
+
+type PlatformTunnelStartupStage string
+
+const (
+	PlatformTunnelStartupStageCapabilityCheck    PlatformTunnelStartupStage = "capability_check"
+	PlatformTunnelStartupStagePermissionAcquire  PlatformTunnelStartupStage = "permission_acquire"
+	PlatformTunnelStartupStageEntitlementAcquire PlatformTunnelStartupStage = "entitlement_acquire"
+	PlatformTunnelStartupStageDriverCheck        PlatformTunnelStartupStage = "driver_check"
+	PlatformTunnelStartupStageRouteValidate      PlatformTunnelStartupStage = "route_validate"
+	PlatformTunnelStartupStageHostBringup        PlatformTunnelStartupStage = "host_bringup"
+	PlatformTunnelStartupStageRuntimeAttach      PlatformTunnelStartupStage = "runtime_attach"
+)
+
+type PlatformTunnelCapability struct {
+	Mode                   PlatformTunnelMode           `json:"mode"`
+	Available              bool                         `json:"available"`
+	SatisfiedPrerequisites []PlatformTunnelPrerequisite `json:"satisfied_prerequisites,omitempty"`
+	MissingPrerequisite    PlatformTunnelPrerequisite   `json:"missing_prerequisite,omitempty"`
+	Message                string                       `json:"message,omitempty"`
+}
+
 type HostInfo struct {
-	Version         string        `json:"version,omitempty"`
-	ContractVersion string        `json:"contract_version,omitempty"`
-	Build           BuildIdentity `json:"build"`
-	Capabilities    []Capability  `json:"capabilities"`
+	Version         string                     `json:"version,omitempty"`
+	ContractVersion string                     `json:"contract_version,omitempty"`
+	Build           BuildIdentity              `json:"build"`
+	Capabilities    []Capability               `json:"capabilities"`
+	PlatformTunnels []PlatformTunnelCapability `json:"platform_tunnels,omitempty"`
 }
 
 type BuildIdentity struct {
@@ -170,4 +213,16 @@ type Diagnostics struct {
 type StartSessionRequest struct {
 	ProfileID string       `json:"profile_id,omitempty"`
 	Spec      *ProfileSpec `json:"spec,omitempty"`
+}
+
+type PlatformTunnelStartRequest struct {
+	Mode PlatformTunnelMode `json:"mode"`
+}
+
+type PlatformTunnelStartResult struct {
+	Mode                PlatformTunnelMode         `json:"mode"`
+	Ready               bool                       `json:"ready"`
+	Stage               PlatformTunnelStartupStage `json:"stage,omitempty"`
+	MissingPrerequisite PlatformTunnelPrerequisite `json:"missing_prerequisite,omitempty"`
+	Message             string                     `json:"message,omitempty"`
 }

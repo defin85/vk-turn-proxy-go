@@ -26,9 +26,11 @@ import (
 const defaultHistoryLimit = 256
 
 var (
-	ErrProfileNotFound   = errors.New("client control profile not found")
-	ErrSessionNotFound   = errors.New("client control session not found")
-	ErrChallengeNotFound = errors.New("client control challenge not found")
+	ErrProfileNotFound            = errors.New("client control profile not found")
+	ErrSessionNotFound            = errors.New("client control session not found")
+	ErrChallengeNotFound          = errors.New("client control challenge not found")
+	ErrPlatformTunnelModeRequired = errors.New("platform tunnel mode is required")
+	ErrPlatformTunnelModeUnknown  = errors.New("platform tunnel mode is not supported by this contract")
 )
 
 type IncompatibleHostError struct {
@@ -80,6 +82,9 @@ type hostConfig struct {
 	cliStdin          io.Reader
 	cliStderr         io.Writer
 	promptOpts        providerprompt.Options
+	platformTunnels   []PlatformTunnelCapability
+	tunnelsConfigured bool
+	startTunnel       func(context.Context, PlatformTunnelStartRequest) (PlatformTunnelStartResult, error)
 }
 
 type Host struct {
@@ -97,6 +102,8 @@ type Host struct {
 	cliStdin          io.Reader
 	cliStderr         io.Writer
 	promptOpts        providerprompt.Options
+	platformTunnels   []PlatformTunnelCapability
+	startTunnel       func(context.Context, PlatformTunnelStartRequest) (PlatformTunnelStartResult, error)
 
 	profiles    map[string]Profile
 	sessions    map[string]*managedSession
@@ -174,6 +181,17 @@ func New(opts ...Option) *Host {
 			return providerprompt.StartContinuation(ctx, challenge, cfg.promptOpts)
 		}
 	}
+	if !cfg.tunnelsConfigured {
+		cfg.platformTunnels = defaultPlatformTunnelCapabilities(cfg.build)
+	}
+	normalizedPlatformTunnels, platformTunnelWarn := normalizePlatformTunnelCapabilities(cfg.platformTunnels, cfg.build)
+	if platformTunnelWarn != nil {
+		cfg.logger.Warn("invalid platform_tunnels contract configured; failing closed", "error", platformTunnelWarn)
+	}
+	cfg.platformTunnels = normalizedPlatformTunnels
+	if cfg.startTunnel == nil {
+		cfg.startTunnel = defaultPlatformTunnelStarter(cfg.platformTunnels)
+	}
 
 	return &Host{
 		logger:            cfg.logger,
@@ -189,6 +207,8 @@ func New(opts ...Option) *Host {
 		cliStdin:          cfg.cliStdin,
 		cliStderr:         cfg.cliStderr,
 		promptOpts:        cfg.promptOpts,
+		platformTunnels:   cfg.platformTunnels,
+		startTunnel:       cfg.startTunnel,
 		profiles:          make(map[string]Profile),
 		sessions:          make(map[string]*managedSession),
 		challenges:        make(map[string]*managedChallenge),
@@ -269,9 +289,11 @@ func (h *Host) Info() HostInfo {
 			CapabilityDiagnostics,
 			CapabilityEventStream,
 			CapabilityMobileHostBridge,
+			CapabilityPlatformTunnels,
 			CapabilityProfiles,
 			CapabilitySessions,
 		},
+		PlatformTunnels: clonePlatformTunnelCapabilities(h.platformTunnels),
 	}
 }
 
@@ -302,6 +324,31 @@ func (h *Host) Negotiate(req NegotiateRequest) (HostInfo, error) {
 	}
 
 	return info, nil
+}
+
+func (h *Host) StartPlatformTunnel(ctx context.Context, req PlatformTunnelStartRequest) (PlatformTunnelStartResult, error) {
+	if !isKnownPlatformTunnelMode(req.Mode) {
+		if strings.TrimSpace(string(req.Mode)) == "" {
+			return PlatformTunnelStartResult{}, ErrPlatformTunnelModeRequired
+		}
+		return PlatformTunnelStartResult{}, ErrPlatformTunnelModeUnknown
+	}
+	if h.startTunnel == nil {
+		return PlatformTunnelStartResult{}, fmt.Errorf("platform tunnel starter is not configured")
+	}
+	result, err := h.startTunnel(ctx, req)
+	if err != nil {
+		if startResult, ok := platformTunnelStartResultFromError(err); ok {
+			if validateErr := validatePlatformTunnelStartResult(req, startResult); validateErr != nil {
+				return PlatformTunnelStartResult{}, fmt.Errorf("invalid platform tunnel startup result: %w", validateErr)
+			}
+		}
+		return PlatformTunnelStartResult{}, err
+	}
+	if validateErr := validatePlatformTunnelStartResult(req, result); validateErr != nil {
+		return PlatformTunnelStartResult{}, fmt.Errorf("invalid platform tunnel startup result: %w", validateErr)
+	}
+	return result, nil
 }
 
 func (h *Host) UpsertProfile(profile Profile) (Profile, error) {

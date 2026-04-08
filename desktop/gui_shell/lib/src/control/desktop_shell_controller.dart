@@ -42,6 +42,8 @@ class DesktopShellController extends ChangeNotifier {
   ProfileDraft draft = ProfileDraft.defaults();
   String? selectedProfileId;
   String? selectedSessionId;
+  final Map<PlatformTunnelMode, PlatformTunnelStartResult>
+  _platformTunnelResults = <PlatformTunnelMode, PlatformTunnelStartResult>{};
   String? notice;
   bool busy = false;
 
@@ -56,6 +58,19 @@ class DesktopShellController extends ChangeNotifier {
   bool _suppressEventStreamClosure = false;
   String? _persistedStateSignature;
   bool _restoredState = false;
+
+  List<PlatformTunnelCapability> get platformTunnels =>
+      hostConnection?.info?.platformTunnels ??
+      const <PlatformTunnelCapability>[];
+
+  bool get systemTunnelSupported =>
+      platformTunnels.any((PlatformTunnelCapability capability) {
+        return capability.available;
+      });
+
+  PlatformTunnelStartResult? platformTunnelResultFor(PlatformTunnelMode mode) {
+    return _platformTunnelResults[mode];
+  }
 
   Future<void> initialize() async {
     await _restorePersistedState();
@@ -80,6 +95,8 @@ class DesktopShellController extends ChangeNotifier {
         message: '$error',
       );
     }
+
+    _clearPlatformTunnelResults();
 
     if (hostConnection?.isReady != true) {
       await _stopRuntimeMonitoring();
@@ -270,6 +287,14 @@ class DesktopShellController extends ChangeNotifier {
 
       notice = 'Exported diagnostics to ${file.path}.';
       selectedSessionId = sessionId;
+    });
+  }
+
+  Future<void> startPlatformTunnel(PlatformTunnelMode mode) async {
+    await _runMutation(() async {
+      final result = await api.startPlatformTunnel(mode: mode);
+      _platformTunnelResults[mode] = result;
+      notice = _platformTunnelNotice(result);
     });
   }
 
@@ -479,6 +504,7 @@ class DesktopShellController extends ChangeNotifier {
       state: HostLifecycleState.unavailable,
       message: message,
     );
+    _clearPlatformTunnelResults();
     status = ShellStatus.blocked;
     notice = message;
     busy = false;
@@ -554,6 +580,28 @@ class DesktopShellController extends ChangeNotifier {
       notice = 'Failed to persist desktop shell state: $error';
       _notify();
     }
+  }
+
+  void _clearPlatformTunnelResults() {
+    _platformTunnelResults.clear();
+  }
+
+  String _platformTunnelNotice(PlatformTunnelStartResult result) {
+    if (result.ready) {
+      return '${result.mode.label} is ready for the local host tunnel path.';
+    }
+    final buffer = StringBuffer(
+      '${result.mode.label} blocked at ${result.stage?.label ?? 'Unknown stage'}.',
+    );
+    if (result.missingPrerequisite != null) {
+      buffer.write(
+        ' Missing prerequisite: ${result.missingPrerequisite!.label}.',
+      );
+    }
+    if (result.message.isNotEmpty) {
+      buffer.write(' ${result.message}');
+    }
+    return buffer.toString();
   }
 
   void _notify() {

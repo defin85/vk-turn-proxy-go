@@ -32,11 +32,20 @@ const HostInfo _readyHostInfo = HostInfo(
   build: _testHostBuild,
   capabilities: <Capability>[
     Capability.desktopSidecar,
+    Capability.platformTunnels,
     Capability.profiles,
     Capability.sessions,
     Capability.challenges,
     Capability.diagnostics,
     Capability.eventStream,
+  ],
+  platformTunnels: <PlatformTunnelCapability>[
+    PlatformTunnelCapability(
+      mode: PlatformTunnelMode.windowsWintun,
+      available: false,
+      missingPrerequisite: PlatformTunnelPrerequisite.hostImplementation,
+      message: 'desktop sidecar does not implement system tunnel startup yet',
+    ),
   ],
 );
 
@@ -68,13 +77,15 @@ void main() {
     expect(find.text('GUI 0.1.0+1 @gui123456789'), findsOneWidget);
     expect(find.text('Host 0.1.0+1 @deadbeefcafe'), findsOneWidget);
     expect(find.text('Contract 1'), findsOneWidget);
+    expect(find.text('Platform tunnel modes'), findsOneWidget);
+    expect(find.text('Windows Wintun'), findsOneWidget);
 
-    final startButton = find.widgetWithText(
-      FilledButton,
-      'Start saved profile',
-      skipOffstage: false,
+    final startButton = find.text('Start saved profile', skipOffstage: false);
+    await tester.scrollUntilVisible(
+      startButton,
+      300,
+      scrollable: find.byType(Scrollable).first,
     );
-    await tester.ensureVisible(startButton);
     await tester.pump();
     await tester.tap(startButton);
     await tester.pump();
@@ -83,6 +94,18 @@ void main() {
     expect(api.startedProfileIDs, <String>['profile-1']);
     expect(find.textContaining('Started session'), findsOneWidget);
     expect(find.text('ready'), findsWidgets);
+
+    final tunnelButton = find.text('Request startup', skipOffstage: false);
+    await tester.ensureVisible(tunnelButton);
+    await tester.pump();
+    await tester.tap(tunnelButton);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(api.startedPlatformTunnels, <PlatformTunnelMode>[
+      PlatformTunnelMode.windowsWintun,
+    ]);
+    expect(find.textContaining('Capability check'), findsWidgets);
 
     controller.dispose();
     await tester.pumpWidget(const SizedBox.shrink());
@@ -104,6 +127,8 @@ class _InMemoryShellStateStore implements DesktopShellStateStore {
 
 class _FakeControlPlaneApi implements ControlPlaneApi {
   final List<String> startedProfileIDs = <String>[];
+  final List<PlatformTunnelMode> startedPlatformTunnels =
+      <PlatformTunnelMode>[];
   final List<ProfileRecord> _profiles = <ProfileRecord>[
     ProfileRecord(
       id: 'profile-1',
@@ -166,6 +191,20 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
     required List<Capability> requiredCapabilities,
   }) {
     return hostInfo();
+  }
+
+  @override
+  Future<PlatformTunnelStartResult> startPlatformTunnel({
+    required PlatformTunnelMode mode,
+  }) async {
+    startedPlatformTunnels.add(mode);
+    return const PlatformTunnelStartResult(
+      mode: PlatformTunnelMode.windowsWintun,
+      ready: false,
+      stage: PlatformTunnelStartupStage.capabilityCheck,
+      missingPrerequisite: PlatformTunnelPrerequisite.hostImplementation,
+      message: 'desktop sidecar does not implement system tunnel startup yet',
+    );
   }
 
   @override

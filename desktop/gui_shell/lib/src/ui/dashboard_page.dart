@@ -40,6 +40,8 @@ class DashboardPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 20),
                   _HostBanner(controller: controller),
+                  const SizedBox(height: 12),
+                  _PlatformTunnelPanel(controller: controller),
                   if (controller.notice != null) ...<Widget>[
                     const SizedBox(height: 12),
                     _NoticeBanner(message: controller.notice!),
@@ -181,6 +183,156 @@ class _HostBanner extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _PlatformTunnelPanel extends StatelessWidget {
+  const _PlatformTunnelPanel({required this.controller});
+
+  final DesktopShellController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final platformTunnels = controller.platformTunnels;
+
+    return Card(
+      color: const Color(0xFFE6EDF7),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              'Platform tunnel modes',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'The desktop shell reads typed host tunnel capabilities and startup stages instead of guessing system routing support from the OS or app bundle.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 14),
+            if (platformTunnels.isEmpty)
+              Text(
+                'The connected host did not report any desktop platform tunnel modes.',
+                style: theme.textTheme.bodyMedium,
+              )
+            else
+              ...platformTunnels.map((PlatformTunnelCapability capability) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _PlatformTunnelCard(
+                    capability: capability,
+                    result: controller.platformTunnelResultFor(capability.mode),
+                    busy: controller.busy,
+                    ready: controller.hostConnection?.isReady == true,
+                    onStart: () =>
+                        controller.startPlatformTunnel(capability.mode),
+                  ),
+                );
+              }),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PlatformTunnelCard extends StatelessWidget {
+  const _PlatformTunnelCard({
+    required this.capability,
+    required this.result,
+    required this.busy,
+    required this.ready,
+    required this.onStart,
+  });
+
+  final PlatformTunnelCapability capability;
+  final PlatformTunnelStartResult? result;
+  final bool busy;
+  final bool ready;
+  final Future<void> Function() onStart;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final statusColor = capability.available
+        ? const Color(0xFFDEF2E1)
+        : const Color(0xFFFFF1D6);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  capability.mode.label,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: statusColor,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  capability.available ? 'available' : 'unavailable',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            capability.mode.value,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            _platformTunnelCapabilitySummary(capability),
+            style: theme.textTheme.bodyMedium,
+          ),
+          if (capability.message.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 8),
+            Text(capability.message, style: theme.textTheme.bodySmall),
+          ],
+          const SizedBox(height: 12),
+          FilledButton.tonal(
+            onPressed: busy || !ready ? null : () => unawaited(onStart()),
+            child: const Text('Request startup'),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            result == null
+                ? 'No startup request yet. Use the typed host contract to verify the fail-closed path.'
+                : _platformTunnelResultSummary(result!),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -555,4 +707,38 @@ class _NoticeBanner extends StatelessWidget {
       ),
     );
   }
+}
+
+String _platformTunnelCapabilitySummary(PlatformTunnelCapability capability) {
+  if (capability.available && capability.satisfiedPrerequisites.isNotEmpty) {
+    final satisfied = capability.satisfiedPrerequisites
+        .map((PlatformTunnelPrerequisite prerequisite) => prerequisite.label)
+        .join(', ');
+    return 'Satisfied prerequisites: $satisfied';
+  }
+  if (!capability.available && capability.missingPrerequisite != null) {
+    return 'Missing prerequisite: ${capability.missingPrerequisite!.label}';
+  }
+  if (capability.available) {
+    return 'The host reports that this mode is available.';
+  }
+  return 'The host reports that this mode is unavailable.';
+}
+
+String _platformTunnelResultSummary(PlatformTunnelStartResult result) {
+  if (result.ready) {
+    return '${result.mode.label} reached ready state for the desktop host tunnel path.';
+  }
+  final buffer = StringBuffer(
+    'Startup blocked at ${result.stage?.label ?? 'Unknown stage'}.',
+  );
+  if (result.missingPrerequisite != null) {
+    buffer.write(
+      ' Missing prerequisite: ${result.missingPrerequisite!.label}.',
+    );
+  }
+  if (result.message.isNotEmpty) {
+    buffer.write(' ${result.message}');
+  }
+  return buffer.toString();
 }

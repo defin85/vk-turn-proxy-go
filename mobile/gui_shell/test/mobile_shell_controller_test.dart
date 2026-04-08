@@ -31,11 +31,20 @@ const HostInfo _readyHostInfo = HostInfo(
   build: _testHostBuild,
   capabilities: <Capability>[
     Capability.mobileHostBridge,
+    Capability.platformTunnels,
     Capability.profiles,
     Capability.sessions,
     Capability.challenges,
     Capability.diagnostics,
     Capability.eventStream,
+  ],
+  platformTunnels: <PlatformTunnelCapability>[
+    PlatformTunnelCapability(
+      mode: PlatformTunnelMode.androidVpnService,
+      available: false,
+      missingPrerequisite: PlatformTunnelPrerequisite.hostImplementation,
+      message: 'mobile host does not implement tunnel startup yet',
+    ),
   ],
 );
 
@@ -145,7 +154,18 @@ void main() {
           info: HostInfo(
             contractVersion: '2',
             build: _testHostBuild,
-            capabilities: <Capability>[Capability.mobileHostBridge],
+            capabilities: <Capability>[
+              Capability.mobileHostBridge,
+              Capability.platformTunnels,
+            ],
+            platformTunnels: <PlatformTunnelCapability>[
+              PlatformTunnelCapability(
+                mode: PlatformTunnelMode.androidVpnService,
+                available: false,
+                missingPrerequisite:
+                    PlatformTunnelPrerequisite.hostImplementation,
+              ),
+            ],
           ),
           description: 'native bridge',
         ),
@@ -439,6 +459,117 @@ void main() {
       expect(payload, contains('embeddedhost123'));
     },
   );
+
+  test(
+    'controller consumes typed platform tunnel reports and startup-stage results',
+    () async {
+      final bridge = _FakeMobileHostBridge();
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: const <ProfileRecord>[],
+            draft: ProfileDraft.defaults(),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.startPlatformTunnel(
+        PlatformTunnelMode.androidVpnService,
+      );
+
+      expect(bridge.startedPlatformTunnels, <PlatformTunnelMode>[
+        PlatformTunnelMode.androidVpnService,
+      ]);
+      expect(
+        controller.platformTunnels.single.mode,
+        PlatformTunnelMode.androidVpnService,
+      );
+      expect(
+        controller
+            .platformTunnelResultFor(PlatformTunnelMode.androidVpnService)
+            ?.stage,
+        PlatformTunnelStartupStage.capabilityCheck,
+      );
+      expect(controller.notice, contains('Capability check'));
+    },
+  );
+
+  test(
+    'controller clears platform tunnel startup results when the bridge later fails closed',
+    () async {
+      final bridge = _FakeMobileHostBridge(
+        sessionsList: <SessionRecord>[
+          SessionRecord(
+            id: 'session-1',
+            profileId: 'profile-1',
+            profileName: 'vk live',
+            profile: _profileSpec(),
+            state: SessionState.starting,
+            startedAt: DateTime.utc(2026, 4, 7, 14, 0),
+            updatedAt: DateTime.utc(2026, 4, 7, 14, 1),
+          ),
+        ],
+        startSessionError: const ControlPlaneError(
+          statusCode: 409,
+          code: 'incompatible_host',
+          message: 'native bridge contract drifted',
+        ),
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ],
+            selectedProfileId: 'profile-1',
+            draft: ProfileDraft.fromProfile(
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.startPlatformTunnel(
+        PlatformTunnelMode.androidVpnService,
+      );
+      expect(
+        controller.platformTunnelResultFor(
+          PlatformTunnelMode.androidVpnService,
+        ),
+        isNotNull,
+      );
+
+      await controller.startSelectedProfile();
+
+      expect(controller.status, ShellStatus.blocked);
+      expect(
+        controller.platformTunnelResultFor(
+          PlatformTunnelMode.androidVpnService,
+        ),
+        isNull,
+      );
+      expect(
+        controller.hostConnection?.state,
+        MobileHostLifecycleState.incompatible,
+      );
+    },
+  );
 }
 
 ProfileSpec _profileSpec() {
@@ -517,6 +648,8 @@ class _FakeMobileHostBridge implements MobileHostBridge {
 
   final List<ProfileRecord> upsertedProfiles = <ProfileRecord>[];
   final List<String> continueChallengeCalls = <String>[];
+  final List<PlatformTunnelMode> startedPlatformTunnels =
+      <PlatformTunnelMode>[];
   int ensureReadyCalls = 0;
   int startSessionCalls = 0;
   final StreamController<EventRecord> _events =
@@ -578,6 +711,20 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       );
     }
     return info;
+  }
+
+  @override
+  Future<PlatformTunnelStartResult> startPlatformTunnel({
+    required PlatformTunnelMode mode,
+  }) async {
+    startedPlatformTunnels.add(mode);
+    return const PlatformTunnelStartResult(
+      mode: PlatformTunnelMode.androidVpnService,
+      ready: false,
+      stage: PlatformTunnelStartupStage.capabilityCheck,
+      missingPrerequisite: PlatformTunnelPrerequisite.hostImplementation,
+      message: 'mobile host does not implement tunnel startup yet',
+    );
   }
 
   @override

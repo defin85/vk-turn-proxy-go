@@ -50,16 +50,168 @@ func TestHandlerHostAndNegotiate(t *testing.T) {
 	if info.Build.Version != "0.1.0" {
 		t.Fatalf("build version = %q, want 0.1.0", info.Build.Version)
 	}
+	if !containsCapability(info.Capabilities, CapabilityPlatformTunnels) {
+		t.Fatalf("capabilities = %v, want platform_tunnels", info.Capabilities)
+	}
+	if len(info.PlatformTunnels) != 1 {
+		t.Fatalf("platform_tunnels len = %d, want 1", len(info.PlatformTunnels))
+	}
+	if info.PlatformTunnels[0].Mode != PlatformTunnelModeLinuxTun {
+		t.Fatalf("platform_tunnels[0].mode = %q, want %q", info.PlatformTunnels[0].Mode, PlatformTunnelModeLinuxTun)
+	}
 
 	body, _ := json.Marshal(NegotiateRequest{
 		SupportedVersions:    []string{ContractVersion},
-		RequiredCapabilities: []Capability{CapabilityMobileHostBridge, CapabilityProfiles, CapabilitySessions, CapabilityChallenges, CapabilityDiagnostics, CapabilityEventStream},
+		RequiredCapabilities: []Capability{CapabilityMobileHostBridge, CapabilityPlatformTunnels, CapabilityProfiles, CapabilitySessions, CapabilityChallenges, CapabilityDiagnostics, CapabilityEventStream},
 	})
 	req = httptest.NewRequest(http.MethodPost, "/v1/negotiate", bytes.NewReader(body))
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("POST /v1/negotiate code = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	body, _ = json.Marshal(PlatformTunnelStartRequest{Mode: PlatformTunnelModeLinuxTun})
+	req = httptest.NewRequest(http.MethodPost, "/v1/platform-tunnels/start", bytes.NewReader(body))
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /v1/platform-tunnels/start code = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var startResult PlatformTunnelStartResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &startResult); err != nil {
+		t.Fatalf("decode platform tunnel start result: %v", err)
+	}
+	if startResult.Ready {
+		t.Fatal("platform tunnel start result ready = true, want false")
+	}
+	if startResult.Stage != PlatformTunnelStartupStageCapabilityCheck {
+		t.Fatalf("platform tunnel start stage = %q, want %q", startResult.Stage, PlatformTunnelStartupStageCapabilityCheck)
+	}
+}
+
+func TestHandlerPlatformTunnelStartReturnsTypedFailureResult(t *testing.T) {
+	host := New(
+		WithBuildIdentity(testBuildIdentity()),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{{
+			Mode:      PlatformTunnelModeLinuxTun,
+			Available: true,
+			SatisfiedPrerequisites: []PlatformTunnelPrerequisite{
+				PlatformTunnelPrerequisiteRouteExclusion,
+			},
+		}}),
+		WithPlatformTunnelStarter(func(_ context.Context, req PlatformTunnelStartRequest) (PlatformTunnelStartResult, error) {
+			return PlatformTunnelStartResult{}, &PlatformTunnelStartError{
+				Result: PlatformTunnelStartResult{
+					Mode:                req.Mode,
+					Ready:               false,
+					Stage:               PlatformTunnelStartupStageRuntimeAttach,
+					MissingPrerequisite: PlatformTunnelPrerequisiteDNSBypass,
+					Message:             "runtime attach left the host without required DNS bypass",
+				},
+			}
+		}),
+	)
+	handler := Handler(host)
+
+	body, _ := json.Marshal(PlatformTunnelStartRequest{Mode: PlatformTunnelModeLinuxTun})
+	req := httptest.NewRequest(http.MethodPost, "/v1/platform-tunnels/start", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /v1/platform-tunnels/start code = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var result PlatformTunnelStartResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode platform tunnel start result: %v", err)
+	}
+	if result.Ready {
+		t.Fatal("platform tunnel typed failure ready = true, want false")
+	}
+	if result.Stage != PlatformTunnelStartupStageRuntimeAttach {
+		t.Fatalf("platform tunnel typed failure stage = %q, want %q", result.Stage, PlatformTunnelStartupStageRuntimeAttach)
+	}
+	if result.MissingPrerequisite != PlatformTunnelPrerequisiteDNSBypass {
+		t.Fatalf("platform tunnel typed failure missing_prerequisite = %q, want %q", result.MissingPrerequisite, PlatformTunnelPrerequisiteDNSBypass)
+	}
+}
+
+func TestHandlerPlatformTunnelStartRejectsInvalidTypedFailureResult(t *testing.T) {
+	host := New(
+		WithBuildIdentity(testBuildIdentity()),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{{
+			Mode:      PlatformTunnelModeLinuxTun,
+			Available: true,
+			SatisfiedPrerequisites: []PlatformTunnelPrerequisite{
+				PlatformTunnelPrerequisiteRouteExclusion,
+			},
+		}}),
+		WithPlatformTunnelStarter(func(_ context.Context, req PlatformTunnelStartRequest) (PlatformTunnelStartResult, error) {
+			return PlatformTunnelStartResult{}, &PlatformTunnelStartError{
+				Result: PlatformTunnelStartResult{
+					Mode:  req.Mode,
+					Ready: false,
+				},
+			}
+		}),
+	)
+	handler := Handler(host)
+
+	body, _ := json.Marshal(PlatformTunnelStartRequest{Mode: PlatformTunnelModeLinuxTun})
+	req := httptest.NewRequest(http.MethodPost, "/v1/platform-tunnels/start", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("POST /v1/platform-tunnels/start code = %d body=%s, want 500", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode platform tunnel error payload: %v", err)
+	}
+	if payload["code"] != "platform_tunnel_start_failed" {
+		t.Fatalf("platform tunnel error code = %v, want platform_tunnel_start_failed", payload["code"])
+	}
+}
+
+func TestHandlerPlatformTunnelStartRejectsTypedFailureWithoutMissingPrerequisite(t *testing.T) {
+	host := New(
+		WithBuildIdentity(testBuildIdentity()),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{{
+			Mode:      PlatformTunnelModeLinuxTun,
+			Available: true,
+			SatisfiedPrerequisites: []PlatformTunnelPrerequisite{
+				PlatformTunnelPrerequisiteRouteExclusion,
+			},
+		}}),
+		WithPlatformTunnelStarter(func(_ context.Context, req PlatformTunnelStartRequest) (PlatformTunnelStartResult, error) {
+			return PlatformTunnelStartResult{}, &PlatformTunnelStartError{
+				Result: PlatformTunnelStartResult{
+					Mode:    req.Mode,
+					Ready:   false,
+					Stage:   PlatformTunnelStartupStageRuntimeAttach,
+					Message: "runtime attach failed without missing_prerequisite",
+				},
+			}
+		}),
+	)
+	handler := Handler(host)
+
+	body, _ := json.Marshal(PlatformTunnelStartRequest{Mode: PlatformTunnelModeLinuxTun})
+	req := httptest.NewRequest(http.MethodPost, "/v1/platform-tunnels/start", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("POST /v1/platform-tunnels/start code = %d body=%s, want 500", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode platform tunnel error payload: %v", err)
+	}
+	if payload["code"] != "platform_tunnel_start_failed" {
+		t.Fatalf("platform tunnel error code = %v, want platform_tunnel_start_failed", payload["code"])
 	}
 }
 

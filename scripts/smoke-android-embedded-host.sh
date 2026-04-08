@@ -90,6 +90,23 @@ try:
     )
     with urllib.request.urlopen(request, timeout=5) as response:
         negotiated = json.load(response)
+
+    platform_tunnels = host_info.get("platform_tunnels", [])
+    if not platform_tunnels:
+        raise SystemExit("embedded host did not publish a platform_tunnels report")
+
+    mode = platform_tunnels[0].get("mode", "").strip()
+    if not mode:
+        raise SystemExit("embedded host platform_tunnels report did not include a mode")
+
+    start_request = urllib.request.Request(
+        base_url + "/v1/platform-tunnels/start",
+        data=json.dumps({"mode": mode}).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(start_request, timeout=5) as response:
+        start_result = json.load(response)
 finally:
     lib.AndroidEmbeddedHostStop()
 
@@ -107,6 +124,21 @@ if missing:
 role = negotiated.get("build", {}).get("role")
 if role != "android_embedded_host":
     raise SystemExit(f"unexpected embedded host build role: {role}")
+
+if start_result.get("ready") is not False:
+    raise SystemExit(f"unexpected platform tunnel start readiness: {start_result}")
+
+if start_result.get("stage") != "capability_check":
+    raise SystemExit(
+        "unexpected platform tunnel start stage: "
+        + str(start_result.get("stage"))
+    )
+
+if start_result.get("missing_prerequisite") != "host_implementation":
+    raise SystemExit(
+        "unexpected platform tunnel missing_prerequisite: "
+        + str(start_result.get("missing_prerequisite"))
+    )
 
 print(f"embedded host smoke passed: {base_url}")
 PY

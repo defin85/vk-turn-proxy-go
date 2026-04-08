@@ -255,6 +255,23 @@ If previously saved secure state is missing, the app blocks runtime control unti
 Browser challenge continuation uses platform-native handoff and explicit in-app confirmation.
 This slice does not yet claim Android `VpnService`, iOS Network Extension, or device-wide tunnel capture support.
 
+Platform tunnel integration is now a typed host contract instead of a shell heuristic.
+`/v1/host` exposes a mode-specific `platform_tunnels` report, where available modes must confirm `satisfied_prerequisites`, and `/v1/platform-tunnels/start` returns a stage-aware startup result naming the failing `missing_prerequisite` for non-ready modes.
+Current repository-owned host responsibilities stay split by OS family:
+- Android hosts own `android_vpn_service` permission flow and the eventual `VpnService` packet path
+- Apple hosts/extensions own `apple_network_extension` entitlements and extension bring-up
+- Windows hosts own `windows_wintun` driver and route preparation
+- Linux hosts own `linux_tun`, capability elevation, and route/DNS preparation
+
+Current repo-owned hosts still fail closed by default for those modes with `stage=capability_check` and `missing_prerequisite=host_implementation` until a platform-specific host wires a real implementation.
+Desktop and mobile shells now render that typed capability report in-app and let the operator request startup explicitly so the stage-aware failure remains visible without guessing from OS heuristics.
+Provider resolution, browser challenges, TURN credentials, and relay policy remain outside that tunnel boundary.
+Before the repository claims a concrete platform tunnel mode as supported, keep evidence for:
+- a host capability report for the packaged target from `/v1/host`
+- a fail-closed startup result from `/v1/platform-tunnels/start` when a prerequisite is missing
+- a packaged-host smoke proving ready state on the target OS
+- explicit route-exclusion validation for control traffic, provider challenges, and DNS bypass on that platform
+
 `cmd/tunnel-client` now runs the supported supervised client runtime matrix after provider resolution.
 Supported overlay adapter pairs for this slice:
 - `udp -> udp` with `ingress=udp` and `cmd/tunnel-server -egress udp`

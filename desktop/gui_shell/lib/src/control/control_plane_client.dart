@@ -10,6 +10,9 @@ abstract class ControlPlaneApi {
     required List<String> supportedVersions,
     required List<Capability> requiredCapabilities,
   });
+  Future<PlatformTunnelStartResult> startPlatformTunnel({
+    required PlatformTunnelMode mode,
+  });
   Future<List<ProfileRecord>> profiles();
   Future<ProfileRecord> upsertProfile(ProfileRecord profile);
   Future<void> deleteProfile(String profileId);
@@ -30,7 +33,9 @@ class ControlPlaneClient implements ControlPlaneApi {
     HttpClient Function()? httpClientFactory,
   }) : _httpClientFactory = httpClientFactory ?? HttpClient.new;
 
-  factory ControlPlaneClient.localhost({String listenAddress = defaultListenAddress}) {
+  factory ControlPlaneClient.localhost({
+    String listenAddress = defaultListenAddress,
+  }) {
     return ControlPlaneClient(baseUri: Uri.parse('http://$listenAddress'));
   }
 
@@ -57,10 +62,24 @@ class ControlPlaneClient implements ControlPlaneApi {
       '/v1/negotiate',
       body: <String, dynamic>{
         'supported_versions': supportedVersions,
-        'required_capabilities': requiredCapabilities.map((capability) => capability.value).toList(growable: false),
+        'required_capabilities': requiredCapabilities
+            .map((capability) => capability.value)
+            .toList(growable: false),
       },
     );
     return HostInfo.fromJson(payload);
+  }
+
+  @override
+  Future<PlatformTunnelStartResult> startPlatformTunnel({
+    required PlatformTunnelMode mode,
+  }) async {
+    final payload = await _jsonRequest(
+      'POST',
+      '/v1/platform-tunnels/start',
+      body: <String, dynamic>{'mode': mode.value},
+    );
+    return PlatformTunnelStartResult.fromJson(payload);
   }
 
   @override
@@ -71,7 +90,11 @@ class ControlPlaneClient implements ControlPlaneApi {
 
   @override
   Future<ProfileRecord> upsertProfile(ProfileRecord profile) async {
-    final payload = await _jsonRequest('POST', '/v1/profiles', body: profile.toJson());
+    final payload = await _jsonRequest(
+      'POST',
+      '/v1/profiles',
+      body: profile.toJson(),
+    );
     return ProfileRecord.fromJson(payload);
   }
 
@@ -87,7 +110,10 @@ class ControlPlaneClient implements ControlPlaneApi {
   }
 
   @override
-  Future<SessionRecord> startSession({String? profileId, ProfileSpec? spec}) async {
+  Future<SessionRecord> startSession({
+    String? profileId,
+    ProfileSpec? spec,
+  }) async {
     final payload = await _jsonRequest(
       'POST',
       '/v1/sessions',
@@ -113,19 +139,28 @@ class ControlPlaneClient implements ControlPlaneApi {
 
   @override
   Future<ChallengeRecord> continueChallenge(String challengeId) async {
-    final payload = await _jsonRequest('POST', '/v1/challenges/$challengeId/continue');
+    final payload = await _jsonRequest(
+      'POST',
+      '/v1/challenges/$challengeId/continue',
+    );
     return ChallengeRecord.fromJson(payload);
   }
 
   @override
   Future<ChallengeRecord> cancelChallenge(String challengeId) async {
-    final payload = await _jsonRequest('POST', '/v1/challenges/$challengeId/cancel');
+    final payload = await _jsonRequest(
+      'POST',
+      '/v1/challenges/$challengeId/cancel',
+    );
     return ChallengeRecord.fromJson(payload);
   }
 
   @override
   Future<DiagnosticsBundle> diagnostics(String sessionId) async {
-    final payload = await _jsonRequest('GET', '/v1/sessions/$sessionId/diagnostics');
+    final payload = await _jsonRequest(
+      'GET',
+      '/v1/sessions/$sessionId/diagnostics',
+    );
     return DiagnosticsBundle.fromJson(payload);
   }
 
@@ -133,13 +168,16 @@ class ControlPlaneClient implements ControlPlaneApi {
   Stream<EventRecord> events() async* {
     final client = _httpClientFactory();
     try {
-      final request = await client.getUrl(_resolve('/v1/events')).timeout(timeout);
+      final request = await client
+          .getUrl(_resolve('/v1/events'))
+          .timeout(timeout);
       final response = await request.close().timeout(timeout);
       if (response.statusCode >= 400) {
         final body = await response.transform(utf8.decoder).join();
         throw _errorFromBody(response.statusCode, body);
       }
-      await for (final line in response.transform(utf8.decoder).transform(const LineSplitter())) {
+      await for (final line
+          in response.transform(utf8.decoder).transform(const LineSplitter())) {
         final trimmed = line.trim();
         if (trimmed.isEmpty) {
           continue;
@@ -163,7 +201,10 @@ class ControlPlaneClient implements ControlPlaneApi {
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
-  Future<List<Map<String, dynamic>>> _jsonRequestList(String method, String path) async {
+  Future<List<Map<String, dynamic>>> _jsonRequestList(
+    String method,
+    String path,
+  ) async {
     final response = await _request(method, path);
     if (response.body.isEmpty) {
       return const <Map<String, dynamic>>[];
@@ -192,15 +233,27 @@ class ControlPlaneClient implements ControlPlaneApi {
       }
       return _ResponsePayload(response.statusCode, responseBody);
     } on SocketException catch (error) {
-      throw ControlPlaneError(statusCode: 0, code: 'connection_failed', message: error.message);
+      throw ControlPlaneError(
+        statusCode: 0,
+        code: 'connection_failed',
+        message: error.message,
+      );
     } on TimeoutException {
-      throw const ControlPlaneError(statusCode: 0, code: 'timeout', message: 'request timed out');
+      throw const ControlPlaneError(
+        statusCode: 0,
+        code: 'timeout',
+        message: 'request timed out',
+      );
     } finally {
       client.close(force: true);
     }
   }
 
-  Future<HttpClientRequest> _open(HttpClient client, String method, String path) {
+  Future<HttpClientRequest> _open(
+    HttpClient client,
+    String method,
+    String path,
+  ) {
     final uri = _resolve(path);
     switch (method) {
       case 'GET':

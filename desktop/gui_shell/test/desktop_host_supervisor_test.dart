@@ -33,6 +33,13 @@ void main() {
             }),
           );
         } else if (request.uri.path == '/v1/negotiate') {
+          final payload =
+              jsonDecode(await utf8.decoder.bind(request).join())
+                  as Map<String, dynamic>;
+          expect(
+            payload['required_capabilities'],
+            contains('platform_tunnels'),
+          );
           request.response.statusCode = HttpStatus.conflict;
           request.response.headers.contentType = ContentType.json;
           request.response.write(
@@ -111,6 +118,11 @@ void main() {
       expect(result.info?.contractVersion, '1');
       expect(result.info?.build.version, isNotEmpty);
       expect(result.info?.capabilities, contains(Capability.desktopSidecar));
+      expect(result.info?.capabilities, contains(Capability.platformTunnels));
+      expect(
+        result.info?.platformTunnels.single.mode,
+        PlatformTunnelMode.linuxTun,
+      );
     },
     timeout: const Timeout(Duration(seconds: 90)),
   );
@@ -180,6 +192,14 @@ void main() {
                       'diagnostics',
                       'event_stream',
                       'desktop_sidecar',
+                      'platform_tunnels',
+                    ],
+                    'platform_tunnels': <Map<String, dynamic>>[
+                      <String, dynamic>{
+                        'mode': 'linux_tun',
+                        'available': false,
+                        'missing_prerequisite': 'host_implementation',
+                      },
                     ],
                   }),
                 );
@@ -208,6 +228,13 @@ void main() {
               return;
             }
 
+            final payload =
+                jsonDecode(await utf8.decoder.bind(request).join())
+                    as Map<String, dynamic>;
+            expect(
+              payload['required_capabilities'],
+              contains('platform_tunnels'),
+            );
             request.response.headers.contentType = ContentType.json;
             request.response.write(
               jsonEncode(<String, dynamic>{
@@ -228,6 +255,14 @@ void main() {
                   'diagnostics',
                   'event_stream',
                   'desktop_sidecar',
+                  'platform_tunnels',
+                ],
+                'platform_tunnels': <Map<String, dynamic>>[
+                  <String, dynamic>{
+                    'mode': 'linux_tun',
+                    'available': false,
+                    'missing_prerequisite': 'host_implementation',
+                  },
                 ],
               }),
             );

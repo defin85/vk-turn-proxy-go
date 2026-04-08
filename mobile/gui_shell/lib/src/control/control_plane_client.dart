@@ -10,6 +10,9 @@ abstract class ControlPlaneApi {
     required List<String> supportedVersions,
     required List<Capability> requiredCapabilities,
   });
+  Future<PlatformTunnelStartResult> startPlatformTunnel({
+    required PlatformTunnelMode mode,
+  });
   Future<List<ProfileRecord>> profiles();
   Future<ProfileRecord> upsertProfile(ProfileRecord profile);
   Future<void> deleteProfile(String profileId);
@@ -65,6 +68,18 @@ class ControlPlaneClient implements ControlPlaneApi {
       },
     );
     return HostInfo.fromJson(payload);
+  }
+
+  @override
+  Future<PlatformTunnelStartResult> startPlatformTunnel({
+    required PlatformTunnelMode mode,
+  }) async {
+    final payload = await _jsonRequest(
+      'POST',
+      '/v1/platform-tunnels/start',
+      body: <String, dynamic>{'mode': mode.value},
+    );
+    return PlatformTunnelStartResult.fromJson(payload);
   }
 
   @override

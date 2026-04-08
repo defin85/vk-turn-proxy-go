@@ -11,6 +11,10 @@ void main() {
   testWidgets('mobile shell renders challenge handoff and tunnel disclaimer', (
     WidgetTester tester,
   ) async {
+    tester.view.physicalSize = const Size(1200, 1800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
     final controller = MobileShellController(
       bridge: _FakeMobileHostBridge(
         sessionsList: <SessionRecord>[
@@ -69,6 +73,19 @@ void main() {
       find.textContaining('does not yet claim device-wide tunnel capture'),
       findsOneWidget,
     );
+    expect(find.text('Android VPN Service'), findsOneWidget);
+    final tunnelButton = find.text('Request startup', skipOffstage: false);
+    expect(tunnelButton, findsOneWidget);
+    await tester.tap(tunnelButton);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(
+      controller
+          .platformTunnelResultFor(PlatformTunnelMode.androidVpnService)
+          ?.stage,
+      PlatformTunnelStartupStage.capabilityCheck,
+    );
+    expect(find.textContaining('Capability check'), findsWidgets);
     await tester.drag(find.byType(Scrollable).first, const Offset(0, -1200));
     await tester.pumpAndSettle();
     expect(find.text('Open browser', skipOffstage: false), findsOneWidget);
@@ -190,11 +207,20 @@ const HostInfo _readyHostInfo = HostInfo(
   ),
   capabilities: <Capability>[
     Capability.mobileHostBridge,
+    Capability.platformTunnels,
     Capability.profiles,
     Capability.sessions,
     Capability.challenges,
     Capability.diagnostics,
     Capability.eventStream,
+  ],
+  platformTunnels: <PlatformTunnelCapability>[
+    PlatformTunnelCapability(
+      mode: PlatformTunnelMode.androidVpnService,
+      available: false,
+      missingPrerequisite: PlatformTunnelPrerequisite.hostImplementation,
+      message: 'embedded mobile host does not implement tunnel startup yet',
+    ),
   ],
 );
 
@@ -231,6 +257,8 @@ class _FakeMobileHostBridge implements MobileHostBridge {
 
   final List<SessionRecord> sessionsList;
   final Map<String, ChallengeRecord> challengeMap;
+  final List<PlatformTunnelMode> startedPlatformTunnels =
+      <PlatformTunnelMode>[];
 
   @override
   Future<ChallengeRecord> cancelChallenge(String challengeId) async {
@@ -287,6 +315,20 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     required List<Capability> requiredCapabilities,
   }) async {
     return _readyHostInfo;
+  }
+
+  @override
+  Future<PlatformTunnelStartResult> startPlatformTunnel({
+    required PlatformTunnelMode mode,
+  }) async {
+    startedPlatformTunnels.add(mode);
+    return const PlatformTunnelStartResult(
+      mode: PlatformTunnelMode.androidVpnService,
+      ready: false,
+      stage: PlatformTunnelStartupStage.capabilityCheck,
+      missingPrerequisite: PlatformTunnelPrerequisite.hostImplementation,
+      message: 'embedded mobile host does not implement tunnel startup yet',
+    );
   }
 
   @override

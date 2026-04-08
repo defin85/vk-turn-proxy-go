@@ -132,6 +132,7 @@ class DesktopHostSupervisor implements HostSupervisor {
     this.supportedVersions = const <String>[ControlPlaneClient.contractVersion],
     this.requiredCapabilities = const <Capability>[
       Capability.desktopSidecar,
+      Capability.platformTunnels,
       Capability.profiles,
       Capability.sessions,
       Capability.challenges,

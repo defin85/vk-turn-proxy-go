@@ -17,3 +17,4 @@ Current transport support claims remain pair-specific:
 - `tcp -> tcp`
 
 This directory still does not define compatibility contracts for SOCKS5, HTTP CONNECT, transparent proxying, or TUN-device adapters.
+The `add-05` platform-tunnel slice currently stops at typed capability and startup reporting; no OS-wide tunnel mode should be claimed as supported until packaged per-OS smoke evidence is committed next to that future contract.

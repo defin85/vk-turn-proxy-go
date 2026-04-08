@@ -77,6 +77,21 @@ func TestHostInfoExposesContractVersionAndBuildIdentity(t *testing.T) {
 	if info.Build.BuildNumber != "1" {
 		t.Fatalf("build number = %q, want 1", info.Build.BuildNumber)
 	}
+	if !containsCapability(info.Capabilities, CapabilityPlatformTunnels) {
+		t.Fatalf("capabilities = %v, want platform_tunnels", info.Capabilities)
+	}
+	if len(info.PlatformTunnels) != 1 {
+		t.Fatalf("platform_tunnels len = %d, want 1", len(info.PlatformTunnels))
+	}
+	if info.PlatformTunnels[0].Mode != PlatformTunnelModeLinuxTun {
+		t.Fatalf("platform_tunnels[0].mode = %q, want %q", info.PlatformTunnels[0].Mode, PlatformTunnelModeLinuxTun)
+	}
+	if info.PlatformTunnels[0].Available {
+		t.Fatal("platform_tunnels[0].available = true, want false")
+	}
+	if info.PlatformTunnels[0].MissingPrerequisite != PlatformTunnelPrerequisiteHostImplementation {
+		t.Fatalf("platform_tunnels[0].missing_prerequisite = %q, want %q", info.PlatformTunnels[0].MissingPrerequisite, PlatformTunnelPrerequisiteHostImplementation)
+	}
 }
 
 func TestHostNegotiateRejectsIncompatibleVersionAndCapability(t *testing.T) {
@@ -93,6 +108,137 @@ func TestHostNegotiateRejectsIncompatibleVersionAndCapability(t *testing.T) {
 		RequiredCapabilities: []Capability{"custom_capability"},
 	}); err == nil {
 		t.Fatal("expected missing capability error")
+	}
+
+	if _, err := host.Negotiate(NegotiateRequest{
+		SupportedVersions:    []string{ContractVersion},
+		RequiredCapabilities: []Capability{CapabilityPlatformTunnels},
+	}); err != nil {
+		t.Fatalf("Negotiate(platform_tunnels) error = %v", err)
+	}
+}
+
+func TestHostStartPlatformTunnelFailsClosedByDefault(t *testing.T) {
+	host := New(WithBuildIdentity(testBuildIdentity()))
+
+	result, err := host.StartPlatformTunnel(context.Background(), PlatformTunnelStartRequest{
+		Mode: PlatformTunnelModeLinuxTun,
+	})
+	if err != nil {
+		t.Fatalf("StartPlatformTunnel() error = %v", err)
+	}
+	if result.Ready {
+		t.Fatal("StartPlatformTunnel().Ready = true, want false")
+	}
+	if result.Stage != PlatformTunnelStartupStageCapabilityCheck {
+		t.Fatalf("StartPlatformTunnel().Stage = %q, want %q", result.Stage, PlatformTunnelStartupStageCapabilityCheck)
+	}
+	if result.MissingPrerequisite != PlatformTunnelPrerequisiteHostImplementation {
+		t.Fatalf("StartPlatformTunnel().MissingPrerequisite = %q, want %q", result.MissingPrerequisite, PlatformTunnelPrerequisiteHostImplementation)
+	}
+}
+
+func TestHostNormalizesInvalidPlatformTunnelCapabilitiesToFailClosedDefault(t *testing.T) {
+	host := New(
+		WithBuildIdentity(testBuildIdentity()),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{{
+			Mode:      PlatformTunnelMode("future_linux_mode"),
+			Available: true,
+		}}),
+	)
+
+	info := host.Info()
+	if len(info.PlatformTunnels) != 1 {
+		t.Fatalf("platform_tunnels len = %d, want 1", len(info.PlatformTunnels))
+	}
+	if info.PlatformTunnels[0].Mode != PlatformTunnelModeLinuxTun {
+		t.Fatalf("platform_tunnels[0].mode = %q, want %q", info.PlatformTunnels[0].Mode, PlatformTunnelModeLinuxTun)
+	}
+	if info.PlatformTunnels[0].Available {
+		t.Fatal("platform_tunnels[0].available = true, want false")
+	}
+	if info.PlatformTunnels[0].MissingPrerequisite != PlatformTunnelPrerequisiteHostImplementation {
+		t.Fatalf("platform_tunnels[0].missing_prerequisite = %q, want %q", info.PlatformTunnels[0].MissingPrerequisite, PlatformTunnelPrerequisiteHostImplementation)
+	}
+}
+
+func TestHostNormalizesAvailablePlatformTunnelWithoutSatisfiedPrerequisitesToFailClosedDefault(t *testing.T) {
+	host := New(
+		WithBuildIdentity(testBuildIdentity()),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{{
+			Mode:      PlatformTunnelModeLinuxTun,
+			Available: true,
+		}}),
+	)
+
+	info := host.Info()
+	if len(info.PlatformTunnels) != 1 {
+		t.Fatalf("platform_tunnels len = %d, want 1", len(info.PlatformTunnels))
+	}
+	if info.PlatformTunnels[0].Mode != PlatformTunnelModeLinuxTun {
+		t.Fatalf("platform_tunnels[0].mode = %q, want %q", info.PlatformTunnels[0].Mode, PlatformTunnelModeLinuxTun)
+	}
+	if info.PlatformTunnels[0].Available {
+		t.Fatal("platform_tunnels[0].available = true, want false")
+	}
+	if info.PlatformTunnels[0].MissingPrerequisite != PlatformTunnelPrerequisiteHostImplementation {
+		t.Fatalf("platform_tunnels[0].missing_prerequisite = %q, want %q", info.PlatformTunnels[0].MissingPrerequisite, PlatformTunnelPrerequisiteHostImplementation)
+	}
+}
+
+func TestHostStartPlatformTunnelRejectsInvalidStartupResult(t *testing.T) {
+	host := New(
+		WithBuildIdentity(testBuildIdentity()),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{{
+			Mode:      PlatformTunnelModeLinuxTun,
+			Available: true,
+			SatisfiedPrerequisites: []PlatformTunnelPrerequisite{
+				PlatformTunnelPrerequisiteRouteExclusion,
+			},
+		}}),
+		WithPlatformTunnelStarter(func(_ context.Context, req PlatformTunnelStartRequest) (PlatformTunnelStartResult, error) {
+			return PlatformTunnelStartResult{
+				Mode:  req.Mode,
+				Ready: false,
+			}, nil
+		}),
+	)
+
+	if _, err := host.StartPlatformTunnel(context.Background(), PlatformTunnelStartRequest{
+		Mode: PlatformTunnelModeLinuxTun,
+	}); err == nil {
+		t.Fatal("StartPlatformTunnel() error = nil, want invalid startup result error")
+	} else if !strings.Contains(err.Error(), "invalid platform tunnel startup result") {
+		t.Fatalf("StartPlatformTunnel() error = %v, want invalid startup result", err)
+	}
+}
+
+func TestHostStartPlatformTunnelRejectsStartupResultWithoutMissingPrerequisite(t *testing.T) {
+	host := New(
+		WithBuildIdentity(testBuildIdentity()),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{{
+			Mode:      PlatformTunnelModeLinuxTun,
+			Available: true,
+			SatisfiedPrerequisites: []PlatformTunnelPrerequisite{
+				PlatformTunnelPrerequisiteRouteExclusion,
+			},
+		}}),
+		WithPlatformTunnelStarter(func(_ context.Context, req PlatformTunnelStartRequest) (PlatformTunnelStartResult, error) {
+			return PlatformTunnelStartResult{
+				Mode:    req.Mode,
+				Ready:   false,
+				Stage:   PlatformTunnelStartupStageRuntimeAttach,
+				Message: "runtime attach failed without a typed prerequisite",
+			}, nil
+		}),
+	)
+
+	if _, err := host.StartPlatformTunnel(context.Background(), PlatformTunnelStartRequest{
+		Mode: PlatformTunnelModeLinuxTun,
+	}); err == nil {
+		t.Fatal("StartPlatformTunnel() error = nil, want invalid startup result error")
+	} else if !strings.Contains(err.Error(), "missing_prerequisite") {
+		t.Fatalf("StartPlatformTunnel() error = %v, want missing_prerequisite validation", err)
 	}
 }
 
@@ -448,4 +594,13 @@ func reserveTCPAddr(t *testing.T) string {
 func boolRef(value bool) *bool {
 	out := value
 	return &out
+}
+
+func containsCapability(caps []Capability, want Capability) bool {
+	for _, cap := range caps {
+		if cap == want {
+			return true
+		}
+	}
+	return false
 }

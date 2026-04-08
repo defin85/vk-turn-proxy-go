@@ -33,11 +33,20 @@ const HostInfo _readyHostInfo = HostInfo(
   build: _testHostBuild,
   capabilities: <Capability>[
     Capability.desktopSidecar,
+    Capability.platformTunnels,
     Capability.profiles,
     Capability.sessions,
     Capability.challenges,
     Capability.diagnostics,
     Capability.eventStream,
+  ],
+  platformTunnels: <PlatformTunnelCapability>[
+    PlatformTunnelCapability(
+      mode: PlatformTunnelMode.windowsWintun,
+      available: false,
+      missingPrerequisite: PlatformTunnelPrerequisite.hostImplementation,
+      message: 'desktop sidecar does not implement system tunnel startup yet',
+    ),
   ],
 );
 
@@ -385,6 +394,92 @@ void main() {
       );
     },
   );
+
+  test(
+    'controller consumes typed platform tunnel reports and startup-stage results',
+    () async {
+      final api = _FakeControlPlaneApi(
+        profiles: const <ProfileRecord>[],
+        sessions: const <SessionRecord>[],
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(const <HostConnectionResult>[
+          HostConnectionResult(
+            state: HostLifecycleState.ready,
+            message: 'ready',
+            info: _readyHostInfo,
+          ),
+        ]),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.startPlatformTunnel(PlatformTunnelMode.windowsWintun);
+
+      expect(api.startPlatformTunnelCalls, <PlatformTunnelMode>[
+        PlatformTunnelMode.windowsWintun,
+      ]);
+      expect(
+        controller.platformTunnels.single.mode,
+        PlatformTunnelMode.windowsWintun,
+      );
+      expect(
+        controller
+            .platformTunnelResultFor(PlatformTunnelMode.windowsWintun)
+            ?.stage,
+        PlatformTunnelStartupStage.capabilityCheck,
+      );
+      expect(controller.notice, contains('Capability check'));
+    },
+  );
+
+  test(
+    'controller clears platform tunnel startup results after reconnecting to the same mode',
+    () async {
+      final api = _FakeControlPlaneApi(
+        profiles: const <ProfileRecord>[],
+        sessions: const <SessionRecord>[],
+      );
+      final supervisor = _SequencedHostSupervisor(const <HostConnectionResult>[
+        HostConnectionResult(
+          state: HostLifecycleState.ready,
+          message: 'ready',
+          info: _readyHostInfo,
+        ),
+        HostConnectionResult(
+          state: HostLifecycleState.ready,
+          message: 'ready again',
+          info: _readyHostInfo,
+        ),
+      ]);
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: supervisor,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.startPlatformTunnel(PlatformTunnelMode.windowsWintun);
+      expect(
+        controller.platformTunnelResultFor(PlatformTunnelMode.windowsWintun),
+        isNotNull,
+      );
+
+      await controller.reconnect();
+
+      expect(supervisor.calls, 2);
+      expect(
+        controller.platformTunnelResultFor(PlatformTunnelMode.windowsWintun),
+        isNull,
+      );
+      expect(
+        controller.platformTunnels.single.mode,
+        PlatformTunnelMode.windowsWintun,
+      );
+      expect(controller.notice, 'ready again');
+    },
+  );
 }
 
 class _FakeControlPlaneApi implements ControlPlaneApi {
@@ -404,6 +499,8 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   final StreamController<EventRecord> _events =
       StreamController<EventRecord>.broadcast();
   final List<String> challengeRequests = <String>[];
+  final List<PlatformTunnelMode> startPlatformTunnelCalls =
+      <PlatformTunnelMode>[];
   final List<ProfileRecord> upsertedProfiles = <ProfileRecord>[];
   bool failReads = false;
   int startSessionCalls = 0;
@@ -465,6 +562,20 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
     required List<Capability> requiredCapabilities,
   }) {
     return hostInfo();
+  }
+
+  @override
+  Future<PlatformTunnelStartResult> startPlatformTunnel({
+    required PlatformTunnelMode mode,
+  }) async {
+    startPlatformTunnelCalls.add(mode);
+    return const PlatformTunnelStartResult(
+      mode: PlatformTunnelMode.windowsWintun,
+      ready: false,
+      stage: PlatformTunnelStartupStage.capabilityCheck,
+      missingPrerequisite: PlatformTunnelPrerequisite.hostImplementation,
+      message: 'desktop sidecar does not implement system tunnel startup yet',
+    );
   }
 
   @override

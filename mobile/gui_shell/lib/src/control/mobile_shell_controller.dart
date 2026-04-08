@@ -69,6 +69,8 @@ class MobileShellController extends ChangeNotifier {
   ProfileDraft draft = ProfileDraft.defaults();
   String? selectedProfileId;
   String? selectedSessionId;
+  final Map<PlatformTunnelMode, PlatformTunnelStartResult>
+  _platformTunnelResults = <PlatformTunnelMode, PlatformTunnelStartResult>{};
   String? notice;
   bool busy = false;
   bool _requiresLocalStateReset = false;
@@ -85,6 +87,7 @@ class MobileShellController extends ChangeNotifier {
 
   static const List<Capability> requiredCapabilities = <Capability>[
     Capability.mobileHostBridge,
+    Capability.platformTunnels,
     Capability.profiles,
     Capability.sessions,
     Capability.challenges,
@@ -93,6 +96,19 @@ class MobileShellController extends ChangeNotifier {
   ];
 
   bool get requiresLocalStateReset => _requiresLocalStateReset;
+
+  List<PlatformTunnelCapability> get platformTunnels =>
+      hostConnection?.info?.platformTunnels ??
+      const <PlatformTunnelCapability>[];
+
+  bool get systemTunnelSupported =>
+      platformTunnels.any((PlatformTunnelCapability capability) {
+        return capability.available;
+      });
+
+  PlatformTunnelStartResult? platformTunnelResultFor(PlatformTunnelMode mode) {
+    return _platformTunnelResults[mode];
+  }
 
   Future<void> initialize() async {
     await _restorePersistedState();
@@ -136,8 +152,6 @@ class MobileShellController extends ChangeNotifier {
       }
     }
   }
-
-  bool get systemTunnelSupported => false;
 
   Future<void> refresh() async {
     if (hostConnection?.isReady != true) {
@@ -378,6 +392,14 @@ class MobileShellController extends ChangeNotifier {
     });
   }
 
+  Future<void> startPlatformTunnel(PlatformTunnelMode mode) async {
+    await _runBridgeMutation(() async {
+      final result = await bridge.startPlatformTunnel(mode: mode);
+      _platformTunnelResults[mode] = result;
+      notice = _platformTunnelNotice(result);
+    });
+  }
+
   ChallengeRecord? activeChallengeFor(SessionRecord session) {
     final challengeID = session.activeChallengeId;
     if (challengeID == null || challengeID.isEmpty) {
@@ -420,6 +442,8 @@ class MobileShellController extends ChangeNotifier {
         message: '$error',
       );
     }
+
+    _clearPlatformTunnelResults();
 
     if (hostConnection?.isReady != true) {
       await _stopRuntimeMonitoring();
@@ -695,6 +719,7 @@ class MobileShellController extends ChangeNotifier {
       info: hostConnection?.info,
       description: hostConnection?.description ?? '',
     );
+    _clearPlatformTunnelResults();
     status = ShellStatus.blocked;
     notice = message;
     busy = false;
@@ -754,6 +779,28 @@ class MobileShellController extends ChangeNotifier {
       notice = 'Failed to persist mobile shell state: $error';
       _notify();
     }
+  }
+
+  void _clearPlatformTunnelResults() {
+    _platformTunnelResults.clear();
+  }
+
+  String _platformTunnelNotice(PlatformTunnelStartResult result) {
+    if (result.ready) {
+      return '${result.mode.label} is ready for the mobile host tunnel path.';
+    }
+    final buffer = StringBuffer(
+      '${result.mode.label} blocked at ${result.stage?.label ?? 'Unknown stage'}.',
+    );
+    if (result.missingPrerequisite != null) {
+      buffer.write(
+        ' Missing prerequisite: ${result.missingPrerequisite!.label}.',
+      );
+    }
+    if (result.message.isNotEmpty) {
+      buffer.write(' ${result.message}');
+    }
+    return buffer.toString();
   }
 
   void _notify() {

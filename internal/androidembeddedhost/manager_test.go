@@ -50,6 +50,18 @@ func TestManagerEnsureStartedServesClientControlHost(t *testing.T) {
 	if info.Build.Role != "android_embedded_host" {
 		t.Fatalf("build.role = %q, want android_embedded_host", info.Build.Role)
 	}
+	if !containsCapability(info.Capabilities, clientcontrol.CapabilityPlatformTunnels) {
+		t.Fatalf("capabilities = %v, want platform_tunnels", info.Capabilities)
+	}
+	if len(info.PlatformTunnels) != 1 {
+		t.Fatalf("platform_tunnels len = %d, want 1", len(info.PlatformTunnels))
+	}
+	if info.PlatformTunnels[0].Mode != clientcontrol.PlatformTunnelModeAndroidVPNService {
+		t.Fatalf("platform_tunnels[0].mode = %q, want %q", info.PlatformTunnels[0].Mode, clientcontrol.PlatformTunnelModeAndroidVPNService)
+	}
+	if info.PlatformTunnels[0].Available {
+		t.Fatal("platform_tunnels[0].available = true, want false")
+	}
 }
 
 func TestManagerEnsureStartedIsIdempotent(t *testing.T) {
@@ -93,6 +105,7 @@ func TestManagerNegotiateSupportsMobileHostBridgeContract(t *testing.T) {
 		SupportedVersions: []string{clientcontrol.ContractVersion},
 		RequiredCapabilities: []clientcontrol.Capability{
 			clientcontrol.CapabilityMobileHostBridge,
+			clientcontrol.CapabilityPlatformTunnels,
 			clientcontrol.CapabilityProfiles,
 			clientcontrol.CapabilitySessions,
 			clientcontrol.CapabilityChallenges,
@@ -124,6 +137,53 @@ func TestManagerNegotiateSupportsMobileHostBridgeContract(t *testing.T) {
 	}
 	if !containsCapability(info.Capabilities, clientcontrol.CapabilityMobileHostBridge) {
 		t.Fatalf("capabilities = %v, want mobile_host_bridge", info.Capabilities)
+	}
+}
+
+func TestManagerPlatformTunnelStartFailsClosedWithTypedStageAndPrerequisite(t *testing.T) {
+	t.Parallel()
+
+	manager := New()
+	baseURL, err := manager.EnsureStarted()
+	if err != nil {
+		t.Fatalf("EnsureStarted() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := manager.Stop(); err != nil {
+			t.Fatalf("Stop() error = %v", err)
+		}
+	})
+
+	payload, err := json.Marshal(clientcontrol.PlatformTunnelStartRequest{
+		Mode: clientcontrol.PlatformTunnelModeAndroidVPNService,
+	})
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Post(baseURL+"/v1/platform-tunnels/start", "application/json", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("POST /v1/platform-tunnels/start error = %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("POST /v1/platform-tunnels/start status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	var result clientcontrol.PlatformTunnelStartResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode platform tunnel start result: %v", err)
+	}
+	if result.Ready {
+		t.Fatal("platform tunnel start result ready = true, want false")
+	}
+	if result.Stage != clientcontrol.PlatformTunnelStartupStageCapabilityCheck {
+		t.Fatalf("platform tunnel start stage = %q, want %q", result.Stage, clientcontrol.PlatformTunnelStartupStageCapabilityCheck)
+	}
+	if result.MissingPrerequisite != clientcontrol.PlatformTunnelPrerequisiteHostImplementation {
+		t.Fatalf("platform tunnel start missing_prerequisite = %q, want %q", result.MissingPrerequisite, clientcontrol.PlatformTunnelPrerequisiteHostImplementation)
 	}
 }
 

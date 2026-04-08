@@ -173,6 +173,7 @@ class HttpMobileHostBridge implements MobileHostBridge {
     this.supportedVersions = const <String>[ControlPlaneClient.contractVersion],
     this.requiredCapabilities = const <Capability>[
       Capability.mobileHostBridge,
+      Capability.platformTunnels,
       Capability.profiles,
       Capability.sessions,
       Capability.challenges,
@@ -287,6 +288,13 @@ class HttpMobileHostBridge implements MobileHostBridge {
   }
 
   @override
+  Future<PlatformTunnelStartResult> startPlatformTunnel({
+    required PlatformTunnelMode mode,
+  }) {
+    return _client.startPlatformTunnel(mode: mode);
+  }
+
+  @override
   Future<List<ProfileRecord>> profiles() => _client.profiles();
 
   @override
@@ -357,6 +365,11 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
   Future<HostInfo> negotiate({
     required List<String> supportedVersions,
     required List<Capability> requiredCapabilities,
+  }) => _fail();
+
+  @override
+  Future<PlatformTunnelStartResult> startPlatformTunnel({
+    required PlatformTunnelMode mode,
   }) => _fail();
 
   @override
