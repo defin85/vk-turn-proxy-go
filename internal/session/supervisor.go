@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net"
 	"sync"
 	"time"
 
+	"github.com/defin85/vk-turn-proxy-go/internal/overlay"
 	"github.com/defin85/vk-turn-proxy-go/internal/runstage"
 	"github.com/defin85/vk-turn-proxy-go/internal/transport"
 )
@@ -17,7 +17,7 @@ const workerQueueSize = 64
 type workerReadyEvent struct {
 	index      int
 	generation int
-	outbound   chan transport.RelayPacket
+	outbound   chan overlay.Frame
 }
 
 type workerResult struct {
@@ -32,7 +32,7 @@ type workerState struct {
 	ready      bool
 }
 
-func runSupervisedSession(ctx context.Context, localConn net.PacketConn, baseCfg transport.ClientConfig, deps Dependencies, plan sessionPlan, observer observerAPI) error {
+func runSupervisedSession(ctx context.Context, ingress overlay.Ingress, baseCfg transport.ClientConfig, deps Dependencies, plan sessionPlan, observer observerAPI) error {
 	supervisorCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -41,34 +41,28 @@ func runSupervisedSession(ctx context.Context, localConn net.PacketConn, baseCfg
 		logger = slog.Default()
 	}
 
-	stopLocalInterrupt := context.AfterFunc(supervisorCtx, func() {
-		_ = localConn.SetDeadline(time.Now())
-	})
-	defer stopLocalInterrupt()
-
-	router := newLocalRouter(localConn, logger)
 	readyCh := make(chan workerReadyEvent, plan.Connections*2)
 	resultCh := make(chan workerResult, plan.Connections*2)
 	restartCh := make(chan int, plan.Connections*2)
-	routerErrCh := make(chan error, 1)
+	ingressErrCh := make(chan error, 1)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		routerErrCh <- router.Run(supervisorCtx)
+		ingressErrCh <- ingress.Run(supervisorCtx)
 	}()
 
 	states := make([]workerState, plan.Connections)
 	startWorker := func(index int, restarting bool) {
 		states[index].generation++
 		generation := states[index].generation
-		outbound := make(chan transport.RelayPacket, workerQueueSize)
+		outbound := make(chan overlay.Frame, workerQueueSize)
 
 		cfg := baseCfg
 		cfg.WorkerIndex = index
 		cfg.Outbound = outbound
-		cfg.Inbound = router.Deliver
+		cfg.Inbound = ingress.Deliver
 		cfg.Logger = logger.With("worker", index, "generation", generation)
 
 		previousReadyHook := cfg.Hooks.OnReady
@@ -129,7 +123,7 @@ loop:
 
 			state.ready = true
 			readyWorkers++
-			router.SetReady(ready.index, ready.outbound)
+			ingress.SetReady(ready.index, ready.outbound)
 			if observer != nil {
 				observer.SetActiveWorkers(readyWorkers)
 			}
@@ -166,7 +160,7 @@ loop:
 			if wasReady {
 				readyWorkers--
 				state.ready = false
-				router.Remove(result.index)
+				ingress.Remove(result.index)
 				if observer != nil {
 					observer.SetActiveWorkers(readyWorkers)
 				}
@@ -232,12 +226,9 @@ loop:
 				)
 
 				go func(index int) {
-					timer := time.NewTimer(plan.RestartBackoff)
-					defer timer.Stop()
-
 					select {
 					case <-supervisorCtx.Done():
-					case <-timer.C:
+					case <-time.After(plan.RestartBackoff):
 						select {
 						case restartCh <- index:
 						case <-supervisorCtx.Done():
@@ -277,7 +268,7 @@ loop:
 
 			startWorker(index, true)
 
-		case err := <-routerErrCh:
+		case err := <-ingressErrCh:
 			if err != nil && supervisorCtx.Err() == nil {
 				if observer != nil {
 					observer.RecordTransportFailure(string(runstage.ForwardingLoop))
@@ -313,7 +304,7 @@ loop:
 	}
 
 	select {
-	case err := <-routerErrCh:
+	case err := <-ingressErrCh:
 		if err != nil {
 			return runstage.Wrap(runstage.ForwardingLoop, err)
 		}

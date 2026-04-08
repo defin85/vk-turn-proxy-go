@@ -13,6 +13,7 @@ import (
 	"github.com/pion/dtls/v3"
 	"github.com/pion/turn/v5"
 
+	"github.com/defin85/vk-turn-proxy-go/internal/overlay"
 	"github.com/defin85/vk-turn-proxy-go/test/turnlab"
 )
 
@@ -45,25 +46,10 @@ func TestHarnessRelayRoundTrip(t *testing.T) {
 		t.Fatalf("unexpected generic-turn link: %q", link)
 	}
 
-	dtlsConn, _, cleanup := dialHarnessDTLS(t, harness, "udp")
+	dtlsConn, endpoint, _, cleanup := dialHarnessDTLS(t, harness, "udp")
 	t.Cleanup(cleanup)
 
-	payload := []byte("turn-lab-smoke")
-	if err := dtlsConn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
-		t.Fatalf("set deadline: %v", err)
-	}
-	if _, err := dtlsConn.Write(payload); err != nil {
-		t.Fatalf("write payload: %v", err)
-	}
-
-	buf := make([]byte, 64)
-	n, err := dtlsConn.Read(buf)
-	if err != nil {
-		t.Fatalf("read payload: %v", err)
-	}
-	if !bytes.Equal(buf[:n], payload) {
-		t.Fatalf("unexpected payload: got %q want %q", buf[:n], payload)
-	}
+	mustReadDTLSEcho(t, dtlsConn, endpoint, []byte("turn-lab-smoke"))
 }
 
 func TestHarnessTCPRelayRoundTrip(t *testing.T) {
@@ -79,25 +65,10 @@ func TestHarnessTCPRelayRoundTrip(t *testing.T) {
 		}
 	})
 
-	dtlsConn, _, cleanup := dialHarnessDTLS(t, harness, "tcp")
+	dtlsConn, endpoint, _, cleanup := dialHarnessDTLS(t, harness, "tcp")
 	t.Cleanup(cleanup)
 
-	payload := []byte("turn-lab-tcp-smoke")
-	if err := dtlsConn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
-		t.Fatalf("set deadline: %v", err)
-	}
-	if _, err := dtlsConn.Write(payload); err != nil {
-		t.Fatalf("write payload: %v", err)
-	}
-
-	buf := make([]byte, 64)
-	n, err := dtlsConn.Read(buf)
-	if err != nil {
-		t.Fatalf("read payload: %v", err)
-	}
-	if !bytes.Equal(buf[:n], payload) {
-		t.Fatalf("unexpected payload: got %q want %q", buf[:n], payload)
-	}
+	mustReadDTLSEcho(t, dtlsConn, endpoint, []byte("turn-lab-tcp-smoke"))
 }
 
 func TestHarnessRelayRoundTripAfterAllocationRefresh(t *testing.T) {
@@ -115,10 +86,10 @@ func TestHarnessRelayRoundTripAfterAllocationRefresh(t *testing.T) {
 		}
 	})
 
-	dtlsConn, _, cleanup := dialHarnessDTLS(t, harness, "udp")
+	dtlsConn, endpoint, _, cleanup := dialHarnessDTLS(t, harness, "udp")
 	t.Cleanup(cleanup)
 
-	mustReadDTLSEcho(t, dtlsConn, []byte("before-refresh"))
+	mustReadDTLSEcho(t, dtlsConn, endpoint, []byte("before-refresh"))
 
 	waitCtx, waitCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer waitCancel()
@@ -129,7 +100,7 @@ func TestHarnessRelayRoundTripAfterAllocationRefresh(t *testing.T) {
 		t.Fatalf("refresh count = %d, want >= 1", got)
 	}
 
-	mustReadDTLSEcho(t, dtlsConn, []byte("after-refresh"))
+	mustReadDTLSEcho(t, dtlsConn, endpoint, []byte("after-refresh"))
 }
 
 func TestHarnessCustomPeerIdleTimeoutClosesIdleDTLSSession(t *testing.T) {
@@ -147,7 +118,7 @@ func TestHarnessCustomPeerIdleTimeoutClosesIdleDTLSSession(t *testing.T) {
 		}
 	})
 
-	dtlsConn, _, cleanup := dialHarnessDTLS(t, harness, "udp")
+	dtlsConn, _, _, cleanup := dialHarnessDTLS(t, harness, "udp")
 	t.Cleanup(cleanup)
 
 	waitForIdleClose(t, dtlsConn, 2*time.Second)
@@ -198,7 +169,7 @@ func TestHarnessCleanupReleasesPorts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("start harness: %v", err)
 	}
-	_, relayAddr, cleanup := dialHarnessDTLS(t, harness, "udp")
+	_, _, relayAddr, cleanup := dialHarnessDTLS(t, harness, "udp")
 	t.Cleanup(cleanup)
 
 	cancel()
@@ -256,9 +227,9 @@ func TestHarnessSupportsSplitBindAndAdvertiseAddresses(t *testing.T) {
 		t.Fatalf("unexpected generic-turn link %q", link)
 	}
 
-	dtlsConn, _, cleanup := dialHarnessDTLS(t, harness, "udp")
+	dtlsConn, endpoint, _, cleanup := dialHarnessDTLS(t, harness, "udp")
 	t.Cleanup(cleanup)
-	mustReadDTLSEcho(t, dtlsConn, []byte("turn-lab-split-addresses"))
+	mustReadDTLSEcho(t, dtlsConn, endpoint, []byte("turn-lab-split-addresses"))
 }
 
 func TestHarnessSupportsFixedPorts(t *testing.T) {
@@ -294,9 +265,9 @@ func TestHarnessSupportsFixedPorts(t *testing.T) {
 		t.Fatalf("PeerAddress = %q, want %q", got, want)
 	}
 
-	dtlsConn, _, cleanup := dialHarnessDTLS(t, harness, "tcp")
+	dtlsConn, endpoint, _, cleanup := dialHarnessDTLS(t, harness, "tcp")
 	t.Cleanup(cleanup)
-	mustReadDTLSEcho(t, dtlsConn, []byte("turn-lab-fixed-ports"))
+	mustReadDTLSEcho(t, dtlsConn, endpoint, []byte("turn-lab-fixed-ports"))
 }
 
 func TestHarnessRejectsNonIPv4AdvertiseAddress(t *testing.T) {
@@ -372,7 +343,7 @@ func TestHarnessRejectsOutOfRangeFixedPort(t *testing.T) {
 	}
 }
 
-func dialHarnessDTLS(t *testing.T, harness *turnlab.Harness, turnNetwork string) (*dtls.Conn, string, func()) {
+func dialHarnessDTLS(t *testing.T, harness *turnlab.Harness, turnNetwork string) (*dtls.Conn, *overlay.Endpoint, string, func()) {
 	t.Helper()
 
 	relayConn, cleanup := dialHarnessRelay(t, harness, turnNetwork)
@@ -399,29 +370,56 @@ func dialHarnessDTLS(t *testing.T, harness *turnlab.Harness, turnNetwork string)
 		t.Fatalf("dtls handshake: %v", err)
 	}
 
-	return dtlsConn, relayConn.LocalAddr().String(), func() {
+	endpoint := overlay.NewEndpoint(dtlsConn, nil)
+	if err := endpoint.WriteFrame(overlay.Frame{
+		Kind:    overlay.FrameHello,
+		Adapter: overlay.AdapterUDP,
+	}); err != nil {
+		_ = dtlsConn.Close()
+		cleanup()
+		t.Fatalf("write overlay hello: %v", err)
+	}
+	frame, err := endpoint.ReadFrame()
+	if err != nil {
+		_ = dtlsConn.Close()
+		cleanup()
+		t.Fatalf("read overlay hello ack: %v", err)
+	}
+	if frame.Kind != overlay.FrameHelloAck {
+		_ = dtlsConn.Close()
+		cleanup()
+		t.Fatalf("overlay frame kind = %s, want %s", frame.Kind, overlay.FrameHelloAck)
+	}
+
+	return dtlsConn, endpoint, relayConn.LocalAddr().String(), func() {
 		_ = dtlsConn.Close()
 		cleanup()
 	}
 }
 
-func mustReadDTLSEcho(t *testing.T, conn *dtls.Conn, payload []byte) {
+func mustReadDTLSEcho(t *testing.T, conn *dtls.Conn, endpoint *overlay.Endpoint, payload []byte) {
 	t.Helper()
 
 	if err := conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
 		t.Fatalf("set deadline: %v", err)
 	}
-	if _, err := conn.Write(payload); err != nil {
-		t.Fatalf("write payload: %v", err)
+	if err := endpoint.WriteFrame(overlay.Frame{
+		Kind:    overlay.FrameDatagram,
+		RouteID: 1,
+		Payload: payload,
+	}); err != nil {
+		t.Fatalf("write overlay payload: %v", err)
 	}
 
-	buf := make([]byte, 64)
-	n, err := conn.Read(buf)
+	frame, err := endpoint.ReadFrame()
 	if err != nil {
 		t.Fatalf("read payload: %v", err)
 	}
-	if !bytes.Equal(buf[:n], payload) {
-		t.Fatalf("unexpected payload: got %q want %q", buf[:n], payload)
+	if frame.Kind != overlay.FrameDatagram {
+		t.Fatalf("frame kind = %s, want %s", frame.Kind, overlay.FrameDatagram)
+	}
+	if !bytes.Equal(frame.Payload, payload) {
+		t.Fatalf("unexpected payload: got %q want %q", frame.Payload, payload)
 	}
 }
 

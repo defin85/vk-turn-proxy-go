@@ -11,3 +11,9 @@ Provider-specific contracts live next to their fixtures.
 The first committed contract is `test/compatibility/vk/README.md`, which defines the VK call debug contour and the schema for sanitized fixtures.
 Runtime acceptance scaffolding for the supported VK-backed client slice lives in
 `test/compatibility/vk/runtime/README.md`.
+
+Current transport support claims remain pair-specific:
+- `udp -> udp`
+- `tcp -> tcp`
+
+This directory still does not define compatibility contracts for SOCKS5, HTTP CONNECT, transparent proxying, or TUN-device adapters.

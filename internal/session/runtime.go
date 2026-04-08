@@ -9,6 +9,7 @@ import (
 
 	"github.com/defin85/vk-turn-proxy-go/internal/config"
 	"github.com/defin85/vk-turn-proxy-go/internal/observe"
+	"github.com/defin85/vk-turn-proxy-go/internal/overlay"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
 	"github.com/defin85/vk-turn-proxy-go/internal/runstage"
 	"github.com/defin85/vk-turn-proxy-go/internal/transport"
@@ -88,6 +89,7 @@ func Run(ctx context.Context, cfg config.ClientConfig, deps Dependencies) error 
 		"provider", cfg.Provider,
 		"listen", cfg.ListenAddr,
 		"peer", cfg.PeerAddr,
+		"ingress", plan.Transport.Ingress,
 		"mode", cfg.Mode,
 		"dtls", cfg.UseDTLS,
 		"connections", cfg.Connections,
@@ -122,9 +124,10 @@ func Run(ctx context.Context, cfg config.ClientConfig, deps Dependencies) error 
 		"turn_addr", turnAddr,
 		"peer", cfg.PeerAddr,
 		"listen", cfg.ListenAddr,
+		"ingress", plan.Transport.Ingress,
 	)
 
-	localConn, err := net.ListenPacket("udp", cfg.ListenAddr)
+	ingress, err := overlay.NewIngress(plan.Transport.Ingress, cfg.ListenAddr, logger)
 	if err != nil {
 		observer.RecordTransportFailure(string(runstage.LocalBind))
 		observer.RecordSessionFailure(string(runstage.LocalBind), true)
@@ -133,13 +136,15 @@ func Run(ctx context.Context, cfg config.ClientConfig, deps Dependencies) error 
 			"result", "failed",
 			"error", err,
 		)
-		return runstage.Wrap(runstage.LocalBind, fmt.Errorf("bind local listener: %w", err))
+		return runstage.Wrap(runstage.LocalBind, err)
 	}
-	defer transportClosePacketConn(localConn)
+	defer closeIngress(ingress)
 
-	if err := runSupervisedSession(ctx, localConn, transport.ClientConfig{
+	cfg.Ingress = config.AdapterKind(plan.Transport.Ingress)
+	if err := runSupervisedSession(ctx, ingress, transport.ClientConfig{
 		ListenAddr: cfg.ListenAddr,
 		PeerAddr:   cfg.PeerAddr,
+		Ingress:    plan.Transport.Ingress,
 		TURN: transport.TURNCredentials{
 			Address:  turnAddr,
 			Username: resolution.Credentials.Username,
@@ -165,12 +170,12 @@ func Run(ctx context.Context, cfg config.ClientConfig, deps Dependencies) error 
 	return nil
 }
 
-func transportClosePacketConn(conn net.PacketConn) {
-	if conn == nil {
+func closeIngress(ingress overlay.Ingress) {
+	if ingress == nil {
 		return
 	}
 
-	_ = conn.Close()
+	_ = ingress.Close()
 }
 
 func clientObserverMetadata(cfg config.ClientConfig, sessionID ID, plan *sessionPlan) observe.Metadata {

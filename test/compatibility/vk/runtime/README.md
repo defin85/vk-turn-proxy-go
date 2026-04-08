@@ -3,19 +3,31 @@
 ## Scope
 
 This contract covers the supported VK-backed client runtime slice after
-`05-expand-transport-policy-matrix`.
+`add-04-native-transport-overlay`.
 
-It currently records replayable evidence for:
+The committed replay assets in this directory currently record evidence for the
+UDP ingress baseline of that slice:
 
+- `ingress=udp`
 - `connections=1`
 - `dtls=true|false`
 - `mode=auto|udp|tcp`
 - empty `bind-interface` or a literal local IP
 - one active local UDP peer per session for reply routing
 
+Current pair-specific overlay support claims are split across evidence sources:
+
+- `udp -> udp` is anchored by these VK replay assets plus deterministic overlay
+  regression tests in `internal/session`, `internal/tunnelserver`, and
+  `test/turnlab`
+- `tcp -> tcp` is implemented and covered by deterministic generic-turn and
+  turnlab-backed tests, including supervised `connections > 1`, but it is not
+  yet represented by committed VK replay fixtures in this directory
+
 It explicitly excludes:
 
 - non-IP `bind-interface` values such as interface names
+- VK replay fixtures for `ingress=tcp`
 - mobile rebinding and broader legacy parity claims
 
 The runtime now also supports supervised sessions with `connections > 1`, but
@@ -79,6 +91,7 @@ required for the first committed baseline.
 Supported-slice success case for:
 
 - VK provider resolution
+- UDP local ingress on the overlay baseline
 - one TURN allocation
 - one DTLS-backed relay session
 - successful UDP round-trip through the configured peer on the provider-default transport path
@@ -108,6 +121,7 @@ Expected compatibility claim:
 Supported-slice success case for:
 
 - VK provider resolution
+- UDP local ingress on the overlay baseline
 - TCP between the client and the TURN server
 - one DTLS-backed relay session
 - successful UDP round-trip through the configured peer
@@ -117,6 +131,7 @@ Supported-slice success case for:
 Supported-slice success case for:
 
 - VK provider resolution
+- UDP local ingress on the overlay baseline
 - UDP between the client and the TURN server
 - plain datagram relay without DTLS
 - successful UDP round-trip through the configured upstream peer
@@ -126,6 +141,7 @@ Supported-slice success case for:
 Supported-slice success case for:
 
 - VK provider resolution
+- UDP local ingress on the overlay baseline
 - TCP between the client and the TURN server
 - plain datagram relay without DTLS
 - successful UDP round-trip through the configured upstream peer
@@ -135,6 +151,7 @@ Supported-slice success case for:
 Supported-slice success case for:
 
 - VK provider resolution
+- UDP local ingress on the overlay baseline
 - literal local IP `bind-interface`
 - successful runtime startup and forwarding on the rewrite path
 - explicit legacy deviation recording because the legacy oracle has no equivalent committed flag
@@ -144,6 +161,7 @@ Supported-slice success case for:
 Supported-slice success case for:
 
 - VK provider resolution
+- UDP local ingress on the overlay baseline
 - `mode=auto` normalization to the provider-default UDP TURN path
 - plain datagram relay without DTLS
 - successful UDP round-trip through the configured upstream peer
@@ -153,6 +171,7 @@ Supported-slice success case for:
 Supported-slice success case for:
 
 - VK provider resolution
+- UDP local ingress on the overlay baseline
 - `mode=auto` normalization to the provider-default UDP TURN path
 - literal local IP `bind-interface`
 - successful runtime startup and forwarding on the rewrite path with verified TURN source IP

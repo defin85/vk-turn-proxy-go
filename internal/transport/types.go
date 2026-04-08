@@ -3,12 +3,9 @@ package transport
 import (
 	"log/slog"
 	"net"
-)
 
-type RelayPacket struct {
-	Payload []byte
-	ReplyTo net.Addr
-}
+	"github.com/defin85/vk-turn-proxy-go/internal/overlay"
+)
 
 type TURNMode string
 
@@ -38,13 +35,14 @@ type TURNCredentials struct {
 type ClientConfig struct {
 	ListenAddr  string
 	PeerAddr    string
+	Ingress     overlay.AdapterKind
 	TURN        TURNCredentials
 	TURNMode    TURNMode
 	PeerMode    PeerMode
 	BindIP      net.IP
 	WorkerIndex int
-	Outbound    <-chan RelayPacket
-	Inbound     func(RelayPacket) error
+	Outbound    <-chan overlay.Frame
+	Inbound     func(overlay.Frame) error
 	Logger      *slog.Logger
 	Hooks       ClientHooks
 }

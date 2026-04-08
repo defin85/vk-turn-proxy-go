@@ -13,6 +13,7 @@ import (
 
 	"github.com/defin85/vk-turn-proxy-go/internal/config"
 	"github.com/defin85/vk-turn-proxy-go/internal/observe"
+	"github.com/defin85/vk-turn-proxy-go/internal/overlay"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
 	"github.com/defin85/vk-turn-proxy-go/internal/runstage"
 	"github.com/defin85/vk-turn-proxy-go/internal/transport"
@@ -383,6 +384,56 @@ func TestRunPassesExpandedTransportPlanToRunner(t *testing.T) {
 	}
 	if got.BindIP == nil || got.BindIP.String() != "127.0.0.1" {
 		t.Fatalf("BindIP = %v, want 127.0.0.1", got.BindIP)
+	}
+}
+
+func TestRunPassesTCPIngressToRunner(t *testing.T) {
+	cfg := validClientConfig()
+	cfg.ListenAddr = reserveTCPAddr(t)
+	cfg.Ingress = config.AdapterTCP
+	cfg.Mode = config.TransportModeUDP
+	cfg.UseDTLS = true
+
+	adapter := &fakeAdapter{
+		name: "fake",
+		resolution: provider.Resolution{
+			Credentials: provider.Credentials{
+				Username: "user",
+				Password: "pass",
+				Address:  "turn.example.test:3478",
+			},
+		},
+	}
+
+	var got transport.ClientConfig
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err := Run(ctx, cfg, Dependencies{
+		Registry: provider.NewRegistry(adapter),
+		Logger:   testLogger(),
+		NewRunner: func(cfg transport.ClientConfig) transport.Runner {
+			got = cfg
+			return fakeRunner{
+				run: func(ctx context.Context) error {
+					if cfg.Hooks.OnReady != nil {
+						cfg.Hooks.OnReady()
+					}
+					cancel()
+					<-ctx.Done()
+					return nil
+				},
+			}
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if got.Ingress != overlay.AdapterTCP {
+		t.Fatalf("Ingress = %s, want %s", got.Ingress, overlay.AdapterTCP)
+	}
+	if got.PeerMode != transport.PeerModeDTLS {
+		t.Fatalf("PeerMode = %s, want %s", got.PeerMode, transport.PeerModeDTLS)
 	}
 }
 

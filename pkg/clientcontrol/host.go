@@ -1010,6 +1010,7 @@ func normalizeProfileSpec(spec ProfileSpec) (ProfileSpec, error) {
 	spec.Link = strings.TrimSpace(spec.Link)
 	spec.ListenAddr = strings.TrimSpace(spec.ListenAddr)
 	spec.PeerAddr = strings.TrimSpace(spec.PeerAddr)
+	spec.Ingress = normalizeAdapterKind(spec.Ingress)
 	spec.TURNServer = strings.TrimSpace(spec.TURNServer)
 	spec.TURNPort = strings.TrimSpace(spec.TURNPort)
 	spec.BindInterface = strings.TrimSpace(spec.BindInterface)
@@ -1026,7 +1027,7 @@ func normalizeProfileSpec(spec ProfileSpec) (ProfileSpec, error) {
 	}
 
 	cfg := translateProfileSpec(spec)
-	if err := cfg.Validate(); err != nil {
+	if err := session.ValidatePolicy(cfg); err != nil {
 		return ProfileSpec{}, err
 	}
 	return spec, nil
@@ -1047,12 +1048,24 @@ func translateProfileSpec(spec ProfileSpec) config.ClientConfig {
 		Link:          spec.Link,
 		ListenAddr:    spec.ListenAddr,
 		PeerAddr:      spec.PeerAddr,
+		Ingress:       config.AdapterKind(spec.Ingress),
 		Connections:   spec.Connections,
 		TURNServer:    spec.TURNServer,
 		TURNPort:      spec.TURNPort,
 		BindInterface: spec.BindInterface,
 		Mode:          mode,
 		UseDTLS:       useDTLS,
+	}
+}
+
+func normalizeAdapterKind(kind AdapterKind) AdapterKind {
+	switch AdapterKind(strings.TrimSpace(string(kind))) {
+	case "", AdapterUDP:
+		return AdapterUDP
+	case AdapterTCP:
+		return AdapterTCP
+	default:
+		return kind
 	}
 }
 

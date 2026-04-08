@@ -106,7 +106,7 @@ Use `./scripts/sync-version-assets.py` when that manifest changes so Flutter dev
 Run the server baseline:
 
 ```bash
-go run ./cmd/tunnel-server -connect 127.0.0.1:51820
+go run ./cmd/tunnel-server -egress udp -connect 127.0.0.1:51820
 ```
 
 List available providers in probe:
@@ -256,28 +256,44 @@ Browser challenge continuation uses platform-native handoff and explicit in-app 
 This slice does not yet claim Android `VpnService`, iOS Network Extension, or device-wide tunnel capture support.
 
 `cmd/tunnel-client` now runs the supported supervised client runtime matrix after provider resolution.
-Supported startup policy for this slice:
-- `connections >= 1` through supervised transport workers sharing one local UDP listener
-- local listener stays UDP
-- `dtls=true|false`
+Supported overlay adapter pairs for this slice:
+- `udp -> udp` with `ingress=udp` and `cmd/tunnel-server -egress udp`
+- `tcp -> tcp` with `ingress=tcp`, `dtls=true`, and `cmd/tunnel-server -egress tcp`
+
+Supported startup policy for the current client slice:
+- `connections >= 1` through supervised transport workers sharing one local ingress listener
+- `ingress=udp|tcp` where `udp` remains the migration baseline and `tcp` is the first native stream slice
+- `dtls=true|false` for `ingress=udp`
+- `dtls=true` only for `ingress=tcp`
 - `mode=auto|udp|tcp` where `auto` normalizes to the provider-default UDP TURN path
 - empty `bind-interface` or a literal local IP for outbound TURN setup
 - round-robin local datagram dispatch across ready workers
 - "most recent local sender" reply routing within each worker; stable multi-peer routing across a supervised session is still not claimed
+- explicit stream identities and per-stream teardown for `ingress=tcp`
 
 Rejected combinations fail closed before provider resolution:
 - non-IP `bind-interface` values such as interface names
+- `ingress=tcp` with `dtls=false`
+- unfinished adapters such as SOCKS5, HTTP CONNECT, and TUN/TAP
 
 Lifecycle policy for supervised sessions:
 - worker startup failures before readiness fail the session with the worker's transport stage
 - runtime worker failures after readiness are restarted with deterministic backoff
 - restart-budget exhaustion fails the session with `session_supervision`
+- stream-local failures on the native `tcp -> tcp` slice close the affected stream without reusing its identity for unrelated traffic
 
 When startup fails after policy validation, the command reports a stage-aware error such as `provider_resolve`, `turn_dial`, `turn_allocate`, `peer_setup`, `dtls_handshake`, or `session_supervision`.
 `-turn` and `-port` overrides remain supported and are applied after provider credential resolution.
 If the selected provider returns an interactive VK captcha challenge, start the client with `-interactive-provider` so provider resolution can pause for a controlled browser step before any local listener or TURN transport is started.
 Internally the CLI now runs through the same client-control runtime host that backs `cmd/clientd`, while keeping the existing operator-facing flags and stderr behavior.
-Long-lived reliability is currently evidenced by deterministic TURN allocation-refresh coverage in `turnlab` and runtime integration tests; the repository still does not claim live mobile-network or NAT parity from that alone.
+Long-lived reliability is currently evidenced by deterministic TURN allocation-refresh coverage in `turnlab` and runtime integration tests; the repository still does not claim live mobile-network, packet-loss, or NAT parity from that alone.
+
+`cmd/tunnel-server` now terminates the overlay-aware DTLS peer path and exposes explicit egress adapters:
+- `-egress udp` preserves the existing UDP upstream behavior
+- `-egress tcp` enables the first native stream slice for `tcp -> tcp`
+
+Support remains pair-specific by design.
+Adding an ingress or egress adapter does not imply generic support for every other pairing, and the repository still does not claim SOCKS5, HTTP CONNECT, transparent proxying, or TUN-device integration in this change.
 
 Client and server runtimes now expose an optional Prometheus-style metrics surface through `-metrics-listen <addr>`.
 The first metric set covers session starts, session failures, startup-stage failures, transport-stage failures, active workers, and forwarded packets/bytes.

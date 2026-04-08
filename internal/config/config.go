@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/defin85/vk-turn-proxy-go/internal/overlay"
 )
 
 type TransportMode string
@@ -15,9 +17,17 @@ const (
 	TransportModeUDP  TransportMode = "udp"
 )
 
+type AdapterKind string
+
+const (
+	AdapterUDP AdapterKind = "udp"
+	AdapterTCP AdapterKind = "tcp"
+)
+
 type ServerConfig struct {
 	ListenAddr       string
 	UpstreamAddr     string
+	Egress           AdapterKind
 	HandshakeTimeout time.Duration
 	IdleTimeout      time.Duration
 }
@@ -27,6 +37,7 @@ type ClientConfig struct {
 	Link          string
 	ListenAddr    string
 	PeerAddr      string
+	Ingress       AdapterKind
 	Connections   int
 	TURNServer    string
 	TURNPort      string
@@ -46,6 +57,7 @@ type ProbeConfig struct {
 func DefaultServerConfig() ServerConfig {
 	return ServerConfig{
 		ListenAddr:       "0.0.0.0:56000",
+		Egress:           AdapterUDP,
 		HandshakeTimeout: 30 * time.Second,
 		IdleTimeout:      30 * time.Minute,
 	}
@@ -54,6 +66,7 @@ func DefaultServerConfig() ServerConfig {
 func DefaultClientConfig() ClientConfig {
 	return ClientConfig{
 		ListenAddr:  "127.0.0.1:9000",
+		Ingress:     AdapterUDP,
 		Connections: 1,
 		Mode:        TransportModeAuto,
 		UseDTLS:     true,
@@ -71,6 +84,9 @@ func (c ServerConfig) Validate() error {
 		return err
 	}
 	if err := requireAddr("upstream", c.UpstreamAddr); err != nil {
+		return err
+	}
+	if err := overlay.ValidateAdapter(overlay.AdapterKind(normalizeAdapterKind(c.Egress)), "server egress"); err != nil {
 		return err
 	}
 	if c.HandshakeTimeout <= 0 {
@@ -94,6 +110,9 @@ func (c ClientConfig) Validate() error {
 		return err
 	}
 	if err := requireAddr("peer", c.PeerAddr); err != nil {
+		return err
+	}
+	if err := overlay.ValidateAdapter(overlay.AdapterKind(normalizeAdapterKind(c.Ingress)), "client ingress"); err != nil {
 		return err
 	}
 	if c.Connections <= 0 {
@@ -129,4 +148,15 @@ func requireAddr(name string, value string) error {
 	}
 
 	return nil
+}
+
+func normalizeAdapterKind(kind AdapterKind) AdapterKind {
+	switch AdapterKind(strings.TrimSpace(string(kind))) {
+	case "", AdapterUDP:
+		return AdapterUDP
+	case AdapterTCP:
+		return AdapterTCP
+	default:
+		return kind
+	}
 }

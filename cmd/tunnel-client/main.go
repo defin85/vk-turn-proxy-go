@@ -21,6 +21,7 @@ import (
 	"github.com/defin85/vk-turn-proxy-go/internal/provider/genericturn"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider/vk"
 	"github.com/defin85/vk-turn-proxy-go/internal/runstage"
+	"github.com/defin85/vk-turn-proxy-go/internal/session"
 	"github.com/defin85/vk-turn-proxy-go/pkg/clientcontrol"
 )
 
@@ -61,7 +62,7 @@ func runClient(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io
 		SessionID: sessionID,
 		Provider:  cfg.Provider,
 	})
-	if err := cfg.Validate(); err != nil {
+	if err := session.ValidatePolicy(cfg); err != nil {
 		observer.RecordSessionFailure(string(runstage.PolicyValidate), true)
 		observer.Emit(ctx, slog.LevelError, "runtime_failure",
 			"stage", runstage.PolicyValidate,
@@ -79,6 +80,7 @@ func runClient(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io
 			Link:                cfg.Link,
 			ListenAddr:          cfg.ListenAddr,
 			PeerAddr:            cfg.PeerAddr,
+			Ingress:             clientcontrol.AdapterKind(cfg.Ingress),
 			Connections:         cfg.Connections,
 			TURNServer:          cfg.TURNServer,
 			TURNPort:            cfg.TURNPort,
@@ -157,13 +159,17 @@ func parseClientFlags(stderr io.Writer, args []string) (config.ClientConfig, str
 	flags.BoolVar(&interactiveProvider, "interactive-provider", interactiveProvider, "allow operator-assisted provider challenges, including browser-observed VK captcha continuation and live preview/post-preview contour capture")
 	flags.StringVar(&cfg.Provider, "provider", cfg.Provider, "provider name")
 	flags.StringVar(&cfg.Link, "link", cfg.Link, "provider link or invite")
-	flags.StringVar(&cfg.ListenAddr, "listen", cfg.ListenAddr, "local UDP listen address")
+	flags.StringVar(&cfg.ListenAddr, "listen", cfg.ListenAddr, "local ingress listen address")
 	flags.StringVar(&cfg.PeerAddr, "peer", cfg.PeerAddr, "remote server address")
 	flags.IntVar(&cfg.Connections, "connections", cfg.Connections, "number of parallel transport connections")
 	flags.StringVar(&cfg.TURNServer, "turn", cfg.TURNServer, "override TURN server IP or host")
 	flags.StringVar(&cfg.TURNPort, "port", cfg.TURNPort, "override TURN server port")
 	flags.StringVar(&cfg.BindInterface, "bind-interface", cfg.BindInterface, "literal local IP for outbound TURN setup")
 	flags.BoolVar(&cfg.UseDTLS, "dtls", cfg.UseDTLS, "wrap transport in DTLS")
+	flags.Func("ingress", "overlay ingress adapter: udp|tcp", func(value string) error {
+		cfg.Ingress = config.AdapterKind(value)
+		return nil
+	})
 	flags.Func("mode", "transport mode: auto|tcp|udp", func(value string) error {
 		cfg.Mode = config.TransportMode(value)
 		return nil

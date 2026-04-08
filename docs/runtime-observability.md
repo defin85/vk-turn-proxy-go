@@ -19,6 +19,8 @@ Additional low-cardinality fields may appear when relevant:
 
 - `listen`
 - `peer`
+- `ingress`
+- `egress`
 - `turn_addr`
 - `resolution_method`
 - `connections`
@@ -89,7 +91,9 @@ Server runtime stages emitted through observability:
 - `listen`
 - `accept`
 - `dtls_handshake`
+- `peer_setup`
 - `upstream_dial`
+- `forwarding_loop`
 - `shutdown`
 
 ## Operator workflow

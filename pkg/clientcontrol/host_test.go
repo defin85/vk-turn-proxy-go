@@ -185,6 +185,43 @@ func TestHostStartsReadySessionAndExportsDiagnostics(t *testing.T) {
 	}
 }
 
+func TestHostStartSessionRejectsUnsupportedPolicyBeforeSessionCreation(t *testing.T) {
+	host := New(WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))))
+
+	testCases := []ProfileSpec{
+		{
+			Provider:      "generic-turn",
+			Link:          "generic-turn://user:pass@turn.example.test:3478",
+			ListenAddr:    reserveUDPAddr(t),
+			PeerAddr:      "127.0.0.1:56000",
+			Connections:   1,
+			Mode:          TransportModeAuto,
+			UseDTLS:       boolRef(true),
+			BindInterface: "eth0",
+		},
+		{
+			Provider:    "generic-turn",
+			Link:        "generic-turn://user:pass@turn.example.test:3478",
+			ListenAddr:  reserveTCPAddr(t),
+			PeerAddr:    "127.0.0.1:56000",
+			Ingress:     AdapterTCP,
+			Connections: 1,
+			Mode:        TransportModeAuto,
+			UseDTLS:     boolRef(false),
+		},
+	}
+
+	for _, spec := range testCases {
+		if _, err := host.StartSession(context.Background(), StartSessionRequest{Spec: &spec}); err == nil {
+			t.Fatalf("StartSession(%+v) succeeded, want error", spec)
+		}
+	}
+
+	if sessions := host.Sessions(); len(sessions) != 0 {
+		t.Fatalf("Sessions() = %d, want 0 after rejected policy", len(sessions))
+	}
+}
+
 func TestHostSurfacesChallengeAndContinuesToReady(t *testing.T) {
 	host := New(
 		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
@@ -396,6 +433,16 @@ func reserveUDPAddr(t *testing.T) string {
 	}
 	defer conn.Close()
 	return conn.LocalAddr().String()
+}
+
+func reserveTCPAddr(t *testing.T) string {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Listen() error = %v", err)
+	}
+	defer listener.Close()
+	return listener.Addr().String()
 }
 
 func boolRef(value bool) *bool {

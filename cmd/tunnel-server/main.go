@@ -86,7 +86,11 @@ func parseServerFlags(stderr io.Writer, args []string) (config.ServerConfig, str
 	flags.StringVar(&logLevel, "log-level", logLevel, "log level: debug|info|warn|error")
 	flags.StringVar(&metricsListen, "metrics-listen", metricsListen, "optional metrics listen address")
 	flags.StringVar(&cfg.ListenAddr, "listen", cfg.ListenAddr, "listen on ip:port")
-	flags.StringVar(&cfg.UpstreamAddr, "connect", cfg.UpstreamAddr, "upstream UDP address host:port")
+	flags.StringVar(&cfg.UpstreamAddr, "connect", cfg.UpstreamAddr, "upstream address host:port for the selected egress adapter")
+	flags.Func("egress", "overlay egress adapter: udp|tcp", func(value string) error {
+		cfg.Egress = config.AdapterKind(value)
+		return nil
+	})
 	flags.DurationVar(&cfg.HandshakeTimeout, "handshake-timeout", cfg.HandshakeTimeout, "DTLS handshake timeout")
 	flags.DurationVar(&cfg.IdleTimeout, "idle-timeout", cfg.IdleTimeout, "idle read/write timeout")
 

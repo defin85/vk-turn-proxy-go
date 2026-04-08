@@ -1,34 +1,18 @@
 package transport
 
-import (
-	"net"
-	"testing"
-)
+import "testing"
 
-func TestLastLocalPeerKeepsMostRecentSender(t *testing.T) {
-	peer := &lastLocalPeer{}
+func TestLastRouteIDKeepsMostRecentRoute(t *testing.T) {
+	route := &lastRouteID{}
 
-	first := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 10001}
-	second := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 10002}
+	route.Store(10)
+	route.Store(22)
 
-	peer.Store(first)
-	peer.Store(second)
-
-	got, ok := peer.Load()
+	got, ok := route.Load()
 	if !ok {
-		t.Fatal("expected stored peer")
+		t.Fatal("expected stored route id")
 	}
-
-	udpAddr, ok := got.(*net.UDPAddr)
-	if !ok {
-		t.Fatalf("unexpected addr type %T", got)
-	}
-	if udpAddr.String() != second.String() {
-		t.Fatalf("unexpected addr %s want %s", udpAddr.String(), second.String())
-	}
-
-	second.Port = 10003
-	if udpAddr.Port != 10002 {
-		t.Fatalf("loaded addr should be cloned, got port %d", udpAddr.Port)
+	if got != 22 {
+		t.Fatalf("route id = %d, want 22", got)
 	}
 }

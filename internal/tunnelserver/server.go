@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"sync"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/defin85/vk-turn-proxy-go/internal/config"
 	"github.com/defin85/vk-turn-proxy-go/internal/observe"
+	"github.com/defin85/vk-turn-proxy-go/internal/overlay"
 )
 
 type Server struct {
@@ -25,6 +27,7 @@ type Server struct {
 }
 
 func New(cfg config.ServerConfig, logger *slog.Logger) (*Server, error) {
+	cfg.Egress = config.AdapterKind(overlay.NormalizeAdapter(overlay.AdapterKind(cfg.Egress)))
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
@@ -107,8 +110,9 @@ func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
 		"result", "succeeded",
 		"listen", listener.Addr().String(),
 		"upstream", s.cfg.UpstreamAddr,
+		"egress", s.cfg.Egress,
 	)
-	s.logger.Info("server listening", "listen", listener.Addr().String(), "upstream", s.cfg.UpstreamAddr)
+	s.logger.Info("server listening", "listen", listener.Addr().String(), "upstream", s.cfg.UpstreamAddr, "egress", s.cfg.Egress)
 	defer observer.Emit(ctx, slog.LevelInfo, "runtime_stop",
 		"stage", "shutdown",
 		"result", "stopped",
@@ -187,30 +191,27 @@ func (s *Server) handleConnection(parent context.Context, conn net.Conn) {
 		return
 	}
 
-	upstreamConn, err := net.Dial("udp", s.cfg.UpstreamAddr)
+	session, err := newServerOverlaySession(s.cfg, conn, s.logger, observer, remoteAddr)
 	if err != nil {
-		observer.RecordTransportFailure("upstream_dial")
+		stage := initErrorStage(err)
+		observer.RecordTransportFailure(stage)
 		observer.Emit(parent, slog.LevelError, "connection_failure",
-			"stage", "upstream_dial",
+			"stage", stage,
 			"result", "failed",
 			"remote", remoteAddr,
 			"error", err,
 		)
-		s.logger.Error("dial upstream", "remote", remoteAddr, "err", err)
+		s.logger.Error("overlay session setup failed", "remote", remoteAddr, "stage", stage, "err", err)
 		return
 	}
-	defer func() {
-		if closeErr := upstreamConn.Close(); closeErr != nil {
-			s.logger.Warn("close upstream connection", "remote", remoteAddr, "err", closeErr)
-		}
-	}()
 
 	observer.Emit(parent, slog.LevelInfo, "connection_ready",
-		"stage", "dtls_handshake",
+		"stage", "peer_setup",
 		"result", "succeeded",
 		"remote", remoteAddr,
+		"egress", s.cfg.Egress,
 	)
-	s.logger.Info("dtls handshake complete", "remote", remoteAddr)
+	s.logger.Info("overlay session ready", "remote", remoteAddr, "egress", s.cfg.Egress)
 
 	sessionCtx, cancelSession := context.WithCancel(parent)
 	defer cancelSession()
@@ -219,27 +220,18 @@ func (s *Server) handleConnection(parent context.Context, conn net.Conn) {
 		if err := conn.SetDeadline(deadline); err != nil {
 			s.logger.Warn("set incoming deadline", "remote", remoteAddr, "err", err)
 		}
-		if err := upstreamConn.SetDeadline(deadline); err != nil {
-			s.logger.Warn("set upstream deadline", "remote", remoteAddr, "err", err)
-		}
 	})
 
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	go func() {
-		defer wg.Done()
-		defer cancelSession()
-		s.pipeConn(sessionCtx, conn, upstreamConn, remoteAddr, "client_to_upstream")
-	}()
-
-	go func() {
-		defer wg.Done()
-		defer cancelSession()
-		s.pipeConn(sessionCtx, upstreamConn, conn, remoteAddr, "upstream_to_client")
-	}()
-
-	wg.Wait()
+	if err := session.Run(sessionCtx); err != nil && parent.Err() == nil && !isSessionCloseError(err) {
+		observer.RecordTransportFailure("forwarding_loop")
+		observer.Emit(parent, slog.LevelError, "connection_failure",
+			"stage", "forwarding_loop",
+			"result", "failed",
+			"remote", remoteAddr,
+			"error", err,
+		)
+		s.logger.Error("overlay session failed", "remote", remoteAddr, "err", err)
+	}
 	observer.Emit(parent, slog.LevelInfo, "connection_closed",
 		"stage", "shutdown",
 		"result", "stopped",
@@ -248,41 +240,13 @@ func (s *Server) handleConnection(parent context.Context, conn net.Conn) {
 	s.logger.Info("connection closed", "remote", remoteAddr)
 }
 
-func (s *Server) pipeConn(ctx context.Context, src net.Conn, dst net.Conn, remoteAddr string, direction string) {
-	buffer := make([]byte, 1600)
-	observer := s.observer()
-
-	for {
-		if ctx.Err() != nil {
-			return
-		}
-
-		if err := src.SetReadDeadline(time.Now().Add(s.cfg.IdleTimeout)); err != nil {
-			s.logger.Warn("set read deadline", "remote", remoteAddr, "direction", direction, "err", err)
-			return
-		}
-
-		n, err := src.Read(buffer)
-		if err != nil {
-			if ctx.Err() == nil {
-				s.logger.Debug("read loop stopped", "remote", remoteAddr, "direction", direction, "err", err)
-			}
-			return
-		}
-
-		if err := dst.SetWriteDeadline(time.Now().Add(s.cfg.IdleTimeout)); err != nil {
-			s.logger.Warn("set write deadline", "remote", remoteAddr, "direction", direction, "err", err)
-			return
-		}
-
-		if _, err := dst.Write(buffer[:n]); err != nil {
-			if ctx.Err() == nil {
-				s.logger.Debug("write loop stopped", "remote", remoteAddr, "direction", direction, "err", err)
-			}
-			return
-		}
-		observer.RecordForward(direction, n)
+func isSessionCloseError(err error) bool {
+	if errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) {
+		return true
 	}
+
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
 }
 
 func (s *Server) observer() *observe.Observer {

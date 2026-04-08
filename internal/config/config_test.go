@@ -23,6 +23,28 @@ func TestClientConfigValidateRejectsInvalidMode(t *testing.T) {
 	}
 }
 
+func TestClientConfigValidateRejectsInvalidIngress(t *testing.T) {
+	cfg := DefaultClientConfig()
+	cfg.Provider = "vk"
+	cfg.Link = "https://vk.com/call/join/example"
+	cfg.PeerAddr = "127.0.0.1:56000"
+	cfg.Ingress = AdapterKind("socks5")
+
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected invalid ingress error")
+	}
+}
+
+func TestServerConfigValidateRejectsInvalidEgress(t *testing.T) {
+	cfg := DefaultServerConfig()
+	cfg.UpstreamAddr = "127.0.0.1:51820"
+	cfg.Egress = AdapterKind("http-connect")
+
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected invalid egress error")
+	}
+}
+
 func TestProbeConfigValidateAllowsProviderListing(t *testing.T) {
 	cfg := DefaultProbeConfig()
 	cfg.ListProviders = true

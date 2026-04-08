@@ -8,48 +8,11 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"github.com/defin85/vk-turn-proxy-go/internal/overlay"
 )
 
-func runPacketConnForwarders(ctx context.Context, localConn net.PacketConn, relayConn net.Conn, logger *slog.Logger, interruptLocal bool, onTraffic func(direction string, bytes int)) error {
-	loopCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	stopCancel := context.AfterFunc(loopCtx, func() {
-		now := time.Now()
-		if interruptLocal {
-			_ = localConn.SetDeadline(now)
-		}
-		_ = relayConn.SetDeadline(now)
-	})
-	defer stopCancel()
-
-	replyTarget := &lastLocalPeer{}
-	errCh := make(chan error, 2)
-
-	go func() {
-		errCh <- packetConnToRelay(loopCtx, localConn, relayConn, replyTarget, onTraffic)
-	}()
-	go func() {
-		errCh <- relayToPacketConn(loopCtx, relayConn, localConn, replyTarget, logger, onTraffic)
-	}()
-
-	var errs []error
-	for i := 0; i < 2; i++ {
-		err := <-errCh
-		if err != nil {
-			errs = append(errs, err)
-			cancel()
-		}
-	}
-
-	if ctx.Err() != nil {
-		return nil
-	}
-
-	return errors.Join(errs...)
-}
-
-func runChannelForwarders(ctx context.Context, outbound <-chan RelayPacket, inbound func(RelayPacket) error, relayConn net.Conn, logger *slog.Logger, onTraffic func(direction string, bytes int)) error {
+func runOverlayForwarders(ctx context.Context, outbound <-chan overlay.Frame, inbound func(overlay.Frame) error, endpoint *overlay.Endpoint, relayConn net.Conn, logger *slog.Logger, onTraffic func(direction string, bytes int)) error {
 	loopCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -58,18 +21,41 @@ func runChannelForwarders(ctx context.Context, outbound <-chan RelayPacket, inbo
 	})
 	defer stopCancel()
 
-	replyTarget := &lastLocalPeer{}
 	errCh := make(chan error, 2)
-
 	go func() {
-		errCh <- channelToRelay(loopCtx, outbound, relayConn, replyTarget, onTraffic)
+		errCh <- frameChannelToEndpoint(loopCtx, outbound, endpoint, onTraffic)
 	}()
 	go func() {
-		errCh <- relayToHandler(loopCtx, relayConn, inbound, replyTarget, logger, onTraffic)
+		errCh <- endpointToFrameHandler(loopCtx, endpoint, inbound, logger, onTraffic)
 	}()
 
+	return waitForwarderErrors(ctx, cancel, errCh, 2)
+}
+
+func runDirectDatagramForwarders(ctx context.Context, outbound <-chan overlay.Frame, inbound func(overlay.Frame) error, relayConn net.Conn, logger *slog.Logger, onTraffic func(direction string, bytes int)) error {
+	loopCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	stopCancel := context.AfterFunc(loopCtx, func() {
+		_ = relayConn.SetDeadline(time.Now())
+	})
+	defer stopCancel()
+
+	target := &lastRouteID{}
+	errCh := make(chan error, 2)
+	go func() {
+		errCh <- datagramChannelToRelay(loopCtx, outbound, relayConn, target, onTraffic)
+	}()
+	go func() {
+		errCh <- relayToDatagramHandler(loopCtx, relayConn, inbound, target, logger, onTraffic)
+	}()
+
+	return waitForwarderErrors(ctx, cancel, errCh, 2)
+}
+
+func waitForwarderErrors(ctx context.Context, cancel context.CancelFunc, errCh <-chan error, count int) error {
 	var errs []error
-	for i := 0; i < 2; i++ {
+	for i := 0; i < count; i++ {
 		err := <-errCh
 		if err != nil {
 			errs = append(errs, err)
@@ -84,139 +70,170 @@ func runChannelForwarders(ctx context.Context, outbound <-chan RelayPacket, inbo
 	return errors.Join(errs...)
 }
 
-func packetConnToRelay(ctx context.Context, localConn net.PacketConn, relayConn net.Conn, target *lastLocalPeer, onTraffic func(direction string, bytes int)) error {
-	buf := make([]byte, 1600)
-
-	for {
-		n, addr, err := localConn.ReadFrom(buf)
-		if err != nil {
-			if ctx.Err() != nil {
-				return nil
-			}
-
-			return fmt.Errorf("read local datagram: %w", err)
-		}
-
-		target.Store(addr)
-		if _, err := relayConn.Write(buf[:n]); err != nil {
-			if ctx.Err() != nil {
-				return nil
-			}
-
-			return fmt.Errorf("write relay datagram: %w", err)
-		}
-		if onTraffic != nil {
-			onTraffic(TrafficDirectionLocalToRelay, n)
-		}
-	}
-}
-
-func relayToPacketConn(ctx context.Context, relayConn net.Conn, localConn net.PacketConn, target *lastLocalPeer, logger *slog.Logger, onTraffic func(direction string, bytes int)) error {
-	return relayToHandler(ctx, relayConn, func(packet RelayPacket) error {
-		_, err := localConn.WriteTo(packet.Payload, packet.ReplyTo)
-		if err != nil {
-			return fmt.Errorf("write local datagram: %w", err)
-		}
-		if onTraffic != nil {
-			onTraffic(TrafficDirectionRelayToLocal, len(packet.Payload))
-		}
-
-		return nil
-	}, target, logger, nil)
-}
-
-func channelToRelay(ctx context.Context, outbound <-chan RelayPacket, relayConn net.Conn, target *lastLocalPeer, onTraffic func(direction string, bytes int)) error {
+func frameChannelToEndpoint(ctx context.Context, outbound <-chan overlay.Frame, endpoint *overlay.Endpoint, onTraffic func(direction string, bytes int)) error {
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
-		case packet, ok := <-outbound:
+		case frame, ok := <-outbound:
 			if !ok {
 				if ctx.Err() != nil {
 					return nil
 				}
-
 				return errors.New("worker outbound channel closed")
 			}
 
-			target.Store(packet.ReplyTo)
-			if _, err := relayConn.Write(packet.Payload); err != nil {
+			if err := endpoint.WriteFrame(frame); err != nil {
 				if ctx.Err() != nil {
 					return nil
 				}
-
-				return fmt.Errorf("write relay datagram: %w", err)
+				return err
 			}
-			if onTraffic != nil {
-				onTraffic(TrafficDirectionLocalToRelay, len(packet.Payload))
-			}
+			recordOverlayTraffic(frame, TrafficDirectionLocalToRelay, onTraffic)
 		}
 	}
 }
 
-func relayToHandler(ctx context.Context, relayConn net.Conn, inbound func(RelayPacket) error, target *lastLocalPeer, logger *slog.Logger, onTraffic func(direction string, bytes int)) error {
-	buf := make([]byte, 1600)
+func endpointToFrameHandler(ctx context.Context, endpoint *overlay.Endpoint, inbound func(overlay.Frame) error, logger *slog.Logger, onTraffic func(direction string, bytes int)) error {
+	for {
+		frame, err := endpoint.ReadFrame()
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return fmt.Errorf("read overlay frame: %w", err)
+		}
 
+		switch frame.Kind {
+		case overlay.FrameDatagram, overlay.FrameStreamData, overlay.FrameStreamClose:
+		default:
+			logger.Debug("dropping unexpected overlay frame from relay", "kind", frame.Kind)
+			continue
+		}
+
+		if err := inbound(frame); err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return err
+		}
+		recordOverlayTraffic(frame, TrafficDirectionRelayToLocal, onTraffic)
+	}
+}
+
+func datagramChannelToRelay(ctx context.Context, outbound <-chan overlay.Frame, relayConn net.Conn, target *lastRouteID, onTraffic func(direction string, bytes int)) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case frame, ok := <-outbound:
+			if !ok {
+				if ctx.Err() != nil {
+					return nil
+				}
+				return errors.New("worker outbound channel closed")
+			}
+			if frame.Kind != overlay.FrameDatagram {
+				return fmt.Errorf("plain peer path does not support overlay %s frames", frame.Kind)
+			}
+
+			target.Store(frame.RouteID)
+			if _, err := relayConn.Write(frame.Payload); err != nil {
+				if ctx.Err() != nil {
+					return nil
+				}
+				return fmt.Errorf("write relay datagram: %w", err)
+			}
+			recordOverlayTraffic(frame, TrafficDirectionLocalToRelay, onTraffic)
+		}
+	}
+}
+
+func relayToDatagramHandler(ctx context.Context, relayConn net.Conn, inbound func(overlay.Frame) error, target *lastRouteID, logger *slog.Logger, onTraffic func(direction string, bytes int)) error {
+	buf := make([]byte, overlay.DefaultDatagramBufferSize)
 	for {
 		n, err := relayConn.Read(buf)
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil
 			}
-
 			return fmt.Errorf("read relay datagram: %w", err)
 		}
 
-		addr, ok := target.Load()
+		routeID, ok := target.Load()
 		if !ok {
-			logger.Debug("dropping relay datagram without known local peer")
+			logger.Debug("dropping relay datagram without known local route")
 			continue
 		}
 
-		packet := RelayPacket{
+		frame := overlay.Frame{
+			Kind:    overlay.FrameDatagram,
+			RouteID: routeID,
 			Payload: append([]byte(nil), buf[:n]...),
-			ReplyTo: addr,
 		}
-		if err := inbound(packet); err != nil {
+		if err := inbound(frame); err != nil {
 			if ctx.Err() != nil {
 				return nil
 			}
-
 			return err
 		}
-		if onTraffic != nil {
-			onTraffic(TrafficDirectionRelayToLocal, len(packet.Payload))
-		}
+		recordOverlayTraffic(frame, TrafficDirectionRelayToLocal, onTraffic)
 	}
 }
 
-type lastLocalPeer struct {
-	mu   sync.RWMutex
-	addr net.Addr
+func recordOverlayTraffic(frame overlay.Frame, direction string, onTraffic func(direction string, bytes int)) {
+	if onTraffic == nil {
+		return
+	}
+	switch frame.Kind {
+	case overlay.FrameDatagram, overlay.FrameStreamData:
+		onTraffic(direction, len(frame.Payload))
+	}
 }
 
-func (p *lastLocalPeer) Store(addr net.Addr) {
-	if p == nil || addr == nil {
+type lastRouteID struct {
+	mu      sync.RWMutex
+	routeID uint64
+	ready   bool
+}
+
+func (p *lastRouteID) Store(routeID uint64) {
+	if p == nil {
 		return
 	}
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.addr = cloneAddr(addr)
+	p.routeID = routeID
+	p.ready = true
 }
 
-func (p *lastLocalPeer) Load() (net.Addr, bool) {
+func (p *lastRouteID) Load() (uint64, bool) {
 	if p == nil {
-		return nil, false
+		return 0, false
 	}
 
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	if p.addr == nil {
-		return nil, false
+	if !p.ready {
+		return 0, false
 	}
 
-	return cloneAddr(p.addr), true
+	return p.routeID, true
+}
+
+func closePacketConn(conn net.PacketConn) {
+	if conn == nil {
+		return
+	}
+	_ = conn.Close()
+}
+
+func closeConn(conn net.Conn) {
+	if conn == nil {
+		return
+	}
+	_ = conn.Close()
 }
 
 func cloneAddr(addr net.Addr) net.Addr {
@@ -240,18 +257,4 @@ func cloneAddr(addr net.Addr) net.Addr {
 	default:
 		return addr
 	}
-}
-
-func closePacketConn(conn net.PacketConn) {
-	if conn == nil {
-		return
-	}
-	_ = conn.Close()
-}
-
-func closeConn(conn net.Conn) {
-	if conn == nil {
-		return
-	}
-	_ = conn.Close()
 }

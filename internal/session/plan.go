@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/defin85/vk-turn-proxy-go/internal/config"
+	"github.com/defin85/vk-turn-proxy-go/internal/overlay"
 	"github.com/defin85/vk-turn-proxy-go/internal/transport"
 )
 
@@ -23,10 +24,19 @@ type sessionPlan struct {
 }
 
 type transportPlan struct {
+	Ingress  overlay.AdapterKind
 	Mode     config.TransportMode
 	TURNMode transport.TURNMode
 	PeerMode transport.PeerMode
 	BindIP   net.IP
+}
+
+func ValidatePolicy(cfg config.ClientConfig) error {
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
+	_, err := buildSessionPlan(cfg, Dependencies{})
+	return err
 }
 
 func buildSessionPlan(cfg config.ClientConfig, deps Dependencies) (sessionPlan, error) {
@@ -53,7 +63,11 @@ func buildSessionPlan(cfg config.ClientConfig, deps Dependencies) (sessionPlan, 
 
 func buildTransportPlan(cfg config.ClientConfig) (transportPlan, error) {
 	plan := transportPlan{
-		Mode: cfg.Mode,
+		Ingress: overlay.NormalizeAdapter(overlay.AdapterKind(cfg.Ingress)),
+		Mode:    cfg.Mode,
+	}
+	if err := overlay.ValidateAdapter(plan.Ingress, "client ingress"); err != nil {
+		return transportPlan{}, err
 	}
 	if plan.Mode == config.TransportModeAuto {
 		plan.Mode = config.TransportModeUDP
@@ -72,6 +86,9 @@ func buildTransportPlan(cfg config.ClientConfig) (transportPlan, error) {
 		plan.PeerMode = transport.PeerModeDTLS
 	} else {
 		plan.PeerMode = transport.PeerModePlain
+	}
+	if plan.Ingress == overlay.AdapterTCP && plan.PeerMode != transport.PeerModeDTLS {
+		return transportPlan{}, fmt.Errorf("unsupported ingress adapter %q with dtls=%t: the first tcp overlay slice requires a dtls-backed peer server", plan.Ingress, cfg.UseDTLS)
 	}
 
 	if trimmed := strings.TrimSpace(cfg.BindInterface); trimmed != "" {

@@ -24,6 +24,13 @@ const (
 	TransportModeUDP  TransportMode = "udp"
 )
 
+type AdapterKind string
+
+const (
+	AdapterUDP AdapterKind = "udp"
+	AdapterTCP AdapterKind = "tcp"
+)
+
 type SessionState string
 
 const (
@@ -86,6 +93,7 @@ type ProfileSpec struct {
 	Link                string        `json:"link"`
 	ListenAddr          string        `json:"listen_addr"`
 	PeerAddr            string        `json:"peer_addr"`
+	Ingress             AdapterKind   `json:"ingress,omitempty"`
 	Connections         int           `json:"connections,omitempty"`
 	TURNServer          string        `json:"turn_server,omitempty"`
 	TURNPort            string        `json:"turn_port,omitempty"`

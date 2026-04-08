@@ -49,7 +49,7 @@ func TestRunClientRejectsInvalidConfig(t *testing.T) {
 	}
 }
 
-func TestRunClientReportsStageAwareFailure(t *testing.T) {
+func TestRunClientRejectsUnsupportedPolicyBeforeRuntimeStart(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	code := runClient(context.Background(), bytes.NewBuffer(nil), &stdout, &stderr, []string{
@@ -59,11 +59,33 @@ func TestRunClientReportsStageAwareFailure(t *testing.T) {
 		"-peer", "127.0.0.1:56000",
 		"-bind-interface", "eth0",
 	}, provider.NewRegistry())
-	if code != 1 {
+	if code != 2 {
 		t.Fatalf("runClient() code = %d, stderr=%s", code, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "stage=policy_validate") {
-		t.Fatalf("stderr missing stage: %s", stderr.String())
+	if !strings.Contains(stderr.String(), "invalid client config:") {
+		t.Fatalf("stderr missing invalid config message: %s", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "event=runtime_failure") || !strings.Contains(stdout.String(), "stage=policy_validate") {
+		t.Fatalf("stdout missing structured policy_validate event: %s", stdout.String())
+	}
+}
+
+func TestRunClientRejectsTCPIngressWithoutDTLSBeforeRuntimeStart(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runClient(context.Background(), bytes.NewBuffer(nil), &stdout, &stderr, []string{
+		"-provider", "generic-turn",
+		"-link", "generic-turn://user:pass@turn.example.test:3478",
+		"-listen", "127.0.0.1:9000",
+		"-peer", "127.0.0.1:56000",
+		"-ingress", "tcp",
+		"-dtls=false",
+	}, provider.NewRegistry())
+	if code != 2 {
+		t.Fatalf("runClient() code = %d, stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "invalid client config:") {
+		t.Fatalf("stderr missing invalid config message: %s", stderr.String())
 	}
 	if !strings.Contains(stdout.String(), "event=runtime_failure") || !strings.Contains(stdout.String(), "stage=policy_validate") {
 		t.Fatalf("stdout missing structured policy_validate event: %s", stdout.String())

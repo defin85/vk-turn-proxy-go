@@ -11,10 +11,12 @@ import (
 
 	"github.com/defin85/vk-turn-proxy-go/internal/config"
 	"github.com/defin85/vk-turn-proxy-go/internal/observe"
+	"github.com/defin85/vk-turn-proxy-go/internal/overlay"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider/genericturn"
 	"github.com/defin85/vk-turn-proxy-go/internal/runstage"
 	"github.com/defin85/vk-turn-proxy-go/internal/transport"
+	"github.com/defin85/vk-turn-proxy-go/internal/tunnelserver"
 	"github.com/defin85/vk-turn-proxy-go/test/turnlab"
 )
 
@@ -425,6 +427,116 @@ func TestRunRoutesInjectedUpstreamReplyToMostRecentLocalSender(t *testing.T) {
 	mustNotRead(t, connA, 300*time.Millisecond)
 }
 
+func TestRunNativeTCPOverlayRoundTrip(t *testing.T) {
+	harnessCtx, cancelHarness := context.WithCancel(context.Background())
+	harness, err := turnlab.Start(harnessCtx, testLogger())
+	if err != nil {
+		t.Fatalf("start harness: %v", err)
+	}
+	t.Cleanup(func() {
+		cancelHarness()
+		if err := harness.Close(); err != nil {
+			t.Errorf("close harness: %v", err)
+		}
+	})
+
+	upstreamListener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen tcp upstream: %v", err)
+	}
+	t.Cleanup(func() { _ = upstreamListener.Close() })
+
+	upstreamCtx, cancelUpstream := context.WithCancel(context.Background())
+	t.Cleanup(cancelUpstream)
+	go runTCPEcho(upstreamCtx, upstreamListener)
+
+	server, err := tunnelserver.New(config.ServerConfig{
+		ListenAddr:       "127.0.0.1:0",
+		UpstreamAddr:     upstreamListener.Addr().String(),
+		Egress:           config.AdapterTCP,
+		HandshakeTimeout: 5 * time.Second,
+		IdleTimeout:      5 * time.Second,
+	}, testLogger())
+	if err != nil {
+		t.Fatalf("new tunnel server: %v", err)
+	}
+	serverListener, err := server.Listen()
+	if err != nil {
+		t.Fatalf("listen tunnel server: %v", err)
+	}
+	serverCtx, cancelServer := context.WithCancel(context.Background())
+	t.Cleanup(func() {
+		cancelServer()
+		_ = serverListener.Close()
+	})
+	serverErrCh := make(chan error, 1)
+	go func() {
+		serverErrCh <- server.Serve(serverCtx, serverListener)
+	}()
+
+	sessionCtx, cancelSession := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	readyCh := make(chan int, 4)
+	listenAddr := reserveTCPAddr(t)
+	go func() {
+		errCh <- Run(sessionCtx, config.ClientConfig{
+			Provider:    "generic-turn",
+			Link:        harness.GenericTurnLink(),
+			ListenAddr:  listenAddr,
+			PeerAddr:    serverListener.Addr().String(),
+			Ingress:     config.AdapterTCP,
+			Connections: 2,
+			Mode:        config.TransportModeAuto,
+			UseDTLS:     true,
+		}, Dependencies{
+			Registry: provider.NewRegistry(genericturn.New()),
+			Logger:   testLogger(),
+			NewRunner: func(cfg transport.ClientConfig) transport.Runner {
+				return readySignalRunner{
+					cfg:     cfg,
+					readyCh: readyCh,
+				}
+			},
+			SessionID: NewID(),
+		})
+	}()
+	t.Cleanup(func() {
+		cancelSession()
+		select {
+		case err := <-errCh:
+			if err != nil {
+				t.Errorf("Run() error = %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Errorf("session did not stop after cancellation")
+		}
+		cancelServer()
+		select {
+		case err := <-serverErrCh:
+			if err != nil {
+				t.Errorf("Serve() error = %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Errorf("server did not stop after cancellation")
+		}
+	})
+
+	waitForReadyWorkers(t, readyCh, 2)
+
+	connA := dialEventuallyTCP(t, listenAddr)
+	t.Cleanup(func() { _ = connA.Close() })
+	connB := dialEventuallyTCP(t, listenAddr)
+	t.Cleanup(func() { _ = connB.Close() })
+
+	mustEchoEventually(t, connA, []byte("tcp-stream-a-1"))
+	mustEchoEventually(t, connB, []byte("tcp-stream-b-1"))
+
+	if err := connA.Close(); err != nil {
+		t.Fatalf("close connA: %v", err)
+	}
+	mustEchoEventually(t, connB, []byte("tcp-stream-b-2"))
+}
+
 func TestRunFailsBeforeListenerOnProviderError(t *testing.T) {
 	cfg := validClientConfig()
 	cfg.ListenAddr = reserveUDPAddr(t)
@@ -617,6 +729,37 @@ func reserveUDPAddr(t *testing.T) string {
 	return addr
 }
 
+func reserveTCPAddr(t *testing.T) string {
+	t.Helper()
+
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve tcp addr: %v", err)
+	}
+	addr := listener.Addr().String()
+	if err := listener.Close(); err != nil {
+		t.Fatalf("close reserved tcp addr: %v", err)
+	}
+
+	return addr
+}
+
+func dialEventuallyTCP(t *testing.T, addr string) net.Conn {
+	t.Helper()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		conn, err := net.Dial("tcp", addr)
+		if err == nil {
+			return conn
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	t.Fatalf("timed out dialing %s", addr)
+	return nil
+}
+
 func mustEchoEventually(t *testing.T, conn net.Conn, payload []byte) {
 	t.Helper()
 
@@ -759,6 +902,82 @@ func mustRebindAddr(t *testing.T, addr net.Addr) {
 	t.Fatalf("rebind %s: address stayed busy past deadline", addr.String())
 }
 
+func runTCPEcho(ctx context.Context, listener net.Listener) {
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			var netErr net.Error
+			if errors.As(err, &netErr) && netErr.Timeout() {
+				continue
+			}
+			return
+		}
+
+		go func(conn net.Conn) {
+			defer conn.Close()
+			buf := make([]byte, 1600)
+			for {
+				if err := conn.SetDeadline(time.Now().Add(100 * time.Millisecond)); err != nil {
+					return
+				}
+				n, err := conn.Read(buf)
+				if err != nil {
+					if ctx.Err() != nil {
+						return
+					}
+					var netErr net.Error
+					if errors.As(err, &netErr) && netErr.Timeout() {
+						continue
+					}
+					return
+				}
+				if _, err := conn.Write(buf[:n]); err != nil {
+					return
+				}
+			}
+		}(conn)
+	}
+}
+
+type readySignalRunner struct {
+	cfg     transport.ClientConfig
+	readyCh chan<- int
+}
+
+func (r readySignalRunner) Run(ctx context.Context) error {
+	cfg := r.cfg
+	previousReadyHook := cfg.Hooks.OnReady
+	cfg.Hooks.OnReady = func() {
+		if previousReadyHook != nil {
+			previousReadyHook()
+		}
+		select {
+		case r.readyCh <- cfg.WorkerIndex:
+		case <-ctx.Done():
+		}
+	}
+
+	return transport.NewClientRunner(cfg).Run(ctx)
+}
+
+func waitForReadyWorkers(t *testing.T, readyCh <-chan int, want int) {
+	t.Helper()
+
+	seen := make(map[int]struct{}, want)
+	deadline := time.After(5 * time.Second)
+	for len(seen) < want {
+		select {
+		case worker := <-readyCh:
+			seen[worker] = struct{}{}
+		case <-deadline:
+			t.Fatalf("timed out waiting for %d ready workers, got %d", want, len(seen))
+		}
+	}
+}
+
 func cloneTestAddr(addr net.Addr) net.Addr {
 	switch value := addr.(type) {
 	case *net.UDPAddr:
@@ -895,7 +1114,7 @@ func (r failingTransportRunner) Run(ctx context.Context) error {
 		return transport.NewClientRunner(r.cfg).Run(ctx)
 	}
 
-	proxyOutbound := make(chan transport.RelayPacket, 1)
+	proxyOutbound := make(chan overlay.Frame, 1)
 	cfg := r.cfg
 	cfg.Outbound = proxyOutbound
 

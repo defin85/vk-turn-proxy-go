@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/defin85/vk-turn-proxy-go/internal/config"
+	"github.com/defin85/vk-turn-proxy-go/internal/overlay"
 	"github.com/defin85/vk-turn-proxy-go/internal/transport"
 )
 
@@ -69,6 +70,9 @@ func TestBuildTransportPlanSupportsExpandedMatrix(t *testing.T) {
 			if plan.Mode != tc.wantMode {
 				t.Fatalf("plan.Mode = %s, want %s", plan.Mode, tc.wantMode)
 			}
+			if plan.Ingress != overlay.AdapterUDP {
+				t.Fatalf("plan.Ingress = %s, want %s", plan.Ingress, overlay.AdapterUDP)
+			}
 			if plan.TURNMode != tc.wantTURNMode {
 				t.Fatalf("plan.TURNMode = %s, want %s", plan.TURNMode, tc.wantTURNMode)
 			}
@@ -99,6 +103,18 @@ func TestBuildTransportPlanRejectsNonIPBindInterface(t *testing.T) {
 	}
 }
 
+func TestBuildTransportPlanRejectsTCPIngressWithoutDTLS(t *testing.T) {
+	_, err := buildTransportPlan(config.ClientConfig{
+		Connections: 1,
+		Ingress:     config.AdapterTCP,
+		Mode:        config.TransportModeUDP,
+		UseDTLS:     false,
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
 func TestBuildSessionPlanCarriesSupervisionPolicy(t *testing.T) {
 	plan, err := buildSessionPlan(config.ClientConfig{
 		Connections: 3,
@@ -122,5 +138,8 @@ func TestBuildSessionPlanCarriesSupervisionPolicy(t *testing.T) {
 	}
 	if plan.Transport.TURNMode != transport.TURNModeUDP {
 		t.Fatalf("plan.Transport.TURNMode = %s, want %s", plan.Transport.TURNMode, transport.TURNModeUDP)
+	}
+	if plan.Transport.Ingress != overlay.AdapterUDP {
+		t.Fatalf("plan.Transport.Ingress = %s, want %s", plan.Transport.Ingress, overlay.AdapterUDP)
 	}
 }
