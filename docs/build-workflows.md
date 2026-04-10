@@ -66,6 +66,12 @@ The script fails closed if:
 - `dist\go\windows-amd64\clientd.exe` is missing
 - `desktop\gui_shell\pubspec.yaml` does not match the canonical version in `version.json`
 
+For the validated Windows desktop `WireGuard` PoC that keeps system VPN in the
+external `WireGuard for Windows` client and uses the desktop shell only as the
+local transport ingress, follow `docs/windows-desktop-wg-poc.md`.
+That workflow also includes the repo-owned sidecar launch helper
+`scripts/run-windows-gui-shell.ps1`.
+
 ## Mobile GUI shell local development
 
 The first mobile shell is app-focused and now ships with a repo-owned Android packaged-host workflow.
@@ -130,6 +136,10 @@ For a repo-owned smoke of the packaged-host shared-library path reaching control
 ```bash
 make smoke-android-embedded-host
 ```
+
+For the validated physical-device Android PoC that keeps device-wide VPN in the
+external `WireGuard` app and uses the packaged mobile shell only as the local
+transport ingress, follow `docs/android-wg-phone-poc.md`.
 
 ## Native Android GUI build
 

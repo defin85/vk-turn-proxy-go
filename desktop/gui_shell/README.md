@@ -43,6 +43,13 @@ For Windows packaging from the canonical WSL checkout, use the repo-owned wrappe
 That workflow synchronizes the repository into `E:\Projects\vk-turn-proxy-go`, runs the Windows-native Flutter build there, and stages the packaged bundle under `dist/windows-gui/`.
 It also refreshes the mirrored build metadata stamp used by the direct native Windows build path when the mirror has no `.git` checkout.
 
+For the validated Windows desktop `WireGuard` PoC, use the mirrored Windows
+bundle directly from `E:\Projects\vk-turn-proxy-go\dist\windows-gui` and follow
+`docs/windows-desktop-wg-poc.md`.
+That document captures the required host route, the `WireGuard` profile shape,
+and the repo-owned `scripts/run-windows-gui-shell.ps1` helper that starts a
+fresh bundled `clientd.exe` before `gui_shell.exe`.
+
 ## Control-plane contract
 
 The shell talks to `cmd/clientd` on `127.0.0.1:7777` through the versioned HTTP surface from `pkg/clientcontrol`.

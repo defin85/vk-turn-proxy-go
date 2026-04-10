@@ -3,6 +3,7 @@ package transport
 import (
 	"log/slog"
 	"net"
+	"time"
 
 	"github.com/defin85/vk-turn-proxy-go/internal/overlay"
 )
@@ -33,18 +34,19 @@ type TURNCredentials struct {
 }
 
 type ClientConfig struct {
-	ListenAddr  string
-	PeerAddr    string
-	Ingress     overlay.AdapterKind
-	TURN        TURNCredentials
-	TURNMode    TURNMode
-	PeerMode    PeerMode
-	BindIP      net.IP
-	WorkerIndex int
-	Outbound    <-chan overlay.Frame
-	Inbound     func(overlay.Frame) error
-	Logger      *slog.Logger
-	Hooks       ClientHooks
+	ListenAddr       string
+	PeerAddr         string
+	Ingress          overlay.AdapterKind
+	TURN             TURNCredentials
+	TURNMode         TURNMode
+	PeerMode         PeerMode
+	HandshakeTimeout time.Duration
+	BindIP           net.IP
+	WorkerIndex      int
+	Outbound         <-chan overlay.Frame
+	Inbound          func(overlay.Frame) error
+	Logger           *slog.Logger
+	Hooks            ClientHooks
 }
 
 type ClientHooks struct {
@@ -53,4 +55,11 @@ type ClientHooks struct {
 	OnRelayAllocate func(net.Addr)
 	OnTraffic       func(direction string, bytes int)
 	OnReady         func()
+}
+
+func (c ClientConfig) DTLSHandshakeTimeout() time.Duration {
+	if c.HandshakeTimeout > 0 {
+		return c.HandshakeTimeout
+	}
+	return handshakeTimeout
 }

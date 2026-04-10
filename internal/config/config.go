@@ -33,17 +33,18 @@ type ServerConfig struct {
 }
 
 type ClientConfig struct {
-	Provider      string
-	Link          string
-	ListenAddr    string
-	PeerAddr      string
-	Ingress       AdapterKind
-	Connections   int
-	TURNServer    string
-	TURNPort      string
-	BindInterface string
-	Mode          TransportMode
-	UseDTLS       bool
+	Provider         string
+	Link             string
+	ListenAddr       string
+	PeerAddr         string
+	Ingress          AdapterKind
+	Connections      int
+	TURNServer       string
+	TURNPort         string
+	BindInterface    string
+	HandshakeTimeout time.Duration
+	Mode             TransportMode
+	UseDTLS          bool
 }
 
 type ProbeConfig struct {
@@ -120,6 +121,9 @@ func (c ClientConfig) Validate() error {
 	}
 	if c.Mode != TransportModeAuto && c.Mode != TransportModeTCP && c.Mode != TransportModeUDP {
 		return fmt.Errorf("unsupported transport mode %q", c.Mode)
+	}
+	if c.HandshakeTimeout < 0 {
+		return errors.New("handshake timeout must not be negative")
 	}
 
 	return nil

@@ -636,13 +636,14 @@ func TestRunFailsOnBadDTLSPeer(t *testing.T) {
 	defer cancel()
 
 	err = Run(ctx, config.ClientConfig{
-		Provider:    "generic-turn",
-		Link:        harness.GenericTurnLink(),
-		ListenAddr:  listenAddr,
-		PeerAddr:    plainPeer.LocalAddr().String(),
-		Connections: 1,
-		Mode:        config.TransportModeUDP,
-		UseDTLS:     true,
+		Provider:         "generic-turn",
+		Link:             harness.GenericTurnLink(),
+		ListenAddr:       listenAddr,
+		PeerAddr:         plainPeer.LocalAddr().String(),
+		Connections:      1,
+		HandshakeTimeout: 5 * time.Second,
+		Mode:             config.TransportModeUDP,
+		UseDTLS:          true,
 	}, Dependencies{
 		Registry:  provider.NewRegistry(genericturn.New()),
 		Logger:    testLogger(),

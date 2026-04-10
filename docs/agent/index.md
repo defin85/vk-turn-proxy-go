@@ -8,6 +8,7 @@ It points to the smallest set of files needed to understand the repo, choose the
 - `README.md`: runtime surface, CLI examples, operator-facing quick start
 - `docs/agent/architecture-map.md`: subsystem ownership and navigation map
 - `docs/build-workflows.md`: local and CI build entrypoints for Go plus current Flutter shell workflows
+- `docs/windows-desktop-wg-poc.md`: validated Windows desktop `WireGuard` over transport operator flow
 - `docs/agent/verification.md`: change-type to verification matrix
 - `docs/provider-matrix.md`: current provider support and scope
 - `docs/runtime-observability.md`: log fields, metrics, stage taxonomy
@@ -21,8 +22,8 @@ It points to the smallest set of files needed to understand the repo, choose the
 | Provider resolution or VK contour behavior | `test/compatibility/AGENTS.md`, `test/compatibility/vk/README.md`, `docs/provider-matrix.md` | `internal/provider/...`, committed fixtures, probe tests |
 | Client runtime or supervision | `docs/agent/architecture-map.md`, `openspec/specs/tunnel-client-runtime/spec.md`, `docs/runtime-observability.md` | `internal/session`, `test/turnlab`, runtime compatibility tests |
 | Local client control plane or GUI host wiring | `pkg/clientcontrol`, `cmd/clientd`, `openspec/changes/add-01-client-control-plane/*` | `go test ./pkg/clientcontrol ./cmd/clientd` |
-| Desktop Flutter shell | `desktop/gui_shell/README.md`, `desktop/gui_shell/lib`, `openspec/changes/add-02-desktop-gui-shell/*` | `flutter analyze`, `flutter test`, sidecar integration test |
-| Mobile Flutter shell | `mobile/gui_shell/README.md`, `mobile/gui_shell/lib`, `openspec/changes/add-03-mobile-gui-shell/*` | `flutter analyze`, `flutter test`, mocked bridge integration test |
+| Desktop Flutter shell | `desktop/gui_shell/README.md`, `docs/windows-desktop-wg-poc.md`, `desktop/gui_shell/lib`, `openspec/changes/add-02-desktop-gui-shell/*` | `flutter analyze`, `flutter test`, sidecar integration test |
+| Mobile Flutter shell | `mobile/gui_shell/README.md`, `docs/android-wg-phone-poc.md`, `mobile/gui_shell/lib`, `openspec/changes/add-03-mobile-gui-shell/*` | `flutter analyze`, `flutter test`, mocked bridge integration test |
 | Build scripts, packaging, or CI workflows | `docs/build-workflows.md`, `Makefile`, relevant OpenSpec change | matching repo-owned build scripts + relevant test/build smoke path |
 | TURN/DTLS transport or server behavior | `docs/agent/architecture-map.md`, `docs/adr/0001-go-monorepo.md` | `internal/transport`, `internal/tunnelserver`, harness tests |
 | Observability | `docs/runtime-observability.md`, `openspec/specs/runtime-observability/spec.md` | `internal/observe`, runtime entrypoint tests |

@@ -228,16 +228,17 @@ func materializeReplayConfig(t *testing.T, asset evidenceAsset, harness *turnlab
 	peerAddr, cleanup := materializeReplayPeer(t, asset.Input.PeerAddrRedacted, harness)
 
 	return config.ClientConfig{
-		Provider:      "vk",
-		Link:          asset.Input.InviteRedacted,
-		ListenAddr:    reserveUDPAddr(t),
-		PeerAddr:      peerAddr,
-		Connections:   asset.Slice.Connections,
-		TURNServer:    materializeReplayTURNValue(t, asset.Input.TURNOverride, harness),
-		TURNPort:      materializeReplayTURNValue(t, asset.Input.PortOverride, harness),
-		BindInterface: asset.Slice.BindInterface,
-		Mode:          config.TransportMode(asset.Slice.Mode),
-		UseDTLS:       asset.Slice.DTLS,
+		Provider:         "vk",
+		Link:             asset.Input.InviteRedacted,
+		ListenAddr:       reserveUDPAddr(t),
+		PeerAddr:         peerAddr,
+		Connections:      asset.Slice.Connections,
+		TURNServer:       materializeReplayTURNValue(t, asset.Input.TURNOverride, harness),
+		TURNPort:         materializeReplayTURNValue(t, asset.Input.PortOverride, harness),
+		BindInterface:    asset.Slice.BindInterface,
+		HandshakeTimeout: 5 * time.Second,
+		Mode:             config.TransportMode(asset.Slice.Mode),
+		UseDTLS:          asset.Slice.DTLS,
 	}, cleanup
 }
 

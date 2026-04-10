@@ -21,3 +21,16 @@ coverage.out
 **/ios/Runner/GeneratedPluginRegistrant.m
 /desktop/gui_shell/build/
 /mobile/gui_shell/build/
+
+# Local operator/runtime artifacts and captures.
+/artifacts/device/
+/artifacts/generic-turn/
+/artifacts/live-vk-*/
+/artifacts/phone-vk-resolve/
+/artifacts/vk/
+/artifacts/wg-live-vk/
+/vk-browser-shot.png
+
+# Local Python helper cache.
+/scripts/__pycache__/
+*.pyc

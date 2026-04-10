@@ -206,6 +206,38 @@ func TestRunProbeGenericTurnWritesRedactedArtifact(t *testing.T) {
 	}
 }
 
+func TestRunProbeEmitsGenericTurnLinkOnDemand(t *testing.T) {
+	outputDir := t.TempDir()
+	registry := provider.NewRegistry(fakeAdapter{
+		name: "vk",
+		resolution: provider.Resolution{
+			Credentials: provider.Credentials{
+				Username: "alice",
+				Password: "s3cret",
+				Address:  "turn.example.test:3478",
+			},
+			Artifact: &provider.ProbeArtifact{
+				Provider: "vk",
+			},
+		},
+	})
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runProbe(context.Background(), bytes.NewBuffer(nil), &stdout, &stderr, []string{
+		"-provider", "vk",
+		"-link", "https://vk.com/call/join/test-token",
+		"-output-dir", outputDir,
+		"-emit-generic-turn-link",
+	}, registry)
+	if code != 0 {
+		t.Fatalf("runProbe() code = %d, stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "generic_turn_link=generic-turn://alice:s3cret@turn.example.test:3478") {
+		t.Fatalf("stdout missing generic-turn link: %s", stdout.String())
+	}
+}
+
 type fakeChallenge struct {
 	provider string
 	stage    string

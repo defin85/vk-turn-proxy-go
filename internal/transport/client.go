@@ -94,7 +94,7 @@ func (r *clientRunner) Run(ctx context.Context) error {
 	var endpoint *overlay.Endpoint
 	if r.cfg.PeerMode == PeerModeDTLS {
 		endpoint = overlay.NewEndpoint(peerConn, logger)
-		if err := performClientOverlayHandshake(peerConn, endpoint, r.cfg.Ingress); err != nil {
+		if err := performClientOverlayHandshake(peerConn, endpoint, r.cfg.Ingress, r.cfg.DTLSHandshakeTimeout()); err != nil {
 			return runstage.Wrap(runstage.PeerSetup, err)
 		}
 	}
@@ -179,8 +179,8 @@ func (r *clientRunner) runForwarders(ctx context.Context, peerConn net.Conn, end
 	}
 }
 
-func performClientOverlayHandshake(conn net.Conn, endpoint *overlay.Endpoint, ingress overlay.AdapterKind) error {
-	if err := conn.SetDeadline(time.Now().Add(handshakeTimeout)); err != nil {
+func performClientOverlayHandshake(conn net.Conn, endpoint *overlay.Endpoint, ingress overlay.AdapterKind, timeout time.Duration) error {
+	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
 		return fmt.Errorf("set overlay handshake deadline: %w", err)
 	}
 	defer func() {

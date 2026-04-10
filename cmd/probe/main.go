@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -37,7 +38,7 @@ func newRegistry() *provider.Registry {
 }
 
 func runProbe(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, args []string, registry *provider.Registry) int {
-	cfg, interactiveProvider, err := parseProbeFlags(stderr, args)
+	cfg, interactiveProvider, emitGenericTurnLink, err := parseProbeFlags(stderr, args)
 	if err != nil {
 		return 2
 	}
@@ -101,13 +102,19 @@ func runProbe(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.
 		stageCount,
 		artifactPath,
 	)
+	if emitGenericTurnLink {
+		if link := genericTurnLink(resolution.Credentials); link != "" {
+			fmt.Fprintf(stdout, "generic_turn_link=%s\n", link)
+		}
+	}
 
 	return 0
 }
 
-func parseProbeFlags(stderr io.Writer, args []string) (config.ProbeConfig, bool, error) {
+func parseProbeFlags(stderr io.Writer, args []string) (config.ProbeConfig, bool, bool, error) {
 	cfg := config.DefaultProbeConfig()
 	interactiveProvider := false
+	emitGenericTurnLink := false
 	flags := flag.NewFlagSet("probe", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	flags.StringVar(&cfg.Provider, "provider", cfg.Provider, "provider name")
@@ -116,8 +123,9 @@ func parseProbeFlags(stderr io.Writer, args []string) (config.ProbeConfig, bool,
 	flags.StringVar(&cfg.OutputDir, "output-dir", cfg.OutputDir, "directory for collected artifacts")
 	flags.BoolVar(&cfg.ListProviders, "list-providers", cfg.ListProviders, "list available providers and exit")
 	flags.BoolVar(&interactiveProvider, "interactive-provider", interactiveProvider, "allow operator-assisted provider challenges, including browser-observed VK captcha continuation and live preview/post-preview contour capture")
+	flags.BoolVar(&emitGenericTurnLink, "emit-generic-turn-link", emitGenericTurnLink, "print a ready-to-paste generic-turn:// link when provider resolution returns TURN credentials")
 
-	return cfg, interactiveProvider, flags.Parse(args)
+	return cfg, interactiveProvider, emitGenericTurnLink, flags.Parse(args)
 }
 
 func artifactFromError(err error) *provider.ProbeArtifact {
@@ -153,4 +161,15 @@ func writeProbeArtifact(outputDir string, providerName string, artifact *provide
 	}
 
 	return path, nil
+}
+
+func genericTurnLink(credentials provider.Credentials) string {
+	if credentials.Username == "" || credentials.Password == "" || credentials.Address == "" {
+		return ""
+	}
+	return (&url.URL{
+		Scheme: "generic-turn",
+		User:   url.UserPassword(credentials.Username, credentials.Password),
+		Host:   credentials.Address,
+	}).String()
 }

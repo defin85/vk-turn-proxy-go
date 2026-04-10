@@ -11,7 +11,11 @@ import (
 	"github.com/defin85/vk-turn-proxy-go/internal/runstage"
 )
 
-const handshakeTimeout = 5 * time.Second
+// Real relay-backed DTLS handshakes can take longer than a local smoke-path
+// budget, especially when the first server flight is delayed or retransmitted.
+// Keep the client budget aligned with the server-side default to avoid
+// false-negative startup failures in real end-to-end runs.
+const handshakeTimeout = 30 * time.Second
 
 func openPeerRelay(ctx context.Context, relayConn net.PacketConn, cfg ClientConfig) (net.Conn, string, error) {
 	peerAddr, err := net.ResolveUDPAddr("udp", cfg.PeerAddr)
@@ -21,7 +25,7 @@ func openPeerRelay(ctx context.Context, relayConn net.PacketConn, cfg ClientConf
 
 	switch cfg.PeerMode {
 	case PeerModeDTLS:
-		conn, err := openDTLSRelay(ctx, relayConn, peerAddr)
+		conn, err := openDTLSRelay(ctx, relayConn, peerAddr, cfg.DTLSHandshakeTimeout())
 		if err != nil {
 			return nil, "", err
 		}
@@ -37,7 +41,7 @@ func openPeerRelay(ctx context.Context, relayConn net.PacketConn, cfg ClientConf
 	}
 }
 
-func openDTLSRelay(ctx context.Context, relayConn net.PacketConn, peerAddr *net.UDPAddr) (net.Conn, error) {
+func openDTLSRelay(ctx context.Context, relayConn net.PacketConn, peerAddr *net.UDPAddr, timeout time.Duration) (net.Conn, error) {
 	dtlsConn, err := dtls.Client(relayConn, peerAddr, &dtls.Config{
 		InsecureSkipVerify:   true,
 		ExtendedMasterSecret: dtls.RequireExtendedMasterSecret,
@@ -46,7 +50,7 @@ func openDTLSRelay(ctx context.Context, relayConn net.PacketConn, peerAddr *net.
 		return nil, runstage.Wrap(runstage.DTLSHandshake, fmt.Errorf("create dtls client: %w", err))
 	}
 
-	handshakeCtx, cancel := context.WithTimeout(ctx, handshakeTimeout)
+	handshakeCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	if err := dtlsConn.HandshakeContext(handshakeCtx); err != nil {
 		_ = dtlsConn.Close()

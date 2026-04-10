@@ -18,6 +18,10 @@ It is an app-owned shell over the local client-control semantics, not a second r
 - device-wide capture or route management
 - provider-specific mobile UI logic beyond typed challenge orchestration
 
+For the current operator-validated Android PoC that keeps device-wide VPN in an
+external `WireGuard` app and uses this shell only as the local transport
+ingress, see `docs/android-wg-phone-poc.md`.
+
 ## Local development
 
 From the repository root:

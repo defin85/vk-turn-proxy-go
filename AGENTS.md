@@ -65,3 +65,6 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - Use that alias for repo-related remote checks when the user asks to inspect or run something on the VPS.
 - `egor-vps` remains as a compatibility alias, but `vk-turn-proxy-go` is the canonical name.
 - Keep remote actions non-destructive unless the user explicitly requests otherwise.
+- Direct Android device testing is available when a phone is connected over USB with debugging enabled and authorized.
+- Prefer the Windows Android SDK `adb.exe` at `C:\Users\Egor\AppData\Local\Android\Sdk\platform-tools\adb.exe` (WSL path `/mnt/c/Users/Egor/AppData/Local/Android/Sdk/platform-tools/adb.exe`) for physical-device install/logcat/intent checks.
+- The Windows Android SDK root is `C:\Users\Egor\AppData\Local\Android\Sdk`, the Windows Flutter SDK used by the repo-owned mirror builds is `C:\flutter`, and the Windows mirror root is `E:\Projects\vk-turn-proxy-go`.

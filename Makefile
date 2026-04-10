@@ -3,7 +3,7 @@
 ACT_WORKFLOW ?= .github/workflows/ci.yml
 ACT_JOB ?= test
 
-.PHONY: ci build-go build-gui-windows build-gui-android smoke-android-embedded-host sync-version-assets check-version-assets ci-act ci-act-dry ci-act-verbose deps-act
+.PHONY: ci build-go build-gui-windows build-gui-android smoke-android-embedded-host wg-e2e-check wg-e2e wg-live-vk-check wg-live-vk-run wg-live-vk-start wg-live-vk-continue wg-live-vk-cleanup android-phone-check android-phone-status android-phone-start android-phone-stop android-phone-diagnostics sync-version-assets check-version-assets ci-act ci-act-dry ci-act-verbose deps-act
 
 ci:
 	./scripts/sync-version-assets.py --check
@@ -21,6 +21,42 @@ build-gui-android:
 
 smoke-android-embedded-host:
 	bash ./scripts/smoke-android-embedded-host.sh
+
+wg-e2e-check:
+	bash ./scripts/e2e-wg-over-transport.sh --check-only
+
+wg-e2e:
+	bash ./scripts/e2e-wg-over-transport.sh
+
+wg-live-vk-check:
+	bash ./scripts/e2e-wg-live-vk.sh check
+
+wg-live-vk-run:
+	bash ./scripts/e2e-wg-live-vk.sh run
+
+wg-live-vk-start:
+	bash ./scripts/e2e-wg-live-vk.sh start
+
+wg-live-vk-continue:
+	bash ./scripts/e2e-wg-live-vk.sh continue
+
+wg-live-vk-cleanup:
+	bash ./scripts/e2e-wg-live-vk.sh cleanup
+
+android-phone-check:
+	python3 ./scripts/android-phone-session.py check
+
+android-phone-status:
+	python3 ./scripts/android-phone-session.py status
+
+android-phone-start:
+	python3 ./scripts/android-phone-session.py start --replace-existing
+
+android-phone-stop:
+	python3 ./scripts/android-phone-session.py stop --session-id latest
+
+android-phone-diagnostics:
+	python3 ./scripts/android-phone-session.py diagnostics --session-id latest
 
 sync-version-assets:
 	./scripts/sync-version-assets.py

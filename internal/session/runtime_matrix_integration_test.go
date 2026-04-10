@@ -237,13 +237,14 @@ func TestRunFailsOnBadDTLSPeerOverTCP(t *testing.T) {
 	defer cancel()
 
 	err = Run(ctx, config.ClientConfig{
-		Provider:    "generic-turn",
-		Link:        harness.Descriptor.GenericTurnTCPLink(),
-		ListenAddr:  listenAddr,
-		PeerAddr:    plainPeer.LocalAddr().String(),
-		Connections: 1,
-		Mode:        config.TransportModeTCP,
-		UseDTLS:     true,
+		Provider:         "generic-turn",
+		Link:             harness.Descriptor.GenericTurnTCPLink(),
+		ListenAddr:       listenAddr,
+		PeerAddr:         plainPeer.LocalAddr().String(),
+		Connections:      1,
+		HandshakeTimeout: 5 * time.Second,
+		Mode:             config.TransportModeTCP,
+		UseDTLS:          true,
 	}, Dependencies{
 		Registry:  provider.NewRegistry(genericturn.New()),
 		Logger:    testLogger(),
