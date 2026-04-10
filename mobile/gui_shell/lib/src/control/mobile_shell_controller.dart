@@ -48,7 +48,7 @@ class MobileShellController extends ChangeNotifier {
     BuildIdentity? appBuild,
   }) : _browserLauncher = browserLauncher ?? ExternalBrowserLauncher(),
        _handoffAdapter =
-           handoffAdapter ?? const ClipboardMobileHandoffAdapter(),
+           handoffAdapter ?? const SystemMobileHandoffAdapter(),
        _diagnosticsDirectoryProvider =
            diagnosticsDirectoryProvider ?? defaultDiagnosticsDirectory,
        _clock = clock ?? DateTime.now,
@@ -376,6 +376,16 @@ class MobileShellController extends ChangeNotifier {
       selectedResolutionId = resolutionId;
       notice =
           'Copied handoff link for $resolutionId. Expires ${_formatNoticeTimestamp(exported.expiresAt)}.';
+    });
+  }
+
+  Future<void> shareResolutionExport(String resolutionId) async {
+    await _runBridgeMutation(() async {
+      final exported = await bridge.exportResolution(resolutionId);
+      await _handoffAdapter.shareLink(exported.link);
+      selectedResolutionId = resolutionId;
+      notice =
+          'Shared handoff link for $resolutionId. Expires ${_formatNoticeTimestamp(exported.expiresAt)}.';
     });
   }
 

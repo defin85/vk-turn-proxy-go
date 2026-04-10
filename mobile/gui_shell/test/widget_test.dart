@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_gui_shell/src/app.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_models.dart';
+import 'package:mobile_gui_shell/src/control/mobile_handoff_adapter.dart';
 import 'package:mobile_gui_shell/src/control/mobile_host_bridge.dart';
 import 'package:mobile_gui_shell/src/control/mobile_shell_controller.dart';
 import 'package:mobile_gui_shell/src/control/mobile_shell_state_store.dart';
@@ -196,6 +197,54 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('mobile shell exposes copy and share handoff actions', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 1800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final controller = MobileShellController(
+      bridge: _FakeMobileHostBridge(
+        resolutionsList: <ResolutionRecord>[
+          ResolutionRecord(
+            id: 'resolution-1',
+            provider: 'vk',
+            input: const ResolutionInput(
+              provider: 'vk',
+              linkRedacted: 'https://vk.com/call/join/<redacted:invite-token>',
+              interactiveProvider: true,
+            ),
+            state: ResolutionState.resolved,
+            export: ResolutionExportStatus(
+              supported: true,
+              expiresAt: DateTime.utc(2026, 4, 10, 20, 17, 6),
+              expirySource: 'vk_turn_rest_username',
+            ),
+            startedAt: DateTime.utc(2026, 4, 10, 12, 0),
+            updatedAt: DateTime.utc(2026, 4, 10, 12, 1),
+          ),
+        ],
+      ),
+      stateStore: _InMemoryStateStore(
+        MobileShellState(
+          profiles: const <ProfileRecord>[],
+          draft: ProfileDraft.defaults(),
+        ),
+      ),
+      handoffAdapter: _FakeMobileHandoffAdapter(),
+    );
+    await controller.initialize();
+    await tester.pumpWidget(MobileShellApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -900));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Copy handoff', skipOffstage: false), findsOneWidget);
+    expect(find.text('Share handoff', skipOffstage: false), findsOneWidget);
+  });
 }
 
 const HostInfo _readyHostInfo = HostInfo(
@@ -255,12 +304,16 @@ class _InMemoryStateStore implements MobileShellStateStore {
 
 class _FakeMobileHostBridge implements MobileHostBridge {
   _FakeMobileHostBridge({
+    List<ResolutionRecord>? resolutionsList,
     this.sessionsList = const <SessionRecord>[],
     this.challengeMap = const <String, ChallengeRecord>{},
-  });
+  }) : _resolutions = List<ResolutionRecord>.of(
+         resolutionsList ?? const <ResolutionRecord>[],
+       );
 
   final List<SessionRecord> sessionsList;
   final Map<String, ChallengeRecord> challengeMap;
+  final List<ResolutionRecord> _resolutions;
   final List<PlatformTunnelMode> startedPlatformTunnels =
       <PlatformTunnelMode>[];
 
@@ -354,8 +407,7 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   Future<List<ProfileRecord>> profiles() async => const <ProfileRecord>[];
 
   @override
-  Future<List<ResolutionRecord>> resolutions() async =>
-      const <ResolutionRecord>[];
+  Future<List<ResolutionRecord>> resolutions() async => _resolutions;
 
   @override
   Future<ResolutionRecord> startResolution({
@@ -420,6 +472,14 @@ class _ThrowingStateStore implements MobileShellStateStore {
 
   @override
   Future<void> save(MobileShellState state) async {}
+}
+
+class _FakeMobileHandoffAdapter implements MobileHandoffAdapter {
+  @override
+  Future<void> copyLink(String link) async {}
+
+  @override
+  Future<void> shareLink(String link) async {}
 }
 
 String _twoDigits(int value) => value.toString().padLeft(2, '0');

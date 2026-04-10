@@ -73,9 +73,9 @@ That workflow also includes the repo-owned sidecar launch helper
 `scripts/run-windows-gui-shell.ps1` and the packaged-session helper
 `scripts/windows-desktop-generic-turn.ps1`.
 
-For the second-step workflow that starts from a real VK invite on WSL, derives
-a short-lived `generic-turn://...` link through `cmd/probe`, and then reuses
-that link on the packaged Windows desktop host, follow
+For the packaged Windows desktop workflow that starts from a real VK invite in
+the GUI, moves through typed resolution and browser continuation when needed,
+and then starts the same-device desktop session, follow
 `docs/windows-desktop-live-vk-workflow.md`.
 
 ## Mobile GUI shell local development

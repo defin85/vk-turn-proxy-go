@@ -1,104 +1,53 @@
 # Windows Desktop Live VK Workflow
 
-This document defines the repo-owned desktop workflow for exercising the
-packaged Windows desktop shell with a real VK invite without claiming direct
-live VK resolution inside the GUI itself.
+This document defines the repo-owned packaged Windows desktop workflow for
+starting from a real VK invite inside the GUI, resolving it through the typed
+provider-resolution handoff contract, and then starting the same-device desktop
+runtime path.
 
 The workflow keeps the current boundary explicit:
 
-1. resolve the live VK invite on WSL through `cmd/probe`
-2. reuse the derived short-lived `generic-turn://...` link on Windows
-3. run the packaged desktop shell over the existing external `WireGuard`
-   desktop path
+1. launch the packaged Windows desktop shell and bundled `clientd.exe`
+2. resolve the live VK invite through the GUI and typed resolution resource
+3. complete browser continuation if the provider requires it
+4. start the same-device desktop session from the resolved handoff
+5. enable the external `WireGuard for Windows` path over that ready desktop
+   transport session
 
 ## Scope
 
 This workflow proves:
 
-- a real VK invite can be resolved on WSL into a short-lived
-  `generic-turn://...` link through the repo-owned probe path
-- the packaged Windows desktop host can start a `generic-turn` session from
-  that derived link
+- the packaged Windows desktop GUI can resolve a real VK invite through the
+  typed local-host contract
+- the operator can complete browser continuation and reach `resolved` in the
+  in-app resolution card
+- the packaged Windows desktop host can start the normal same-device
+  `generic-turn` runtime path from that resolved handoff
 - the external `WireGuard for Windows` client can still use the desktop shell
-  as local transport ingress after the live preflight step
+  as local transport ingress after the live invite step
 
 This workflow does not claim:
 
-- direct VK browser continuation inside the Flutter desktop UI
-- repo-owned system VPN or `wintun` integration
-- unattended live VK resolution on Windows
+- repo-owned system VPN or `windows_wintun`
+- unattended live VK resolution without an operator-driven browser step
+- Android or iOS handoff behavior
 
 ## Required inputs
 
 - a real VK invite URL
-- local browser support on WSL for the controlled VK continuation browser
 - a fresh Windows desktop bundle built through
   `./scripts/build-windows-gui-from-wsl.sh`
 - the mirrored Windows-native bundle at
   `E:\Projects\vk-turn-proxy-go\dist\windows-gui`
+- local Windows browser support for the provider challenge when VK requires it
 - the official `WireGuard for Windows` client
 - the validated `desktop1-windows.conf` profile from
   `docs/windows-desktop-wg-poc.md`
 - the VPS `wg-quick@wgvktp0.service` and `vk-turn-tunnel-wg.service` already
   running
 
-## Step 1: Resolve the live VK invite on WSL
-
-Run the live probe from the canonical WSL checkout:
-
-```bash
-cd /home/egor/code/vk-turn-proxy-go
-VK_PROVIDER_BROWSER_HEADLESS=false \
-go run ./cmd/probe \
-  -provider vk \
-  -link 'https://vk.com/call/join/<invite>' \
-  -interactive-provider \
-  -emit-generic-turn-link \
-  -output-dir ./artifacts/windows-desktop-live-vk
-```
-
-After the human completes the browser challenge, `probe` prints:
-
-```text
-generic_turn_link=generic-turn://...
-```
-
-Use that exact value as `TURN_LINK` for the Windows desktop helper below.
-
-## Step 2: Resolve the TURN host for the Windows route exclusion
-
-Export the printed link in WSL and extract the host:
-
-```bash
-TURN_LINK='generic-turn://...'
-python3 -c "import os, urllib.parse; print(urllib.parse.urlparse(os.environ['TURN_LINK']).hostname)"
-```
-
-Keep both values:
-
-- the full `TURN_LINK`
-- the extracted TURN host/IP
-
-## Step 3: Add the Windows host route for that TURN host
-
-Resolve the current default gateway:
-
-```powershell
-$gw = (Get-NetRoute -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0' | Sort-Object RouteMetric, InterfaceMetric | Select-Object -First 1).NextHop
-```
-
-Set the actual TURN host extracted above, then add the persistent route:
-
-```powershell
-$turnHost = '155.212.205.169'
-route -p add $turnHost mask 255.255.255.255 $gw metric 1
-route print $turnHost
-```
-
-This route must target the real host from the live-derived `TURN_LINK`, not a
-stale host from an older run.
-
-## Step 4: Start the bundled desktop shell
+## Step 1: Start the bundled desktop shell
 
 Launch the repo-owned Windows helper from the mirrored checkout:
 
@@ -109,39 +58,82 @@ powershell -NoProfile -ExecutionPolicy Bypass -File E:\Projects\vk-turn-proxy-go
 That starts a fresh bundled `clientd.exe`, waits for `/v1/host`, and then
 launches `gui_shell.exe`.
 
-## Step 5: Start the Windows desktop transport session
+## Step 2: Resolve the live VK invite in the GUI
 
-Pass the live-derived `TURN_LINK` into the Windows helper and start the saved
-`generic-turn` profile:
+In the desktop shell:
+
+1. keep `Provider = vk`
+2. paste the real invite into `Provider link`
+3. enable `Interactive provider challenges`
+4. review the non-secret runtime defaults in the profile editor
+   (`Local UDP listen`, `Peer address`, transport mode, TURN overrides, and
+   similar runtime knobs)
+5. click `Resolve invite`
+
+When the resolution succeeds, the resolution card shows:
+
+- the typed `resolved` state
+- the redacted TURN address
+- the export expiry timestamp
+- `Start on this device`
+- `Copy handoff`
+
+## Step 3: Complete browser continuation when required
+
+If the resolution card enters `challenge_required`:
+
+1. use the displayed provider URL or the host-opened browser session to
+   complete the challenge
+2. return to the desktop shell
+3. click `Continue after browser step`
+
+The desktop shell keeps challenge continuation typed and host-driven.
+It does not require CLI log parsing or manual secret reconstruction.
+
+## Step 4: Add the Windows host route for the resolved TURN host
+
+Before enabling `WireGuard for Windows`, add the persistent host route for the
+current TURN host from the resolved desktop card.
+
+You can take that host from either:
+
+- the TURN address shown on the `resolved` card
+- the explicit `Copy handoff` action if you need the full link for inspection
+
+Resolve the current default gateway:
 
 ```powershell
-$env:TURN_LINK = 'generic-turn://...'
-powershell -NoProfile -ExecutionPolicy Bypass -File E:\Projects\vk-turn-proxy-go\scripts\windows-desktop-generic-turn.ps1 start -ReplaceExisting
+$gw = (Get-NetRoute -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0' | Sort-Object RouteMetric, InterfaceMetric | Select-Object -First 1).NextHop
 ```
 
-The helper:
-
-- talks to the bundled `clientd` over `http://127.0.0.1:7777`
-- upserts a stable `desktop-generic-turn` profile
-- uses `127.0.0.1:39010` as the local UDP ingress
-- uses `176.109.104.105:56040` as the VPS peer
-- waits until the desktop session reaches `ready`
-
-You can inspect the current state later with:
+Set the actual TURN host extracted from the resolved card, then add the
+persistent route:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File E:\Projects\vk-turn-proxy-go\scripts\windows-desktop-generic-turn.ps1 status
+$turnHost = '155.212.205.169'
+route -p add $turnHost mask 255.255.255.255 $gw metric 1
+route print $turnHost
 ```
 
-And export diagnostics with:
+This route must target the current TURN host from the live resolution, not a
+stale host from an older run.
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File E:\Projects\vk-turn-proxy-go\scripts\windows-desktop-generic-turn.ps1 diagnostics
-```
+## Step 5: Start on this device
+
+From the resolved desktop card, click `Start on this device`.
+
+The host then:
+
+- materializes the resolved handoff through the normal desktop runtime path
+- reuses the non-secret runtime defaults already shown in the profile editor
+- keeps the secret handoff link out of ordinary session reads and diagnostics
+
+Wait until the session reaches `ready` in the desktop shell before enabling the
+external `WireGuard` tunnel.
 
 ## Step 6: Enable the external WireGuard tunnel
 
-Once the desktop transport session is `ready`:
+Once the desktop session is `ready`:
 
 1. import `desktop1-windows.conf` into `WireGuard for Windows` if needed
 2. confirm `AllowedIPs` still stays `0.0.0.0/1, 128.0.0.0/1`
@@ -153,17 +145,20 @@ The `WireGuard` profile itself still follows the validated contract in
 
 ## Failure triage
 
-- `probe` never prints `generic_turn_link=...`
-  The live VK provider run never reached transport-ready credentials. Inspect
-  the probe output and `artifacts/windows-desktop-live-vk/` first.
-- Windows helper says `clientd` is missing required capability
-  The bundled desktop sidecar is stale or the GUI was not started through
-  `scripts/run-windows-gui-shell.ps1`.
-- Desktop helper fails before `ready`
-  Export diagnostics with `windows-desktop-generic-turn.ps1 diagnostics` and
-  inspect the latest session failure stage.
+- The resolution never reaches `resolved`
+  Inspect the failure stage shown on the desktop resolution card instead of
+  falling back to CLI guesses.
+- The resolution stays in `challenge_required`
+  The browser step was not completed or the operator did not click
+  `Continue after browser step`.
+- `Start on this device` fails before `ready`
+  Export diagnostics from the desktop shell and inspect the latest session
+  failure stage.
 - Desktop session reaches `ready`, but public traffic dies after enabling
   `WireGuard`
   The persistent route points to the wrong TURN host, or the imported
   `desktop1-windows.conf` profile no longer matches the validated exclusion
   settings in `docs/windows-desktop-wg-poc.md`.
+- You need the raw short-lived handoff secret for support or another device
+  Use `Copy handoff` from the resolved desktop card. That explicit export
+  remains optional and is not required for same-device startup.

@@ -46,6 +46,10 @@ class DesktopShellController extends ChangeNotifier {
   List<SessionRecord> sessions = const <SessionRecord>[];
   List<EventRecord> events = const <EventRecord>[];
   ProfileDraft draft = ProfileDraft.defaults();
+  RuntimeDefaults materializeDefaults = const RuntimeDefaults(
+    listenAddress: '127.0.0.1:9001',
+    peerAddress: '127.0.0.1:56000',
+  );
   String? selectedProfileId;
   String? selectedResolutionId;
   String? selectedSessionId;
@@ -167,6 +171,7 @@ class DesktopShellController extends ChangeNotifier {
           )) {
         selectedProfileId = null;
         draft = ProfileDraft.defaults();
+        materializeDefaults = RuntimeDefaults.fromProfileSpec(draft.spec);
       }
 
       if (selectedSessionId == null && sessions.isNotEmpty) {
@@ -202,6 +207,7 @@ class DesktopShellController extends ChangeNotifier {
       orElse: () => ProfileDraft.defaults().toProfile(),
     );
     draft = ProfileDraft.fromProfile(selected);
+    materializeDefaults = RuntimeDefaults.fromProfileSpec(selected.spec);
     _scheduleStatePersist();
     notifyListeners();
   }
@@ -219,6 +225,7 @@ class DesktopShellController extends ChangeNotifier {
   void updateDraft(ProfileDraft nextDraft) {
     _restoredState = true;
     draft = nextDraft;
+    materializeDefaults = RuntimeDefaults.fromProfileSpec(nextDraft.spec);
     _scheduleStatePersist();
     notifyListeners();
   }
@@ -227,6 +234,7 @@ class DesktopShellController extends ChangeNotifier {
     _restoredState = true;
     selectedProfileId = null;
     draft = ProfileDraft.defaults();
+    materializeDefaults = RuntimeDefaults.fromProfileSpec(draft.spec);
     _scheduleStatePersist();
     notifyListeners();
   }
@@ -292,7 +300,7 @@ class DesktopShellController extends ChangeNotifier {
     await _runMutation(() async {
       final session = await api.materializeResolution(
         resolutionId: resolutionId,
-        runtimeDefaults: RuntimeDefaults.fromProfileSpec(draft.spec),
+        runtimeDefaults: materializeDefaults,
       );
       selectedResolutionId = resolutionId;
       selectedSessionId = session.id;
@@ -639,6 +647,7 @@ class DesktopShellController extends ChangeNotifier {
       profiles = state.profiles;
       selectedProfileId = state.selectedProfileId;
       draft = state.draft;
+      materializeDefaults = state.runtimeDefaults;
       _persistedStateSignature = state.signature();
       _restoredState = true;
     } catch (error) {
@@ -670,6 +679,7 @@ class DesktopShellController extends ChangeNotifier {
       profiles: profiles,
       selectedProfileId: selectedProfileId,
       draft: draft,
+      runtimeDefaults: materializeDefaults,
     );
     final signature = next.signature();
     if (signature == _persistedStateSignature) {

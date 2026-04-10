@@ -288,6 +288,8 @@ type RuntimeDefaults struct {
 	PeerAddr      string        `json:"peer_addr"`
 	Ingress       AdapterKind   `json:"ingress,omitempty"`
 	Connections   int           `json:"connections,omitempty"`
+	TURNServer    string        `json:"turn_server,omitempty"`
+	TURNPort      string        `json:"turn_port,omitempty"`
 	BindInterface string        `json:"bind_interface,omitempty"`
 	Mode          TransportMode `json:"mode,omitempty"`
 	UseDTLS       *bool         `json:"use_dtls,omitempty"`

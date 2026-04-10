@@ -247,6 +247,13 @@ class _ResolutionsPanel extends StatelessWidget {
                                   resolution.id,
                                 )
                               : null,
+                          onShareExport:
+                              resolution.export.supported &&
+                                  resolution.state == ResolutionState.resolved
+                              ? () => controller.shareResolutionExport(
+                                  resolution.id,
+                                )
+                              : null,
                           onCancel: resolution.isTerminal
                               ? null
                               : () =>
@@ -425,6 +432,7 @@ class _ResolutionCard extends StatelessWidget {
     required this.onContinueChallenge,
     required this.onCancelChallenge,
     required this.onCopyExport,
+    required this.onShareExport,
     required this.onCancel,
   });
 
@@ -437,6 +445,7 @@ class _ResolutionCard extends StatelessWidget {
   final Future<void> Function()? onContinueChallenge;
   final Future<void> Function()? onCancelChallenge;
   final Future<void> Function()? onCopyExport;
+  final Future<void> Function()? onShareExport;
   final Future<void> Function()? onCancel;
 
   @override
@@ -562,6 +571,12 @@ class _ResolutionCard extends StatelessWidget {
                         ? null
                         : () => unawaited(onCopyExport!.call()),
                     child: const Text('Copy handoff'),
+                  ),
+                  OutlinedButton(
+                    onPressed: busy || onShareExport == null
+                        ? null
+                        : () => unawaited(onShareExport!.call()),
+                    child: const Text('Share handoff'),
                   ),
                   if (onCancel != null)
                     OutlinedButton(

@@ -10,6 +10,7 @@ It is an app-owned shell over the local client-control semantics, not a second r
 - connect to a compatible embedded or bridged mobile host
 - start and stop sessions through that mobile host bridge
 - surface typed session state, challenge state, and diagnostics export
+- export resolved provider handoffs through explicit copy/share actions for another device
 - hand browser-oriented provider challenges off through platform-native URL launching
 
 ## Non-goals for this slice
@@ -43,7 +44,9 @@ The mobile shell expects a compatible bridge that satisfies the same client-cont
 Required capabilities for the first slice are:
 
 - `mobile_host_bridge`
+- `platform_tunnels`
 - `profiles`
+- `provider-resolution-handoff`
 - `sessions`
 - `challenges`
 - `diagnostics`

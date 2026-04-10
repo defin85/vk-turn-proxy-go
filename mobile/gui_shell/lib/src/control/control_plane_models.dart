@@ -645,6 +645,8 @@ class RuntimeDefaults {
     required this.listenAddress,
     required this.peerAddress,
     this.connections = 1,
+    this.turnServer,
+    this.turnPort,
     this.bindInterface,
     this.mode = TransportMode.auto,
     this.useDtls = true,
@@ -656,6 +658,8 @@ class RuntimeDefaults {
       listenAddress: spec.listenAddress,
       peerAddress: spec.peerAddress,
       connections: spec.connections,
+      turnServer: spec.turnServer,
+      turnPort: spec.turnPort,
       bindInterface: spec.bindInterface,
       mode: spec.mode,
       useDtls: spec.useDtls,
@@ -666,6 +670,8 @@ class RuntimeDefaults {
   final String listenAddress;
   final String peerAddress;
   final int connections;
+  final String? turnServer;
+  final String? turnPort;
   final String? bindInterface;
   final TransportMode mode;
   final bool useDtls;
@@ -676,6 +682,8 @@ class RuntimeDefaults {
       'listen_addr': listenAddress,
       'peer_addr': peerAddress,
       'connections': connections,
+      'turn_server': turnServer,
+      'turn_port': turnPort,
       'bind_interface': bindInterface,
       'mode': mode.value,
       'use_dtls': useDtls,

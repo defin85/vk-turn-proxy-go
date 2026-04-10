@@ -6,8 +6,11 @@ It is a GUI over the local client control plane, not a second runtime implementa
 ## Scope
 
 - manage saved profiles
+- resolve live provider links into typed handoff records
+- start the same-device runtime path from a resolved handoff without manual secret copy/paste
 - start and stop sessions through `cmd/clientd`
 - surface typed session state and challenge events
+- optionally copy the explicit handoff link for support or cross-device use
 - export per-session diagnostics bundles
 - supervise a compatible local sidecar on Windows, macOS, and Linux
 
@@ -52,9 +55,10 @@ bundled `clientd.exe` before `gui_shell.exe`, and the companion
 `scripts/windows-desktop-generic-turn.ps1` helper that seeds and starts the
 desktop `generic-turn` session through the local control plane.
 
-For the real-link workflow that first resolves a live VK invite into a
-short-lived `generic-turn://...` link on WSL and then reuses that link on the
-packaged Windows desktop host, follow `docs/windows-desktop-live-vk-workflow.md`.
+For the packaged Windows workflow that starts from a real VK invite inside the
+desktop GUI, moves through typed resolution and browser continuation when
+needed, and then starts the same-device desktop session, follow
+`docs/windows-desktop-live-vk-workflow.md`.
 
 ## Control-plane contract
 
@@ -62,7 +66,9 @@ The shell talks to `cmd/clientd` on `127.0.0.1:7777` through the versioned HTTP 
 The required host capabilities for this shell are:
 
 - `desktop_sidecar`
+- `platform_tunnels`
 - `profiles`
+- `provider-resolution-handoff`
 - `sessions`
 - `challenges`
 - `diagnostics`
@@ -74,6 +80,21 @@ Host metadata may also include `platform_tunnels`, a typed per-mode report for `
 The shell renders that report in the dashboard and uses the typed `/v1/platform-tunnels/start` result instead of inferring system-tunnel support from OS or bundle heuristics.
 Operators can request startup for the reported mode directly from the shell to inspect the stage-aware fail-closed result in-app.
 Current repo-owned desktop hosts still fail closed for those modes until a platform-specific sidecar implements the privileged tunnel path.
+
+## Invite resolution workflow
+
+The desktop shell now supports the product path:
+
+1. enter a provider link such as a VK invite in the profile editor
+2. click `Resolve invite`
+3. if the host reports `challenge_required`, complete the browser step and then click `Continue after browser step`
+4. wait for the typed resolution card to reach `resolved`
+5. choose either `Start on this device` for the normal desktop runtime path or `Copy handoff` for explicit export
+
+`Start on this device` reuses the non-secret runtime defaults from the profile
+editor, such as listen address, peer address, transport policy, and TURN
+override fields, without requiring the full secret handoff link to be pasted
+back into the same host.
 
 ## Sidecar discovery order
 
@@ -102,6 +123,7 @@ The desktop shell persists:
 - saved profiles
 - the selected profile
 - the current in-progress draft
+- the non-secret runtime defaults used for `Start on this device`
 
 Default state-file paths:
 
@@ -109,6 +131,9 @@ Default state-file paths:
 - Windows: `%APPDATA%\\vk-turn-proxy-go\\gui-shell-state.json`
 
 When the GUI reconnects to a compatible host, it rehydrates the persisted profiles back into the local control plane before normal profile/session refresh continues.
+The persisted plaintext state keeps the same-device runtime defaults separate
+from secret-bearing handoff links; `generic-turn://...` handoff secrets are
+redacted before the state file is written.
 
 ## Challenge, tray, and notifications behavior
 

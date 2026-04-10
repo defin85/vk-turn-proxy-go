@@ -603,11 +603,15 @@ func TestHostStartsResolvesExportsAndMaterializesResolution(t *testing.T) {
 	}
 
 	sessionState, err := host.MaterializeResolution(context.Background(), resolved.ID, RuntimeDefaults{
-		ListenAddr:  reserveUDPAddr(t),
-		PeerAddr:    "127.0.0.1:56000",
-		Connections: 1,
-		Mode:        TransportModeAuto,
-		UseDTLS:     boolRef(true),
+		ListenAddr:    reserveUDPAddr(t),
+		PeerAddr:      "127.0.0.1:56000",
+		Connections:   1,
+		TURNServer:    "override.example.test",
+		TURNPort:      "5349",
+		Mode:          TransportModeAuto,
+		UseDTLS:       boolRef(true),
+		BindInterface: "127.0.0.1",
+		LogLevel:      "debug",
 	})
 	if err != nil {
 		t.Fatalf("MaterializeResolution() error = %v", err)
@@ -620,6 +624,18 @@ func TestHostStartsResolvesExportsAndMaterializesResolution(t *testing.T) {
 	if strings.Contains(ready.Profile.Link, "generic-turn://turn-user:turn-pass@") {
 		t.Fatalf("session profile leaked handoff secret: %q", ready.Profile.Link)
 	}
+	if ready.Profile.TURNServer != "override.example.test" {
+		t.Fatalf("session turn_server = %q, want override.example.test", ready.Profile.TURNServer)
+	}
+	if ready.Profile.TURNPort != "5349" {
+		t.Fatalf("session turn_port = %q, want 5349", ready.Profile.TURNPort)
+	}
+	if ready.Profile.BindInterface != "127.0.0.1" {
+		t.Fatalf("session bind_interface = %q, want 127.0.0.1", ready.Profile.BindInterface)
+	}
+	if ready.Profile.LogLevel != "debug" {
+		t.Fatalf("session log_level = %q, want debug", ready.Profile.LogLevel)
+	}
 
 	diagnostics, err := host.ExportDiagnostics(ready.ID)
 	if err != nil {
@@ -630,6 +646,12 @@ func TestHostStartsResolvesExportsAndMaterializesResolution(t *testing.T) {
 	}
 	if strings.Contains(diagnostics.Session.Profile.Link, "generic-turn://turn-user:turn-pass@") {
 		t.Fatalf("diagnostics leaked handoff secret: %q", diagnostics.Session.Profile.Link)
+	}
+	if diagnostics.Session.Profile.TURNServer != "override.example.test" {
+		t.Fatalf("diagnostics turn_server = %q, want override.example.test", diagnostics.Session.Profile.TURNServer)
+	}
+	if diagnostics.Session.Profile.TURNPort != "5349" {
+		t.Fatalf("diagnostics turn_port = %q, want 5349", diagnostics.Session.Profile.TURNPort)
 	}
 
 	if _, err := host.StopSession(ready.ID); err != nil {
@@ -801,6 +823,72 @@ func TestHostResolutionExpiresAndFailsClosed(t *testing.T) {
 		UseDTLS:     boolRef(true),
 	}); !errors.Is(err, errResolutionExpired) {
 		t.Fatalf("MaterializeResolution() error = %v, want expired", err)
+	}
+}
+
+func TestHostCancelResolutionStaysCancelledIfProviderFinishesLate(t *testing.T) {
+	release := make(chan struct{})
+	host := New(
+		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+		WithBuildIdentity(testBuildIdentity()),
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name: "vk",
+			resolve: func(ctx context.Context, link string) (provider.Resolution, error) {
+				<-release
+				return provider.Resolution{
+					Credentials: provider.Credentials{
+						Username: "turn-user",
+						Password: "turn-pass",
+						Address:  "turn.example.test:3478",
+						TTL:      time.Minute,
+					},
+					Metadata: map[string]string{
+						"provider":                      "vk",
+						"resolution_method":             "staged_http",
+						"turn_credential_expires_at":    time.Now().UTC().Add(time.Minute).Format(time.RFC3339),
+						"turn_credential_expiry_source": "turn_rest_username",
+					},
+				}, nil
+			},
+		})),
+	)
+
+	resolutionState, err := host.StartResolution(context.Background(), StartResolutionRequest{
+		Provider: "vk",
+		Link:     "https://vk.com/call/join/test-token",
+	})
+	if err != nil {
+		t.Fatalf("StartResolution() error = %v", err)
+	}
+
+	cancelled, err := host.CancelResolution(resolutionState.ID)
+	if err != nil {
+		t.Fatalf("CancelResolution() error = %v", err)
+	}
+	if cancelled.State != ResolutionStateCancelled {
+		t.Fatalf("cancelled state = %q, want cancelled", cancelled.State)
+	}
+
+	close(release)
+
+	deadline := time.After(3 * time.Second)
+	for {
+		current, err := host.Resolution(resolutionState.ID)
+		if err != nil {
+			t.Fatalf("Resolution() error = %v", err)
+		}
+		if current.State == ResolutionStateCancelled {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("resolution state = %q, want cancelled", current.State)
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+
+	if _, err := host.ExportResolution(resolutionState.ID); !errors.Is(err, errResolutionNotTransportReady) {
+		t.Fatalf("ExportResolution() error = %v, want not transport-ready", err)
 	}
 }
 

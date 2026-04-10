@@ -51,6 +51,16 @@ void main() {
             peerAddress: '127.0.0.1:56000',
           ),
         ),
+        runtimeDefaults: const RuntimeDefaults(
+          listenAddress: '127.0.0.1:9101',
+          peerAddress: '127.0.0.1:56100',
+          turnServer: 'override.example.test',
+          turnPort: '5349',
+          bindInterface: '127.0.0.1',
+          mode: TransportMode.tcp,
+          useDtls: false,
+          logLevel: 'debug',
+        ),
       );
 
       await store.save(state);
@@ -68,12 +78,22 @@ void main() {
 
       final decoded = jsonDecode(payload) as Map<String, dynamic>;
       final profiles = decoded['profiles'] as List<dynamic>;
+      final runtimeDefaults =
+          decoded['runtime_defaults'] as Map<String, dynamic>;
       expect(
         (profiles[0] as Map<String, dynamic>)['spec']['link'],
         'https://vk.com/call/join/test-token',
       );
       expect((profiles[1] as Map<String, dynamic>)['spec']['link'], '');
       expect((decoded['draft'] as Map<String, dynamic>)['spec']['link'], '');
+      expect(runtimeDefaults['listen_addr'], '127.0.0.1:9101');
+      expect(runtimeDefaults['peer_addr'], '127.0.0.1:56100');
+      expect(runtimeDefaults['turn_server'], 'override.example.test');
+      expect(runtimeDefaults['turn_port'], '5349');
+      expect(runtimeDefaults['bind_interface'], '127.0.0.1');
+      expect(runtimeDefaults['mode'], 'tcp');
+      expect(runtimeDefaults['use_dtls'], isFalse);
+      expect(runtimeDefaults['log_level'], 'debug');
     },
   );
 }

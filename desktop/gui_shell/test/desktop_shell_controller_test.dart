@@ -250,7 +250,7 @@ void main() {
   );
 
   test(
-    'controller restores persisted profiles and draft into the host',
+    'controller restores persisted profiles, draft, and runtime defaults into the host',
     () async {
       final persistedProfile = ProfileRecord(
         id: 'profile-1',
@@ -259,6 +259,7 @@ void main() {
       );
       final api = _FakeControlPlaneApi(
         profiles: const <ProfileRecord>[],
+        resolutions: <ResolutionRecord>[_resolutionRecord()],
         sessions: const <SessionRecord>[],
       );
       final store = _FakeShellStateStore(
@@ -269,6 +270,16 @@ void main() {
             id: 'profile-1',
             name: 'saved draft',
             spec: _profileSpec().copyWith(link: 'generic-turn://saved'),
+          ),
+          runtimeDefaults: const RuntimeDefaults(
+            listenAddress: '127.0.0.1:9101',
+            peerAddress: '127.0.0.1:56100',
+            turnServer: 'override.example.test',
+            turnPort: '5349',
+            bindInterface: '127.0.0.1',
+            mode: TransportMode.udp,
+            useDtls: false,
+            logLevel: 'debug',
           ),
         ),
       );
@@ -293,6 +304,30 @@ void main() {
       expect(controller.selectedProfileId, 'profile-1');
       expect(controller.draft.name, 'saved draft');
       expect(controller.draft.spec.link, 'generic-turn://saved');
+
+      await controller.materializeResolution('resolution-1');
+
+      expect(api.materializeResolutionDefaults, hasLength(1));
+      expect(
+        api.materializeResolutionDefaults.single.listenAddress,
+        '127.0.0.1:9101',
+      );
+      expect(
+        api.materializeResolutionDefaults.single.peerAddress,
+        '127.0.0.1:56100',
+      );
+      expect(
+        api.materializeResolutionDefaults.single.turnServer,
+        'override.example.test',
+      );
+      expect(api.materializeResolutionDefaults.single.turnPort, '5349');
+      expect(
+        api.materializeResolutionDefaults.single.bindInterface,
+        '127.0.0.1',
+      );
+      expect(api.materializeResolutionDefaults.single.mode, TransportMode.udp);
+      expect(api.materializeResolutionDefaults.single.useDtls, isFalse);
+      expect(api.materializeResolutionDefaults.single.logLevel, 'debug');
     },
   );
 
@@ -324,7 +359,17 @@ void main() {
       controller.updateDraft(
         controller.draft.copyWith(
           name: 'edited alpha',
-          spec: controller.draft.spec.copyWith(link: 'generic-turn://edited'),
+          spec: controller.draft.spec.copyWith(
+            link: 'generic-turn://edited',
+            listenAddress: '127.0.0.1:9201',
+            peerAddress: '127.0.0.1:56100',
+            turnServer: 'override.example.test',
+            turnPort: '5349',
+            bindInterface: '127.0.0.1',
+            mode: TransportMode.tcp,
+            useDtls: false,
+            logLevel: 'debug',
+          ),
         ),
       );
 
@@ -336,6 +381,14 @@ void main() {
       expect(saved.selectedProfileId, 'profile-1');
       expect(saved.draft.name, 'edited alpha');
       expect(saved.draft.spec.link, 'generic-turn://edited');
+      expect(saved.runtimeDefaults.listenAddress, '127.0.0.1:9201');
+      expect(saved.runtimeDefaults.peerAddress, '127.0.0.1:56100');
+      expect(saved.runtimeDefaults.turnServer, 'override.example.test');
+      expect(saved.runtimeDefaults.turnPort, '5349');
+      expect(saved.runtimeDefaults.bindInterface, '127.0.0.1');
+      expect(saved.runtimeDefaults.mode, TransportMode.tcp);
+      expect(saved.runtimeDefaults.useDtls, isFalse);
+      expect(saved.runtimeDefaults.logLevel, 'debug');
     },
   );
 
@@ -368,6 +421,8 @@ void main() {
             provider: 'vk',
             link: 'https://vk.com/call/join/fresh',
             interactiveProvider: true,
+            turnServer: 'override.example.test',
+            turnPort: '5349',
           ),
         ),
       );
@@ -384,6 +439,12 @@ void main() {
         'generic-turn://turn-user:turn-pass@turn.example.test:3478',
       ]);
       expect(api.materializeResolutionCalls, <String>[resolutionID]);
+      expect(api.materializeResolutionDefaults, hasLength(1));
+      expect(
+        api.materializeResolutionDefaults.single.turnServer,
+        'override.example.test',
+      );
+      expect(api.materializeResolutionDefaults.single.turnPort, '5349');
       expect(controller.selectedResolutionId, resolutionID);
       expect(controller.selectedSessionId, 'materialized-session');
       expect(
@@ -611,6 +672,8 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   final List<_StartResolutionCall> startResolutionCalls =
       <_StartResolutionCall>[];
   final List<String> materializeResolutionCalls = <String>[];
+  final List<RuntimeDefaults> materializeResolutionDefaults =
+      <RuntimeDefaults>[];
   final List<PlatformTunnelMode> startPlatformTunnelCalls =
       <PlatformTunnelMode>[];
   final List<ProfileRecord> upsertedProfiles = <ProfileRecord>[];
@@ -694,6 +757,7 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
     required RuntimeDefaults runtimeDefaults,
   }) async {
     materializeResolutionCalls.add(resolutionId);
+    materializeResolutionDefaults.add(runtimeDefaults);
     final session = SessionRecord(
       id: 'materialized-session',
       profileId: null,
@@ -703,6 +767,8 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
         provider: 'generic-turn',
         listenAddress: runtimeDefaults.listenAddress,
         peerAddress: runtimeDefaults.peerAddress,
+        turnServer: runtimeDefaults.turnServer,
+        turnPort: runtimeDefaults.turnPort,
       ),
       state: SessionState.ready,
       startedAt: DateTime.utc(2026, 4, 7, 11, 0),
@@ -873,6 +939,8 @@ ProfileSpec _profileSpec() {
     link: 'https://vk.com/call/join/test',
     listenAddress: '127.0.0.1:9001',
     peerAddress: '127.0.0.1:56000',
+    turnServer: 'turn.example.test',
+    turnPort: '3478',
   );
 }
 

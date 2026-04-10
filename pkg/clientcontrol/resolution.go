@@ -160,6 +160,12 @@ func (h *Host) CancelResolution(resolutionID string) (Resolution, error) {
 	event := resolutionSnapshotEvent(snapshot, EventResolutionCancelled, "cancelled")
 	managed.events = appendWithLimit(managed.events, event, h.historyLimit)
 	cancel := managed.cancel
+	done := managed.done
+	select {
+	case <-done:
+	default:
+		close(done)
+	}
 	h.mu.Unlock()
 
 	h.publishEvent(event)
@@ -289,6 +295,11 @@ func (h *Host) finishResolutionSuccess(resolutionID string, resolved provider.Re
 		h.mu.Unlock()
 		return
 	}
+	switch managed.snapshot.State {
+	case ResolutionStateCancelled, ResolutionStateFailed, ResolutionStateExpired:
+		h.mu.Unlock()
+		return
+	}
 	managed.secret = resolved
 	managed.snapshot.Provider = firstNonEmpty(strings.TrimSpace(resolved.Metadata["provider"]), managed.snapshot.Provider)
 	managed.snapshot.ResolutionMethod = strings.TrimSpace(resolved.Metadata["resolution_method"])
@@ -315,10 +326,14 @@ func (h *Host) finishResolutionSuccess(resolutionID string, resolved provider.Re
 	event := resolutionSnapshotEvent(snapshot, eventType, message)
 	managed.events = appendWithLimit(managed.events, event, h.historyLimit)
 	done := managed.done
+	select {
+	case <-done:
+	default:
+		close(done)
+	}
 	h.mu.Unlock()
 
 	h.publishEvent(event)
-	close(done)
 }
 
 func (h *Host) finishResolutionFailure(resolutionID string, err error) {
@@ -355,12 +370,12 @@ func (h *Host) finishResolutionFailure(resolutionID string, err error) {
 	event := resolutionSnapshotEvent(snapshot, eventType, message)
 	if !alreadyClosed {
 		managed.events = appendWithLimit(managed.events, event, h.historyLimit)
+		close(done)
 	}
 	h.mu.Unlock()
 
 	if !alreadyClosed {
 		h.publishEvent(event)
-		close(done)
 	}
 }
 
@@ -533,6 +548,8 @@ func buildMaterializedProfileSpec(credentials provider.Credentials, defaults Run
 		PeerAddr:      defaults.PeerAddr,
 		Ingress:       defaults.Ingress,
 		Connections:   defaults.Connections,
+		TURNServer:    defaults.TURNServer,
+		TURNPort:      defaults.TURNPort,
 		BindInterface: defaults.BindInterface,
 		Mode:          defaults.Mode,
 		UseDTLS:       defaults.UseDTLS,

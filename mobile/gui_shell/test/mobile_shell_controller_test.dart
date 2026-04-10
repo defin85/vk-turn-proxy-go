@@ -463,7 +463,7 @@ void main() {
   );
 
   test(
-    'controller starts resolutions and copies exported handoff links',
+    'controller starts resolutions and exports copied and shared handoff links',
     () async {
       final bridge = _FakeMobileHostBridge(
         resolutionsList: const <ResolutionRecord>[],
@@ -499,12 +499,16 @@ void main() {
 
       final resolutionID = controller.resolutions.single.id;
       await controller.copyResolutionExport(resolutionID);
+      await controller.shareResolutionExport(resolutionID);
 
       expect(handoff.copiedLinks, <String>[
         'generic-turn://turn-user:turn-pass@turn.example.test:3478',
       ]);
+      expect(handoff.sharedLinks, <String>[
+        'generic-turn://turn-user:turn-pass@turn.example.test:3478',
+      ]);
       expect(controller.selectedResolutionId, resolutionID);
-      expect(controller.notice, contains('Copied handoff link'));
+      expect(controller.notice, contains('Shared handoff link'));
     },
   );
 
@@ -928,10 +932,16 @@ class _ThrowingStateStore implements MobileShellStateStore {
 
 class _FakeMobileHandoffAdapter implements MobileHandoffAdapter {
   final List<String> copiedLinks = <String>[];
+  final List<String> sharedLinks = <String>[];
 
   @override
   Future<void> copyLink(String link) async {
     copiedLinks.add(link);
+  }
+
+  @override
+  Future<void> shareLink(String link) async {
+    sharedLinks.add(link);
   }
 }
 

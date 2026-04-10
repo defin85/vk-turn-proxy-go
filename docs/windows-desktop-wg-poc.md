@@ -21,7 +21,8 @@ This workflow does not claim:
 
 - repo-owned `windows_wintun`
 - one-app desktop VPN product support
-- live VK invite resolution inside the desktop shell
+- the live VK invite workflow from `docs/windows-desktop-live-vk-workflow.md`;
+  this PoC starts from an already resolved `generic-turn://...` link
 
 ## Required inputs
 

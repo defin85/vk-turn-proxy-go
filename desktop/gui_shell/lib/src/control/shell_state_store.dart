@@ -11,6 +11,10 @@ class DesktopShellState {
     required this.profiles,
     required this.draft,
     this.selectedProfileId,
+    this.runtimeDefaults = const RuntimeDefaults(
+      listenAddress: '127.0.0.1:9001',
+      peerAddress: '127.0.0.1:56000',
+    ),
   });
 
   factory DesktopShellState.empty() {
@@ -21,26 +25,34 @@ class DesktopShellState {
   }
 
   factory DesktopShellState.fromJson(Map<String, dynamic> json) {
+    final draft = json['draft'] is Map<String, dynamic>
+        ? ProfileDraft.fromJson(json['draft'] as Map<String, dynamic>)
+        : ProfileDraft.defaults();
     return DesktopShellState(
       profiles: (json['profiles'] as List<dynamic>? ?? const <dynamic>[])
           .map((dynamic raw) => ProfileRecord.fromJson(raw as Map<String, dynamic>))
           .toList(growable: false),
       selectedProfileId: json['selected_profile_id'] as String?,
-      draft: json['draft'] is Map<String, dynamic>
-          ? ProfileDraft.fromJson(json['draft'] as Map<String, dynamic>)
-          : ProfileDraft.defaults(),
+      draft: draft,
+      runtimeDefaults: json['runtime_defaults'] is Map<String, dynamic>
+          ? RuntimeDefaults.fromJson(
+              json['runtime_defaults'] as Map<String, dynamic>,
+            )
+          : RuntimeDefaults.fromProfileSpec(draft.spec),
     );
   }
 
   final List<ProfileRecord> profiles;
   final String? selectedProfileId;
   final ProfileDraft draft;
+  final RuntimeDefaults runtimeDefaults;
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'profiles': profiles.map((ProfileRecord profile) => profile.toJson()).toList(growable: false),
       'selected_profile_id': selectedProfileId,
       'draft': draft.toJson(),
+      'runtime_defaults': runtimeDefaults.toJson(),
     };
   }
 
@@ -55,6 +67,7 @@ class DesktopShellState {
           .toList(growable: false),
       selectedProfileId: selectedProfileId,
       draft: _sanitizeDraft(draft),
+      runtimeDefaults: runtimeDefaults,
     );
   }
 }
