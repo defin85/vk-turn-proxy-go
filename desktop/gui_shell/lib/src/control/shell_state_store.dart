@@ -47,6 +47,16 @@ class DesktopShellState {
   String signature() {
     return jsonEncode(toJson());
   }
+
+  DesktopShellState sanitizedForPersistence() {
+    return DesktopShellState(
+      profiles: profiles
+          .map((ProfileRecord profile) => _sanitizeProfile(profile))
+          .toList(growable: false),
+      selectedProfileId: selectedProfileId,
+      draft: _sanitizeDraft(draft),
+    );
+  }
 }
 
 abstract class DesktopShellStateStore {
@@ -78,8 +88,26 @@ class FileDesktopShellStateStore implements DesktopShellStateStore {
     final file = await _fileProvider();
     await file.parent.create(recursive: true);
     final encoder = const JsonEncoder.withIndent('  ');
-    await file.writeAsString('${encoder.convert(state.toJson())}\n');
+    await file.writeAsString(
+      '${encoder.convert(state.sanitizedForPersistence().toJson())}\n',
+    );
   }
+}
+
+ProfileRecord _sanitizeProfile(ProfileRecord profile) {
+  return profile.copyWith(spec: _sanitizeProfileSpec(profile.spec));
+}
+
+ProfileDraft _sanitizeDraft(ProfileDraft draft) {
+  return draft.copyWith(spec: _sanitizeProfileSpec(draft.spec));
+}
+
+ProfileSpec _sanitizeProfileSpec(ProfileSpec spec) {
+  final link = spec.link.trim();
+  if (!link.startsWith('generic-turn://')) {
+    return spec;
+  }
+  return spec.copyWith(link: '');
 }
 
 Future<File> defaultDesktopShellStateFile() async {

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gui_shell/src/control/control_plane_client.dart';
 import 'package:gui_shell/src/control/control_plane_models.dart';
+import 'package:gui_shell/src/control/desktop_handoff_adapter.dart';
 import 'package:gui_shell/src/control/desktop_host_supervisor.dart';
 import 'package:gui_shell/src/control/desktop_shell_controller.dart';
 import 'package:gui_shell/src/control/profile_draft.dart';
@@ -35,6 +36,7 @@ const HostInfo _readyHostInfo = HostInfo(
     Capability.desktopSidecar,
     Capability.platformTunnels,
     Capability.profiles,
+    Capability.providerResolutionHandoff,
     Capability.sessions,
     Capability.challenges,
     Capability.diagnostics,
@@ -338,6 +340,108 @@ void main() {
   );
 
   test(
+    'controller starts, copies, and materializes typed resolutions',
+    () async {
+      final api = _FakeControlPlaneApi(
+        profiles: const <ProfileRecord>[],
+        resolutions: const <ResolutionRecord>[],
+        sessions: const <SessionRecord>[],
+      );
+      final handoff = _FakeDesktopHandoffAdapter();
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(const <HostConnectionResult>[
+          HostConnectionResult(
+            state: HostLifecycleState.ready,
+            message: 'ready',
+            info: _readyHostInfo,
+          ),
+        ]),
+        handoffAdapter: handoff,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      controller.updateDraft(
+        controller.draft.copyWith(
+          spec: controller.draft.spec.copyWith(
+            provider: 'vk',
+            link: 'https://vk.com/call/join/fresh',
+            interactiveProvider: true,
+          ),
+        ),
+      );
+
+      await controller.startResolutionFromDraft();
+      expect(api.startResolutionCalls, hasLength(1));
+      expect(controller.resolutions, hasLength(1));
+
+      final resolutionID = controller.resolutions.single.id;
+      await controller.copyResolutionExport(resolutionID);
+      await controller.materializeResolution(resolutionID);
+
+      expect(handoff.copiedLinks, <String>[
+        'generic-turn://turn-user:turn-pass@turn.example.test:3478',
+      ]);
+      expect(api.materializeResolutionCalls, <String>[resolutionID]);
+      expect(controller.selectedResolutionId, resolutionID);
+      expect(controller.selectedSessionId, 'materialized-session');
+      expect(
+        controller.notice,
+        contains('Started session materialized-session from resolution'),
+      );
+    },
+  );
+
+  test(
+    'controller restores resolution challenge details during refresh',
+    () async {
+      final api = _FakeControlPlaneApi(
+        profiles: const <ProfileRecord>[],
+        resolutions: <ResolutionRecord>[
+          _resolutionRecord(activeChallengeId: 'challenge-resolution-1'),
+        ],
+        sessions: const <SessionRecord>[],
+        challenges: <String, ChallengeRecord>{
+          'challenge-resolution-1': ChallengeRecord(
+            id: 'challenge-resolution-1',
+            sessionId: '',
+            resolutionId: 'resolution-1',
+            provider: 'vk',
+            stage: 'provider_resolve',
+            kind: 'browser',
+            prompt: 'continue in browser',
+            openUrl: 'https://vk.com/call/join/test',
+            status: ChallengeStatus.pending,
+            createdAt: DateTime.utc(2026, 4, 5, 17, 0),
+            updatedAt: DateTime.utc(2026, 4, 5, 17, 1),
+          ),
+        },
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(const <HostConnectionResult>[
+          HostConnectionResult(
+            state: HostLifecycleState.ready,
+            message: 'ready',
+            info: _readyHostInfo,
+          ),
+        ]),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(api.challengeRequests, <String>['challenge-resolution-1']);
+      final challenge = controller.activeChallengeForResolution(
+        controller.resolutions.single,
+      );
+      expect(challenge?.id, 'challenge-resolution-1');
+      expect(challenge?.openUrl, 'https://vk.com/call/join/test');
+    },
+  );
+
+  test(
     'controller export diagnostics includes gui and host build identity',
     () async {
       final api = _FakeControlPlaneApi(
@@ -485,20 +589,28 @@ void main() {
 class _FakeControlPlaneApi implements ControlPlaneApi {
   _FakeControlPlaneApi({
     required List<ProfileRecord> profiles,
+    List<ResolutionRecord>? resolutions,
     required List<SessionRecord> sessions,
     Map<String, ChallengeRecord>? challenges,
   }) : _profiles = List<ProfileRecord>.of(profiles),
+       _resolutions = List<ResolutionRecord>.of(
+         resolutions ?? const <ResolutionRecord>[],
+       ),
        _sessions = List<SessionRecord>.of(sessions),
        _challenges = Map<String, ChallengeRecord>.of(
          challenges ?? <String, ChallengeRecord>{},
        );
 
   final List<ProfileRecord> _profiles;
+  final List<ResolutionRecord> _resolutions;
   final List<SessionRecord> _sessions;
   final Map<String, ChallengeRecord> _challenges;
   final StreamController<EventRecord> _events =
       StreamController<EventRecord>.broadcast();
   final List<String> challengeRequests = <String>[];
+  final List<_StartResolutionCall> startResolutionCalls =
+      <_StartResolutionCall>[];
+  final List<String> materializeResolutionCalls = <String>[];
   final List<PlatformTunnelMode> startPlatformTunnelCalls =
       <PlatformTunnelMode>[];
   final List<ProfileRecord> upsertedProfiles = <ProfileRecord>[];
@@ -533,6 +645,26 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   Future<void> deleteProfile(String profileId) async {}
 
   @override
+  Future<ResolutionRecord> cancelResolution(String resolutionId) async {
+    final index = _resolutions.indexWhere(
+      (ResolutionRecord resolution) => resolution.id == resolutionId,
+    );
+    if (index < 0) {
+      throw const ControlPlaneError(
+        statusCode: 404,
+        code: 'not_found',
+        message: 'resolution not found',
+      );
+    }
+    final updated = _resolutionRecord(
+      id: _resolutions[index].id,
+      state: ResolutionState.cancelled,
+    );
+    _resolutions[index] = updated;
+    return updated;
+  }
+
+  @override
   Future<DiagnosticsBundle> diagnostics(String sessionId) async {
     return DiagnosticsBundle(
       session: _sessions.first,
@@ -557,11 +689,47 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   }
 
   @override
+  Future<SessionRecord> materializeResolution({
+    required String resolutionId,
+    required RuntimeDefaults runtimeDefaults,
+  }) async {
+    materializeResolutionCalls.add(resolutionId);
+    final session = SessionRecord(
+      id: 'materialized-session',
+      profileId: null,
+      profileName: 'materialized',
+      sourceResolutionId: resolutionId,
+      profile: _profileSpec().copyWith(
+        provider: 'generic-turn',
+        listenAddress: runtimeDefaults.listenAddress,
+        peerAddress: runtimeDefaults.peerAddress,
+      ),
+      state: SessionState.ready,
+      startedAt: DateTime.utc(2026, 4, 7, 11, 0),
+      updatedAt: DateTime.utc(2026, 4, 7, 11, 0),
+    );
+    _sessions
+      ..clear()
+      ..add(session);
+    return session;
+  }
+
+  @override
   Future<HostInfo> negotiate({
     required List<String> supportedVersions,
     required List<Capability> requiredCapabilities,
   }) {
     return hostInfo();
+  }
+
+  @override
+  Future<ResolutionExportResult> exportResolution(String resolutionId) async {
+    return ResolutionExportResult(
+      resolutionId: resolutionId,
+      link: 'generic-turn://turn-user:turn-pass@turn.example.test:3478',
+      expiresAt: DateTime.utc(2026, 4, 10, 20, 17, 6),
+      expirySource: 'vk_turn_rest_username',
+    );
   }
 
   @override
@@ -588,6 +756,33 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
       );
     }
     return _profiles;
+  }
+
+  @override
+  Future<List<ResolutionRecord>> resolutions() async => _resolutions;
+
+  @override
+  Future<ResolutionRecord> startResolution({
+    required String provider,
+    required String link,
+    required bool interactiveProvider,
+  }) async {
+    startResolutionCalls.add(
+      _StartResolutionCall(
+        provider: provider,
+        link: link,
+        interactiveProvider: interactiveProvider,
+      ),
+    );
+    final resolution = _resolutionRecord(
+      id: 'resolution-${startResolutionCalls.length}',
+      provider: provider,
+      linkRedacted: link,
+    );
+    _resolutions
+      ..clear()
+      ..add(resolution);
+    return resolution;
   }
 
   @override
@@ -646,6 +841,15 @@ class _FakeShellStateStore implements DesktopShellStateStore {
   }
 }
 
+class _FakeDesktopHandoffAdapter implements DesktopHandoffAdapter {
+  final List<String> copiedLinks = <String>[];
+
+  @override
+  Future<void> copyLink(String link) async {
+    copiedLinks.add(link);
+  }
+}
+
 class _SequencedHostSupervisor implements HostSupervisor {
   _SequencedHostSupervisor(this._results);
 
@@ -670,4 +874,55 @@ ProfileSpec _profileSpec() {
     listenAddress: '127.0.0.1:9001',
     peerAddress: '127.0.0.1:56000',
   );
+}
+
+ResolutionRecord _resolutionRecord({
+  String id = 'resolution-1',
+  String provider = 'vk',
+  String linkRedacted = 'https://vk.com/call/join/<redacted:invite-token>',
+  ResolutionState state = ResolutionState.resolved,
+  String? activeChallengeId,
+}) {
+  return ResolutionRecord(
+    id: id,
+    provider: provider,
+    input: ResolutionInput(
+      provider: provider,
+      linkRedacted: linkRedacted,
+      interactiveProvider: true,
+    ),
+    state: state,
+    credentials: const ResolutionCredentials(
+      address: 'turn.example.test:3478',
+      usernameRedacted: '<redacted:turn-username>',
+      passwordRedacted: '<redacted:turn-password>',
+    ),
+    export: ResolutionExportStatus(
+      supported: state == ResolutionState.resolved,
+      expiresAt: state == ResolutionState.resolved
+          ? DateTime.utc(2026, 4, 10, 20, 17, 6)
+          : null,
+      expirySource: state == ResolutionState.resolved
+          ? 'vk_turn_rest_username'
+          : null,
+    ),
+    activeChallengeId: activeChallengeId,
+    startedAt: DateTime.utc(2026, 4, 10, 12, 0),
+    updatedAt: DateTime.utc(2026, 4, 10, 12, 1),
+    resolvedAt: state == ResolutionState.resolved
+        ? DateTime.utc(2026, 4, 10, 12, 1)
+        : null,
+  );
+}
+
+class _StartResolutionCall {
+  const _StartResolutionCall({
+    required this.provider,
+    required this.link,
+    required this.interactiveProvider,
+  });
+
+  final String provider;
+  final String link;
+  final bool interactiveProvider;
 }

@@ -84,6 +84,26 @@ func Handler(host *Host) http.Handler {
 			writeMethodNotAllowed(w, r.Method)
 		}
 	})
+	mux.HandleFunc("/v1/resolutions", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			writeJSON(w, http.StatusOK, host.Resolutions())
+		case http.MethodPost:
+			var req StartResolutionRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_json", err)
+				return
+			}
+			resolution, err := host.StartResolution(context.WithoutCancel(r.Context()), req)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "start_resolution_failed", err)
+				return
+			}
+			writeJSON(w, http.StatusAccepted, resolution)
+		default:
+			writeMethodNotAllowed(w, r.Method)
+		}
+	})
 	mux.HandleFunc("/v1/sessions", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -103,6 +123,84 @@ func Handler(host *Host) http.Handler {
 			writeJSON(w, http.StatusAccepted, session)
 		default:
 			writeMethodNotAllowed(w, r.Method)
+		}
+	})
+	mux.HandleFunc("/v1/resolutions/", func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/v1/resolutions/")
+		if path == "" {
+			http.NotFound(w, r)
+			return
+		}
+		switch {
+		case strings.HasSuffix(path, "/cancel"):
+			if r.Method != http.MethodPost {
+				writeMethodNotAllowed(w, r.Method)
+				return
+			}
+			resolutionID := strings.TrimSuffix(path, "/cancel")
+			resolutionID = strings.TrimSuffix(resolutionID, "/")
+			resolution, err := host.CancelResolution(resolutionID)
+			if err != nil {
+				writeNotFound(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, resolution)
+		case strings.HasSuffix(path, "/export"):
+			if r.Method != http.MethodPost {
+				writeMethodNotAllowed(w, r.Method)
+				return
+			}
+			resolutionID := strings.TrimSuffix(path, "/export")
+			resolutionID = strings.TrimSuffix(resolutionID, "/")
+			result, err := host.ExportResolution(resolutionID)
+			if err != nil {
+				switch {
+				case errors.Is(err, ErrResolutionNotFound):
+					writeNotFound(w, err)
+				case errors.Is(err, errResolutionNotTransportReady), errors.Is(err, errResolutionExpired), errors.Is(err, errResolutionExportUnavailable):
+					writeError(w, http.StatusConflict, "resolution_export_unavailable", err)
+				default:
+					writeError(w, http.StatusInternalServerError, "resolution_export_failed", err)
+				}
+				return
+			}
+			writeJSON(w, http.StatusOK, result)
+		case strings.HasSuffix(path, "/materialize"):
+			if r.Method != http.MethodPost {
+				writeMethodNotAllowed(w, r.Method)
+				return
+			}
+			resolutionID := strings.TrimSuffix(path, "/materialize")
+			resolutionID = strings.TrimSuffix(resolutionID, "/")
+			var req MaterializeResolutionRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_json", err)
+				return
+			}
+			session, err := host.MaterializeResolution(context.WithoutCancel(r.Context()), resolutionID, req.RuntimeDefaults)
+			if err != nil {
+				switch {
+				case errors.Is(err, ErrResolutionNotFound):
+					writeNotFound(w, err)
+				case errors.Is(err, errResolutionNotTransportReady), errors.Is(err, errResolutionExpired):
+					writeError(w, http.StatusConflict, "resolution_materialize_unavailable", err)
+				default:
+					writeError(w, http.StatusBadRequest, "resolution_materialize_failed", err)
+				}
+				return
+			}
+			writeJSON(w, http.StatusAccepted, session)
+		default:
+			if r.Method != http.MethodGet {
+				writeMethodNotAllowed(w, r.Method)
+				return
+			}
+			resolution, err := host.Resolution(strings.TrimSuffix(path, "/"))
+			if err != nil {
+				writeNotFound(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, resolution)
 		}
 	})
 	mux.HandleFunc("/v1/platform-tunnels/start", func(w http.ResponseWriter, r *http.Request) {

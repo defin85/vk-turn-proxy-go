@@ -7,7 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -164,12 +163,5 @@ func writeProbeArtifact(outputDir string, providerName string, artifact *provide
 }
 
 func genericTurnLink(credentials provider.Credentials) string {
-	if credentials.Username == "" || credentials.Password == "" || credentials.Address == "" {
-		return ""
-	}
-	return (&url.URL{
-		Scheme: "generic-turn",
-		User:   url.UserPassword(credentials.Username, credentials.Password),
-		Host:   credentials.Address,
-	}).String()
+	return genericturn.FormatLink(credentials)
 }

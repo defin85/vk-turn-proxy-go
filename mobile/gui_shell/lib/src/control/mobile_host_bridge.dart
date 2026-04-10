@@ -175,6 +175,7 @@ class HttpMobileHostBridge implements MobileHostBridge {
       Capability.mobileHostBridge,
       Capability.platformTunnels,
       Capability.profiles,
+      Capability.providerResolutionHandoff,
       Capability.sessions,
       Capability.challenges,
       Capability.diagnostics,
@@ -209,6 +210,45 @@ class HttpMobileHostBridge implements MobileHostBridge {
   @override
   Future<void> deleteProfile(String profileId) {
     return _client.deleteProfile(profileId);
+  }
+
+  @override
+  Future<List<ResolutionRecord>> resolutions() {
+    return _client.resolutions();
+  }
+
+  @override
+  Future<ResolutionRecord> startResolution({
+    required String provider,
+    required String link,
+    required bool interactiveProvider,
+  }) {
+    return _client.startResolution(
+      provider: provider,
+      link: link,
+      interactiveProvider: interactiveProvider,
+    );
+  }
+
+  @override
+  Future<ResolutionRecord> cancelResolution(String resolutionId) {
+    return _client.cancelResolution(resolutionId);
+  }
+
+  @override
+  Future<ResolutionExportResult> exportResolution(String resolutionId) {
+    return _client.exportResolution(resolutionId);
+  }
+
+  @override
+  Future<SessionRecord> materializeResolution({
+    required String resolutionId,
+    required RuntimeDefaults runtimeDefaults,
+  }) {
+    return _client.materializeResolution(
+      resolutionId: resolutionId,
+      runtimeDefaults: runtimeDefaults,
+    );
   }
 
   @override
@@ -341,6 +381,9 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
   Future<void> deleteProfile(String profileId) => _fail();
 
   @override
+  Future<ResolutionRecord> cancelResolution(String resolutionId) => _fail();
+
+  @override
   Future<DiagnosticsBundle> diagnostics(String sessionId) => _fail();
 
   @override
@@ -368,6 +411,10 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
   }) => _fail();
 
   @override
+  Future<ResolutionExportResult> exportResolution(String resolutionId) =>
+      _fail();
+
+  @override
   Future<PlatformTunnelStartResult> startPlatformTunnel({
     required PlatformTunnelMode mode,
   }) => _fail();
@@ -376,11 +423,27 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
   Future<List<ProfileRecord>> profiles() => _fail();
 
   @override
+  Future<List<ResolutionRecord>> resolutions() => _fail();
+
+  @override
   Future<List<SessionRecord>> sessions() => _fail();
+
+  @override
+  Future<ResolutionRecord> startResolution({
+    required String provider,
+    required String link,
+    required bool interactiveProvider,
+  }) => _fail();
 
   @override
   Future<SessionRecord> startSession({String? profileId, ProfileSpec? spec}) =>
       _fail();
+
+  @override
+  Future<SessionRecord> materializeResolution({
+    required String resolutionId,
+    required RuntimeDefaults runtimeDefaults,
+  }) => _fail();
 
   @override
   Future<SessionRecord> stopSession(String sessionId) => _fail();

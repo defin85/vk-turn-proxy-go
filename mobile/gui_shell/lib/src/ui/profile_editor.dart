@@ -16,6 +16,7 @@ class ProfileEditorPanel extends StatefulWidget {
     required this.onSave,
     required this.onDelete,
     required this.onReset,
+    required this.onResolve,
     required this.onStart,
   });
 
@@ -28,6 +29,7 @@ class ProfileEditorPanel extends StatefulWidget {
   final Future<void> Function() onSave;
   final Future<void> Function() onDelete;
   final VoidCallback onReset;
+  final Future<void> Function() onResolve;
   final Future<void> Function() onStart;
 
   @override
@@ -280,6 +282,12 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                             ? null
                             : () => unawaited(widget.onSave()),
                         child: const Text('Save profile'),
+                      ),
+                      FilledButton.tonal(
+                        onPressed: widget.busy
+                            ? null
+                            : () => unawaited(widget.onResolve()),
+                        child: const Text('Resolve invite'),
                       ),
                       FilledButton.tonal(
                         onPressed:

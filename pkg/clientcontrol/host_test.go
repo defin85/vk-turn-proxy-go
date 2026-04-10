@@ -2,6 +2,7 @@ package clientcontrol
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
+	"github.com/defin85/vk-turn-proxy-go/internal/provider/genericturn"
 	"github.com/defin85/vk-turn-proxy-go/internal/transport"
 )
 
@@ -524,6 +526,284 @@ func TestHostRejectsSessionIDAllocationCollision(t *testing.T) {
 	}
 }
 
+func TestHostStartsResolvesExportsAndMaterializesResolution(t *testing.T) {
+	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
+	host := New(
+		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+		WithBuildIdentity(testBuildIdentity()),
+		withNow(func() time.Time { return now }),
+		WithSessionIDSource(func() string { return "materialized-session" }),
+		withRegistry(provider.NewRegistry(
+			genericturn.New(),
+			fakeAdapter{
+				name: "vk",
+				resolve: func(ctx context.Context, link string) (provider.Resolution, error) {
+					return provider.Resolution{
+						Credentials: provider.Credentials{
+							Username: "turn-user",
+							Password: "turn-pass",
+							Address:  "turn.example.test:3478",
+							TTL:      45 * time.Minute,
+						},
+						Metadata: map[string]string{
+							"provider":                      "vk",
+							"resolution_method":             "staged_http",
+							"turn_credential_expires_at":    now.Add(45 * time.Minute).Format(time.RFC3339),
+							"turn_credential_expiry_source": "turn_rest_username",
+						},
+					}, nil
+				},
+			},
+		)),
+		withRunnerFactory(func(cfg transport.ClientConfig) transport.Runner {
+			return fakeRunner{run: func(ctx context.Context) error {
+				if cfg.Hooks.OnReady != nil {
+					cfg.Hooks.OnReady()
+				}
+				<-ctx.Done()
+				return nil
+			}}
+		}),
+	)
+
+	resolutionState, err := host.StartResolution(context.Background(), StartResolutionRequest{
+		Provider: "vk",
+		Link:     "https://vk.com/call/join/test-token",
+	})
+	if err != nil {
+		t.Fatalf("StartResolution() error = %v", err)
+	}
+
+	resolved := waitForResolutionState(t, host, resolutionState.ID, ResolutionStateResolved)
+	if strings.Contains(resolved.Input.LinkRedacted, "test-token") {
+		t.Fatalf("resolution input leaked invite token: %q", resolved.Input.LinkRedacted)
+	}
+	if resolved.Credentials == nil {
+		t.Fatal("resolved credentials missing")
+	}
+	if resolved.Credentials.Address != "turn.example.test:3478" {
+		t.Fatalf("resolution address = %q, want turn.example.test:3478", resolved.Credentials.Address)
+	}
+	if resolved.Credentials.UsernameRedacted != redactedTurnUsername {
+		t.Fatalf("resolution username redaction = %q", resolved.Credentials.UsernameRedacted)
+	}
+	if !resolved.Export.Supported {
+		t.Fatal("resolution export supported = false, want true")
+	}
+
+	exported, err := host.ExportResolution(resolved.ID)
+	if err != nil {
+		t.Fatalf("ExportResolution() error = %v", err)
+	}
+	if exported.Link != "generic-turn://turn-user:turn-pass@turn.example.test:3478" {
+		t.Fatalf("exported link = %q", exported.Link)
+	}
+	if exported.ExpirySource != "turn_rest_username" {
+		t.Fatalf("exported expiry_source = %q, want turn_rest_username", exported.ExpirySource)
+	}
+
+	sessionState, err := host.MaterializeResolution(context.Background(), resolved.ID, RuntimeDefaults{
+		ListenAddr:  reserveUDPAddr(t),
+		PeerAddr:    "127.0.0.1:56000",
+		Connections: 1,
+		Mode:        TransportModeAuto,
+		UseDTLS:     boolRef(true),
+	})
+	if err != nil {
+		t.Fatalf("MaterializeResolution() error = %v", err)
+	}
+
+	ready := waitForSessionState(t, host, sessionState.ID, SessionStateReady)
+	if ready.SourceResolutionID != resolved.ID {
+		t.Fatalf("session source_resolution_id = %q, want %q", ready.SourceResolutionID, resolved.ID)
+	}
+	if strings.Contains(ready.Profile.Link, "generic-turn://turn-user:turn-pass@") {
+		t.Fatalf("session profile leaked handoff secret: %q", ready.Profile.Link)
+	}
+
+	diagnostics, err := host.ExportDiagnostics(ready.ID)
+	if err != nil {
+		t.Fatalf("ExportDiagnostics() error = %v", err)
+	}
+	if diagnostics.Session.SourceResolutionID != resolved.ID {
+		t.Fatalf("diagnostics source_resolution_id = %q, want %q", diagnostics.Session.SourceResolutionID, resolved.ID)
+	}
+	if strings.Contains(diagnostics.Session.Profile.Link, "generic-turn://turn-user:turn-pass@") {
+		t.Fatalf("diagnostics leaked handoff secret: %q", diagnostics.Session.Profile.Link)
+	}
+
+	if _, err := host.StopSession(ready.ID); err != nil {
+		t.Fatalf("StopSession() error = %v", err)
+	}
+	if _, err := host.WaitSession(context.Background(), ready.ID); err != nil {
+		t.Fatalf("WaitSession() error = %v", err)
+	}
+}
+
+func TestHostResolutionChallengeContinuation(t *testing.T) {
+	host := New(
+		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+		WithBuildIdentity(testBuildIdentity()),
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name: "vk",
+			resolve: func(ctx context.Context, link string) (provider.Resolution, error) {
+				handler := provider.BrowserContinuationHandlerFromContext(ctx)
+				if handler == nil {
+					return provider.Resolution{}, io.ErrUnexpectedEOF
+				}
+				if _, err := handler.Continue(ctx, fakeChallenge{
+					provider: "vk",
+					stage:    "vk_calls_get_anonymous_token",
+					kind:     "captcha",
+					prompt:   "complete captcha",
+					openURL:  "https://example.test/challenge",
+				}); err != nil {
+					return provider.Resolution{}, err
+				}
+				return provider.Resolution{
+					Credentials: provider.Credentials{
+						Username: "turn-user",
+						Password: "turn-pass",
+						Address:  "turn.example.test:3478",
+						TTL:      time.Minute,
+					},
+					Metadata: map[string]string{
+						"provider":          "vk",
+						"resolution_method": "browser_continuation",
+					},
+				}, nil
+			},
+		})),
+		withContinuationStarter(func(ctx context.Context, challenge provider.InteractiveChallenge) (browserContinuation, error) {
+			return fakeContinuation{result: &provider.BrowserContinuation{}}, nil
+		}),
+	)
+
+	events, cancel := host.Subscribe(16)
+	defer cancel()
+
+	resolutionState, err := host.StartResolution(context.Background(), StartResolutionRequest{
+		Provider:            "vk",
+		Link:                "https://vk.com/call/join/test-token",
+		InteractiveProvider: true,
+	})
+	if err != nil {
+		t.Fatalf("StartResolution() error = %v", err)
+	}
+
+	challengeEvent := waitForEvent(t, events, EventChallengeRequired)
+	if challengeEvent.Challenge == nil {
+		t.Fatal("challenge event missing payload")
+	}
+	if challengeEvent.Challenge.ResolutionID != resolutionState.ID {
+		t.Fatalf("challenge resolution_id = %q, want %q", challengeEvent.Challenge.ResolutionID, resolutionState.ID)
+	}
+
+	challenge, err := host.ContinueChallenge(challengeEvent.Challenge.ID)
+	if err != nil {
+		t.Fatalf("ContinueChallenge() error = %v", err)
+	}
+	if challenge.Status != ChallengeStatusContinuing {
+		t.Fatalf("challenge status = %q, want continuing", challenge.Status)
+	}
+
+	waitForEvent(t, events, EventChallengeUpdated)
+	waitForEvent(t, events, EventResolutionResolved)
+	waitForResolutionState(t, host, resolutionState.ID, ResolutionStateResolved)
+}
+
+func TestHostResolutionExportFailsWithoutAuthoritativeExpiry(t *testing.T) {
+	host := New(
+		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+		WithBuildIdentity(testBuildIdentity()),
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name: "vk",
+			resolve: func(ctx context.Context, link string) (provider.Resolution, error) {
+				return provider.Resolution{
+					Credentials: provider.Credentials{
+						Username: "turn-user",
+						Password: "turn-pass",
+						Address:  "turn.example.test:3478",
+					},
+					Metadata: map[string]string{
+						"provider":          "vk",
+						"resolution_method": "staged_http",
+					},
+				}, nil
+			},
+		})),
+	)
+
+	resolutionState, err := host.StartResolution(context.Background(), StartResolutionRequest{
+		Provider: "vk",
+		Link:     "https://vk.com/call/join/test-token",
+	})
+	if err != nil {
+		t.Fatalf("StartResolution() error = %v", err)
+	}
+	waitForResolutionState(t, host, resolutionState.ID, ResolutionStateResolved)
+
+	if _, err := host.ExportResolution(resolutionState.ID); !errors.Is(err, errResolutionExportUnavailable) {
+		t.Fatalf("ExportResolution() error = %v, want export unavailable", err)
+	}
+}
+
+func TestHostResolutionExpiresAndFailsClosed(t *testing.T) {
+	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
+	host := New(
+		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+		WithBuildIdentity(testBuildIdentity()),
+		withNow(func() time.Time { return now }),
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name: "vk",
+			resolve: func(ctx context.Context, link string) (provider.Resolution, error) {
+				return provider.Resolution{
+					Credentials: provider.Credentials{
+						Username: "turn-user",
+						Password: "turn-pass",
+						Address:  "turn.example.test:3478",
+						TTL:      time.Minute,
+					},
+					Metadata: map[string]string{
+						"provider":          "vk",
+						"resolution_method": "staged_http",
+					},
+				}, nil
+			},
+		})),
+	)
+
+	resolutionState, err := host.StartResolution(context.Background(), StartResolutionRequest{
+		Provider: "vk",
+		Link:     "https://vk.com/call/join/test-token",
+	})
+	if err != nil {
+		t.Fatalf("StartResolution() error = %v", err)
+	}
+	waitForResolutionState(t, host, resolutionState.ID, ResolutionStateResolved)
+
+	now = now.Add(2 * time.Minute)
+	expired, err := host.Resolution(resolutionState.ID)
+	if err != nil {
+		t.Fatalf("Resolution() error = %v", err)
+	}
+	if expired.State != ResolutionStateExpired {
+		t.Fatalf("resolution state = %q, want expired", expired.State)
+	}
+	if _, err := host.ExportResolution(resolutionState.ID); !errors.Is(err, errResolutionExpired) {
+		t.Fatalf("ExportResolution() error = %v, want expired", err)
+	}
+	if _, err := host.MaterializeResolution(context.Background(), resolutionState.ID, RuntimeDefaults{
+		ListenAddr:  reserveUDPAddr(t),
+		PeerAddr:    "127.0.0.1:56000",
+		Connections: 1,
+		Mode:        TransportModeAuto,
+		UseDTLS:     boolRef(true),
+	}); !errors.Is(err, errResolutionExpired) {
+		t.Fatalf("MaterializeResolution() error = %v, want expired", err)
+	}
+}
+
 func waitForEvent(t *testing.T, events <-chan Event, eventType EventType) Event {
 	t.Helper()
 	deadline := time.After(3 * time.Second)
@@ -535,6 +815,25 @@ func waitForEvent(t *testing.T, events <-chan Event, eventType EventType) Event 
 			if event.Type == eventType {
 				return event
 			}
+		}
+	}
+}
+
+func waitForResolutionState(t *testing.T, host *Host, resolutionID string, want ResolutionState) Resolution {
+	t.Helper()
+	deadline := time.After(3 * time.Second)
+	for {
+		resolutionState, err := host.Resolution(resolutionID)
+		if err != nil {
+			t.Fatalf("Resolution() error = %v", err)
+		}
+		if resolutionState.State == want {
+			return resolutionState
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("timed out waiting for resolution %s state %s; got %s", resolutionID, want, resolutionState.State)
+		case <-time.After(10 * time.Millisecond):
 		}
 	}
 }

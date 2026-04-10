@@ -108,7 +108,7 @@ func buildArtifact(host string, port string, address string) *provider.ProbeArti
 		Provider:         providerName,
 		ResolutionMethod: "static_link",
 		Input: provider.ProbeArtifactInput{
-			LinkRedacted: fmt.Sprintf("%s://%s:%s@%s", providerName, placeholderUsername, placeholderPassword, net.JoinHostPort(host, port)),
+			LinkRedacted: RedactedLink(net.JoinHostPort(host, port)),
 		},
 		Stages: []provider.ProbeArtifactStage{
 			{

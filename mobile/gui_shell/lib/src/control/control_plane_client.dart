@@ -16,6 +16,18 @@ abstract class ControlPlaneApi {
   Future<List<ProfileRecord>> profiles();
   Future<ProfileRecord> upsertProfile(ProfileRecord profile);
   Future<void> deleteProfile(String profileId);
+  Future<List<ResolutionRecord>> resolutions();
+  Future<ResolutionRecord> startResolution({
+    required String provider,
+    required String link,
+    required bool interactiveProvider,
+  });
+  Future<ResolutionRecord> cancelResolution(String resolutionId);
+  Future<ResolutionExportResult> exportResolution(String resolutionId);
+  Future<SessionRecord> materializeResolution({
+    required String resolutionId,
+    required RuntimeDefaults runtimeDefaults,
+  });
   Future<List<SessionRecord>> sessions();
   Future<SessionRecord> startSession({String? profileId, ProfileSpec? spec});
   Future<SessionRecord> stopSession(String sessionId);
@@ -101,6 +113,61 @@ class ControlPlaneClient implements ControlPlaneApi {
   @override
   Future<void> deleteProfile(String profileId) async {
     await _request('DELETE', '/v1/profiles/$profileId');
+  }
+
+  @override
+  Future<List<ResolutionRecord>> resolutions() async {
+    final payload = await _jsonRequestList('GET', '/v1/resolutions');
+    return payload.map(ResolutionRecord.fromJson).toList(growable: false);
+  }
+
+  @override
+  Future<ResolutionRecord> startResolution({
+    required String provider,
+    required String link,
+    required bool interactiveProvider,
+  }) async {
+    final payload = await _jsonRequest(
+      'POST',
+      '/v1/resolutions',
+      body: <String, dynamic>{
+        'provider': provider,
+        'link': link,
+        if (interactiveProvider) 'interactive_provider': true,
+      },
+    );
+    return ResolutionRecord.fromJson(payload);
+  }
+
+  @override
+  Future<ResolutionRecord> cancelResolution(String resolutionId) async {
+    final payload = await _jsonRequest(
+      'POST',
+      '/v1/resolutions/$resolutionId/cancel',
+    );
+    return ResolutionRecord.fromJson(payload);
+  }
+
+  @override
+  Future<ResolutionExportResult> exportResolution(String resolutionId) async {
+    final payload = await _jsonRequest(
+      'POST',
+      '/v1/resolutions/$resolutionId/export',
+    );
+    return ResolutionExportResult.fromJson(payload);
+  }
+
+  @override
+  Future<SessionRecord> materializeResolution({
+    required String resolutionId,
+    required RuntimeDefaults runtimeDefaults,
+  }) async {
+    final payload = await _jsonRequest(
+      'POST',
+      '/v1/resolutions/$resolutionId/materialize',
+      body: <String, dynamic>{'runtime_defaults': runtimeDefaults.toJson()},
+    );
+    return SessionRecord.fromJson(payload);
   }
 
   @override

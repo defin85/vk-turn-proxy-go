@@ -98,6 +98,14 @@ The helper:
 - waits until `/v1/host` is reachable
 - starts `gui_shell.exe`
 
+Use the companion session helper to upsert and start the packaged
+`generic-turn` desktop profile without manual form editing:
+
+```powershell
+$env:TURN_LINK = 'generic-turn://...'
+powershell -NoProfile -ExecutionPolicy Bypass -File E:\Projects\vk-turn-proxy-go\scripts\windows-desktop-generic-turn.ps1 start -ReplaceExisting
+```
+
 If the bundled files are locked during rebuild, close any running desktop shell
 and `clientd.exe` first, then rebuild again.
 
@@ -116,17 +124,14 @@ and `clientd.exe` first, then rebuild again.
 powershell -NoProfile -ExecutionPolicy Bypass -File E:\Projects\vk-turn-proxy-go\scripts\run-windows-gui-shell.ps1
 ```
 
-4. In the desktop shell, create or update the profile:
+4. Start the repo-owned desktop session helper:
 
-   - `Provider`: `generic-turn`
-   - `Provider link`: `generic-turn://...`
-   - `Local UDP listen`: `127.0.0.1:39010`
-   - `Peer`: `176.109.104.105:56040`
-   - `Connections`: `1`
-   - `Mode`: `udp`
-   - `DTLS`: `on`
+```powershell
+$env:TURN_LINK = 'generic-turn://...'
+powershell -NoProfile -ExecutionPolicy Bypass -File E:\Projects\vk-turn-proxy-go\scripts\windows-desktop-generic-turn.ps1 start -ReplaceExisting
+```
 
-5. Start the saved profile and wait for `ready`.
+5. Confirm the helper reports `ready`.
 6. Import `desktop1-windows.conf` into `WireGuard for Windows`.
 7. Verify that `AllowedIPs` remains `0.0.0.0/1, 128.0.0.0/1`.
 8. Enable the imported `WireGuard` tunnel.
@@ -144,6 +149,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File E:\Projects\vk-turn-proxy-go
 - `gui_shell.exe` starts but nothing listens on `127.0.0.1:7777`
   Start the bundle through `scripts/run-windows-gui-shell.ps1` instead of
   launching the GUI by hand.
+- Session helper fails before `ready`
+  Export diagnostics with
+  `scripts/windows-desktop-generic-turn.ps1 diagnostics` and inspect the
+  latest session failure stage instead of guessing from the GUI alone.
 - Windows bundle in `dist/windows-gui/` stays stale after rebuild
   A running `clientd.exe` or GUI still holds files open during the copy-back
   step. Close the desktop processes, rebuild again, or use the mirrored bundle

@@ -73,6 +73,7 @@ void main() {
       find.textContaining('does not yet claim device-wide tunnel capture'),
       findsOneWidget,
     );
+    expect(find.text('Resolutions'), findsOneWidget);
     expect(find.text('Android VPN Service'), findsOneWidget);
     final tunnelButton = find.text('Request startup', skipOffstage: false);
     expect(tunnelButton, findsOneWidget);
@@ -119,6 +120,10 @@ void main() {
   testWidgets('mobile shell shows freshest sessions first with session metadata', (
     WidgetTester tester,
   ) async {
+    tester.view.physicalSize = const Size(1200, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
     final controller = MobileShellController(
       bridge: _FakeMobileHostBridge(
         sessionsList: <SessionRecord>[
@@ -171,8 +176,6 @@ void main() {
     await controller.initialize();
     await tester.pumpWidget(MobileShellApp(controller: controller));
     await tester.pumpAndSettle();
-    await tester.drag(find.byType(Scrollable).first, const Offset(0, -900));
-    await tester.pumpAndSettle();
     final updatedAt = DateTime.utc(2026, 4, 7, 12, 3).toLocal();
     final updatedLabel =
         'Updated ${updatedAt.year}-${_twoDigits(updatedAt.month)}-${_twoDigits(updatedAt.day)} '
@@ -209,6 +212,7 @@ const HostInfo _readyHostInfo = HostInfo(
     Capability.mobileHostBridge,
     Capability.platformTunnels,
     Capability.profiles,
+    Capability.providerResolutionHandoff,
     Capability.sessions,
     Capability.challenges,
     Capability.diagnostics,
@@ -276,6 +280,11 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   }
 
   @override
+  Future<ResolutionRecord> cancelResolution(String resolutionId) async {
+    throw UnimplementedError();
+  }
+
+  @override
   Future<void> deleteProfile(String profileId) async {}
 
   @override
@@ -318,6 +327,16 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   }
 
   @override
+  Future<ResolutionExportResult> exportResolution(String resolutionId) async {
+    return ResolutionExportResult(
+      resolutionId: resolutionId,
+      link: 'generic-turn://turn-user:turn-pass@turn.example.test:3478',
+      expiresAt: DateTime.utc(2026, 4, 10, 20, 17, 6),
+      expirySource: 'vk_turn_rest_username',
+    );
+  }
+
+  @override
   Future<PlatformTunnelStartResult> startPlatformTunnel({
     required PlatformTunnelMode mode,
   }) async {
@@ -335,6 +354,31 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   Future<List<ProfileRecord>> profiles() async => const <ProfileRecord>[];
 
   @override
+  Future<List<ResolutionRecord>> resolutions() async =>
+      const <ResolutionRecord>[];
+
+  @override
+  Future<ResolutionRecord> startResolution({
+    required String provider,
+    required String link,
+    required bool interactiveProvider,
+  }) async {
+    return ResolutionRecord(
+      id: 'resolution-1',
+      provider: provider,
+      input: ResolutionInput(provider: provider, linkRedacted: link),
+      state: ResolutionState.resolved,
+      export: ResolutionExportStatus(
+        supported: true,
+        expiresAt: DateTime.utc(2026, 4, 10, 20, 17, 6),
+        expirySource: 'vk_turn_rest_username',
+      ),
+      startedAt: DateTime.utc(2026, 4, 10, 12, 0),
+      updatedAt: DateTime.utc(2026, 4, 10, 12, 1),
+    );
+  }
+
+  @override
   Future<List<SessionRecord>> sessions() async => sessionsList;
 
   @override
@@ -348,6 +392,14 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   @override
   Future<SessionRecord> stopSession(String sessionId) async =>
       sessionsList.first;
+
+  @override
+  Future<SessionRecord> materializeResolution({
+    required String resolutionId,
+    required RuntimeDefaults runtimeDefaults,
+  }) async {
+    return sessionsList.first;
+  }
 
   @override
   Future<ProfileRecord> upsertProfile(ProfileRecord profile) async => profile;

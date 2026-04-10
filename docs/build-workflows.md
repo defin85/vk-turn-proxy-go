@@ -70,7 +70,13 @@ For the validated Windows desktop `WireGuard` PoC that keeps system VPN in the
 external `WireGuard for Windows` client and uses the desktop shell only as the
 local transport ingress, follow `docs/windows-desktop-wg-poc.md`.
 That workflow also includes the repo-owned sidecar launch helper
-`scripts/run-windows-gui-shell.ps1`.
+`scripts/run-windows-gui-shell.ps1` and the packaged-session helper
+`scripts/windows-desktop-generic-turn.ps1`.
+
+For the second-step workflow that starts from a real VK invite on WSL, derives
+a short-lived `generic-turn://...` link through `cmd/probe`, and then reuses
+that link on the packaged Windows desktop host, follow
+`docs/windows-desktop-live-vk-workflow.md`.
 
 ## Mobile GUI shell local development
 

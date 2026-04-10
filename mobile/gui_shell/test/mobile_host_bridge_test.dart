@@ -393,6 +393,7 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
       Capability.mobileHostBridge,
       Capability.platformTunnels,
       Capability.profiles,
+      Capability.providerResolutionHandoff,
       Capability.sessions,
       Capability.challenges,
       Capability.diagnostics,
@@ -429,6 +430,11 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
   Future<void> deleteProfile(String profileId) async {}
 
   @override
+  Future<ResolutionRecord> cancelResolution(String resolutionId) {
+    throw UnimplementedError();
+  }
+
+  @override
   Future<DiagnosticsBundle> diagnostics(String sessionId) {
     throw UnimplementedError();
   }
@@ -449,6 +455,11 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
   }
 
   @override
+  Future<ResolutionExportResult> exportResolution(String resolutionId) {
+    throw UnimplementedError();
+  }
+
+  @override
   Future<PlatformTunnelStartResult> startPlatformTunnel({
     required PlatformTunnelMode mode,
   }) async {
@@ -465,10 +476,31 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
   Future<List<ProfileRecord>> profiles() async => const <ProfileRecord>[];
 
   @override
+  Future<List<ResolutionRecord>> resolutions() async =>
+      const <ResolutionRecord>[];
+
+  @override
+  Future<ResolutionRecord> startResolution({
+    required String provider,
+    required String link,
+    required bool interactiveProvider,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
   Future<List<SessionRecord>> sessions() async => const <SessionRecord>[];
 
   @override
   Future<SessionRecord> startSession({String? profileId, ProfileSpec? spec}) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<SessionRecord> materializeResolution({
+    required String resolutionId,
+    required RuntimeDefaults runtimeDefaults,
+  }) {
     throw UnimplementedError();
   }
 

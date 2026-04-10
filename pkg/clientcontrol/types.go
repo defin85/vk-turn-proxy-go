@@ -7,14 +7,15 @@ const ContractVersion = "1"
 type Capability string
 
 const (
-	CapabilityProfiles         Capability = "profiles"
-	CapabilitySessions         Capability = "sessions"
-	CapabilityChallenges       Capability = "challenges"
-	CapabilityDiagnostics      Capability = "diagnostics"
-	CapabilityEventStream      Capability = "event_stream"
-	CapabilityDesktopSidecar   Capability = "desktop_sidecar"
-	CapabilityMobileHostBridge Capability = "mobile_host_bridge"
-	CapabilityPlatformTunnels  Capability = "platform_tunnels"
+	CapabilityProfiles                  Capability = "profiles"
+	CapabilitySessions                  Capability = "sessions"
+	CapabilityChallenges                Capability = "challenges"
+	CapabilityDiagnostics               Capability = "diagnostics"
+	CapabilityEventStream               Capability = "event_stream"
+	CapabilityDesktopSidecar            Capability = "desktop_sidecar"
+	CapabilityMobileHostBridge          Capability = "mobile_host_bridge"
+	CapabilityPlatformTunnels           Capability = "platform_tunnels"
+	CapabilityProviderResolutionHandoff Capability = "provider-resolution-handoff"
 )
 
 type TransportMode string
@@ -44,6 +45,17 @@ const (
 	SessionStateFailed            SessionState = "failed"
 )
 
+type ResolutionState string
+
+const (
+	ResolutionStateStarting          ResolutionState = "starting"
+	ResolutionStateChallengeRequired ResolutionState = "challenge_required"
+	ResolutionStateResolved          ResolutionState = "resolved"
+	ResolutionStateFailed            ResolutionState = "failed"
+	ResolutionStateCancelled         ResolutionState = "cancelled"
+	ResolutionStateExpired           ResolutionState = "expired"
+)
+
 type ChallengeStatus string
 
 const (
@@ -57,13 +69,18 @@ const (
 type EventType string
 
 const (
-	EventSessionStarting   EventType = "session_starting"
-	EventSessionReady      EventType = "session_ready"
-	EventSessionRetrying   EventType = "session_retrying"
-	EventSessionFailed     EventType = "session_failed"
-	EventSessionStopped    EventType = "session_stopped"
-	EventChallengeRequired EventType = "challenge_required"
-	EventChallengeUpdated  EventType = "challenge_updated"
+	EventSessionStarting     EventType = "session_starting"
+	EventSessionReady        EventType = "session_ready"
+	EventSessionRetrying     EventType = "session_retrying"
+	EventSessionFailed       EventType = "session_failed"
+	EventSessionStopped      EventType = "session_stopped"
+	EventResolutionStarting  EventType = "resolution_starting"
+	EventResolutionResolved  EventType = "resolution_resolved"
+	EventResolutionFailed    EventType = "resolution_failed"
+	EventResolutionCancelled EventType = "resolution_cancelled"
+	EventResolutionExpired   EventType = "resolution_expired"
+	EventChallengeRequired   EventType = "challenge_required"
+	EventChallengeUpdated    EventType = "challenge_updated"
 )
 
 type PlatformTunnelMode string
@@ -153,6 +170,40 @@ type Profile struct {
 	Spec ProfileSpec `json:"spec"`
 }
 
+type ResolutionInput struct {
+	Provider            string `json:"provider"`
+	LinkRedacted        string `json:"link_redacted,omitempty"`
+	InteractiveProvider bool   `json:"interactive_provider,omitempty"`
+}
+
+type ResolutionCredentials struct {
+	Address          string `json:"address,omitempty"`
+	UsernameRedacted string `json:"username_redacted,omitempty"`
+	PasswordRedacted string `json:"password_redacted,omitempty"`
+}
+
+type ResolutionExportStatus struct {
+	Supported    bool       `json:"supported"`
+	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
+	ExpirySource string     `json:"expiry_source,omitempty"`
+}
+
+type Resolution struct {
+	ID                string                 `json:"id"`
+	Provider          string                 `json:"provider"`
+	ResolutionMethod  string                 `json:"resolution_method,omitempty"`
+	Input             ResolutionInput        `json:"input"`
+	State             ResolutionState        `json:"state"`
+	Credentials       *ResolutionCredentials `json:"credentials,omitempty"`
+	Export            ResolutionExportStatus `json:"export"`
+	Failure           *FailureInfo           `json:"failure,omitempty"`
+	ActiveChallengeID string                 `json:"active_challenge_id,omitempty"`
+	StartedAt         time.Time              `json:"started_at"`
+	UpdatedAt         time.Time              `json:"updated_at"`
+	ResolvedAt        *time.Time             `json:"resolved_at,omitempty"`
+	ExpiredAt         *time.Time             `json:"expired_at,omitempty"`
+}
+
 type FailureInfo struct {
 	Stage          string `json:"stage,omitempty"`
 	Message        string `json:"message,omitempty"`
@@ -160,44 +211,48 @@ type FailureInfo struct {
 }
 
 type Session struct {
-	ID                string       `json:"id"`
-	ProfileID         string       `json:"profile_id,omitempty"`
-	ProfileName       string       `json:"profile_name,omitempty"`
-	Profile           ProfileSpec  `json:"profile"`
-	State             SessionState `json:"state"`
-	Failure           *FailureInfo `json:"failure,omitempty"`
-	ActiveChallengeID string       `json:"active_challenge_id,omitempty"`
-	StartedAt         time.Time    `json:"started_at"`
-	UpdatedAt         time.Time    `json:"updated_at"`
-	StoppedAt         *time.Time   `json:"stopped_at,omitempty"`
+	ID                 string       `json:"id"`
+	ProfileID          string       `json:"profile_id,omitempty"`
+	ProfileName        string       `json:"profile_name,omitempty"`
+	SourceResolutionID string       `json:"source_resolution_id,omitempty"`
+	Profile            ProfileSpec  `json:"profile"`
+	State              SessionState `json:"state"`
+	Failure            *FailureInfo `json:"failure,omitempty"`
+	ActiveChallengeID  string       `json:"active_challenge_id,omitempty"`
+	StartedAt          time.Time    `json:"started_at"`
+	UpdatedAt          time.Time    `json:"updated_at"`
+	StoppedAt          *time.Time   `json:"stopped_at,omitempty"`
 }
 
 type Challenge struct {
-	ID        string          `json:"id"`
-	SessionID string          `json:"session_id"`
-	Provider  string          `json:"provider"`
-	Stage     string          `json:"stage"`
-	Kind      string          `json:"kind"`
-	Prompt    string          `json:"prompt,omitempty"`
-	OpenURL   string          `json:"open_url,omitempty"`
-	Status    ChallengeStatus `json:"status"`
-	CreatedAt time.Time       `json:"created_at"`
-	UpdatedAt time.Time       `json:"updated_at"`
+	ID           string          `json:"id"`
+	SessionID    string          `json:"session_id"`
+	ResolutionID string          `json:"resolution_id,omitempty"`
+	Provider     string          `json:"provider"`
+	Stage        string          `json:"stage"`
+	Kind         string          `json:"kind"`
+	Prompt       string          `json:"prompt,omitempty"`
+	OpenURL      string          `json:"open_url,omitempty"`
+	Status       ChallengeStatus `json:"status"`
+	CreatedAt    time.Time       `json:"created_at"`
+	UpdatedAt    time.Time       `json:"updated_at"`
 }
 
 type Event struct {
-	ID           string       `json:"id"`
-	Timestamp    time.Time    `json:"timestamp"`
-	SessionID    string       `json:"session_id"`
-	Type         EventType    `json:"type"`
-	State        SessionState `json:"state,omitempty"`
-	Stage        string       `json:"stage,omitempty"`
-	Message      string       `json:"message,omitempty"`
-	Connections  int          `json:"connections,omitempty"`
-	ReadyWorkers int          `json:"ready_workers,omitempty"`
-	Restart      int          `json:"restart,omitempty"`
-	Backoff      string       `json:"backoff,omitempty"`
-	Challenge    *Challenge   `json:"challenge,omitempty"`
+	ID              string          `json:"id"`
+	Timestamp       time.Time       `json:"timestamp"`
+	SessionID       string          `json:"session_id"`
+	ResolutionID    string          `json:"resolution_id,omitempty"`
+	Type            EventType       `json:"type"`
+	State           SessionState    `json:"state,omitempty"`
+	ResolutionState ResolutionState `json:"resolution_state,omitempty"`
+	Stage           string          `json:"stage,omitempty"`
+	Message         string          `json:"message,omitempty"`
+	Connections     int             `json:"connections,omitempty"`
+	ReadyWorkers    int             `json:"ready_workers,omitempty"`
+	Restart         int             `json:"restart,omitempty"`
+	Backoff         string          `json:"backoff,omitempty"`
+	Challenge       *Challenge      `json:"challenge,omitempty"`
 }
 
 type Diagnostics struct {
@@ -213,6 +268,34 @@ type Diagnostics struct {
 type StartSessionRequest struct {
 	ProfileID string       `json:"profile_id,omitempty"`
 	Spec      *ProfileSpec `json:"spec,omitempty"`
+}
+
+type StartResolutionRequest struct {
+	Provider            string `json:"provider"`
+	Link                string `json:"link"`
+	InteractiveProvider bool   `json:"interactive_provider,omitempty"`
+}
+
+type ResolutionExportResult struct {
+	ResolutionID string    `json:"resolution_id"`
+	Link         string    `json:"link"`
+	ExpiresAt    time.Time `json:"expires_at"`
+	ExpirySource string    `json:"expiry_source,omitempty"`
+}
+
+type RuntimeDefaults struct {
+	ListenAddr    string        `json:"listen_addr"`
+	PeerAddr      string        `json:"peer_addr"`
+	Ingress       AdapterKind   `json:"ingress,omitempty"`
+	Connections   int           `json:"connections,omitempty"`
+	BindInterface string        `json:"bind_interface,omitempty"`
+	Mode          TransportMode `json:"mode,omitempty"`
+	UseDTLS       *bool         `json:"use_dtls,omitempty"`
+	LogLevel      string        `json:"log_level,omitempty"`
+}
+
+type MaterializeResolutionRequest struct {
+	RuntimeDefaults RuntimeDefaults `json:"runtime_defaults"`
 }
 
 type PlatformTunnelStartRequest struct {

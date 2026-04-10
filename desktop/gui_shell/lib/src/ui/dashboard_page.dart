@@ -63,7 +63,11 @@ class DashboardPage extends StatelessWidget {
                               onSave: controller.saveDraft,
                               onDelete: controller.deleteSelectedProfile,
                               onReset: controller.resetDraft,
+                              onResolve: controller.startResolutionFromDraft,
                               onStart: controller.startSelectedProfile,
+                            );
+                            final resolutionsPanel = _ResolutionsPanel(
+                              controller: controller,
                             );
                             final sessionsPanel = _SessionsPanel(
                               controller: controller,
@@ -78,7 +82,18 @@ class DashboardPage extends StatelessWidget {
                                 children: <Widget>[
                                   SizedBox(width: 380, child: profilePanel),
                                   const SizedBox(width: 20),
-                                  Expanded(child: sessionsPanel),
+                                  Expanded(
+                                    child: Column(
+                                      children: <Widget>[
+                                        Expanded(
+                                          flex: 4,
+                                          child: resolutionsPanel,
+                                        ),
+                                        const SizedBox(height: 20),
+                                        Expanded(flex: 5, child: sessionsPanel),
+                                      ],
+                                    ),
+                                  ),
                                   const SizedBox(width: 20),
                                   SizedBox(width: 360, child: eventsPanel),
                                 ],
@@ -89,6 +104,11 @@ class DashboardPage extends StatelessWidget {
                               child: Column(
                                 children: <Widget>[
                                   SizedBox(height: 720, child: profilePanel),
+                                  const SizedBox(height: 20),
+                                  SizedBox(
+                                    height: 360,
+                                    child: resolutionsPanel,
+                                  ),
                                   const SizedBox(height: 20),
                                   SizedBox(height: 420, child: sessionsPanel),
                                   const SizedBox(height: 20),
@@ -338,6 +358,98 @@ class _PlatformTunnelCard extends StatelessWidget {
   }
 }
 
+class _ResolutionsPanel extends StatelessWidget {
+  const _ResolutionsPanel({required this.controller});
+
+  final DesktopShellController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              'Resolutions',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Invite resolution stays separate from runtime sessions until you explicitly start on this device or copy a handoff link.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: controller.resolutions.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No provider resolutions yet.',
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    )
+                  : ListView.separated(
+                      itemCount: controller.resolutions.length,
+                      separatorBuilder: (_, int index) =>
+                          const SizedBox(height: 14),
+                      itemBuilder: (BuildContext context, int index) {
+                        final resolution = controller.resolutions[index];
+                        final challenge = controller
+                            .activeChallengeForResolution(resolution);
+                        return _ResolutionCard(
+                          resolution: resolution,
+                          challenge: challenge,
+                          busy:
+                              controller.busy ||
+                              controller.status != ShellStatus.ready,
+                          selected:
+                              controller.selectedResolutionId == resolution.id,
+                          onSelect: () =>
+                              controller.selectResolution(resolution.id),
+                          onCancel: resolution.isTerminal
+                              ? null
+                              : () =>
+                                    controller.cancelResolution(resolution.id),
+                          onMaterialize:
+                              resolution.state == ResolutionState.resolved
+                              ? () => controller.materializeResolution(
+                                  resolution.id,
+                                )
+                              : null,
+                          onCopyExport:
+                              resolution.export.supported &&
+                                  resolution.state == ResolutionState.resolved
+                              ? () => controller.copyResolutionExport(
+                                  resolution.id,
+                                )
+                              : null,
+                          onContinueChallenge: challenge == null
+                              ? null
+                              : () =>
+                                    controller.continueChallenge(challenge.id),
+                          onCancelChallenge: challenge == null
+                              ? null
+                              : () => controller.cancelChallenge(challenge.id),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _SessionsPanel extends StatelessWidget {
   const _SessionsPanel({required this.controller});
 
@@ -402,6 +514,179 @@ class _SessionsPanel extends StatelessWidget {
                     ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ResolutionCard extends StatelessWidget {
+  const _ResolutionCard({
+    required this.resolution,
+    required this.challenge,
+    required this.busy,
+    required this.selected,
+    required this.onSelect,
+    required this.onCancel,
+    required this.onMaterialize,
+    required this.onCopyExport,
+    required this.onContinueChallenge,
+    required this.onCancelChallenge,
+  });
+
+  final ResolutionRecord resolution;
+  final ChallengeRecord? challenge;
+  final bool busy;
+  final bool selected;
+  final VoidCallback onSelect;
+  final Future<void> Function()? onCancel;
+  final Future<void> Function()? onMaterialize;
+  final Future<void> Function()? onCopyExport;
+  final Future<void> Function()? onContinueChallenge;
+  final Future<void> Function()? onCancelChallenge;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final containerColor = selected
+        ? theme.colorScheme.primary.withValues(alpha: 0.08)
+        : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45);
+
+    return Material(
+      color: containerColor,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onSelect,
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      resolution.input.provider,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  _ResolutionStateChip(state: resolution.state),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                resolution.input.linkRedacted.isEmpty
+                    ? resolution.id
+                    : resolution.input.linkRedacted,
+                style: theme.textTheme.bodyMedium,
+              ),
+              if (resolution.credentials != null) ...<Widget>[
+                const SizedBox(height: 4),
+                Text(
+                  'TURN ${resolution.credentials!.address} | ${resolution.credentials!.usernameRedacted}',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
+              if (resolution.export.expiresAt != null) ...<Widget>[
+                const SizedBox(height: 4),
+                Text(
+                  'Export expiry ${resolution.export.expiresAt!.toLocal().toIso8601String()}'
+                  '${resolution.export.expirySource == null ? '' : ' via ${resolution.export.expirySource}'}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+              if (resolution.failure != null) ...<Widget>[
+                const SizedBox(height: 10),
+                Text(
+                  '${resolution.failure!.stage ?? 'failure'}: ${resolution.failure!.message ?? 'unknown'}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: const Color(0xFF7A1F16),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+              if (challenge != null) ...<Widget>[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF1D6),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        'Challenge: ${challenge!.kind}',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(challenge!.prompt ?? challenge!.stage),
+                      if ((challenge!.openUrl ?? '').isNotEmpty) ...<Widget>[
+                        const SizedBox(height: 8),
+                        SelectableText(
+                          challenge!.openUrl!,
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: <Widget>[
+                          FilledButton(
+                            onPressed: busy || onContinueChallenge == null
+                                ? null
+                                : () => unawaited(onContinueChallenge!.call()),
+                            child: const Text('Continue after browser step'),
+                          ),
+                          OutlinedButton(
+                            onPressed: busy || onCancelChallenge == null
+                                ? null
+                                : () => unawaited(onCancelChallenge!.call()),
+                            child: const Text('Cancel challenge'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: <Widget>[
+                  FilledButton.tonal(
+                    onPressed: busy || onMaterialize == null
+                        ? null
+                        : () => unawaited(onMaterialize!.call()),
+                    child: const Text('Start on this device'),
+                  ),
+                  OutlinedButton(
+                    onPressed: busy || onCopyExport == null
+                        ? null
+                        : () => unawaited(onCopyExport!.call()),
+                    child: const Text('Copy handoff'),
+                  ),
+                  if (onCancel != null)
+                    OutlinedButton(
+                      onPressed: busy
+                          ? null
+                          : () => unawaited(onCancel!.call()),
+                      child: const Text('Cancel resolution'),
+                    ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -617,7 +902,9 @@ class _EventsPanel extends StatelessWidget {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                event.sessionId,
+                                event.sessionId.isNotEmpty
+                                    ? event.sessionId
+                                    : (event.resolutionId ?? ''),
                                 style: theme.textTheme.bodySmall,
                               ),
                             ],
@@ -650,6 +937,45 @@ class _SessionStateChip extends StatelessWidget {
       SessionState.stopped => (
         const Color(0xFFE1E6EC),
         const Color(0xFF334A5E),
+      ),
+      _ => (const Color(0xFFE6EDF7), const Color(0xFF245070)),
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        state.value,
+        style: TextStyle(color: foreground, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
+class _ResolutionStateChip extends StatelessWidget {
+  const _ResolutionStateChip({required this.state});
+
+  final ResolutionState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final (Color background, Color foreground) = switch (state) {
+      ResolutionState.resolved => (
+        const Color(0xFFDEF2E1),
+        const Color(0xFF285B38),
+      ),
+      ResolutionState.challengeRequired => (
+        const Color(0xFFFFF1D6),
+        const Color(0xFF7E5514),
+      ),
+      ResolutionState.failed ||
+      ResolutionState.cancelled ||
+      ResolutionState.expired => (
+        const Color(0xFFFFE0DF),
+        const Color(0xFF7A1F16),
       ),
       _ => (const Color(0xFFE6EDF7), const Color(0xFF245070)),
     };

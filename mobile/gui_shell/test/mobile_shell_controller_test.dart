@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_models.dart';
+import 'package:mobile_gui_shell/src/control/mobile_handoff_adapter.dart';
 import 'package:mobile_gui_shell/src/control/mobile_host_bridge.dart';
 import 'package:mobile_gui_shell/src/control/mobile_shell_controller.dart';
 import 'package:mobile_gui_shell/src/control/mobile_shell_state_store.dart';
@@ -33,6 +34,7 @@ const HostInfo _readyHostInfo = HostInfo(
     Capability.mobileHostBridge,
     Capability.platformTunnels,
     Capability.profiles,
+    Capability.providerResolutionHandoff,
     Capability.sessions,
     Capability.challenges,
     Capability.diagnostics,
@@ -461,6 +463,97 @@ void main() {
   );
 
   test(
+    'controller starts resolutions and copies exported handoff links',
+    () async {
+      final bridge = _FakeMobileHostBridge(
+        resolutionsList: const <ResolutionRecord>[],
+      );
+      final handoff = _FakeMobileHandoffAdapter();
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: const <ProfileRecord>[],
+            draft: ProfileDraft.defaults(),
+          ),
+        ),
+        handoffAdapter: handoff,
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      controller.updateDraft(
+        controller.draft.copyWith(
+          spec: controller.draft.spec.copyWith(
+            provider: 'vk',
+            link: 'https://vk.com/call/join/fresh',
+            interactiveProvider: true,
+          ),
+        ),
+      );
+
+      await controller.startResolutionFromDraft();
+      expect(bridge.startResolutionCalls, hasLength(1));
+      expect(controller.resolutions, hasLength(1));
+
+      final resolutionID = controller.resolutions.single.id;
+      await controller.copyResolutionExport(resolutionID);
+
+      expect(handoff.copiedLinks, <String>[
+        'generic-turn://turn-user:turn-pass@turn.example.test:3478',
+      ]);
+      expect(controller.selectedResolutionId, resolutionID);
+      expect(controller.notice, contains('Copied handoff link'));
+    },
+  );
+
+  test(
+    'controller restores mobile resolution challenge details during refresh',
+    () async {
+      final challenge = ChallengeRecord(
+        id: 'challenge-resolution-1',
+        sessionId: '',
+        resolutionId: 'resolution-1',
+        provider: 'vk',
+        stage: 'provider_resolve',
+        kind: 'browser',
+        prompt: 'continue in browser',
+        openUrl: 'https://vk.com/call/join/test',
+        status: ChallengeStatus.pending,
+        createdAt: DateTime.utc(2026, 4, 7, 13, 0),
+        updatedAt: DateTime.utc(2026, 4, 7, 13, 1),
+      );
+      final bridge = _FakeMobileHostBridge(
+        resolutionsList: <ResolutionRecord>[
+          _resolutionRecord(activeChallengeId: challenge.id),
+        ],
+        challengeMap: <String, ChallengeRecord>{challenge.id: challenge},
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: const <ProfileRecord>[],
+            draft: ProfileDraft.defaults(),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(
+        controller
+            .activeChallengeForResolution(controller.resolutions.single)
+            ?.id,
+        challenge.id,
+      );
+    },
+  );
+
+  test(
     'controller consumes typed platform tunnel reports and startup-stage results',
     () async {
       final bridge = _FakeMobileHostBridge();
@@ -615,6 +708,7 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       info: _readyHostInfo,
       description: 'native bridge',
     ),
+    List<ResolutionRecord>? resolutionsList,
     this.sessionsList = const <SessionRecord>[],
     this.challengeMap = const <String, ChallengeRecord>{},
     this.startSessionError,
@@ -638,16 +732,22 @@ class _FakeMobileHostBridge implements MobileHostBridge {
              metrics: 'vk_turn_proxy_runtime_session_starts_total 1',
              hostBuild: _testHostBuild,
              contractVersion: '1',
-           );
+           ),
+       _resolutions = List<ResolutionRecord>.of(
+         resolutionsList ?? const <ResolutionRecord>[],
+       );
 
   final MobileHostConnectionResult ensureReadyResult;
   final List<SessionRecord> sessionsList;
   final Map<String, ChallengeRecord> challengeMap;
   final ControlPlaneError? startSessionError;
   final DiagnosticsBundle diagnosticsBundle;
+  final List<ResolutionRecord> _resolutions;
 
   final List<ProfileRecord> upsertedProfiles = <ProfileRecord>[];
   final List<String> continueChallengeCalls = <String>[];
+  final List<_StartResolutionCall> startResolutionCalls =
+      <_StartResolutionCall>[];
   final List<PlatformTunnelMode> startedPlatformTunnels =
       <PlatformTunnelMode>[];
   int ensureReadyCalls = 0;
@@ -669,6 +769,14 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   Future<ChallengeRecord> continueChallenge(String challengeId) async {
     continueChallengeCalls.add(challengeId);
     return challengeMap[challengeId]!;
+  }
+
+  @override
+  Future<ResolutionRecord> cancelResolution(String resolutionId) async {
+    return _resolutionRecord(
+      id: resolutionId,
+      state: ResolutionState.cancelled,
+    );
   }
 
   @override
@@ -714,6 +822,16 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   }
 
   @override
+  Future<ResolutionExportResult> exportResolution(String resolutionId) async {
+    return ResolutionExportResult(
+      resolutionId: resolutionId,
+      link: 'generic-turn://turn-user:turn-pass@turn.example.test:3478',
+      expiresAt: DateTime.utc(2026, 4, 10, 20, 17, 6),
+      expirySource: 'vk_turn_rest_username',
+    );
+  }
+
+  @override
   Future<PlatformTunnelStartResult> startPlatformTunnel({
     required PlatformTunnelMode mode,
   }) async {
@@ -729,6 +847,33 @@ class _FakeMobileHostBridge implements MobileHostBridge {
 
   @override
   Future<List<ProfileRecord>> profiles() async => const <ProfileRecord>[];
+
+  @override
+  Future<List<ResolutionRecord>> resolutions() async => _resolutions;
+
+  @override
+  Future<ResolutionRecord> startResolution({
+    required String provider,
+    required String link,
+    required bool interactiveProvider,
+  }) async {
+    startResolutionCalls.add(
+      _StartResolutionCall(
+        provider: provider,
+        link: link,
+        interactiveProvider: interactiveProvider,
+      ),
+    );
+    final resolution = _resolutionRecord(
+      id: 'resolution-${startResolutionCalls.length}',
+      provider: provider,
+      linkRedacted: link,
+    );
+    _resolutions
+      ..clear()
+      ..add(resolution);
+    return resolution;
+  }
 
   @override
   Future<List<SessionRecord>> sessions() async => sessionsList;
@@ -748,6 +893,14 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   @override
   Future<SessionRecord> stopSession(String sessionId) async =>
       sessionsList.first;
+
+  @override
+  Future<SessionRecord> materializeResolution({
+    required String resolutionId,
+    required RuntimeDefaults runtimeDefaults,
+  }) async {
+    return sessionsList.first;
+  }
 
   @override
   Future<ProfileRecord> upsertProfile(ProfileRecord profile) async {
@@ -773,6 +926,15 @@ class _ThrowingStateStore implements MobileShellStateStore {
   Future<void> save(MobileShellState state) async {}
 }
 
+class _FakeMobileHandoffAdapter implements MobileHandoffAdapter {
+  final List<String> copiedLinks = <String>[];
+
+  @override
+  Future<void> copyLink(String link) async {
+    copiedLinks.add(link);
+  }
+}
+
 class _RecoverableThrowingStateStore implements MobileShellStateStore {
   _RecoverableThrowingStateStore(this.error);
 
@@ -795,4 +957,55 @@ class _RecoverableThrowingStateStore implements MobileShellStateStore {
 
   @override
   Future<void> save(MobileShellState state) async {}
+}
+
+ResolutionRecord _resolutionRecord({
+  String id = 'resolution-1',
+  String provider = 'vk',
+  String linkRedacted = 'https://vk.com/call/join/<redacted:invite-token>',
+  ResolutionState state = ResolutionState.resolved,
+  String? activeChallengeId,
+}) {
+  return ResolutionRecord(
+    id: id,
+    provider: provider,
+    input: ResolutionInput(
+      provider: provider,
+      linkRedacted: linkRedacted,
+      interactiveProvider: true,
+    ),
+    state: state,
+    credentials: const ResolutionCredentials(
+      address: 'turn.example.test:3478',
+      usernameRedacted: '<redacted:turn-username>',
+      passwordRedacted: '<redacted:turn-password>',
+    ),
+    export: ResolutionExportStatus(
+      supported: state == ResolutionState.resolved,
+      expiresAt: state == ResolutionState.resolved
+          ? DateTime.utc(2026, 4, 10, 20, 17, 6)
+          : null,
+      expirySource: state == ResolutionState.resolved
+          ? 'vk_turn_rest_username'
+          : null,
+    ),
+    activeChallengeId: activeChallengeId,
+    startedAt: DateTime.utc(2026, 4, 10, 12, 0),
+    updatedAt: DateTime.utc(2026, 4, 10, 12, 1),
+    resolvedAt: state == ResolutionState.resolved
+        ? DateTime.utc(2026, 4, 10, 12, 1)
+        : null,
+  );
+}
+
+class _StartResolutionCall {
+  const _StartResolutionCall({
+    required this.provider,
+    required this.link,
+    required this.interactiveProvider,
+  });
+
+  final String provider;
+  final String link;
+  final bool interactiveProvider;
 }

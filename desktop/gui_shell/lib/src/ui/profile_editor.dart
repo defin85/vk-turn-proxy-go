@@ -16,6 +16,7 @@ class ProfileEditorPanel extends StatefulWidget {
     required this.onSave,
     required this.onDelete,
     required this.onReset,
+    required this.onResolve,
     required this.onStart,
   });
 
@@ -28,6 +29,7 @@ class ProfileEditorPanel extends StatefulWidget {
   final Future<void> Function() onSave;
   final Future<void> Function() onDelete;
   final VoidCallback onReset;
+  final Future<void> Function() onResolve;
   final Future<void> Function() onStart;
 
   @override
@@ -142,7 +144,9 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                           controller: _listenController,
                           label: 'Local UDP listen',
                           onChanged: (String value) => _pushDraft(
-                            spec: widget.draft.spec.copyWith(listenAddress: value.trim()),
+                            spec: widget.draft.spec.copyWith(
+                              listenAddress: value.trim(),
+                            ),
                           ),
                         ),
                       ),
@@ -152,7 +156,9 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                           controller: _peerController,
                           label: 'Peer address',
                           onChanged: (String value) => _pushDraft(
-                            spec: widget.draft.spec.copyWith(peerAddress: value.trim()),
+                            spec: widget.draft.spec.copyWith(
+                              peerAddress: value.trim(),
+                            ),
                           ),
                         ),
                       ),
@@ -175,13 +181,16 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                       Expanded(
                         child: DropdownButtonFormField<TransportMode>(
                           initialValue: widget.draft.spec.mode,
-                          decoration: const InputDecoration(labelText: 'TURN mode'),
+                          decoration: const InputDecoration(
+                            labelText: 'TURN mode',
+                          ),
                           items: TransportMode.values
                               .map(
-                                (TransportMode mode) => DropdownMenuItem<TransportMode>(
-                                  value: mode,
-                                  child: Text(mode.value),
-                                ),
+                                (TransportMode mode) =>
+                                    DropdownMenuItem<TransportMode>(
+                                      value: mode,
+                                      child: Text(mode.value),
+                                    ),
                               )
                               .toList(growable: false),
                           onChanged: widget.busy
@@ -190,7 +199,11 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                                   if (mode == null) {
                                     return;
                                   }
-                                  _pushDraft(spec: widget.draft.spec.copyWith(mode: mode));
+                                  _pushDraft(
+                                    spec: widget.draft.spec.copyWith(
+                                      mode: mode,
+                                    ),
+                                  );
                                 },
                         ),
                       ),
@@ -203,7 +216,9 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                           controller: _turnServerController,
                           label: 'TURN override',
                           onChanged: (String value) => _pushDraft(
-                            spec: widget.draft.spec.copyWith(turnServer: value.trim()),
+                            spec: widget.draft.spec.copyWith(
+                              turnServer: value.trim(),
+                            ),
                           ),
                         ),
                       ),
@@ -213,7 +228,9 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                           controller: _turnPortController,
                           label: 'TURN port',
                           onChanged: (String value) => _pushDraft(
-                            spec: widget.draft.spec.copyWith(turnPort: value.trim()),
+                            spec: widget.draft.spec.copyWith(
+                              turnPort: value.trim(),
+                            ),
                           ),
                         ),
                       ),
@@ -223,7 +240,9 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                     controller: _bindInterfaceController,
                     label: 'Bind interface',
                     onChanged: (String value) => _pushDraft(
-                      spec: widget.draft.spec.copyWith(bindInterface: value.trim()),
+                      spec: widget.draft.spec.copyWith(
+                        bindInterface: value.trim(),
+                      ),
                     ),
                   ),
                   _field(
@@ -238,8 +257,8 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                     onChanged: widget.busy
                         ? null
                         : (bool enabled) => _pushDraft(
-                              spec: widget.draft.spec.copyWith(useDtls: enabled),
-                            ),
+                            spec: widget.draft.spec.copyWith(useDtls: enabled),
+                          ),
                     title: const Text('DTLS enabled'),
                   ),
                   SwitchListTile(
@@ -247,8 +266,10 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                     onChanged: widget.busy
                         ? null
                         : (bool enabled) => _pushDraft(
-                              spec: widget.draft.spec.copyWith(interactiveProvider: enabled),
+                            spec: widget.draft.spec.copyWith(
+                              interactiveProvider: enabled,
                             ),
+                          ),
                     title: const Text('Interactive provider challenges'),
                   ),
                   const SizedBox(height: 12),
@@ -257,17 +278,27 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                     runSpacing: 12,
                     children: <Widget>[
                       FilledButton(
-                        onPressed: widget.busy ? null : () => unawaited(widget.onSave()),
+                        onPressed: widget.busy
+                            ? null
+                            : () => unawaited(widget.onSave()),
                         child: const Text('Save profile'),
                       ),
                       FilledButton.tonal(
-                        onPressed: widget.busy || widget.selectedProfileId == null
+                        onPressed: widget.busy
+                            ? null
+                            : () => unawaited(widget.onResolve()),
+                        child: const Text('Resolve invite'),
+                      ),
+                      FilledButton.tonal(
+                        onPressed:
+                            widget.busy || widget.selectedProfileId == null
                             ? null
                             : () => unawaited(widget.onStart()),
                         child: const Text('Start saved profile'),
                       ),
                       OutlinedButton(
-                        onPressed: widget.busy || widget.selectedProfileId == null
+                        onPressed:
+                            widget.busy || widget.selectedProfileId == null
                             ? null
                             : () => unawaited(widget.onDelete()),
                         child: const Text('Delete'),
@@ -289,12 +320,14 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
-                  for (final ProfileRecord profile in widget.profiles) ...<Widget>[
+                  for (final ProfileRecord profile
+                      in widget.profiles) ...<Widget>[
                     const SizedBox(height: 8),
                     Material(
                       color: widget.selectedProfileId == profile.id
                           ? theme.colorScheme.primary.withValues(alpha: 0.08)
-                          : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                          : theme.colorScheme.surfaceContainerHighest
+                                .withValues(alpha: 0.4),
                       borderRadius: BorderRadius.circular(16),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(16),
@@ -305,8 +338,12 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: <Widget>[
                               Text(
-                                profile.name.isEmpty ? profile.id : profile.name,
-                                style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                                profile.name.isEmpty
+                                    ? profile.id
+                                    : profile.name,
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                               const SizedBox(height: 4),
                               Text(
@@ -346,10 +383,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     );
   }
 
-  void _pushDraft({
-    String? name,
-    ProfileSpec? spec,
-  }) {
+  void _pushDraft({String? name, ProfileSpec? spec}) {
     widget.onDraftChanged(
       widget.draft.copyWith(
         name: name ?? widget.draft.name,

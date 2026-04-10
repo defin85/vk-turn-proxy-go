@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
+	"github.com/defin85/vk-turn-proxy-go/internal/provider/genericturn"
 	"github.com/defin85/vk-turn-proxy-go/internal/transport"
 )
 
@@ -62,7 +63,7 @@ func TestHandlerHostAndNegotiate(t *testing.T) {
 
 	body, _ := json.Marshal(NegotiateRequest{
 		SupportedVersions:    []string{ContractVersion},
-		RequiredCapabilities: []Capability{CapabilityMobileHostBridge, CapabilityPlatformTunnels, CapabilityProfiles, CapabilitySessions, CapabilityChallenges, CapabilityDiagnostics, CapabilityEventStream},
+		RequiredCapabilities: []Capability{CapabilityMobileHostBridge, CapabilityPlatformTunnels, CapabilityProfiles, CapabilityProviderResolutionHandoff, CapabilitySessions, CapabilityChallenges, CapabilityDiagnostics, CapabilityEventStream},
 	})
 	req = httptest.NewRequest(http.MethodPost, "/v1/negotiate", bytes.NewReader(body))
 	rec = httptest.NewRecorder()
@@ -87,6 +88,115 @@ func TestHandlerHostAndNegotiate(t *testing.T) {
 	}
 	if startResult.Stage != PlatformTunnelStartupStageCapabilityCheck {
 		t.Fatalf("platform tunnel start stage = %q, want %q", startResult.Stage, PlatformTunnelStartupStageCapabilityCheck)
+	}
+}
+
+func TestHandlerResolutionLifecycle(t *testing.T) {
+	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
+	host := New(
+		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+		WithBuildIdentity(testBuildIdentity()),
+		withNow(func() time.Time { return now }),
+		WithSessionIDSource(func() string { return "resolution-http-session" }),
+		withRegistry(provider.NewRegistry(
+			genericturn.New(),
+			fakeAdapter{
+				name: "vk",
+				resolve: func(ctx context.Context, link string) (provider.Resolution, error) {
+					return provider.Resolution{
+						Credentials: provider.Credentials{
+							Username: "turn-user",
+							Password: "turn-pass",
+							Address:  "turn.example.test:3478",
+							TTL:      time.Hour,
+						},
+						Metadata: map[string]string{
+							"provider":                      "vk",
+							"resolution_method":             "staged_http",
+							"turn_credential_expires_at":    now.Add(time.Hour).Format(time.RFC3339),
+							"turn_credential_expiry_source": "turn_rest_username",
+						},
+					}, nil
+				},
+			},
+		)),
+		withRunnerFactory(func(cfg transport.ClientConfig) transport.Runner {
+			return fakeRunner{run: func(ctx context.Context) error {
+				if cfg.Hooks.OnReady != nil {
+					cfg.Hooks.OnReady()
+				}
+				<-ctx.Done()
+				return nil
+			}}
+		}),
+	)
+	handler := Handler(host)
+
+	payload, _ := json.Marshal(StartResolutionRequest{
+		Provider: "vk",
+		Link:     "https://vk.com/call/join/test-token",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/resolutions", bytes.NewReader(payload))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("POST /v1/resolutions code = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resolutionState Resolution
+	if err := json.Unmarshal(rec.Body.Bytes(), &resolutionState); err != nil {
+		t.Fatalf("decode resolution response: %v", err)
+	}
+	resolutionState = waitForResolutionState(t, host, resolutionState.ID, ResolutionStateResolved)
+
+	req = httptest.NewRequest(http.MethodGet, "/v1/resolutions/"+resolutionState.ID, nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /v1/resolutions/{id} code = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if bytes.Contains(rec.Body.Bytes(), []byte("turn-user:turn-pass@")) {
+		t.Fatalf("GET /v1/resolutions/{id} leaked secret: %s", rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/v1/resolutions/"+resolutionState.ID+"/export", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /v1/resolutions/{id}/export code = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var exportResult ResolutionExportResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &exportResult); err != nil {
+		t.Fatalf("decode resolution export response: %v", err)
+	}
+	if exportResult.Link != "generic-turn://turn-user:turn-pass@turn.example.test:3478" {
+		t.Fatalf("export link = %q", exportResult.Link)
+	}
+	if exportResult.ExpirySource != "turn_rest_username" {
+		t.Fatalf("export expiry_source = %q, want turn_rest_username", exportResult.ExpirySource)
+	}
+
+	payload, _ = json.Marshal(MaterializeResolutionRequest{
+		RuntimeDefaults: RuntimeDefaults{
+			ListenAddr:  reserveUDPAddr(t),
+			PeerAddr:    "127.0.0.1:56000",
+			Connections: 1,
+			Mode:        TransportModeAuto,
+			UseDTLS:     boolRef(true),
+		},
+	})
+	req = httptest.NewRequest(http.MethodPost, "/v1/resolutions/"+resolutionState.ID+"/materialize", bytes.NewReader(payload))
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("POST /v1/resolutions/{id}/materialize code = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var sessionState Session
+	if err := json.Unmarshal(rec.Body.Bytes(), &sessionState); err != nil {
+		t.Fatalf("decode materialized session response: %v", err)
+	}
+	if sessionState.SourceResolutionID != resolutionState.ID {
+		t.Fatalf("materialized session source_resolution_id = %q, want %q", sessionState.SourceResolutionID, resolutionState.ID)
 	}
 }
 

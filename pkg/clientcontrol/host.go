@@ -29,6 +29,7 @@ var (
 	ErrProfileNotFound            = errors.New("client control profile not found")
 	ErrSessionNotFound            = errors.New("client control session not found")
 	ErrChallengeNotFound          = errors.New("client control challenge not found")
+	ErrResolutionNotFound         = errors.New("client control resolution not found")
 	ErrPlatformTunnelModeRequired = errors.New("platform tunnel mode is required")
 	ErrPlatformTunnelModeUnknown  = errors.New("platform tunnel mode is not supported by this contract")
 )
@@ -106,6 +107,7 @@ type Host struct {
 	startTunnel       func(context.Context, PlatformTunnelStartRequest) (PlatformTunnelStartResult, error)
 
 	profiles    map[string]Profile
+	resolutions map[string]*managedResolution
 	sessions    map[string]*managedSession
 	challenges  map[string]*managedChallenge
 	subscribers map[uint64]chan Event
@@ -210,6 +212,7 @@ func New(opts ...Option) *Host {
 		platformTunnels:   cfg.platformTunnels,
 		startTunnel:       cfg.startTunnel,
 		profiles:          make(map[string]Profile),
+		resolutions:       make(map[string]*managedResolution),
 		sessions:          make(map[string]*managedSession),
 		challenges:        make(map[string]*managedChallenge),
 		subscribers:       make(map[uint64]chan Event),
@@ -291,6 +294,7 @@ func (h *Host) Info() HostInfo {
 			CapabilityMobileHostBridge,
 			CapabilityPlatformTunnels,
 			CapabilityProfiles,
+			CapabilityProviderResolutionHandoff,
 			CapabilitySessions,
 		},
 		PlatformTunnels: clonePlatformTunnelCapabilities(h.platformTunnels),
@@ -403,19 +407,27 @@ func (h *Host) StartSession(ctx context.Context, req StartSessionRequest) (Sessi
 	if err != nil {
 		return Session{}, err
 	}
+	return h.startSessionFromSpec(ctx, profileID, profileName, spec, "")
+}
+
+func (h *Host) startSessionFromSpec(ctx context.Context, profileID string, profileName string, spec ProfileSpec, sourceResolutionID string) (Session, error) {
 	startedAt := h.now().UTC()
 	sessionID, err := h.allocateSessionID()
 	if err != nil {
 		return Session{}, err
 	}
 	snapshot := Session{
-		ID:          sessionID,
-		ProfileID:   profileID,
-		ProfileName: profileName,
-		Profile:     spec,
-		State:       SessionStateStarting,
-		StartedAt:   startedAt,
-		UpdatedAt:   startedAt,
+		ID:                 sessionID,
+		ProfileID:          profileID,
+		ProfileName:        profileName,
+		SourceResolutionID: sourceResolutionID,
+		Profile:            spec,
+		State:              SessionStateStarting,
+		StartedAt:          startedAt,
+		UpdatedAt:          startedAt,
+	}
+	if sourceResolutionID != "" {
+		snapshot.Profile.Link = observeSanitizedLink(spec.Link)
 	}
 
 	runCtx, cancel := context.WithCancel(ctx)
@@ -849,6 +861,9 @@ func (h *Host) completeChallenge(challengeID string, status ChallengeStatus, mes
 	managedChallenge.snapshot.UpdatedAt = h.now().UTC()
 	challenge := managedChallenge.snapshot
 	sessionID := challenge.SessionID
+	resolutionID := challenge.ResolutionID
+	sessionState := SessionState("")
+	resolutionState := ResolutionState("")
 	if managedSession, ok := h.sessions[sessionID]; ok {
 		managedSession.snapshot.ActiveChallengeID = ""
 		if status == ChallengeStatusCompleted {
@@ -856,25 +871,40 @@ func (h *Host) completeChallenge(challengeID string, status ChallengeStatus, mes
 		}
 		managedSession.snapshot.UpdatedAt = challenge.UpdatedAt
 		managedSession.challenges = replaceChallenge(managedSession.challenges, challenge)
+		sessionState = managedSession.snapshot.State
 		managedSession.events = appendWithLimit(managedSession.events, Event{
-			ID:        h.newID(),
-			Timestamp: challenge.UpdatedAt,
-			SessionID: sessionID,
-			Type:      EventChallengeUpdated,
-			State:     managedSession.snapshot.State,
-			Message:   message,
-			Challenge: cloneChallenge(&challenge),
+			ID:              h.newID(),
+			Timestamp:       challenge.UpdatedAt,
+			SessionID:       sessionID,
+			ResolutionID:    resolutionID,
+			Type:            EventChallengeUpdated,
+			State:           managedSession.snapshot.State,
+			ResolutionState: resolutionState,
+			Message:         message,
+			Challenge:       cloneChallenge(&challenge),
 		}, h.historyLimit)
+	}
+	if managedResolution, ok := h.resolutions[resolutionID]; ok {
+		managedResolution.snapshot.ActiveChallengeID = ""
+		if status == ChallengeStatusCompleted {
+			managedResolution.snapshot.State = ResolutionStateStarting
+		}
+		managedResolution.snapshot.UpdatedAt = challenge.UpdatedAt
+		managedResolution.challenges = replaceChallenge(managedResolution.challenges, challenge)
+		resolutionState = managedResolution.snapshot.State
 	}
 	h.mu.Unlock()
 
 	h.publishEvent(Event{
-		ID:        h.newID(),
-		Timestamp: challenge.UpdatedAt,
-		SessionID: sessionID,
-		Type:      EventChallengeUpdated,
-		Message:   message,
-		Challenge: cloneChallenge(&challenge),
+		ID:              h.newID(),
+		Timestamp:       challenge.UpdatedAt,
+		SessionID:       sessionID,
+		ResolutionID:    resolutionID,
+		Type:            EventChallengeUpdated,
+		State:           sessionState,
+		ResolutionState: resolutionState,
+		Message:         message,
+		Challenge:       cloneChallenge(&challenge),
 	})
 }
 
@@ -905,8 +935,16 @@ func (h *Host) signalChallenge(challengeID string, action challengeAction, statu
 	managed.snapshot.UpdatedAt = h.now().UTC()
 	challenge := managed.snapshot
 	sessionID := challenge.SessionID
+	resolutionID := challenge.ResolutionID
+	sessionState := SessionState("")
+	resolutionState := ResolutionState("")
 	if managedSession, ok := h.sessions[sessionID]; ok {
 		managedSession.challenges = replaceChallenge(managedSession.challenges, challenge)
+		sessionState = managedSession.snapshot.State
+	}
+	if managedResolution, ok := h.resolutions[resolutionID]; ok {
+		managedResolution.challenges = replaceChallenge(managedResolution.challenges, challenge)
+		resolutionState = managedResolution.snapshot.State
 	}
 	actionCh := managed.actionCh
 	h.mu.Unlock()
@@ -917,15 +955,21 @@ func (h *Host) signalChallenge(challengeID string, action challengeAction, statu
 	}
 
 	event := Event{
-		ID:        h.newID(),
-		Timestamp: challenge.UpdatedAt,
-		SessionID: sessionID,
-		Type:      EventChallengeUpdated,
-		Challenge: cloneChallenge(&challenge),
+		ID:              h.newID(),
+		Timestamp:       challenge.UpdatedAt,
+		SessionID:       sessionID,
+		ResolutionID:    resolutionID,
+		Type:            EventChallengeUpdated,
+		State:           sessionState,
+		ResolutionState: resolutionState,
+		Challenge:       cloneChallenge(&challenge),
 	}
 	h.mu.Lock()
 	if managedSession, ok := h.sessions[sessionID]; ok {
 		managedSession.events = appendWithLimit(managedSession.events, event, h.historyLimit)
+	}
+	if managedResolution, ok := h.resolutions[resolutionID]; ok {
+		managedResolution.events = appendWithLimit(managedResolution.events, event, h.historyLimit)
 	}
 	h.mu.Unlock()
 	h.publishEvent(event)

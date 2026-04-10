@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
 )
@@ -107,11 +108,54 @@ func TestResolveUsesStagedVKFlow(t *testing.T) {
 	if resolution.Credentials.Address != fixture.Expected.Resolution.Address {
 		t.Fatalf("unexpected address %q", resolution.Credentials.Address)
 	}
+	if resolution.Credentials.TTL != 0 {
+		t.Fatalf("resolution.Credentials.TTL = %s, want 0", resolution.Credentials.TTL)
+	}
+	if got := resolution.Metadata[metadataTurnCredentialExpirySource]; got != "" {
+		t.Fatalf("resolution.Metadata[%q] = %q, want empty", metadataTurnCredentialExpirySource, got)
+	}
 	if got := resolution.Metadata["resolution_method"]; got != "staged_http" {
 		t.Fatalf("unexpected resolution method %q", got)
 	}
 	if doer.calls != len(fixture.Stages) {
 		t.Fatalf("unexpected HTTP call count %d", doer.calls)
+	}
+}
+
+func TestResolveDerivesTurnCredentialTTLFromTurnRESTUsername(t *testing.T) {
+	fixture := loadFixture(t, "vk_call_debug_success_v1.json")
+	turnServer, ok := fixture.Stages[3].Response.Body["turn_server"].(map[string]any)
+	if !ok {
+		t.Fatalf("turn_server = %#v, want object", fixture.Stages[3].Response.Body["turn_server"])
+	}
+	turnServer["username"] = "1775852226:584771567964"
+	turnServer["credential"] = "derived-pass"
+
+	doer := &fixtureDoer{t: t, stages: fixture.Stages}
+	adapter := NewWithHTTPDoer(doer)
+
+	originalNowUTC := nowUTC
+	nowUTC = func() time.Time {
+		return time.Date(2026, time.April, 10, 12, 17, 29, 0, time.UTC)
+	}
+	defer func() {
+		nowUTC = originalNowUTC
+	}()
+
+	resolution, err := adapter.Resolve(context.Background(), "https://vk.com/call/join/test-token")
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+
+	wantTTL := 7*time.Hour + 59*time.Minute + 37*time.Second
+	if resolution.Credentials.TTL != wantTTL {
+		t.Fatalf("resolution.Credentials.TTL = %s, want %s", resolution.Credentials.TTL, wantTTL)
+	}
+	if got := resolution.Metadata[metadataTurnCredentialExpirySource]; got != turnCredentialExpirySourceTURNREST {
+		t.Fatalf("resolution.Metadata[%q] = %q, want %q", metadataTurnCredentialExpirySource, got, turnCredentialExpirySourceTURNREST)
+	}
+	if got := resolution.Metadata[metadataTurnCredentialExpiresAt]; got != "2026-04-10T20:17:06Z" {
+		t.Fatalf("resolution.Metadata[%q] = %q, want %q", metadataTurnCredentialExpiresAt, got, "2026-04-10T20:17:06Z")
 	}
 }
 

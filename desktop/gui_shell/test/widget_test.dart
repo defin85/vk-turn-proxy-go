@@ -34,6 +34,7 @@ const HostInfo _readyHostInfo = HostInfo(
     Capability.desktopSidecar,
     Capability.platformTunnels,
     Capability.profiles,
+    Capability.providerResolutionHandoff,
     Capability.sessions,
     Capability.challenges,
     Capability.diagnostics,
@@ -78,6 +79,7 @@ void main() {
     expect(find.text('Host 0.1.0+1 @deadbeefcafe'), findsOneWidget);
     expect(find.text('Contract 1'), findsOneWidget);
     expect(find.text('Platform tunnel modes'), findsOneWidget);
+    expect(find.text('Resolutions'), findsOneWidget);
     expect(find.text('Windows Wintun'), findsOneWidget);
 
     final startButton = find.text('Start saved profile', skipOffstage: false);
@@ -166,6 +168,11 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   }
 
   @override
+  Future<ResolutionRecord> cancelResolution(String resolutionId) async {
+    throw UnimplementedError();
+  }
+
+  @override
   Future<DiagnosticsBundle> diagnostics(String sessionId) async {
     return DiagnosticsBundle(
       session: _sessions.first,
@@ -186,11 +193,29 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   }
 
   @override
+  Future<SessionRecord> materializeResolution({
+    required String resolutionId,
+    required RuntimeDefaults runtimeDefaults,
+  }) async {
+    return _sessions.first;
+  }
+
+  @override
   Future<HostInfo> negotiate({
     required List<String> supportedVersions,
     required List<Capability> requiredCapabilities,
   }) {
     return hostInfo();
+  }
+
+  @override
+  Future<ResolutionExportResult> exportResolution(String resolutionId) async {
+    return ResolutionExportResult(
+      resolutionId: resolutionId,
+      link: 'generic-turn://turn-user:turn-pass@turn.example.test:3478',
+      expiresAt: DateTime.utc(2026, 4, 10, 20, 17, 6),
+      expirySource: 'vk_turn_rest_username',
+    );
   }
 
   @override
@@ -209,6 +234,31 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
 
   @override
   Future<List<ProfileRecord>> profiles() async => _profiles;
+
+  @override
+  Future<List<ResolutionRecord>> resolutions() async =>
+      const <ResolutionRecord>[];
+
+  @override
+  Future<ResolutionRecord> startResolution({
+    required String provider,
+    required String link,
+    required bool interactiveProvider,
+  }) async {
+    return ResolutionRecord(
+      id: 'resolution-1',
+      provider: provider,
+      input: ResolutionInput(provider: provider, linkRedacted: link),
+      state: ResolutionState.resolved,
+      export: ResolutionExportStatus(
+        supported: true,
+        expiresAt: DateTime.utc(2026, 4, 10, 20, 17, 6),
+        expirySource: 'vk_turn_rest_username',
+      ),
+      startedAt: DateTime.utc(2026, 4, 10, 12, 0),
+      updatedAt: DateTime.utc(2026, 4, 10, 12, 1),
+    );
+  }
 
   @override
   Future<SessionRecord> startSession({

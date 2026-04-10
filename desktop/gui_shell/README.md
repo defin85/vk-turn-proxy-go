@@ -47,8 +47,14 @@ For the validated Windows desktop `WireGuard` PoC, use the mirrored Windows
 bundle directly from `E:\Projects\vk-turn-proxy-go\dist\windows-gui` and follow
 `docs/windows-desktop-wg-poc.md`.
 That document captures the required host route, the `WireGuard` profile shape,
-and the repo-owned `scripts/run-windows-gui-shell.ps1` helper that starts a
-fresh bundled `clientd.exe` before `gui_shell.exe`.
+the repo-owned `scripts/run-windows-gui-shell.ps1` helper that starts a fresh
+bundled `clientd.exe` before `gui_shell.exe`, and the companion
+`scripts/windows-desktop-generic-turn.ps1` helper that seeds and starts the
+desktop `generic-turn` session through the local control plane.
+
+For the real-link workflow that first resolves a live VK invite into a
+short-lived `generic-turn://...` link on WSL and then reuses that link on the
+packaged Windows desktop host, follow `docs/windows-desktop-live-vk-workflow.md`.
 
 ## Control-plane contract
 

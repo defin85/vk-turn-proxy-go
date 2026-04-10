@@ -8,7 +8,8 @@ enum Capability {
   eventStream('event_stream'),
   desktopSidecar('desktop_sidecar'),
   mobileHostBridge('mobile_host_bridge'),
-  platformTunnels('platform_tunnels');
+  platformTunnels('platform_tunnels'),
+  providerResolutionHandoff('provider-resolution-handoff');
 
   const Capability(this.value);
 
@@ -66,6 +67,28 @@ enum SessionState {
   }
 }
 
+enum ResolutionState {
+  starting('starting'),
+  challengeRequired('challenge_required'),
+  resolved('resolved'),
+  failed('failed'),
+  cancelled('cancelled'),
+  expired('expired');
+
+  const ResolutionState(this.value);
+
+  final String value;
+
+  static ResolutionState? fromJson(String? raw) {
+    for (final state in values) {
+      if (state.value == raw) {
+        return state;
+      }
+    }
+    return null;
+  }
+}
+
 enum ChallengeStatus {
   pending('pending'),
   continuing('continuing'),
@@ -93,6 +116,11 @@ enum EventType {
   sessionRetrying('session_retrying'),
   sessionFailed('session_failed'),
   sessionStopped('session_stopped'),
+  resolutionStarting('resolution_starting'),
+  resolutionResolved('resolution_resolved'),
+  resolutionFailed('resolution_failed'),
+  resolutionCancelled('resolution_cancelled'),
+  resolutionExpired('resolution_expired'),
   challengeRequired('challenge_required'),
   challengeUpdated('challenge_updated');
 
@@ -612,10 +640,255 @@ class ProfileRecord {
   }
 }
 
+class RuntimeDefaults {
+  const RuntimeDefaults({
+    required this.listenAddress,
+    required this.peerAddress,
+    this.connections = 1,
+    this.bindInterface,
+    this.mode = TransportMode.auto,
+    this.useDtls = true,
+    this.logLevel = 'info',
+  });
+
+  factory RuntimeDefaults.fromProfileSpec(ProfileSpec spec) {
+    return RuntimeDefaults(
+      listenAddress: spec.listenAddress,
+      peerAddress: spec.peerAddress,
+      connections: spec.connections,
+      bindInterface: spec.bindInterface,
+      mode: spec.mode,
+      useDtls: spec.useDtls,
+      logLevel: spec.logLevel,
+    );
+  }
+
+  final String listenAddress;
+  final String peerAddress;
+  final int connections;
+  final String? bindInterface;
+  final TransportMode mode;
+  final bool useDtls;
+  final String logLevel;
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{
+      'listen_addr': listenAddress,
+      'peer_addr': peerAddress,
+      'connections': connections,
+      'bind_interface': bindInterface,
+      'mode': mode.value,
+      'use_dtls': useDtls,
+      'log_level': logLevel,
+    });
+  }
+}
+
+class ResolutionInput {
+  const ResolutionInput({
+    required this.provider,
+    this.linkRedacted = '',
+    this.interactiveProvider = false,
+  });
+
+  factory ResolutionInput.fromJson(Map<String, dynamic> json) {
+    return ResolutionInput(
+      provider: json['provider'] as String? ?? '',
+      linkRedacted: json['link_redacted'] as String? ?? '',
+      interactiveProvider: json['interactive_provider'] as bool? ?? false,
+    );
+  }
+
+  final String provider;
+  final String linkRedacted;
+  final bool interactiveProvider;
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{
+      'provider': provider,
+      'link_redacted': linkRedacted.isEmpty ? null : linkRedacted,
+      'interactive_provider': interactiveProvider ? true : null,
+    });
+  }
+}
+
+class ResolutionCredentials {
+  const ResolutionCredentials({
+    required this.address,
+    this.usernameRedacted = '',
+    this.passwordRedacted = '',
+  });
+
+  factory ResolutionCredentials.fromJson(Map<String, dynamic> json) {
+    return ResolutionCredentials(
+      address: json['address'] as String? ?? '',
+      usernameRedacted: json['username_redacted'] as String? ?? '',
+      passwordRedacted: json['password_redacted'] as String? ?? '',
+    );
+  }
+
+  final String address;
+  final String usernameRedacted;
+  final String passwordRedacted;
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{
+      'address': address,
+      'username_redacted': usernameRedacted.isEmpty ? null : usernameRedacted,
+      'password_redacted': passwordRedacted.isEmpty ? null : passwordRedacted,
+    });
+  }
+}
+
+class ResolutionExportStatus {
+  const ResolutionExportStatus({
+    required this.supported,
+    this.expiresAt,
+    this.expirySource,
+  });
+
+  factory ResolutionExportStatus.fromJson(Map<String, dynamic> json) {
+    return ResolutionExportStatus(
+      supported: json['supported'] as bool? ?? false,
+      expiresAt: json['expires_at'] == null
+          ? null
+          : _readTimestamp(json['expires_at']),
+      expirySource: json['expiry_source'] as String?,
+    );
+  }
+
+  final bool supported;
+  final DateTime? expiresAt;
+  final String? expirySource;
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{
+      'supported': supported,
+      'expires_at': expiresAt?.toUtc().toIso8601String(),
+      'expiry_source': expirySource,
+    });
+  }
+}
+
+class ResolutionRecord {
+  const ResolutionRecord({
+    required this.id,
+    required this.provider,
+    required this.input,
+    required this.state,
+    required this.export,
+    required this.startedAt,
+    required this.updatedAt,
+    this.resolutionMethod,
+    this.credentials,
+    this.failure,
+    this.activeChallengeId,
+    this.resolvedAt,
+    this.expiredAt,
+  });
+
+  factory ResolutionRecord.fromJson(Map<String, dynamic> json) {
+    return ResolutionRecord(
+      id: json['id'] as String? ?? '',
+      provider: json['provider'] as String? ?? '',
+      resolutionMethod: json['resolution_method'] as String?,
+      input: ResolutionInput.fromJson(
+        json['input'] as Map<String, dynamic>? ?? const <String, dynamic>{},
+      ),
+      state:
+          ResolutionState.fromJson(json['state'] as String?) ??
+          ResolutionState.starting,
+      credentials: json['credentials'] is Map<String, dynamic>
+          ? ResolutionCredentials.fromJson(
+              json['credentials'] as Map<String, dynamic>,
+            )
+          : null,
+      export: ResolutionExportStatus.fromJson(
+        json['export'] as Map<String, dynamic>? ?? const <String, dynamic>{},
+      ),
+      failure: json['failure'] is Map<String, dynamic>
+          ? FailureInfo.fromJson(json['failure'] as Map<String, dynamic>)
+          : null,
+      activeChallengeId: json['active_challenge_id'] as String?,
+      startedAt: _readTimestamp(json['started_at']),
+      updatedAt: _readTimestamp(json['updated_at']),
+      resolvedAt: json['resolved_at'] == null
+          ? null
+          : _readTimestamp(json['resolved_at']),
+      expiredAt: json['expired_at'] == null
+          ? null
+          : _readTimestamp(json['expired_at']),
+    );
+  }
+
+  final String id;
+  final String provider;
+  final String? resolutionMethod;
+  final ResolutionInput input;
+  final ResolutionState state;
+  final ResolutionCredentials? credentials;
+  final ResolutionExportStatus export;
+  final FailureInfo? failure;
+  final String? activeChallengeId;
+  final DateTime startedAt;
+  final DateTime updatedAt;
+  final DateTime? resolvedAt;
+  final DateTime? expiredAt;
+
+  bool get isTerminal => switch (state) {
+    ResolutionState.failed ||
+    ResolutionState.cancelled ||
+    ResolutionState.expired => true,
+    _ => false,
+  };
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{
+      'id': id,
+      'provider': provider,
+      'resolution_method': resolutionMethod,
+      'input': input.toJson(),
+      'state': state.value,
+      'credentials': credentials?.toJson(),
+      'export': export.toJson(),
+      'failure': failure?.toJson(),
+      'active_challenge_id': activeChallengeId,
+      'started_at': startedAt.toUtc().toIso8601String(),
+      'updated_at': updatedAt.toUtc().toIso8601String(),
+      'resolved_at': resolvedAt?.toUtc().toIso8601String(),
+      'expired_at': expiredAt?.toUtc().toIso8601String(),
+    });
+  }
+}
+
+class ResolutionExportResult {
+  const ResolutionExportResult({
+    required this.resolutionId,
+    required this.link,
+    required this.expiresAt,
+    this.expirySource,
+  });
+
+  factory ResolutionExportResult.fromJson(Map<String, dynamic> json) {
+    return ResolutionExportResult(
+      resolutionId: json['resolution_id'] as String? ?? '',
+      link: json['link'] as String? ?? '',
+      expiresAt: _readTimestamp(json['expires_at']),
+      expirySource: json['expiry_source'] as String?,
+    );
+  }
+
+  final String resolutionId;
+  final String link;
+  final DateTime expiresAt;
+  final String? expirySource;
+}
+
 class ChallengeRecord {
   const ChallengeRecord({
     required this.id,
     required this.sessionId,
+    this.resolutionId,
     required this.provider,
     required this.stage,
     required this.kind,
@@ -630,6 +903,7 @@ class ChallengeRecord {
     return ChallengeRecord(
       id: json['id'] as String? ?? '',
       sessionId: json['session_id'] as String? ?? '',
+      resolutionId: json['resolution_id'] as String?,
       provider: json['provider'] as String? ?? '',
       stage: json['stage'] as String? ?? '',
       kind: json['kind'] as String? ?? '',
@@ -645,6 +919,7 @@ class ChallengeRecord {
 
   final String id;
   final String sessionId;
+  final String? resolutionId;
   final String provider;
   final String stage;
   final String kind;
@@ -673,6 +948,7 @@ class ChallengeRecord {
     return _compact(<String, dynamic>{
       'id': id,
       'session_id': sessionId,
+      'resolution_id': resolutionId,
       'provider': provider,
       'stage': stage,
       'kind': kind,
@@ -694,6 +970,7 @@ class SessionRecord {
     required this.updatedAt,
     this.profileId,
     this.profileName,
+    this.sourceResolutionId,
     this.failure,
     this.activeChallengeId,
     this.stoppedAt,
@@ -704,6 +981,7 @@ class SessionRecord {
       id: json['id'] as String? ?? '',
       profileId: json['profile_id'] as String?,
       profileName: json['profile_name'] as String?,
+      sourceResolutionId: json['source_resolution_id'] as String?,
       profile: ProfileSpec.fromJson(
         json['profile'] as Map<String, dynamic>? ?? const <String, dynamic>{},
       ),
@@ -725,6 +1003,7 @@ class SessionRecord {
   final String id;
   final String? profileId;
   final String? profileName;
+  final String? sourceResolutionId;
   final ProfileSpec profile;
   final SessionState state;
   final FailureInfo? failure;
@@ -759,6 +1038,7 @@ class SessionRecord {
       'id': id,
       'profile_id': profileId,
       'profile_name': profileName,
+      'source_resolution_id': sourceResolutionId,
       'profile': profile.toJson(),
       'state': state.value,
       'failure': failure?.toJson(),
@@ -776,7 +1056,9 @@ class EventRecord {
     required this.timestamp,
     required this.sessionId,
     required this.type,
+    this.resolutionId,
     this.state,
+    this.resolutionState,
     this.stage,
     this.message,
     this.connections,
@@ -791,10 +1073,14 @@ class EventRecord {
       id: json['id'] as String? ?? '',
       timestamp: _readTimestamp(json['timestamp']),
       sessionId: json['session_id'] as String? ?? '',
+      resolutionId: json['resolution_id'] as String?,
       type:
           EventType.fromJson(json['type'] as String?) ??
           EventType.sessionStarting,
       state: SessionState.fromJson(json['state'] as String?),
+      resolutionState: ResolutionState.fromJson(
+        json['resolution_state'] as String?,
+      ),
       stage: json['stage'] as String?,
       message: json['message'] as String?,
       connections: json['connections'] as int?,
@@ -810,8 +1096,10 @@ class EventRecord {
   final String id;
   final DateTime timestamp;
   final String sessionId;
+  final String? resolutionId;
   final EventType type;
   final SessionState? state;
+  final ResolutionState? resolutionState;
   final String? stage;
   final String? message;
   final int? connections;
@@ -824,6 +1112,9 @@ class EventRecord {
     final buffer = StringBuffer(type.value);
     if (state != null) {
       buffer.write(' -> ${state!.value}');
+    }
+    if (resolutionState != null) {
+      buffer.write(' -> ${resolutionState!.value}');
     }
     if (stage != null && stage!.isNotEmpty) {
       buffer.write(' @ $stage');
@@ -844,8 +1135,10 @@ class EventRecord {
       'id': id,
       'timestamp': timestamp.toUtc().toIso8601String(),
       'session_id': sessionId,
+      'resolution_id': resolutionId,
       'type': type.value,
       'state': state?.value,
+      'resolution_state': resolutionState?.value,
       'stage': stage,
       'message': message,
       'connections': connections,

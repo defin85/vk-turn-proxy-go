@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:gui_shell/src/build/app_build_identity.dart';
 import 'package:gui_shell/src/control/control_plane_client.dart';
 import 'package:gui_shell/src/control/control_plane_models.dart';
+import 'package:gui_shell/src/control/desktop_handoff_adapter.dart';
 import 'package:gui_shell/src/control/desktop_host_supervisor.dart';
 import 'package:gui_shell/src/control/profile_draft.dart';
 import 'package:gui_shell/src/control/shell_state_store.dart';
@@ -19,10 +20,13 @@ class DesktopShellController extends ChangeNotifier {
     required this.supervisor,
     DesktopShellStateStore? stateStore,
     DirectoryProvider? diagnosticsDirectoryProvider,
+    DesktopHandoffAdapter? handoffAdapter,
     DateTime Function()? clock,
     BuildIdentity? appBuild,
   }) : _diagnosticsDirectoryProvider =
            diagnosticsDirectoryProvider ?? _defaultDiagnosticsDirectory,
+       _handoffAdapter =
+           handoffAdapter ?? const ClipboardDesktopHandoffAdapter(),
        _stateStore = stateStore ?? FileDesktopShellStateStore(),
        _clock = clock ?? DateTime.now,
        appBuild = appBuild ?? AppBuildIdentity.current;
@@ -30,6 +34,7 @@ class DesktopShellController extends ChangeNotifier {
   final ControlPlaneApi api;
   final HostSupervisor supervisor;
   final DirectoryProvider _diagnosticsDirectoryProvider;
+  final DesktopHandoffAdapter _handoffAdapter;
   final DesktopShellStateStore _stateStore;
   final DateTime Function() _clock;
   final BuildIdentity appBuild;
@@ -37,10 +42,12 @@ class DesktopShellController extends ChangeNotifier {
   ShellStatus status = ShellStatus.booting;
   HostConnectionResult? hostConnection;
   List<ProfileRecord> profiles = const <ProfileRecord>[];
+  List<ResolutionRecord> resolutions = const <ResolutionRecord>[];
   List<SessionRecord> sessions = const <SessionRecord>[];
   List<EventRecord> events = const <EventRecord>[];
   ProfileDraft draft = ProfileDraft.defaults();
   String? selectedProfileId;
+  String? selectedResolutionId;
   String? selectedSessionId;
   final Map<PlatformTunnelMode, PlatformTunnelStartResult>
   _platformTunnelResults = <PlatformTunnelMode, PlatformTunnelStartResult>{};
@@ -101,7 +108,10 @@ class DesktopShellController extends ChangeNotifier {
     if (hostConnection?.isReady != true) {
       await _stopRuntimeMonitoring();
       _challengeCache.clear();
+      resolutions = const <ResolutionRecord>[];
       sessions = const <SessionRecord>[];
+      selectedResolutionId = null;
+      selectedSessionId = null;
       busy = false;
       status = ShellStatus.blocked;
       notice = hostConnection?.message;
@@ -136,10 +146,15 @@ class DesktopShellController extends ChangeNotifier {
     }
     try {
       final nextProfiles = await api.profiles();
+      final nextResolutions = await api.resolutions();
       final nextSessions = await api.sessions();
-      final nextChallenges = await _loadActiveChallenges(nextSessions);
+      final nextChallenges = await _loadActiveChallenges(
+        nextSessions,
+        nextResolutions,
+      );
 
       profiles = nextProfiles;
+      resolutions = nextResolutions;
       sessions = nextSessions;
       _mergeChallenges(nextChallenges);
 
@@ -161,6 +176,15 @@ class DesktopShellController extends ChangeNotifier {
             (SessionRecord session) => session.id == selectedSessionId,
           )) {
         selectedSessionId = null;
+      }
+      if (selectedResolutionId == null && resolutions.isNotEmpty) {
+        selectedResolutionId = resolutions.first.id;
+      } else if (selectedResolutionId != null &&
+          !resolutions.any(
+            (ResolutionRecord resolution) =>
+                resolution.id == selectedResolutionId,
+          )) {
+        selectedResolutionId = null;
       }
 
       _scheduleStatePersist();
@@ -184,6 +208,11 @@ class DesktopShellController extends ChangeNotifier {
 
   void selectSession(String sessionId) {
     selectedSessionId = sessionId;
+    notifyListeners();
+  }
+
+  void selectResolution(String resolutionId) {
+    selectedResolutionId = resolutionId;
     notifyListeners();
   }
 
@@ -234,6 +263,51 @@ class DesktopShellController extends ChangeNotifier {
       selectedSessionId = session.id;
       notice = 'Started session ${session.id}.';
       await refresh();
+    });
+  }
+
+  Future<void> startResolutionFromDraft() async {
+    await _runMutation(() async {
+      final resolution = await api.startResolution(
+        provider: draft.spec.provider,
+        link: draft.spec.link,
+        interactiveProvider: draft.spec.interactiveProvider,
+      );
+      selectedResolutionId = resolution.id;
+      notice = 'Started resolution ${resolution.id}.';
+      await refresh();
+    });
+  }
+
+  Future<void> cancelResolution(String resolutionId) async {
+    await _runMutation(() async {
+      final resolution = await api.cancelResolution(resolutionId);
+      selectedResolutionId = resolution.id;
+      notice = 'Cancelled resolution ${resolution.id}.';
+      await refresh();
+    });
+  }
+
+  Future<void> materializeResolution(String resolutionId) async {
+    await _runMutation(() async {
+      final session = await api.materializeResolution(
+        resolutionId: resolutionId,
+        runtimeDefaults: RuntimeDefaults.fromProfileSpec(draft.spec),
+      );
+      selectedResolutionId = resolutionId;
+      selectedSessionId = session.id;
+      notice = 'Started session ${session.id} from resolution $resolutionId.';
+      await refresh();
+    });
+  }
+
+  Future<void> copyResolutionExport(String resolutionId) async {
+    await _runMutation(() async {
+      final exported = await api.exportResolution(resolutionId);
+      await _handoffAdapter.copyLink(exported.link);
+      selectedResolutionId = resolutionId;
+      notice =
+          'Copied handoff link for $resolutionId. Expires ${_formatNoticeTimestamp(exported.expiresAt)}.';
     });
   }
 
@@ -300,6 +374,15 @@ class DesktopShellController extends ChangeNotifier {
 
   ChallengeRecord? activeChallengeFor(SessionRecord session) {
     final challengeID = session.activeChallengeId;
+    return _activeChallengeById(challengeID);
+  }
+
+  ChallengeRecord? activeChallengeForResolution(ResolutionRecord resolution) {
+    final challengeID = resolution.activeChallengeId;
+    return _activeChallengeById(challengeID);
+  }
+
+  ChallengeRecord? _activeChallengeById(String? challengeID) {
     if (challengeID == null || challengeID.isEmpty) {
       return null;
     }
@@ -435,13 +518,21 @@ class DesktopShellController extends ChangeNotifier {
 
   Future<List<ChallengeRecord>> _loadActiveChallenges(
     List<SessionRecord> nextSessions,
+    List<ResolutionRecord> nextResolutions,
   ) async {
-    final ids = nextSessions
-        .map((SessionRecord session) => session.activeChallengeId)
-        .whereType<String>()
-        .map((String id) => id.trim())
-        .where((String id) => id.isNotEmpty)
-        .toSet();
+    final ids =
+        <String?>[
+              ...nextSessions.map(
+                (SessionRecord session) => session.activeChallengeId,
+              ),
+              ...nextResolutions.map(
+                (ResolutionRecord resolution) => resolution.activeChallengeId,
+              ),
+            ]
+            .whereType<String>()
+            .map((String id) => id.trim())
+            .where((String id) => id.isNotEmpty)
+            .toSet();
     if (ids.isEmpty) {
       return const <ChallengeRecord>[];
     }
@@ -466,12 +557,19 @@ class DesktopShellController extends ChangeNotifier {
   }
 
   void _mergeChallenges(List<ChallengeRecord> challenges) {
-    final activeIDs = sessions
-        .map((SessionRecord session) => session.activeChallengeId)
-        .whereType<String>()
-        .map((String id) => id.trim())
-        .where((String id) => id.isNotEmpty)
-        .toSet();
+    final activeIDs =
+        <String?>[
+              ...sessions.map(
+                (SessionRecord session) => session.activeChallengeId,
+              ),
+              ...resolutions.map(
+                (ResolutionRecord resolution) => resolution.activeChallengeId,
+              ),
+            ]
+            .whereType<String>()
+            .map((String id) => id.trim())
+            .where((String id) => id.isNotEmpty)
+            .toSet();
 
     _challengeCache.removeWhere(
       (String id, ChallengeRecord _) => !activeIDs.contains(id),
@@ -505,6 +603,10 @@ class DesktopShellController extends ChangeNotifier {
       message: message,
     );
     _clearPlatformTunnelResults();
+    resolutions = const <ResolutionRecord>[];
+    sessions = const <SessionRecord>[];
+    selectedResolutionId = null;
+    selectedSessionId = null;
     status = ShellStatus.blocked;
     notice = message;
     busy = false;
@@ -650,3 +752,11 @@ String _join(List<String> parts) {
   }
   return value;
 }
+
+String _formatNoticeTimestamp(DateTime value) {
+  final local = value.toLocal();
+  return '${local.year}-${_twoDigits(local.month)}-${_twoDigits(local.day)} '
+      '${_twoDigits(local.hour)}:${_twoDigits(local.minute)}:${_twoDigits(local.second)}';
+}
+
+String _twoDigits(int value) => value.toString().padLeft(2, '0');

@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:mobile_gui_shell/src/build/app_build_identity.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_client.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_models.dart';
+import 'package:mobile_gui_shell/src/control/mobile_handoff_adapter.dart';
 import 'package:mobile_gui_shell/src/control/mobile_host_bridge.dart';
 import 'package:mobile_gui_shell/src/control/mobile_shell_state_store.dart';
 import 'package:mobile_gui_shell/src/control/profile_draft.dart';
@@ -40,11 +41,14 @@ class MobileShellController extends ChangeNotifier {
     required this.bridge,
     required this.stateStore,
     BrowserLauncher? browserLauncher,
+    MobileHandoffAdapter? handoffAdapter,
     DirectoryProvider? diagnosticsDirectoryProvider,
     DateTime Function()? clock,
     IDFactory? idFactory,
     BuildIdentity? appBuild,
   }) : _browserLauncher = browserLauncher ?? ExternalBrowserLauncher(),
+       _handoffAdapter =
+           handoffAdapter ?? const ClipboardMobileHandoffAdapter(),
        _diagnosticsDirectoryProvider =
            diagnosticsDirectoryProvider ?? defaultDiagnosticsDirectory,
        _clock = clock ?? DateTime.now,
@@ -56,6 +60,7 @@ class MobileShellController extends ChangeNotifier {
   final MobileHostBridge bridge;
   final MobileShellStateStore stateStore;
   final BrowserLauncher _browserLauncher;
+  final MobileHandoffAdapter _handoffAdapter;
   final DirectoryProvider _diagnosticsDirectoryProvider;
   final DateTime Function() _clock;
   final IDFactory _idFactory;
@@ -64,10 +69,12 @@ class MobileShellController extends ChangeNotifier {
   ShellStatus status = ShellStatus.booting;
   MobileHostConnectionResult? hostConnection;
   List<ProfileRecord> profiles = const <ProfileRecord>[];
+  List<ResolutionRecord> resolutions = const <ResolutionRecord>[];
   List<SessionRecord> sessions = const <SessionRecord>[];
   List<EventRecord> events = const <EventRecord>[];
   ProfileDraft draft = ProfileDraft.defaults();
   String? selectedProfileId;
+  String? selectedResolutionId;
   String? selectedSessionId;
   final Map<PlatformTunnelMode, PlatformTunnelStartResult>
   _platformTunnelResults = <PlatformTunnelMode, PlatformTunnelStartResult>{};
@@ -89,6 +96,7 @@ class MobileShellController extends ChangeNotifier {
     Capability.mobileHostBridge,
     Capability.platformTunnels,
     Capability.profiles,
+    Capability.providerResolutionHandoff,
     Capability.sessions,
     Capability.challenges,
     Capability.diagnostics,
@@ -159,8 +167,14 @@ class MobileShellController extends ChangeNotifier {
       return;
     }
     try {
+      final nextResolutions = await bridge.resolutions();
       final nextSessions = _orderedSessions(await bridge.sessions());
-      final nextChallenges = await _loadActiveChallenges(nextSessions);
+      final nextChallenges = await _loadActiveChallenges(
+        nextSessions,
+        nextResolutions,
+      );
+      resolutions = nextResolutions;
+      selectedResolutionId = _resolveSelectedResolutionId(nextResolutions);
       _replaceSessions(nextSessions);
       _mergeChallenges(nextChallenges);
       _notify();
@@ -185,6 +199,11 @@ class MobileShellController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void selectResolution(String resolutionId) {
+    selectedResolutionId = resolutionId;
+    notifyListeners();
+  }
+
   void updateDraft(ProfileDraft nextDraft) {
     draft = nextDraft;
     _scheduleStatePersist();
@@ -206,10 +225,12 @@ class MobileShellController extends ChangeNotifier {
       await stateStore.clear();
       _challengeCache.clear();
       profiles = const <ProfileRecord>[];
+      resolutions = const <ResolutionRecord>[];
       sessions = const <SessionRecord>[];
       events = const <EventRecord>[];
       draft = ProfileDraft.defaults();
       selectedProfileId = null;
+      selectedResolutionId = null;
       selectedSessionId = null;
       _persistedStateSignature = MobileShellState.empty().signature();
       _requiresLocalStateReset = false;
@@ -326,6 +347,38 @@ class MobileShellController extends ChangeNotifier {
     });
   }
 
+  Future<void> startResolutionFromDraft() async {
+    await _runBridgeMutation(() async {
+      final resolution = await bridge.startResolution(
+        provider: draft.spec.provider,
+        link: draft.spec.link,
+        interactiveProvider: draft.spec.interactiveProvider,
+      );
+      selectedResolutionId = resolution.id;
+      notice = 'Started mobile resolution ${resolution.id}.';
+      await refresh();
+    });
+  }
+
+  Future<void> cancelResolution(String resolutionId) async {
+    await _runBridgeMutation(() async {
+      final resolution = await bridge.cancelResolution(resolutionId);
+      selectedResolutionId = resolution.id;
+      notice = 'Cancelled mobile resolution ${resolution.id}.';
+      await refresh();
+    });
+  }
+
+  Future<void> copyResolutionExport(String resolutionId) async {
+    await _runBridgeMutation(() async {
+      final exported = await bridge.exportResolution(resolutionId);
+      await _handoffAdapter.copyLink(exported.link);
+      selectedResolutionId = resolutionId;
+      notice =
+          'Copied handoff link for $resolutionId. Expires ${_formatNoticeTimestamp(exported.expiresAt)}.';
+    });
+  }
+
   Future<void> stopSession(String sessionId) async {
     await _runBridgeMutation(() async {
       await bridge.stopSession(sessionId);
@@ -402,6 +455,15 @@ class MobileShellController extends ChangeNotifier {
 
   ChallengeRecord? activeChallengeFor(SessionRecord session) {
     final challengeID = session.activeChallengeId;
+    return _activeChallengeById(challengeID);
+  }
+
+  ChallengeRecord? activeChallengeForResolution(ResolutionRecord resolution) {
+    final challengeID = resolution.activeChallengeId;
+    return _activeChallengeById(challengeID);
+  }
+
+  ChallengeRecord? _activeChallengeById(String? challengeID) {
     if (challengeID == null || challengeID.isEmpty) {
       return null;
     }
@@ -448,7 +510,10 @@ class MobileShellController extends ChangeNotifier {
     if (hostConnection?.isReady != true) {
       await _stopRuntimeMonitoring();
       _challengeCache.clear();
+      resolutions = const <ResolutionRecord>[];
       sessions = const <SessionRecord>[];
+      selectedResolutionId = null;
+      selectedSessionId = null;
       busy = false;
       status = ShellStatus.blocked;
       notice = hostConnection?.message;
@@ -596,6 +661,22 @@ class MobileShellController extends ChangeNotifier {
     return current.id;
   }
 
+  String? _resolveSelectedResolutionId(List<ResolutionRecord> nextResolutions) {
+    if (nextResolutions.isEmpty) {
+      return null;
+    }
+    final currentID = selectedResolutionId?.trim() ?? '';
+    if (currentID.isEmpty) {
+      return nextResolutions.first.id;
+    }
+    for (final resolution in nextResolutions) {
+      if (resolution.id == currentID) {
+        return resolution.id;
+      }
+    }
+    return nextResolutions.first.id;
+  }
+
   SessionRecord? _firstActiveSession(List<SessionRecord> nextSessions) {
     for (final session in nextSessions) {
       if (!_isTerminalSession(session)) {
@@ -624,13 +705,21 @@ class MobileShellController extends ChangeNotifier {
 
   Future<List<ChallengeRecord>> _loadActiveChallenges(
     List<SessionRecord> nextSessions,
+    List<ResolutionRecord> nextResolutions,
   ) async {
-    final ids = nextSessions
-        .map((SessionRecord session) => session.activeChallengeId)
-        .whereType<String>()
-        .map((String id) => id.trim())
-        .where((String id) => id.isNotEmpty)
-        .toSet();
+    final ids =
+        <String?>[
+              ...nextSessions.map(
+                (SessionRecord session) => session.activeChallengeId,
+              ),
+              ...nextResolutions.map(
+                (ResolutionRecord resolution) => resolution.activeChallengeId,
+              ),
+            ]
+            .whereType<String>()
+            .map((String id) => id.trim())
+            .where((String id) => id.isNotEmpty)
+            .toSet();
     if (ids.isEmpty) {
       return const <ChallengeRecord>[];
     }
@@ -655,12 +744,19 @@ class MobileShellController extends ChangeNotifier {
   }
 
   void _mergeChallenges(List<ChallengeRecord> challenges) {
-    final activeIDs = sessions
-        .map((SessionRecord session) => session.activeChallengeId)
-        .whereType<String>()
-        .map((String id) => id.trim())
-        .where((String id) => id.isNotEmpty)
-        .toSet();
+    final activeIDs =
+        <String?>[
+              ...sessions.map(
+                (SessionRecord session) => session.activeChallengeId,
+              ),
+              ...resolutions.map(
+                (ResolutionRecord resolution) => resolution.activeChallengeId,
+              ),
+            ]
+            .whereType<String>()
+            .map((String id) => id.trim())
+            .where((String id) => id.isNotEmpty)
+            .toSet();
 
     _challengeCache.removeWhere(
       (String id, ChallengeRecord _) => !activeIDs.contains(id),
@@ -720,6 +816,10 @@ class MobileShellController extends ChangeNotifier {
       description: hostConnection?.description ?? '',
     );
     _clearPlatformTunnelResults();
+    resolutions = const <ResolutionRecord>[];
+    sessions = const <SessionRecord>[];
+    selectedResolutionId = null;
+    selectedSessionId = null;
     status = ShellStatus.blocked;
     notice = message;
     busy = false;
@@ -834,3 +934,11 @@ String _join(List<String> parts) {
   }
   return value;
 }
+
+String _formatNoticeTimestamp(DateTime value) {
+  final local = value.toLocal();
+  return '${local.year}-${_twoDigits(local.month)}-${_twoDigits(local.day)} '
+      '${_twoDigits(local.hour)}:${_twoDigits(local.minute)}:${_twoDigits(local.second)}';
+}
+
+String _twoDigits(int value) => value.toString().padLeft(2, '0');

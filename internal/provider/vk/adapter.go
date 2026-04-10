@@ -43,10 +43,11 @@ func (a *Adapter) Resolve(ctx context.Context, link string) (provider.Resolution
 	}
 
 	if resolution.Metadata == nil {
-		resolution.Metadata = make(map[string]string, 2)
+		resolution.Metadata = make(map[string]string, 4)
 	}
 	resolution.Metadata["provider"] = "vk"
 	resolution.Metadata["resolution_method"] = "staged_http"
+	applyDerivedTurnCredentialExpiry(&resolution, nowUTC())
 
 	return resolution, nil
 }
