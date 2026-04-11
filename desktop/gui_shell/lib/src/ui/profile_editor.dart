@@ -90,6 +90,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final managedVkInviteWorkflow = widget.draft.spec.isManagedVkInviteWorkflow;
 
     return Card(
       child: Padding(
@@ -117,6 +118,10 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
             Expanded(
               child: ListView(
                 children: <Widget>[
+                  if (managedVkInviteWorkflow) ...<Widget>[
+                    _workflowBanner(theme),
+                    const SizedBox(height: 16),
+                  ],
                   _field(
                     controller: _nameController,
                     label: 'Profile name',
@@ -137,131 +142,8 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                       spec: widget.draft.spec.copyWith(link: value.trim()),
                     ),
                   ),
-                  Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: _field(
-                          controller: _listenController,
-                          label: 'Local UDP listen',
-                          onChanged: (String value) => _pushDraft(
-                            spec: widget.draft.spec.copyWith(
-                              listenAddress: value.trim(),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _field(
-                          controller: _peerController,
-                          label: 'Peer address',
-                          onChanged: (String value) => _pushDraft(
-                            spec: widget.draft.spec.copyWith(
-                              peerAddress: value.trim(),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: _field(
-                          controller: _connectionsController,
-                          label: 'Connections',
-                          onChanged: (String value) => _pushDraft(
-                            spec: widget.draft.spec.copyWith(
-                              connections: int.tryParse(value.trim()) ?? 1,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: DropdownButtonFormField<TransportMode>(
-                          initialValue: widget.draft.spec.mode,
-                          decoration: const InputDecoration(
-                            labelText: 'TURN mode',
-                          ),
-                          items: TransportMode.values
-                              .map(
-                                (TransportMode mode) =>
-                                    DropdownMenuItem<TransportMode>(
-                                      value: mode,
-                                      child: Text(mode.value),
-                                    ),
-                              )
-                              .toList(growable: false),
-                          onChanged: widget.busy
-                              ? null
-                              : (TransportMode? mode) {
-                                  if (mode == null) {
-                                    return;
-                                  }
-                                  _pushDraft(
-                                    spec: widget.draft.spec.copyWith(
-                                      mode: mode,
-                                    ),
-                                  );
-                                },
-                        ),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: _field(
-                          controller: _turnServerController,
-                          label: 'TURN override',
-                          onChanged: (String value) => _pushDraft(
-                            spec: widget.draft.spec.copyWith(
-                              turnServer: value.trim(),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _field(
-                          controller: _turnPortController,
-                          label: 'TURN port',
-                          onChanged: (String value) => _pushDraft(
-                            spec: widget.draft.spec.copyWith(
-                              turnPort: value.trim(),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  _field(
-                    controller: _bindInterfaceController,
-                    label: 'Bind interface',
-                    onChanged: (String value) => _pushDraft(
-                      spec: widget.draft.spec.copyWith(
-                        bindInterface: value.trim(),
-                      ),
-                    ),
-                  ),
-                  _field(
-                    controller: _logLevelController,
-                    label: 'Log level',
-                    onChanged: (String value) => _pushDraft(
-                      spec: widget.draft.spec.copyWith(logLevel: value.trim()),
-                    ),
-                  ),
                   SwitchListTile(
-                    value: widget.draft.spec.useDtls,
-                    onChanged: widget.busy
-                        ? null
-                        : (bool enabled) => _pushDraft(
-                            spec: widget.draft.spec.copyWith(useDtls: enabled),
-                          ),
-                    title: const Text('DTLS enabled'),
-                  ),
-                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
                     value: widget.draft.spec.interactiveProvider,
                     onChanged: widget.busy
                         ? null
@@ -270,8 +152,32 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                               interactiveProvider: enabled,
                             ),
                           ),
-                    title: const Text('Interactive provider challenges'),
+                    title: Text(
+                      managedVkInviteWorkflow
+                          ? 'Browser continuation enabled'
+                          : 'Interactive provider challenges',
+                    ),
+                    subtitle: Text(
+                      managedVkInviteWorkflow
+                          ? 'Keep this on for the standard VK flow so the operator can continue in the browser and click Join before ready.'
+                          : 'Enable host-driven browser continuation when the provider requires a manual step.',
+                    ),
                   ),
+                  if (managedVkInviteWorkflow &&
+                      !widget.draft.spec.interactiveProvider) ...<Widget>[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF1D6),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Text(
+                        'The standard VK invite workflow expects browser continuation to stay enabled. Turn it off only for support or compatibility work.',
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 12,
@@ -289,22 +195,92 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                             : () => unawaited(widget.onResolve()),
                         child: const Text('Resolve invite'),
                       ),
-                      FilledButton.tonal(
-                        onPressed:
-                            widget.busy || widget.selectedProfileId == null
-                            ? null
-                            : () => unawaited(widget.onStart()),
-                        child: const Text('Start saved profile'),
-                      ),
-                      OutlinedButton(
-                        onPressed:
-                            widget.busy || widget.selectedProfileId == null
-                            ? null
-                            : () => unawaited(widget.onDelete()),
-                        child: const Text('Delete'),
-                      ),
                     ],
                   ),
+                  if (managedVkInviteWorkflow) ...<Widget>[
+                    const SizedBox(height: 20),
+                    Text(
+                      'Operator-managed runtime defaults',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'These runtime defaults stay separate from the user-supplied VK invite. They are reused only after the resolution reaches resolved and you choose Start on this device.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      childrenPadding: const EdgeInsets.only(top: 8),
+                      title: const Text('Inspect or edit runtime defaults'),
+                      subtitle: Text(
+                        _runtimeDefaultsSummary(widget.draft.spec),
+                      ),
+                      children: _runtimeDefaultsFields(),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Operator/support actions',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Direct profile start and raw transport tuning remain available for support work, but they are not the standard end-user VK workflow.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: <Widget>[
+                        FilledButton.tonal(
+                          onPressed:
+                              widget.busy || widget.selectedProfileId == null
+                              ? null
+                              : () => unawaited(widget.onStart()),
+                          child: const Text('Start saved profile'),
+                        ),
+                        OutlinedButton(
+                          onPressed:
+                              widget.busy || widget.selectedProfileId == null
+                              ? null
+                              : () => unawaited(widget.onDelete()),
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  ] else ...<Widget>[
+                    ..._runtimeDefaultsFields(),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: <Widget>[
+                        FilledButton.tonal(
+                          onPressed:
+                              widget.busy || widget.selectedProfileId == null
+                              ? null
+                              : () => unawaited(widget.onStart()),
+                          child: const Text('Start saved profile'),
+                        ),
+                        OutlinedButton(
+                          onPressed:
+                              widget.busy || widget.selectedProfileId == null
+                              ? null
+                              : () => unawaited(widget.onDelete()),
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 24),
                   Text(
                     'Saved profiles',
@@ -365,6 +341,32 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     );
   }
 
+  Widget _workflowBanner(ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE6EDF7),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'Standard VK invite workflow',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'An organizer or dispatcher creates the VK call outside the product and shares the invite link. The end user pastes that shared invite here, then continues in the browser and clicks Join before the product may report ready.',
+            style: theme.textTheme.bodyMedium,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _field({
     required TextEditingController controller,
     required String label,
@@ -381,6 +383,127 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
         onChanged: onChanged,
       ),
     );
+  }
+
+  List<Widget> _runtimeDefaultsFields() {
+    return <Widget>[
+      Row(
+        children: <Widget>[
+          Expanded(
+            child: _field(
+              controller: _listenController,
+              label: 'Local UDP listen',
+              onChanged: (String value) => _pushDraft(
+                spec: widget.draft.spec.copyWith(listenAddress: value.trim()),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _field(
+              controller: _peerController,
+              label: 'Peer address',
+              onChanged: (String value) => _pushDraft(
+                spec: widget.draft.spec.copyWith(peerAddress: value.trim()),
+              ),
+            ),
+          ),
+        ],
+      ),
+      Row(
+        children: <Widget>[
+          Expanded(
+            child: _field(
+              controller: _connectionsController,
+              label: 'Connections',
+              onChanged: (String value) => _pushDraft(
+                spec: widget.draft.spec.copyWith(
+                  connections: int.tryParse(value.trim()) ?? 1,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: DropdownButtonFormField<TransportMode>(
+              initialValue: widget.draft.spec.mode,
+              decoration: const InputDecoration(labelText: 'TURN mode'),
+              items: TransportMode.values
+                  .map(
+                    (TransportMode mode) => DropdownMenuItem<TransportMode>(
+                      value: mode,
+                      child: Text(mode.value),
+                    ),
+                  )
+                  .toList(growable: false),
+              onChanged: widget.busy
+                  ? null
+                  : (TransportMode? mode) {
+                      if (mode == null) {
+                        return;
+                      }
+                      _pushDraft(spec: widget.draft.spec.copyWith(mode: mode));
+                    },
+            ),
+          ),
+        ],
+      ),
+      Row(
+        children: <Widget>[
+          Expanded(
+            child: _field(
+              controller: _turnServerController,
+              label: 'TURN override',
+              onChanged: (String value) => _pushDraft(
+                spec: widget.draft.spec.copyWith(turnServer: value.trim()),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _field(
+              controller: _turnPortController,
+              label: 'TURN port',
+              onChanged: (String value) => _pushDraft(
+                spec: widget.draft.spec.copyWith(turnPort: value.trim()),
+              ),
+            ),
+          ),
+        ],
+      ),
+      _field(
+        controller: _bindInterfaceController,
+        label: 'Bind interface',
+        onChanged: (String value) => _pushDraft(
+          spec: widget.draft.spec.copyWith(bindInterface: value.trim()),
+        ),
+      ),
+      _field(
+        controller: _logLevelController,
+        label: 'Log level',
+        onChanged: (String value) => _pushDraft(
+          spec: widget.draft.spec.copyWith(logLevel: value.trim()),
+        ),
+      ),
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        value: widget.draft.spec.useDtls,
+        onChanged: widget.busy
+            ? null
+            : (bool enabled) => _pushDraft(
+                spec: widget.draft.spec.copyWith(useDtls: enabled),
+              ),
+        title: const Text('DTLS enabled'),
+      ),
+    ];
+  }
+
+  String _runtimeDefaultsSummary(ProfileSpec spec) {
+    final turnOverride = (spec.turnServer ?? '').isEmpty
+        ? 'provider TURN'
+        : '${spec.turnServer}${(spec.turnPort ?? '').isEmpty ? '' : ':${spec.turnPort}'}';
+    final dtlsLabel = spec.useDtls ? 'DTLS on' : 'DTLS off';
+    return '${spec.listenAddress} -> ${spec.peerAddress} | ${spec.connections} conn | ${spec.mode.value} | $dtlsLabel | $turnOverride';
   }
 
   void _pushDraft({String? name, ProfileSpec? spec}) {

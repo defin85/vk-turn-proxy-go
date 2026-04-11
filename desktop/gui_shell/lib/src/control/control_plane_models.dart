@@ -602,6 +602,10 @@ class ProfileSpec {
   }
 }
 
+extension ProfileSpecWorkflow on ProfileSpec {
+  bool get isManagedVkInviteWorkflow => provider.trim().toLowerCase() == 'vk';
+}
+
 class ProfileRecord {
   const ProfileRecord({
     required this.id,

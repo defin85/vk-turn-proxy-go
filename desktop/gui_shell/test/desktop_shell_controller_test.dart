@@ -149,6 +149,7 @@ void main() {
             info: _readyHostInfo,
           ),
         ]),
+        stateStore: _FakeShellStateStore(),
       );
       addTearDown(controller.dispose);
 
@@ -246,6 +247,33 @@ void main() {
 
       expect(api.startSessionCalls, 0);
       expect(controller.notice, contains('local host unavailable'));
+    },
+  );
+
+  test(
+    'controller defaults to managed VK invite flow with browser continuation enabled',
+    () async {
+      final api = _FakeControlPlaneApi(
+        profiles: const <ProfileRecord>[],
+        sessions: const <SessionRecord>[],
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(const <HostConnectionResult>[
+          HostConnectionResult(
+            state: HostLifecycleState.ready,
+            message: 'ready',
+            info: _readyHostInfo,
+          ),
+        ]),
+        stateStore: _FakeShellStateStore(),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(controller.draft.spec.provider, 'vk');
+      expect(controller.draft.spec.interactiveProvider, isTrue);
     },
   );
 
@@ -389,6 +417,45 @@ void main() {
       expect(saved.runtimeDefaults.mode, TransportMode.tcp);
       expect(saved.runtimeDefaults.useDtls, isFalse);
       expect(saved.runtimeDefaults.logLevel, 'debug');
+    },
+  );
+
+  test(
+    'controller starts managed VK invite resolution with Join guidance',
+    () async {
+      final api = _FakeControlPlaneApi(
+        profiles: const <ProfileRecord>[],
+        resolutions: const <ResolutionRecord>[],
+        sessions: const <SessionRecord>[],
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(const <HostConnectionResult>[
+          HostConnectionResult(
+            state: HostLifecycleState.ready,
+            message: 'ready',
+            info: _readyHostInfo,
+          ),
+        ]),
+        stateStore: _FakeShellStateStore(),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      controller.updateDraft(
+        controller.draft.copyWith(
+          spec: controller.draft.spec.copyWith(
+            link: 'https://vk.com/call/join/fresh',
+            interactiveProvider: true,
+          ),
+        ),
+      );
+
+      await controller.startResolutionFromDraft();
+
+      expect(api.startResolutionCalls, hasLength(1));
+      expect(api.startResolutionCalls.single.interactiveProvider, isTrue);
+      expect(controller.notice, contains('Continue in browser and click Join'));
     },
   );
 

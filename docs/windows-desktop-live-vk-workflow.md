@@ -4,6 +4,9 @@ This document defines the repo-owned packaged Windows desktop workflow for
 starting from a real VK invite inside the GUI, resolving it through the typed
 provider-resolution handoff contract, and then starting the same-device desktop
 runtime path.
+It follows the canonical actor model from `docs/vk-invite-user-workflow.md`:
+the call is created and shared outside the product, while the desktop app is
+the invite-consumption and runtime-start surface.
 
 The workflow keeps the current boundary explicit:
 
@@ -63,11 +66,11 @@ launches `gui_shell.exe`.
 In the desktop shell:
 
 1. keep `Provider = vk`
-2. paste the real invite into `Provider link`
-3. enable `Interactive provider challenges`
+2. paste the shared invite into `Provider link`
+3. keep browser continuation enabled for the standard VK flow
 4. review the non-secret runtime defaults in the profile editor
    (`Local UDP listen`, `Peer address`, transport mode, TURN overrides, and
-   similar runtime knobs)
+   similar runtime knobs) only if you are acting as the operator/support owner
 5. click `Resolve invite`
 
 When the resolution succeeds, the resolution card shows:
@@ -86,9 +89,12 @@ If the resolution card enters `challenge_required`:
    complete the challenge
 2. return to the desktop shell
 3. click `Continue after browser step`
+4. finish the VK browser flow past preview and click `Join`
 
 The desktop shell keeps challenge continuation typed and host-driven.
 It does not require CLI log parsing or manual secret reconstruction.
+The session is not considered transport-ready while the browser flow remains at
+preview-only state.
 
 ## Step 4: Add the Windows host route for the resolved TURN host
 
@@ -142,6 +148,31 @@ Once the desktop session is `ready`:
 
 The `WireGuard` profile itself still follows the validated contract in
 `docs/windows-desktop-wg-poc.md`.
+
+## Optional: Capture throughput diagnostics during a speedtest
+
+When the external tunnel may interrupt operator connectivity, start the
+repo-owned capture helper before the throughput run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File E:\Projects\vk-turn-proxy-go\scripts\windows-desktop-throughput-capture.ps1 -DurationSeconds 180 -SampleIntervalSeconds 2
+```
+
+The helper:
+
+- attaches to the latest desktop session unless you pin `-SessionId`
+- writes artifacts under `artifacts\desktop-throughput-captures\<timestamp>\`
+- stores raw `diagnostics` JSON snapshots and matching `.prom` metrics text
+- keeps a compact `summary.csv` and `summary.ndjson` for later analysis
+- when you reuse a fixed `-OutputDir` such as `...\latest`, it clears only the
+  helper-managed artifacts in that directory before the new run starts
+
+If you need to target one known session explicitly, pass its ID from the
+desktop shell or control plane:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File E:\Projects\vk-turn-proxy-go\scripts\windows-desktop-throughput-capture.ps1 -SessionId <session-id> -DurationSeconds 180
+```
 
 ## Failure triage
 

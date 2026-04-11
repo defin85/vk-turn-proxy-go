@@ -1,11 +1,7 @@
 import 'package:gui_shell/src/control/control_plane_models.dart';
 
 class ProfileDraft {
-  const ProfileDraft({
-    this.id,
-    required this.name,
-    required this.spec,
-  });
+  const ProfileDraft({this.id, required this.name, required this.spec});
 
   factory ProfileDraft.defaults() {
     return const ProfileDraft(
@@ -15,6 +11,7 @@ class ProfileDraft {
         link: '',
         listenAddress: '127.0.0.1:9001',
         peerAddress: '127.0.0.1:56000',
+        interactiveProvider: true,
       ),
     );
   }
@@ -23,7 +20,9 @@ class ProfileDraft {
     return ProfileDraft(
       id: json['id'] as String?,
       name: json['name'] as String? ?? '',
-      spec: ProfileSpec.fromJson(json['spec'] as Map<String, dynamic>? ?? const <String, dynamic>{}),
+      spec: ProfileSpec.fromJson(
+        json['spec'] as Map<String, dynamic>? ?? const <String, dynamic>{},
+      ),
     );
   }
 
@@ -35,11 +34,7 @@ class ProfileDraft {
   final String name;
   final ProfileSpec spec;
 
-  ProfileDraft copyWith({
-    String? id,
-    String? name,
-    ProfileSpec? spec,
-  }) {
+  ProfileDraft copyWith({String? id, String? name, ProfileSpec? spec}) {
     return ProfileDraft(
       id: id ?? this.id,
       name: name ?? this.name,
@@ -48,18 +43,10 @@ class ProfileDraft {
   }
 
   ProfileRecord toProfile() {
-    return ProfileRecord(
-      id: id ?? '',
-      name: name.trim(),
-      spec: spec,
-    );
+    return ProfileRecord(id: id ?? '', name: name.trim(), spec: spec);
   }
 
   Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'id': id,
-      'name': name,
-      'spec': spec.toJson(),
-    };
+    return <String, dynamic>{'id': id, 'name': name, 'spec': spec.toJson()};
   }
 }

@@ -173,6 +173,11 @@ Embedded/mobile hosts should use `pkg/clientcontrol` directly so they share the 
 
 The first desktop shell lives in `desktop/gui_shell` and uses Flutter as the canonical GUI stack for Windows, macOS, and Linux.
 It talks to the local client control plane on `127.0.0.1:7777`, supervises a compatible `clientd` sidecar, and renders typed profiles, sessions, challenge state, and diagnostics export without requiring terminal-only workflows.
+The canonical VK actor model and invite-first workflow boundary are documented
+in `docs/vk-invite-user-workflow.md`: an organizer or dispatcher creates and
+shares the VK call outside the product, while the end user pastes the shared
+invite and continues through browser `Join` before the runtime may report
+`ready`.
 
 Run the shell locally on Linux with:
 
@@ -204,6 +209,8 @@ The desktop banner labels three separate version concepts:
 
 Browser challenge continuation stays host-driven in this change.
 The GUI triggers the typed challenge continue/cancel operations and surfaces the resulting session events, but it does not embed provider-specific browser flows.
+For the standard VK path, raw peer and transport controls remain available as
+operator/support tooling rather than required end-user inputs.
 Tray and system-notification behavior are intentionally kept explicit and non-magical for this slice: the shell uses in-app status banners and action buttons rather than background-only runtime control.
 
 ## Mobile GUI shell

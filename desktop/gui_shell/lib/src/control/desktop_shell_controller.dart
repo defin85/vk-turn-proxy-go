@@ -282,7 +282,7 @@ class DesktopShellController extends ChangeNotifier {
         interactiveProvider: draft.spec.interactiveProvider,
       );
       selectedResolutionId = resolution.id;
-      notice = 'Started resolution ${resolution.id}.';
+      notice = _resolutionStartedNotice(draft.spec, resolution.id);
       await refresh();
     });
   }
@@ -304,7 +304,8 @@ class DesktopShellController extends ChangeNotifier {
       );
       selectedResolutionId = resolutionId;
       selectedSessionId = session.id;
-      notice = 'Started session ${session.id} from resolution $resolutionId.';
+      notice =
+          'Started session ${session.id} from resolution $resolutionId. Ready is reported only after runtime startup succeeds.';
       await refresh();
     });
   }
@@ -331,7 +332,7 @@ class DesktopShellController extends ChangeNotifier {
     await _runMutation(() async {
       final challenge = await api.continueChallenge(challengeId);
       _challengeCache[challenge.id] = challenge;
-      notice = 'Continued challenge $challengeId.';
+      notice = _challengeContinuedNotice(challenge);
       await refresh();
     });
   }
@@ -714,6 +715,26 @@ class DesktopShellController extends ChangeNotifier {
       buffer.write(' ${result.message}');
     }
     return buffer.toString();
+  }
+
+  String _resolutionStartedNotice(ProfileSpec spec, String resolutionId) {
+    if (!spec.isManagedVkInviteWorkflow) {
+      return 'Started resolution $resolutionId.';
+    }
+    if (!spec.interactiveProvider) {
+      return 'Started resolution $resolutionId. Interactive browser continuation is off, so preview-only VK invites will fail closed.';
+    }
+    return 'Started resolution $resolutionId. Continue in browser and click Join if VK stops at preview before expecting a ready session.';
+  }
+
+  String _challengeContinuedNotice(ChallengeRecord challenge) {
+    if (challenge.provider.trim().toLowerCase() != 'vk') {
+      return 'Continued challenge ${challenge.id}.';
+    }
+    if ((challenge.resolutionId ?? '').isNotEmpty) {
+      return 'Continued challenge ${challenge.id}. Finish the VK browser flow and click Join before expecting a resolved handoff.';
+    }
+    return 'Continued challenge ${challenge.id}. Finish the VK browser flow and click Join before expecting the session to reach ready.';
   }
 
   void _notify() {

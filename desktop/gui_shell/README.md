@@ -59,6 +59,8 @@ For the packaged Windows workflow that starts from a real VK invite inside the
 desktop GUI, moves through typed resolution and browser continuation when
 needed, and then starts the same-device desktop session, follow
 `docs/windows-desktop-live-vk-workflow.md`.
+The canonical actor model and invite-first workflow contract live in
+`docs/vk-invite-user-workflow.md`.
 
 ## Control-plane contract
 
@@ -85,16 +87,19 @@ Current repo-owned desktop hosts still fail closed for those modes until a platf
 
 The desktop shell now supports the product path:
 
-1. enter a provider link such as a VK invite in the profile editor
+1. paste a shared provider link such as a VK invite in the profile editor
 2. click `Resolve invite`
 3. if the host reports `challenge_required`, complete the browser step and then click `Continue after browser step`
-4. wait for the typed resolution card to reach `resolved`
-5. choose either `Start on this device` for the normal desktop runtime path or `Copy handoff` for explicit export
+4. finish the provider flow past preview and click `Join` before expecting the handoff to become usable
+5. wait for the typed resolution card to reach `resolved`
+6. choose either `Start on this device` for the normal desktop runtime path or `Copy handoff` for explicit export
 
 `Start on this device` reuses the non-secret runtime defaults from the profile
 editor, such as listen address, peer address, transport policy, and TURN
 override fields, without requiring the full secret handoff link to be pasted
 back into the same host.
+Those runtime defaults stay operator-managed in the standard VK flow; the end
+user path is invite-first, not peer-first.
 
 ## Sidecar discovery order
 
