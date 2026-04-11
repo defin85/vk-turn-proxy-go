@@ -138,6 +138,27 @@ powershell -NoProfile -ExecutionPolicy Bypass -File E:\Projects\vk-turn-proxy-go
 8. Enable the imported `WireGuard` tunnel.
 9. Open any public IP check page in the browser.
 
+## Optional: Capture offline WireGuard failure evidence
+
+When enabling `WireGuard for Windows` may cut operator connectivity, start the
+repo-owned health capture helper first and then enable the tunnel while it is
+sampling:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File E:\Projects\vk-turn-proxy-go\scripts\windows-wireguard-health-capture.ps1 -DurationSeconds 120 -SampleIntervalSeconds 2 -OutputDir E:\Projects\vk-turn-proxy-go\artifacts\windows-wireguard-health\latest
+```
+
+The helper captures:
+
+- `clientd` host, sessions, and per-session diagnostics when available
+- `WireGuard` service state and `wg.exe show`
+- Wintun adapter state, IPv4 interfaces, default routes, split routes, and public `/32` host routes
+- connectivity probes to the current LAN gateway, the desktop session peer host, one external IP, and one DNS lookup
+- raw `route print` and `ipconfig /all` snapshots at the start and end of the run
+
+Use a fixed `-OutputDir` such as `...\latest` when you want the evidence path to
+stay predictable across retries.
+
 ## Failure triage
 
 - Desktop profile fails in `provider_resolve` with `vk_calls_get_anonymous_token`

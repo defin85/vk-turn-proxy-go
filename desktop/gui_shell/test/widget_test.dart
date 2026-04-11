@@ -80,7 +80,23 @@ void main() {
     expect(find.text('Contract 1'), findsOneWidget);
     expect(find.text('Platform tunnel modes'), findsOneWidget);
     expect(find.text('Resolutions'), findsOneWidget);
-    expect(find.text('Windows Wintun'), findsOneWidget);
+    expect(find.textContaining('Windows Wintun'), findsOneWidget);
+    expect(
+      find.textContaining('Fail-closed platform tunnel checks stay collapsed'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Windows Wintun: host implementation missing'),
+      findsOneWidget,
+    );
+    final hostTitleOffset = tester.getTopLeft(find.text('Local host ready'));
+    final tunnelTitleOffset = tester.getTopLeft(
+      find.text('Platform tunnel modes'),
+    );
+    final resolutionsTitleOffset = tester.getTopLeft(find.text('Resolutions'));
+
+    expect((hostTitleOffset.dy - tunnelTitleOffset.dy).abs(), lessThan(24));
+    expect(resolutionsTitleOffset.dy, lessThan(430));
 
     final startButton = find.text('Start saved profile', skipOffstage: false);
     await tester.scrollUntilVisible(
