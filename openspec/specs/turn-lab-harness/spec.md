@@ -21,3 +21,10 @@ The repository SHALL provide a reusable local TURN lab harness for deterministic
 - **THEN** the harness provides deterministic conditions for allocation or permission maintenance to occur
 - **AND** the test can verify whether the runtime stayed healthy through that window without relying on live external providers
 
+#### Scenario: Desktop GUI operator needs time after session ready
+
+- **GIVEN** an operator starts `cmd/turnlab-shell` for manual desktop GUI testing
+- **WHEN** the desktop GUI reaches `session_ready` and no payload is sent immediately
+- **THEN** the shell-provided harness keeps the TURN and peer path alive for a manual inspection window instead of forcing an immediate idle EOF
+- **AND** automated tests can still opt into short deterministic idle behavior explicitly
+
