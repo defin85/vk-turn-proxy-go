@@ -75,6 +75,94 @@ const List<ProviderDescriptor> _providerDescriptors = <ProviderDescriptor>[
 ];
 
 void main() {
+  testWidgets(
+    'desktop shell shows connecting state before host negotiation completes',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1600, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final controller = DesktopShellController(
+        api: _FakeControlPlaneApi(),
+        supervisor: _FakeHostSupervisor(),
+        stateStore: const _InMemoryShellStateStore(),
+        appBuild: _testGuiBuild,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(home: DashboardPage(controller: controller)),
+      );
+      await tester.pump();
+
+      expect(find.text('Connecting to local host'), findsOneWidget);
+      expect(
+        find.text('Starting local host and negotiating capabilities.'),
+        findsOneWidget,
+      );
+      expect(find.text('Local host blocked'), findsNothing);
+      expect(find.text('Saved profiles'), findsOneWidget);
+      expect(find.text('Profile workspace'), findsOneWidget);
+      expect(find.text('Diagnostics'), findsOneWidget);
+
+      controller.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets('desktop shell keeps saved-profile navigation separate', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final controller = DesktopShellController(
+      api: _FakeControlPlaneApi(),
+      supervisor: _FakeHostSupervisor(),
+      stateStore: const _InMemoryShellStateStore(),
+      appBuild: _testGuiBuild,
+    );
+
+    await controller.initialize();
+    await tester.pumpWidget(
+      MaterialApp(home: DashboardPage(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+
+    final libraryScrollable = find.descendant(
+      of: find.byKey(const ValueKey<String>('profile-library-scroll')),
+      matching: find.byType(Scrollable),
+    ).first;
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('profile-library-item-profile-2')),
+      180,
+      scrollable: libraryScrollable,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Saved profiles'), findsOneWidget);
+    expect(find.text('Profile workspace'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('profile-library-item-profile-2')),
+      findsOneWidget,
+    );
+
+    final libraryOffset = tester.getTopLeft(find.text('Saved profiles'));
+    final workspaceOffset = tester.getTopLeft(find.text('Profile workspace'));
+    expect(libraryOffset.dx, lessThan(workspaceOffset.dx));
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('profile-library-item-profile-2')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(controller.selectedProfileId, 'profile-2');
+    expect(controller.draft.name, 'beta');
+
+    controller.dispose();
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('desktop shell starts a saved profile from the GUI', (
     WidgetTester tester,
   ) async {
@@ -98,45 +186,52 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
 
     expect(find.text('Local host ready'), findsOneWidget);
-    expect(find.text('alpha', skipOffstage: false), findsOneWidget);
+    expect(controller.selectedProfileId, 'profile-1');
     expect(find.text('GUI 0.1.0+1 @gui123456789'), findsOneWidget);
     expect(find.text('Host 0.1.0+1 @deadbeefcafe'), findsOneWidget);
     expect(find.text('Contract 1'), findsOneWidget);
-    expect(find.text('Platform tunnel modes'), findsOneWidget);
-    expect(find.text('Resolutions'), findsOneWidget);
-    expect(find.textContaining('Windows Wintun'), findsOneWidget);
+    expect(find.text('Saved profiles'), findsOneWidget);
+    expect(find.text('Profile workspace'), findsOneWidget);
+    expect(find.text('Diagnostics'), findsOneWidget);
+    expect(find.text('Live work'), findsNothing);
     expect(
-      find.textContaining('Fail-closed platform tunnel checks stay collapsed'),
+      find.textContaining('All reported tunnel modes are currently fail-closed'),
       findsOneWidget,
     );
-    expect(
-      find.textContaining('Windows Wintun: host implementation missing'),
-      findsOneWidget,
-    );
-    final hostTitleOffset = tester.getTopLeft(find.text('Local host ready'));
-    final tunnelTitleOffset = tester.getTopLeft(
-      find.text('Platform tunnel modes'),
-    );
-    final resolutionsTitleOffset = tester.getTopLeft(find.text('Resolutions'));
+    final libraryOffset = tester.getTopLeft(find.text('Saved profiles'));
+    final workspaceOffset = tester.getTopLeft(find.text('Profile workspace'));
+    final diagnosticsOffset = tester.getTopLeft(find.text('Diagnostics'));
 
-    expect((hostTitleOffset.dy - tunnelTitleOffset.dy).abs(), lessThan(24));
-    expect(resolutionsTitleOffset.dy, lessThan(430));
+    expect(libraryOffset.dx, lessThan(workspaceOffset.dx));
+    expect(workspaceOffset.dx, lessThan(diagnosticsOffset.dx));
 
+    final workspaceScrollable = find.descendant(
+      of: find.byKey(const ValueKey<String>('profile-workspace-scroll')),
+      matching: find.byType(Scrollable),
+    ).first;
     final startButton = find.text('Start saved profile', skipOffstage: false);
     await tester.scrollUntilVisible(
       startButton,
-      300,
-      scrollable: find.byType(Scrollable).first,
+      320,
+      scrollable: workspaceScrollable,
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
     await tester.tap(startButton);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(api.startedProfileIDs, <String>['profile-1']);
     expect(find.textContaining('Started session'), findsOneWidget);
+    expect(find.text('Live work'), findsOneWidget);
+    expect(find.text('Sessions (1)'), findsOneWidget);
     expect(find.text('ready'), findsWidgets);
 
+    await tester.tap(find.text('Tunnel detail'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Platform tunnel modes'), findsOneWidget);
+    expect(find.text('Windows Wintun'), findsOneWidget);
+    expect(find.textContaining('host implementation is still missing'), findsOneWidget);
     final tunnelButton = find.text('Request startup', skipOffstage: false);
     await tester.ensureVisible(tunnelButton);
     await tester.pump();
@@ -209,13 +304,18 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.text('Live work'), findsOneWidget);
+    final resolutionsScrollable = find.descendant(
+      of: find.byKey(const ValueKey<String>('resolutions-scroll')),
+      matching: find.byType(Scrollable),
+    ).first;
     final openRoomButton = find.text('Open room', skipOffstage: false);
     await tester.scrollUntilVisible(
       openRoomButton,
-      300,
-      scrollable: find.byType(Scrollable).first,
+      320,
+      scrollable: resolutionsScrollable,
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
     await tester.tap(openRoomButton);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
@@ -258,6 +358,16 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
         link: 'https://vk.com/call/join/test',
         listenAddress: '127.0.0.1:9001',
         peerAddress: '127.0.0.1:56000',
+      ),
+    ),
+    ProfileRecord(
+      id: 'profile-2',
+      name: 'beta',
+      spec: const ProfileSpec(
+        provider: 'generic-turn',
+        link: 'generic-turn://turn-user:turn-pass@turn.example.test:3478',
+        listenAddress: '127.0.0.1:9002',
+        peerAddress: '10.0.0.2:6000',
       ),
     ),
   ];

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:gui_shell/src/control/control_plane_models.dart';
 import 'package:gui_shell/src/control/desktop_host_supervisor.dart';
 import 'package:gui_shell/src/control/desktop_shell_controller.dart';
+import 'package:gui_shell/src/ui/profile_library_panel.dart';
 import 'package:gui_shell/src/ui/profile_editor.dart';
 
 class DashboardPage extends StatelessWidget {
@@ -17,11 +18,34 @@ class DashboardPage extends StatelessWidget {
       animation: controller,
       builder: (BuildContext context, Widget? child) {
         final theme = Theme.of(context);
+        final busy = controller.busy || controller.status != ShellStatus.ready;
+        final profileLibrary = ProfileLibraryPanel(
+          profiles: controller.profiles,
+          selectedProfileId: controller.selectedProfileId,
+          busy: busy,
+          onSelectProfile: controller.selectProfile,
+          onCreateDraft: controller.resetDraft,
+        );
+        final profileWorkspace = ProfileEditorPanel(
+          providerDescriptors: controller.providerDescriptors,
+          selectedProfileId: controller.selectedProfileId,
+          draft: controller.draft,
+          busy: busy,
+          onDraftChanged: controller.updateDraft,
+          onSave: controller.saveDraft,
+          onDelete: controller.deleteSelectedProfile,
+          onReset: controller.resetDraft,
+          onResolve: controller.startResolutionFromDraft,
+          onStart: controller.startSelectedProfile,
+        );
+        final hasLiveWork =
+            controller.resolutions.isNotEmpty || controller.sessions.isNotEmpty;
+
         return Scaffold(
           body: SafeArea(
             child: LayoutBuilder(
               builder: (BuildContext context, BoxConstraints rootConstraints) {
-                final compactTopSummary = rootConstraints.maxWidth >= 1180;
+                final compactHeading = rootConstraints.maxWidth >= 1180;
 
                 return Padding(
                   padding: const EdgeInsets.all(24),
@@ -31,7 +55,7 @@ class DashboardPage extends StatelessWidget {
                       Text(
                         'Desktop control shell',
                         style:
-                            (compactTopSummary
+                            (compactHeading
                                     ? theme.textTheme.headlineMedium
                                     : theme.textTheme.displaySmall)
                                 ?.copyWith(
@@ -39,49 +63,20 @@ class DashboardPage extends StatelessWidget {
                                   color: theme.colorScheme.primary,
                                 ),
                       ),
-                      SizedBox(height: compactTopSummary ? 4 : 8),
+                      SizedBox(height: compactHeading ? 4 : 8),
                       Text(
                         'Profiles, sidecar supervision, challenge handoff, session states, and diagnostics without terminal-only workflows.',
                         style:
-                            (compactTopSummary
+                            (compactHeading
                                     ? theme.textTheme.bodyMedium
                                     : theme.textTheme.bodyLarge)
                                 ?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),
                       ),
-                      SizedBox(height: compactTopSummary ? 14 : 20),
-                      if (compactTopSummary)
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            Expanded(
-                              flex: 6,
-                              child: _HostBanner(
-                                controller: controller,
-                                compact: true,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              flex: 5,
-                              child: _PlatformTunnelPanel(
-                                controller: controller,
-                                compact: true,
-                              ),
-                            ),
-                          ],
-                        )
-                      else ...<Widget>[
-                        _HostBanner(controller: controller),
-                        const SizedBox(height: 12),
-                        _PlatformTunnelPanel(controller: controller),
-                      ],
-                      if (controller.notice != null) ...<Widget>[
-                        const SizedBox(height: 12),
-                        _NoticeBanner(message: controller.notice!),
-                      ],
-                      SizedBox(height: compactTopSummary ? 16 : 20),
+                      SizedBox(height: compactHeading ? 14 : 20),
+                      _OperationalHeader(controller: controller),
+                      SizedBox(height: compactHeading ? 16 : 20),
                       Expanded(
                         child: LayoutBuilder(
                           builder:
@@ -89,59 +84,84 @@ class DashboardPage extends StatelessWidget {
                                 BuildContext context,
                                 BoxConstraints constraints,
                               ) {
-                                final profilePanel = ProfileEditorPanel(
-                                  profiles: controller.profiles,
-                                  providerDescriptors:
-                                      controller.providerDescriptors,
-                                  selectedProfileId:
-                                      controller.selectedProfileId,
-                                  draft: controller.draft,
-                                  busy:
-                                      controller.busy ||
-                                      controller.status != ShellStatus.ready,
-                                  onSelectProfile: controller.selectProfile,
-                                  onDraftChanged: controller.updateDraft,
-                                  onSave: controller.saveDraft,
-                                  onDelete: controller.deleteSelectedProfile,
-                                  onReset: controller.resetDraft,
-                                  onResolve:
-                                      controller.startResolutionFromDraft,
-                                  onStart: controller.startSelectedProfile,
-                                );
-                                final resolutionsPanel = _ResolutionsPanel(
-                                  controller: controller,
-                                );
-                                final sessionsPanel = _SessionsPanel(
-                                  controller: controller,
-                                );
-                                final eventsPanel = _EventsPanel(
-                                  controller: controller,
-                                );
-
-                                if (constraints.maxWidth >= 1260) {
+                                if (constraints.maxWidth >= 1440) {
                                   return Row(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.stretch,
                                     children: <Widget>[
-                                      SizedBox(width: 380, child: profilePanel),
+                                      SizedBox(
+                                        width: 300,
+                                        child: profileLibrary,
+                                      ),
                                       const SizedBox(width: 20),
                                       Expanded(
                                         child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
                                           children: <Widget>[
                                             Expanded(
-                                              flex: 4,
-                                              child: resolutionsPanel,
+                                              child: profileWorkspace,
                                             ),
-                                            const SizedBox(height: 20),
-                                            Expanded(
-                                              flex: 5,
-                                              child: sessionsPanel,
-                                            ),
+                                            if (hasLiveWork) ...<Widget>[
+                                              const SizedBox(height: 20),
+                                              SizedBox(
+                                                height: 360,
+                                                child: _ActivityWorkspace(
+                                                  controller: controller,
+                                                ),
+                                              ),
+                                            ],
                                           ],
                                         ),
                                       ),
                                       const SizedBox(width: 20),
-                                      SizedBox(width: 360, child: eventsPanel),
+                                      SizedBox(
+                                        width: 360,
+                                        child: _SecondaryInspector(
+                                          controller: controller,
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                }
+
+                                if (constraints.maxWidth >= 1120) {
+                                  return Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: <Widget>[
+                                      SizedBox(
+                                        width: 280,
+                                        child: profileLibrary,
+                                      ),
+                                      const SizedBox(width: 20),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: <Widget>[
+                                            Expanded(
+                                              child: profileWorkspace,
+                                            ),
+                                            if (hasLiveWork) ...<Widget>[
+                                              const SizedBox(height: 20),
+                                              SizedBox(
+                                                height: 320,
+                                                child: _ActivityWorkspace(
+                                                  controller: controller,
+                                                ),
+                                              ),
+                                            ],
+                                            const SizedBox(height: 20),
+                                            SizedBox(
+                                              height: 340,
+                                              child: _SecondaryInspector(
+                                                controller: controller,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
                                     ],
                                   );
                                 }
@@ -150,21 +170,30 @@ class DashboardPage extends StatelessWidget {
                                   child: Column(
                                     children: <Widget>[
                                       SizedBox(
-                                        height: 720,
-                                        child: profilePanel,
+                                        height: 260,
+                                        child: profileLibrary,
                                       ),
                                       const SizedBox(height: 20),
                                       SizedBox(
-                                        height: 360,
-                                        child: resolutionsPanel,
+                                        height: 760,
+                                        child: profileWorkspace,
                                       ),
+                                      if (hasLiveWork) ...<Widget>[
+                                        const SizedBox(height: 20),
+                                        SizedBox(
+                                          height: 420,
+                                          child: _ActivityWorkspace(
+                                            controller: controller,
+                                          ),
+                                        ),
+                                      ],
                                       const SizedBox(height: 20),
                                       SizedBox(
                                         height: 420,
-                                        child: sessionsPanel,
+                                        child: _SecondaryInspector(
+                                          controller: controller,
+                                        ),
                                       ),
-                                      const SizedBox(height: 20),
-                                      SizedBox(height: 320, child: eventsPanel),
                                     ],
                                   ),
                                 );
@@ -183,100 +212,297 @@ class DashboardPage extends StatelessWidget {
   }
 }
 
-class _HostBanner extends StatelessWidget {
-  const _HostBanner({required this.controller, this.compact = false});
+class _OperationalHeader extends StatelessWidget {
+  const _OperationalHeader({required this.controller});
 
   final DesktopShellController controller;
-  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final connection = controller.hostConnection;
     final hostInfo = connection?.info;
-    final ready = connection?.isReady == true;
+    final status = controller.status;
+    final title = switch (status) {
+      ShellStatus.booting => 'Connecting to local host',
+      ShellStatus.ready => 'Local host ready',
+      ShellStatus.blocked => 'Local host blocked',
+    };
+    final detail =
+        connection?.message ??
+        switch (status) {
+          ShellStatus.booting =>
+            'Starting local host and negotiating capabilities.',
+          ShellStatus.ready => 'Connected to local host.',
+          ShellStatus.blocked => 'Waiting for local host negotiation.',
+        };
     final color = switch (connection?.state) {
       HostLifecycleState.ready => const Color(0xFFDEF2E1),
       HostLifecycleState.incompatible => const Color(0xFFFFE5CC),
       HostLifecycleState.failed => const Color(0xFFFFE0DF),
       _ => const Color(0xFFE5ECF6),
     };
+    final tunnelSummary = _platformTunnelHeaderSummary(controller);
+    final tunnelModes = controller.platformTunnels.length;
+    final readyTunnelModes = controller.platformTunnels
+        .where((PlatformTunnelCapability capability) => capability.available)
+        .length;
 
     return Card(
       color: color,
       child: Padding(
-        padding: EdgeInsets.all(compact ? 12 : 18),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Expanded(
+        padding: const EdgeInsets.all(18),
+        child: LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints constraints) {
+            final stacked = constraints.maxWidth < 1100;
+            final hostSummary = Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  title,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(detail),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: <Widget>[
+                    _Tag(
+                      label: 'GUI ${controller.appBuild.shortLabel}',
+                      dense: false,
+                    ),
+                    if (hostInfo != null)
+                      _Tag(label: 'Host ${hostInfo.build.shortLabel}'),
+                    if (hostInfo != null)
+                      _Tag(label: 'Contract ${hostInfo.contractVersion}'),
+                    if (connection?.launched == true) _Tag(label: 'launched'),
+                    if (connection?.launchSpec != null)
+                      _Tag(label: connection!.launchSpec!.description),
+                  ],
+                ),
+              ],
+            );
+            final operationsAside = Column(
+              crossAxisAlignment: stacked
+                  ? CrossAxisAlignment.start
+                  : CrossAxisAlignment.end,
+              children: <Widget>[
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.66),
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: stacked
+                        ? CrossAxisAlignment.start
+                        : CrossAxisAlignment.end,
+                    children: <Widget>[
+                      Text(
+                        readyTunnelModes > 0
+                            ? '$readyTunnelModes/$tunnelModes tunnel modes ready'
+                            : 'Platform tunnel summary',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        tunnelSummary,
+                        textAlign: stacked ? TextAlign.start : TextAlign.end,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: stacked
+                      ? WrapAlignment.start
+                      : WrapAlignment.end,
+                  children: <Widget>[
+                    FilledButton.tonal(
+                      onPressed: controller.busy
+                          ? null
+                          : () => unawaited(controller.reconnect()),
+                      child: const Text('Reconnect'),
+                    ),
+                    FilledButton(
+                      onPressed:
+                          controller.busy ||
+                              controller.status != ShellStatus.ready
+                          ? null
+                          : () => unawaited(controller.refresh()),
+                      child: const Text('Refresh'),
+                    ),
+                  ],
+                ),
+              ],
+            );
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                if (stacked)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      hostSummary,
+                      const SizedBox(height: 14),
+                      operationsAside,
+                    ],
+                  )
+                else
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Expanded(child: hostSummary),
+                      const SizedBox(width: 18),
+                      SizedBox(width: 320, child: operationsAside),
+                    ],
+                  ),
+                if (controller.notice != null) ...<Widget>[
+                  const SizedBox(height: 14),
+                  _NoticeBanner(message: controller.notice!),
+                ],
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _ActivityWorkspace extends StatelessWidget {
+  const _ActivityWorkspace({required this.controller});
+
+  final DesktopShellController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final initialIndex = controller.sessions.isNotEmpty &&
+            (controller.selectedSessionId != null ||
+                controller.resolutions.isEmpty)
+        ? 1
+        : 0;
+
+    return DefaultTabController(
+      key: ValueKey<String>(
+        'activity-${controller.resolutions.length}-${controller.sessions.length}-${controller.selectedResolutionId ?? 'none'}-${controller.selectedSessionId ?? 'none'}',
+      ),
+      length: 2,
+      initialIndex: initialIndex,
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                'Live work',
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Inspect the currently selected resolution or session without dedicating the full desktop canvas to empty activity panels.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 16),
+              TabBar(
+                isScrollable: true,
+                tabs: <Widget>[
+                  Tab(text: 'Resolutions (${controller.resolutions.length})'),
+                  Tab(text: 'Sessions (${controller.sessions.length})'),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: TabBarView(
+                  children: <Widget>[
+                    _ResolutionsPanel(controller: controller, embedded: true),
+                    _SessionsPanel(controller: controller, embedded: true),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SecondaryInspector extends StatelessWidget {
+  const _SecondaryInspector({required this.controller});
+
+  final DesktopShellController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Text(
-                    ready ? 'Local host ready' : 'Local host blocked',
-                    style:
-                        (compact
-                                ? theme.textTheme.titleSmall
-                                : theme.textTheme.titleLarge)
-                            ?.copyWith(fontWeight: FontWeight.w800),
+                    'Diagnostics',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-                  SizedBox(height: compact ? 4 : 6),
+                  const SizedBox(height: 6),
                   Text(
-                    connection?.message ??
-                        'Waiting for local host negotiation.',
-                    style: compact ? theme.textTheme.bodySmall : null,
+                    'Secondary support surfaces stay here: typed events and detailed platform-tunnel startup evidence.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                  SizedBox(height: compact ? 6 : 8),
-                  Wrap(
-                    spacing: compact ? 6 : 8,
-                    runSpacing: compact ? 6 : 8,
-                    children: <Widget>[
-                      _Tag(
-                        label: 'GUI ${controller.appBuild.shortLabel}',
-                        dense: compact,
-                      ),
-                      if (hostInfo != null)
-                        _Tag(
-                          label: 'Host ${hostInfo.build.shortLabel}',
-                          dense: compact,
-                        ),
-                      if (hostInfo != null)
-                        _Tag(
-                          label: 'Contract ${hostInfo.contractVersion}',
-                          dense: compact,
-                        ),
-                      if (!compact && connection?.launched == true)
-                        _Tag(label: 'launched'),
-                      if (!compact && connection?.launchSpec != null)
-                        _Tag(label: connection!.launchSpec!.description),
+                  const SizedBox(height: 16),
+                  const TabBar(
+                    tabs: <Widget>[
+                      Tab(text: 'Events'),
+                      Tab(text: 'Tunnel detail'),
                     ],
                   ),
                 ],
               ),
             ),
-            SizedBox(width: compact ? 10 : 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: TabBarView(
               children: <Widget>[
-                FilledButton.tonal(
-                  onPressed: controller.busy
-                      ? null
-                      : () => unawaited(controller.reconnect()),
-                  child: const Text('Reconnect'),
-                ),
-                FilledButton(
-                  onPressed:
-                      controller.busy || controller.status != ShellStatus.ready
-                      ? null
-                      : () => unawaited(controller.refresh()),
-                  child: const Text('Refresh'),
-                ),
+                _EventsPanel(controller: controller),
+                _PlatformTunnelPanel(controller: controller, compact: false),
               ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -301,6 +527,80 @@ class _PlatformTunnelPanel extends StatelessWidget {
           (PlatformTunnelCapability capability) =>
               controller.platformTunnelResultFor(capability.mode) == null,
         );
+    final body = switch ((platformTunnels.isEmpty, compact, showCompactUnavailableSummary)) {
+      (true, _, _) => <Widget>[
+          Text(
+            'The connected host did not report any desktop platform tunnel modes.',
+            style: theme.textTheme.bodyMedium,
+          ),
+        ],
+      (false, true, true) => <Widget>[
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: platformTunnels.map((PlatformTunnelCapability capability) {
+              return Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.72),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: <Widget>[
+                    Text(
+                      _compactPlatformTunnelStatusLabel(capability),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    FilledButton.tonal(
+                      onPressed:
+                          controller.busy ||
+                              controller.hostConnection?.isReady != true
+                          ? null
+                          : () => unawaited(
+                              controller.startPlatformTunnel(capability.mode),
+                            ),
+                      child: const Text('Request startup'),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      (_, _, true) => platformTunnels.map((PlatformTunnelCapability capability) {
+          return Padding(
+            padding: EdgeInsets.only(bottom: compact ? 8 : 12),
+            child: _CompactPlatformTunnelCard(
+              capability: capability,
+              busy: controller.busy,
+              ready: controller.hostConnection?.isReady == true,
+              compact: compact,
+              onStart: () => controller.startPlatformTunnel(capability.mode),
+            ),
+          );
+        }).toList(),
+      _ => platformTunnels.map((PlatformTunnelCapability capability) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _PlatformTunnelCard(
+              capability: capability,
+              result: controller.platformTunnelResultFor(capability.mode),
+              busy: controller.busy,
+              ready: controller.hostConnection?.isReady == true,
+              onStart: () => controller.startPlatformTunnel(capability.mode),
+            ),
+          );
+        }).toList(),
+    };
 
     return Card(
       color: const Color(0xFFE6EDF7),
@@ -331,84 +631,14 @@ class _PlatformTunnelPanel extends StatelessWidget {
                       ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
             SizedBox(height: compact ? 10 : 14),
-            if (platformTunnels.isEmpty)
-              Text(
-                'The connected host did not report any desktop platform tunnel modes.',
-                style: theme.textTheme.bodyMedium,
-              )
-            else if (compact && showCompactUnavailableSummary)
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: platformTunnels.map((
-                  PlatformTunnelCapability capability,
-                ) {
-                  return Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.72),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: <Widget>[
-                        Text(
-                          _compactPlatformTunnelStatusLabel(capability),
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        FilledButton.tonal(
-                          onPressed:
-                              controller.busy ||
-                                  controller.hostConnection?.isReady != true
-                              ? null
-                              : () => unawaited(
-                                  controller.startPlatformTunnel(
-                                    capability.mode,
-                                  ),
-                                ),
-                          child: const Text('Request startup'),
-                        ),
-                      ],
-                    ),
-                  );
-                }).toList(),
-              )
-            else if (showCompactUnavailableSummary)
-              ...platformTunnels.map((PlatformTunnelCapability capability) {
-                return Padding(
-                  padding: EdgeInsets.only(bottom: compact ? 8 : 12),
-                  child: _CompactPlatformTunnelCard(
-                    capability: capability,
-                    busy: controller.busy,
-                    ready: controller.hostConnection?.isReady == true,
-                    compact: compact,
-                    onStart: () =>
-                        controller.startPlatformTunnel(capability.mode),
-                  ),
-                );
-              })
-            else
-              ...platformTunnels.map((PlatformTunnelCapability capability) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _PlatformTunnelCard(
-                    capability: capability,
-                    result: controller.platformTunnelResultFor(capability.mode),
-                    busy: controller.busy,
-                    ready: controller.hostConnection?.isReady == true,
-                    onStart: () =>
-                        controller.startPlatformTunnel(capability.mode),
-                  ),
-                );
-              }),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: body,
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -585,198 +815,202 @@ class _PlatformTunnelCard extends StatelessWidget {
 }
 
 class _ResolutionsPanel extends StatelessWidget {
-  const _ResolutionsPanel({required this.controller});
+  const _ResolutionsPanel({required this.controller, this.embedded = false});
 
   final DesktopShellController controller;
+  final bool embedded;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          'Resolutions',
+          style: theme.textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Invite resolution stays separate from runtime sessions until you explicitly start on this device or copy a handoff link.',
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Expanded(
+          child: controller.resolutions.isEmpty
+              ? Center(
+                  child: Text(
+                    'No provider resolutions yet.',
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                )
+              : ListView.separated(
+                  key: const ValueKey<String>('resolutions-scroll'),
+                  itemCount: controller.resolutions.length,
+                  separatorBuilder: (_, int index) =>
+                      const SizedBox(height: 14),
+                  itemBuilder: (BuildContext context, int index) {
+                    final resolution = controller.resolutions[index];
+                    final challenge = controller.activeChallengeForResolution(
+                      resolution,
+                    );
+                    return _ResolutionCard(
+                      resolution: resolution,
+                      challenge: challenge,
+                      busy:
+                          controller.busy ||
+                          controller.status != ShellStatus.ready,
+                      selected:
+                          controller.selectedResolutionId == resolution.id,
+                      onSelect: () =>
+                          controller.selectResolution(resolution.id),
+                      onCancel: resolution.isTerminal
+                          ? null
+                          : () => controller.cancelResolution(resolution.id),
+                      onMaterialize:
+                          resolution.state == ResolutionState.resolved &&
+                              resolution.supportsAction(
+                                ArtifactAction.startOnThisDevice,
+                              )
+                          ? () => controller.materializeResolution(
+                              resolution.id,
+                            )
+                          : null,
+                      onCopyExport:
+                          resolution.state == ResolutionState.resolved &&
+                              resolution.supportsAction(
+                                ArtifactAction.exportHandoff,
+                              )
+                          ? () => controller.copyResolutionExport(
+                              resolution.id,
+                            )
+                          : null,
+                      onOpenRoom:
+                          resolution.state == ResolutionState.resolved &&
+                              resolution.supportsAction(
+                                ArtifactAction.openRoom,
+                              )
+                          ? () => controller.openResolutionExternalAction(
+                              resolution.id,
+                              ArtifactAction.openRoom,
+                            )
+                          : null,
+                      onOpenCamera:
+                          resolution.state == ResolutionState.resolved &&
+                              resolution.supportsAction(
+                                ArtifactAction.openCamera,
+                              )
+                          ? () => controller.openResolutionExternalAction(
+                              resolution.id,
+                              ArtifactAction.openCamera,
+                            )
+                          : null,
+                      onOpenArchive:
+                          resolution.state == ResolutionState.resolved &&
+                              resolution.supportsAction(
+                                ArtifactAction.openArchive,
+                              )
+                          ? () => controller.openResolutionExternalAction(
+                              resolution.id,
+                              ArtifactAction.openArchive,
+                            )
+                          : null,
+                      onContinueChallenge: challenge == null
+                          ? null
+                          : () => controller.continueChallenge(challenge.id),
+                      onCancelChallenge: challenge == null
+                          ? null
+                          : () => controller.cancelChallenge(challenge.id),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+
+    if (embedded) {
+      return content;
+    }
 
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              'Resolutions',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Invite resolution stays separate from runtime sessions until you explicitly start on this device or copy a handoff link.',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: controller.resolutions.isEmpty
-                  ? Center(
-                      child: Text(
-                        'No provider resolutions yet.',
-                        style: theme.textTheme.bodyLarge?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    )
-                  : ListView.separated(
-                      itemCount: controller.resolutions.length,
-                      separatorBuilder: (_, int index) =>
-                          const SizedBox(height: 14),
-                      itemBuilder: (BuildContext context, int index) {
-                        final resolution = controller.resolutions[index];
-                        final challenge = controller
-                            .activeChallengeForResolution(resolution);
-                        return _ResolutionCard(
-                          resolution: resolution,
-                          challenge: challenge,
-                          busy:
-                              controller.busy ||
-                              controller.status != ShellStatus.ready,
-                          selected:
-                              controller.selectedResolutionId == resolution.id,
-                          onSelect: () =>
-                              controller.selectResolution(resolution.id),
-                          onCancel: resolution.isTerminal
-                              ? null
-                              : () =>
-                                    controller.cancelResolution(resolution.id),
-                          onMaterialize:
-                              resolution.state == ResolutionState.resolved &&
-                                  resolution.supportsAction(
-                                    ArtifactAction.startOnThisDevice,
-                                  )
-                              ? () => controller.materializeResolution(
-                                  resolution.id,
-                                )
-                              : null,
-                          onCopyExport:
-                              resolution.state == ResolutionState.resolved &&
-                                  resolution.supportsAction(
-                                    ArtifactAction.exportHandoff,
-                                  )
-                              ? () => controller.copyResolutionExport(
-                                  resolution.id,
-                                )
-                              : null,
-                          onOpenRoom:
-                              resolution.state == ResolutionState.resolved &&
-                                  resolution.supportsAction(
-                                    ArtifactAction.openRoom,
-                                  )
-                              ? () => controller.openResolutionExternalAction(
-                                  resolution.id,
-                                  ArtifactAction.openRoom,
-                                )
-                              : null,
-                          onOpenCamera:
-                              resolution.state == ResolutionState.resolved &&
-                                  resolution.supportsAction(
-                                    ArtifactAction.openCamera,
-                                  )
-                              ? () => controller.openResolutionExternalAction(
-                                  resolution.id,
-                                  ArtifactAction.openCamera,
-                                )
-                              : null,
-                          onOpenArchive:
-                              resolution.state == ResolutionState.resolved &&
-                                  resolution.supportsAction(
-                                    ArtifactAction.openArchive,
-                                  )
-                              ? () => controller.openResolutionExternalAction(
-                                  resolution.id,
-                                  ArtifactAction.openArchive,
-                                )
-                              : null,
-                          onContinueChallenge: challenge == null
-                              ? null
-                              : () =>
-                                    controller.continueChallenge(challenge.id),
-                          onCancelChallenge: challenge == null
-                              ? null
-                              : () => controller.cancelChallenge(challenge.id),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
+      child: Padding(padding: const EdgeInsets.all(20), child: content),
     );
   }
 }
 
 class _SessionsPanel extends StatelessWidget {
-  const _SessionsPanel({required this.controller});
+  const _SessionsPanel({required this.controller, this.embedded = false});
 
   final DesktopShellController controller;
+  final bool embedded;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          'Sessions',
+          style: theme.textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Expanded(
+          child: controller.sessions.isEmpty
+              ? Center(
+                  child: Text(
+                    'No active or recent sessions yet.',
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                )
+              : ListView.separated(
+                  key: const ValueKey<String>('sessions-scroll'),
+                  itemCount: controller.sessions.length,
+                  separatorBuilder: (_, int index) =>
+                      const SizedBox(height: 14),
+                  itemBuilder: (BuildContext context, int index) {
+                    final session = controller.sessions[index];
+                    final challenge = controller.activeChallengeFor(session);
+                    return _SessionCard(
+                      session: session,
+                      challenge: challenge,
+                      busy:
+                          controller.busy ||
+                          controller.status != ShellStatus.ready,
+                      selected: controller.selectedSessionId == session.id,
+                      onSelect: () => controller.selectSession(session.id),
+                      onStop: () => controller.stopSession(session.id),
+                      onExport: () =>
+                          controller.exportDiagnostics(session.id),
+                      onContinueChallenge: challenge == null
+                          ? null
+                          : () => controller.continueChallenge(challenge.id),
+                      onCancelChallenge: challenge == null
+                          ? null
+                          : () => controller.cancelChallenge(challenge.id),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+
+    if (embedded) {
+      return content;
+    }
 
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              'Sessions',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: controller.sessions.isEmpty
-                  ? Center(
-                      child: Text(
-                        'No active or recent sessions yet.',
-                        style: theme.textTheme.bodyLarge?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    )
-                  : ListView.separated(
-                      itemCount: controller.sessions.length,
-                      separatorBuilder: (_, int index) =>
-                          const SizedBox(height: 14),
-                      itemBuilder: (BuildContext context, int index) {
-                        final session = controller.sessions[index];
-                        final challenge = controller.activeChallengeFor(
-                          session,
-                        );
-                        return _SessionCard(
-                          session: session,
-                          challenge: challenge,
-                          busy:
-                              controller.busy ||
-                              controller.status != ShellStatus.ready,
-                          selected: controller.selectedSessionId == session.id,
-                          onSelect: () => controller.selectSession(session.id),
-                          onStop: () => controller.stopSession(session.id),
-                          onExport: () =>
-                              controller.exportDiagnostics(session.id),
-                          onContinueChallenge: challenge == null
-                              ? null
-                              : () =>
-                                    controller.continueChallenge(challenge.id),
-                          onCancelChallenge: challenge == null
-                              ? null
-                              : () => controller.cancelChallenge(challenge.id),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
+      child: Padding(padding: const EdgeInsets.all(20), child: content),
     );
   }
 }
@@ -1177,6 +1411,7 @@ class _EventsPanel extends StatelessWidget {
                       ),
                     )
                   : ListView.separated(
+                      key: const ValueKey<String>('events-scroll'),
                       itemCount: controller.events.length,
                       separatorBuilder: (_, int index) =>
                           const SizedBox(height: 10),
@@ -1343,6 +1578,30 @@ class _NoticeBanner extends StatelessWidget {
       ),
     );
   }
+}
+
+String _platformTunnelHeaderSummary(DesktopShellController controller) {
+  final platformTunnels = controller.platformTunnels;
+  if (platformTunnels.isEmpty) {
+    return 'No platform tunnel modes reported by the connected host.';
+  }
+
+  final readyCount = platformTunnels
+      .where((PlatformTunnelCapability capability) => capability.available)
+      .length;
+  if (readyCount > 0) {
+    return 'Use Diagnostics -> Tunnel detail to inspect startup stages and fail-closed results for the reported modes.';
+  }
+
+  final startupRequested = platformTunnels.any(
+    (PlatformTunnelCapability capability) =>
+        controller.platformTunnelResultFor(capability.mode) != null,
+  );
+  if (startupRequested) {
+    return 'All reported tunnel modes are still fail-closed; inspect Diagnostics -> Tunnel detail for the latest startup evidence.';
+  }
+
+  return 'All reported tunnel modes are currently fail-closed. Use Diagnostics -> Tunnel detail when you want to test startup explicitly.';
 }
 
 String _platformTunnelCapabilitySummary(PlatformTunnelCapability capability) {

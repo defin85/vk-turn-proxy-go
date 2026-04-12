@@ -7,12 +7,10 @@ import 'package:gui_shell/src/control/profile_draft.dart';
 class ProfileEditorPanel extends StatefulWidget {
   const ProfileEditorPanel({
     super.key,
-    required this.profiles,
     required this.providerDescriptors,
     required this.selectedProfileId,
     required this.draft,
     required this.busy,
-    required this.onSelectProfile,
     required this.onDraftChanged,
     required this.onSave,
     required this.onDelete,
@@ -21,12 +19,10 @@ class ProfileEditorPanel extends StatefulWidget {
     required this.onStart,
   });
 
-  final List<ProfileRecord> profiles;
   final List<ProviderDescriptor> providerDescriptors;
   final String? selectedProfileId;
   final ProfileDraft draft;
   final bool busy;
-  final ValueChanged<String> onSelectProfile;
   final ValueChanged<ProfileDraft> onDraftChanged;
   final Future<void> Function() onSave;
   final Future<void> Function() onDelete;
@@ -98,6 +94,9 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final descriptor = _selectedDescriptor();
+    final profileScopeLabel = widget.selectedProfileId == null
+        ? 'Editing an unsaved draft'
+        : 'Editing a saved profile workspace';
 
     return Card(
       child: Padding(
@@ -108,23 +107,73 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
             Row(
               children: <Widget>[
                 Expanded(
-                  child: Text(
-                    'Profiles',
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        'Profile workspace',
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        profileScopeLabel,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                FilledButton.tonal(
+                FilledButton.tonalIcon(
                   onPressed: widget.busy ? null : widget.onReset,
-                  child: const Text('New'),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Fresh draft'),
                 ),
               ],
             ),
             const SizedBox(height: 16),
             Expanded(
               child: ListView(
+                key: const ValueKey<String>('profile-workspace-scroll'),
                 children: <Widget>[
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        const Icon(Icons.playlist_add_check_circle_outlined),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text(
+                                'Task-first workspace',
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Use this workspace to shape the active profile, save it if needed, then resolve or start. Saved-profile browsing now stays in the separate library rail.',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   if (descriptor != null) ...<Widget>[
                     _providerDescriptorCard(theme, descriptor),
                     const SizedBox(height: 16),
@@ -221,57 +270,6 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 24),
-                  Text(
-                    'Saved profiles',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  if (widget.profiles.isEmpty)
-                    Text(
-                      'No saved profiles yet.',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  for (final ProfileRecord profile
-                      in widget.profiles) ...<Widget>[
-                    const SizedBox(height: 8),
-                    Material(
-                      color: widget.selectedProfileId == profile.id
-                          ? theme.colorScheme.primary.withValues(alpha: 0.08)
-                          : theme.colorScheme.surfaceContainerHighest
-                                .withValues(alpha: 0.4),
-                      borderRadius: BorderRadius.circular(16),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(16),
-                        onTap: () => widget.onSelectProfile(profile.id),
-                        child: Padding(
-                          padding: const EdgeInsets.all(14),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              Text(
-                                profile.name.isEmpty
-                                    ? profile.id
-                                    : profile.name,
-                                style: theme.textTheme.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '${profile.spec.provider} -> ${profile.spec.peerAddress}',
-                                style: theme.textTheme.bodySmall,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
