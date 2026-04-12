@@ -1,7 +1,8 @@
 # native-build-workflows Specification
 
 ## Purpose
-TBD - created by archiving change add-09-native-build-workflows. Update Purpose after archive.
+Define the documented, repo-owned build workflows and prerequisites for native
+Go and Flutter artifacts.
 ## Requirements
 ### Requirement: Repository provides target-native build entrypoints
 
@@ -50,3 +51,26 @@ The repository SHALL detect incompatible host-native build toolchains before sta
 - **THEN** the workflow fails before the native build starts if the installed Windows Flutter toolchain is missing or incompatible
 - **AND** it reports the expected repo-managed version or bootstrap path explicitly
 
+### Requirement: Shell build workflows expose root workspace resolution explicitly
+
+The system SHALL treat repository-root workspace resolution as a documented
+public prerequisite for Flutter shell development and build workflows once the
+shell packages migrate to one repository-root workspace.
+
+#### Scenario: Developer prepares shell dependencies from the documented workflow
+
+- **GIVEN** a developer follows the documented workflow for desktop, mobile, or
+  shared shell core work
+- **WHEN** they prepare the Flutter shell packages before analysis, tests, or
+  packaging
+- **THEN** the workflow directs them to run repository-root `dart pub get`
+- **AND** it does not present per-package `flutter pub get` as an authoritative
+  replacement for the shared workspace resolution
+
+#### Scenario: Repo-owned shell tooling does not depend on app-local resolution artifacts
+
+- **GIVEN** repo-owned shell scripts or CI jobs run after workspace migration
+- **WHEN** they verify or build Flutter shell packages
+- **THEN** they use or validate the repository-root workspace resolution
+- **AND** they do not depend on app-local `pubspec.lock` or app-local
+  `.dart_tool/package_config.json` files for workspace members

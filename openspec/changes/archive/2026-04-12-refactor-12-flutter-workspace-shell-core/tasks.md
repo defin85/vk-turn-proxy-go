@@ -15,7 +15,7 @@
 - [x] 3.2 Update shell docs and CI verification to include repo-root workspace resolution as a public developer workflow plus both app packages
 - [x] 3.3 Update operator-facing shell build workflow docs/spec deltas when commands or prerequisites change
 - [x] 3.4 Remove or rewrite app-local `flutter pub get` guidance and script assumptions anywhere repository-root workspace resolution is now authoritative
-- [ ] 3.5 Keep archive/promotion readiness explicit for both `flutter-shell-workspace` and `native-build-workflows`, including creation of current specs under `openspec/specs/` when the change is archived
+- [x] 3.5 Keep archive/promotion readiness explicit for both `flutter-shell-workspace` and `native-build-workflows`, including creation of current specs under `openspec/specs/` when the change is archived
 
 ## 4. Verification
 - [x] 4.1 Run `dart pub get`
