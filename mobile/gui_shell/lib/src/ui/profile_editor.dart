@@ -9,11 +9,13 @@ class ProfileEditorPanel extends StatefulWidget {
     super.key,
     required this.profiles,
     required this.providerDescriptors,
+    required this.availableProviderConfigs,
     required this.selectedProfileId,
     required this.draft,
     required this.busy,
     required this.onSelectProfile,
     required this.onDraftChanged,
+    required this.onApplyProviderConfig,
     required this.onSave,
     required this.onDelete,
     required this.onReset,
@@ -23,11 +25,13 @@ class ProfileEditorPanel extends StatefulWidget {
 
   final List<ProfileRecord> profiles;
   final List<ProviderDescriptor> providerDescriptors;
+  final List<ProviderConfigRecord> availableProviderConfigs;
   final String? selectedProfileId;
   final ProfileDraft draft;
   final bool busy;
   final ValueChanged<String> onSelectProfile;
   final ValueChanged<ProfileDraft> onDraftChanged;
+  final ValueChanged<String> onApplyProviderConfig;
   final Future<void> Function() onSave;
   final Future<void> Function() onDelete;
   final VoidCallback onReset;
@@ -51,6 +55,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   late final TextEditingController _logLevelController;
   final Map<String, TextEditingController> _providerSettingControllers =
       <String, TextEditingController>{};
+  String? _selectedProviderConfigId;
 
   @override
   void initState() {
@@ -145,6 +150,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                 spec: widget.draft.spec.copyWith(link: value.trim()),
               ),
             ),
+            _providerConfigApplySection(theme),
             if (descriptor != null) ...<Widget>[
               _disclosureSection(
                 title: 'Provider details',
@@ -755,6 +761,97 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
       widget.draft.copyWith(
         name: name ?? widget.draft.name,
         spec: spec ?? widget.draft.spec,
+      ),
+    );
+  }
+
+  Widget _providerConfigApplySection(ThemeData theme) {
+    if (widget.availableProviderConfigs.isEmpty) {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest.withValues(
+            alpha: 0.35,
+          ),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Text(
+          'No reusable provider configs are currently available for this provider. Use the workflow library to create one when the mobile host advertises descriptor-retained provider settings.',
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
+
+    _selectedProviderConfigId ??= widget.availableProviderConfigs.first.id;
+    final selectedConfigId =
+        widget.availableProviderConfigs.any(
+          (ProviderConfigRecord config) =>
+              config.id == _selectedProviderConfigId,
+        )
+        ? _selectedProviderConfigId
+        : widget.availableProviderConfigs.first.id;
+    _selectedProviderConfigId = selectedConfigId;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.35,
+        ),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'Apply provider config',
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Copy retained provider settings from a reusable config into the active mobile draft. Saved profiles remain snapshot-based until you save the draft again.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            initialValue: selectedConfigId,
+            decoration: const InputDecoration(labelText: 'Provider config'),
+            items: widget.availableProviderConfigs
+                .map(
+                  (ProviderConfigRecord config) => DropdownMenuItem<String>(
+                    value: config.id,
+                    child: Text(config.name.isEmpty ? config.id : config.name),
+                  ),
+                )
+                .toList(growable: false),
+            onChanged: widget.busy
+                ? null
+                : (String? value) {
+                    if (value == null) {
+                      return;
+                    }
+                    setState(() {
+                      _selectedProviderConfigId = value;
+                    });
+                  },
+          ),
+          const SizedBox(height: 10),
+          _actionButton(
+            label: 'Apply config to draft',
+            variant: _ProfileEditorActionVariant.secondary,
+            onPressed: widget.busy
+                ? null
+                : () => widget.onApplyProviderConfig(selectedConfigId!),
+          ),
+        ],
       ),
     );
   }

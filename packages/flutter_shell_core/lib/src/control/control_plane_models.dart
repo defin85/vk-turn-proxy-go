@@ -2,6 +2,7 @@ import 'dart:convert';
 
 enum Capability {
   profiles('profiles'),
+  providerConfigs('provider_configs'),
   sessions('sessions'),
   challenges('challenges'),
   diagnostics('diagnostics'),
@@ -1224,6 +1225,240 @@ class ProfileRecord {
     });
   }
 }
+
+enum ProviderConfigAvailabilityState {
+  available('available'),
+  providerUnavailable('provider_unavailable'),
+  schemaUnsupported('schema_unsupported'),
+  settingsInvalid('settings_invalid');
+
+  const ProviderConfigAvailabilityState(this.value);
+
+  final String value;
+
+  static ProviderConfigAvailabilityState fromJson(String? raw) {
+    for (final state in values) {
+      if (state.value == raw) {
+        return state;
+      }
+    }
+    return ProviderConfigAvailabilityState.available;
+  }
+}
+
+extension ProviderConfigAvailabilityStateDisplay
+    on ProviderConfigAvailabilityState {
+  String get label => switch (this) {
+    ProviderConfigAvailabilityState.available => 'Available',
+    ProviderConfigAvailabilityState.providerUnavailable => 'Provider missing',
+    ProviderConfigAvailabilityState.schemaUnsupported => 'Schema unsupported',
+    ProviderConfigAvailabilityState.settingsInvalid => 'Settings invalid',
+  };
+}
+
+class ProviderConfigAvailability {
+  const ProviderConfigAvailability({
+    this.state = ProviderConfigAvailabilityState.available,
+    this.message = '',
+    this.field = '',
+    this.violation = '',
+  });
+
+  factory ProviderConfigAvailability.fromJson(Map<String, dynamic> json) {
+    return ProviderConfigAvailability(
+      state: ProviderConfigAvailabilityState.fromJson(json['state'] as String?),
+      message: json['message'] as String? ?? '',
+      field: json['field'] as String? ?? '',
+      violation: json['violation'] as String? ?? '',
+    );
+  }
+
+  final ProviderConfigAvailabilityState state;
+  final String message;
+  final String field;
+  final String violation;
+
+  bool get isAvailable => state == ProviderConfigAvailabilityState.available;
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{
+      'state': state.value,
+      'message': message.isEmpty ? null : message,
+      'field': field.isEmpty ? null : field,
+      'violation': violation.isEmpty ? null : violation,
+    });
+  }
+}
+
+class ProviderConfigRecord {
+  const ProviderConfigRecord({
+    required this.id,
+    required this.provider,
+    required this.name,
+    required this.providerSettings,
+    required this.createdAt,
+    required this.updatedAt,
+    this.availability = const ProviderConfigAvailability(),
+  });
+
+  factory ProviderConfigRecord.fromJson(Map<String, dynamic> json) {
+    return ProviderConfigRecord(
+      id: json['id'] as String? ?? '',
+      provider: json['provider'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      providerSettings: _readJsonObject(json['provider_settings']),
+      createdAt: _readTimestamp(json['created_at']),
+      updatedAt: _readTimestamp(json['updated_at']),
+      availability: json['availability'] is Map<String, dynamic>
+          ? ProviderConfigAvailability.fromJson(
+              json['availability'] as Map<String, dynamic>,
+            )
+          : const ProviderConfigAvailability(),
+    );
+  }
+
+  final String id;
+  final String provider;
+  final String name;
+  final Map<String, dynamic> providerSettings;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final ProviderConfigAvailability availability;
+
+  bool get isAvailable => availability.isAvailable;
+
+  ProviderConfigRecord copyWith({
+    String? id,
+    String? provider,
+    String? name,
+    Map<String, dynamic>? providerSettings,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    ProviderConfigAvailability? availability,
+  }) {
+    return ProviderConfigRecord(
+      id: id ?? this.id,
+      provider: provider ?? this.provider,
+      name: name ?? this.name,
+      providerSettings: providerSettings ?? this.providerSettings,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      availability: availability ?? this.availability,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{
+      'id': id.isEmpty ? null : id,
+      'provider': provider,
+      'name': name,
+      'provider_settings': providerSettings.isEmpty ? null : providerSettings,
+      'availability': availability.toJson(),
+      'created_at': createdAt.millisecondsSinceEpoch == 0
+          ? null
+          : createdAt.toUtc().toIso8601String(),
+      'updated_at': updatedAt.millisecondsSinceEpoch == 0
+          ? null
+          : updatedAt.toUtc().toIso8601String(),
+    });
+  }
+}
+
+enum ProviderPresetAvailabilityState {
+  available('available'),
+  providerUnavailable('provider_unavailable');
+
+  const ProviderPresetAvailabilityState(this.value);
+
+  final String value;
+}
+
+class ProviderPresetAvailability {
+  const ProviderPresetAvailability({
+    required this.state,
+    required this.message,
+    this.descriptor,
+  });
+
+  final ProviderPresetAvailabilityState state;
+  final String message;
+  final ProviderDescriptor? descriptor;
+
+  bool get isAvailable => state == ProviderPresetAvailabilityState.available;
+}
+
+class ProviderPreset {
+  const ProviderPreset({
+    required this.id,
+    required this.provider,
+    required this.title,
+    required this.description,
+    required this.suggestedProfileName,
+    this.seedProviderSettings = const <String, dynamic>{},
+  });
+
+  final String id;
+  final String provider;
+  final String title;
+  final String description;
+  final String suggestedProfileName;
+  final Map<String, dynamic> seedProviderSettings;
+
+  ProviderPresetAvailability availabilityFor(
+    Iterable<ProviderDescriptor> descriptors,
+  ) {
+    final providerId = provider.trim().toLowerCase();
+    for (final descriptor in descriptors) {
+      if (descriptor.id.trim().toLowerCase() != providerId) {
+        continue;
+      }
+      return ProviderPresetAvailability(
+        state: ProviderPresetAvailabilityState.available,
+        message: '',
+        descriptor: descriptor,
+      );
+    }
+    return ProviderPresetAvailability(
+      state: ProviderPresetAvailabilityState.providerUnavailable,
+      message:
+          'The connected host does not advertise the $title provider family yet.',
+    );
+  }
+
+  Map<String, dynamic> normalizedSeedSettings(ProviderDescriptor? descriptor) {
+    if (descriptor == null) {
+      return const <String, dynamic>{};
+    }
+    return descriptor.normalizeProviderSettings(seedProviderSettings);
+  }
+}
+
+const List<ProviderPreset> kProviderPresetCatalog = <ProviderPreset>[
+  ProviderPreset(
+    id: 'vk-default',
+    provider: 'vk',
+    title: 'VK',
+    description:
+        'Bootstrap a browser-first VK invite workflow with the current host-reported descriptor.',
+    suggestedProfileName: 'VK Calls',
+  ),
+  ProviderPreset(
+    id: 'wb-stream-default',
+    provider: 'wb-stream',
+    title: 'WB Stream',
+    description:
+        'Bootstrap a reusable WB stream profile family for future room and media-device rollouts.',
+    suggestedProfileName: 'WB Stream',
+  ),
+  ProviderPreset(
+    id: 'smarthome-default',
+    provider: 'smarthome',
+    title: 'RTK Smarthome',
+    description:
+        'Bootstrap an RTK Smarthome profile family for future camera and device portal flows.',
+    suggestedProfileName: 'RTK Smarthome',
+  ),
+];
 
 class RuntimeDefaults {
   const RuntimeDefaults({

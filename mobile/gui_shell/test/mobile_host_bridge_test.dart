@@ -468,6 +468,7 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
       Capability.mobileHostBridge,
       Capability.platformTunnels,
       Capability.profiles,
+      Capability.providerConfigs,
       Capability.providerRuntimeArtifacts,
       Capability.sessions,
       Capability.challenges,
@@ -503,6 +504,9 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
 
   @override
   Future<void> deleteProfile(String profileId) async {}
+
+  @override
+  Future<void> deleteProviderConfig(String configId) async {}
 
   @override
   Future<ResolutionRecord> cancelResolution(String resolutionId) {
@@ -554,6 +558,10 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
   Future<List<ProfileRecord>> profiles() async => const <ProfileRecord>[];
 
   @override
+  Future<List<ProviderConfigRecord>> providerConfigs() async =>
+      const <ProviderConfigRecord>[];
+
+  @override
   Future<List<ResolutionRecord>> resolutions() async =>
       const <ResolutionRecord>[];
 
@@ -589,4 +597,9 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
 
   @override
   Future<ProfileRecord> upsertProfile(ProfileRecord profile) async => profile;
+
+  @override
+  Future<ProviderConfigRecord> upsertProviderConfig(
+    ProviderConfigRecord config,
+  ) async => config;
 }

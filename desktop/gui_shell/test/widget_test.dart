@@ -34,6 +34,7 @@ const HostInfo _readyHostInfo = HostInfo(
     Capability.desktopSidecar,
     Capability.platformTunnels,
     Capability.profiles,
+    Capability.providerConfigs,
     Capability.providerRuntimeArtifacts,
     Capability.sessions,
     Capability.challenges,
@@ -74,6 +75,31 @@ const List<ProviderDescriptor> _providerDescriptors = <ProviderDescriptor>[
   ),
 ];
 
+const ProviderDescriptor _providerWithSettingsDescriptor = ProviderDescriptor(
+  id: 'wb-stream',
+  displayName: 'WB Stream',
+  description: 'Descriptor-driven provider settings test fixture.',
+  inputKind: ProviderInputKind.link,
+  authPosture: ProviderAuthPosture.account,
+  browserPolicy: ProviderBrowserPolicy.notRequired,
+  artifactFamilies: <ArtifactFamily>[ArtifactFamily.genericTurn],
+  settingsSchema: ProviderSettingsSchema(
+    type: 'object',
+    additionalProperties: false,
+    requiredKeys: <String>['region'],
+    properties: <String, ProviderSettingProperty>{
+      'region': ProviderSettingProperty(
+        type: ProviderSettingType.string,
+        title: 'Region',
+        enumValues: <dynamic>['ru-central', 'eu-west'],
+        defaultValue: 'ru-central',
+        control: ProviderSettingControl.select,
+        persistence: ProviderSettingPersistence.profile,
+      ),
+    },
+  ),
+);
+
 void main() {
   testWidgets(
     'desktop shell shows connecting state before host negotiation completes',
@@ -100,7 +126,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Local host blocked'), findsNothing);
-      expect(find.text('Saved profiles'), findsOneWidget);
+      expect(find.text('Libraries'), findsOneWidget);
       expect(find.text('Profile workspace'), findsOneWidget);
       expect(find.text('Diagnostics'), findsOneWidget);
 
@@ -129,10 +155,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final libraryScrollable = find.descendant(
-      of: find.byKey(const ValueKey<String>('profile-library-scroll')),
-      matching: find.byType(Scrollable),
-    ).first;
+    final libraryScrollable = find
+        .descendant(
+          of: find.byKey(const ValueKey<String>('workflow-library-scroll')),
+          matching: find.byType(Scrollable),
+        )
+        .first;
     await tester.scrollUntilVisible(
       find.byKey(const ValueKey<String>('profile-library-item-profile-2')),
       180,
@@ -140,14 +168,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Saved profiles'), findsOneWidget);
+    expect(find.text('Libraries'), findsOneWidget);
     expect(find.text('Profile workspace'), findsOneWidget);
     expect(
       find.byKey(const ValueKey<String>('profile-library-item-profile-2')),
       findsOneWidget,
     );
 
-    final libraryOffset = tester.getTopLeft(find.text('Saved profiles'));
+    final libraryOffset = tester.getTopLeft(find.text('Libraries'));
     final workspaceOffset = tester.getTopLeft(find.text('Profile workspace'));
     expect(libraryOffset.dx, lessThan(workspaceOffset.dx));
 
@@ -190,25 +218,29 @@ void main() {
     expect(find.text('GUI 0.1.0+1 @gui123456789'), findsOneWidget);
     expect(find.text('Host 0.1.0+1 @deadbeefcafe'), findsOneWidget);
     expect(find.text('Contract 1'), findsOneWidget);
-    expect(find.text('Saved profiles'), findsOneWidget);
+    expect(find.text('Libraries'), findsOneWidget);
     expect(find.text('Profile workspace'), findsOneWidget);
     expect(find.text('Diagnostics'), findsOneWidget);
     expect(find.text('Live work'), findsNothing);
     expect(
-      find.textContaining('All reported tunnel modes are currently fail-closed'),
+      find.textContaining(
+        'All reported tunnel modes are currently fail-closed',
+      ),
       findsOneWidget,
     );
-    final libraryOffset = tester.getTopLeft(find.text('Saved profiles'));
+    final libraryOffset = tester.getTopLeft(find.text('Libraries'));
     final workspaceOffset = tester.getTopLeft(find.text('Profile workspace'));
     final diagnosticsOffset = tester.getTopLeft(find.text('Diagnostics'));
 
     expect(libraryOffset.dx, lessThan(workspaceOffset.dx));
     expect(workspaceOffset.dx, lessThan(diagnosticsOffset.dx));
 
-    final workspaceScrollable = find.descendant(
-      of: find.byKey(const ValueKey<String>('profile-workspace-scroll')),
-      matching: find.byType(Scrollable),
-    ).first;
+    final workspaceScrollable = find
+        .descendant(
+          of: find.byKey(const ValueKey<String>('profile-workspace-scroll')),
+          matching: find.byType(Scrollable),
+        )
+        .first;
     final startButton = find.text('Start saved profile', skipOffstage: false);
     await tester.scrollUntilVisible(
       startButton,
@@ -231,7 +263,10 @@ void main() {
 
     expect(find.text('Platform tunnel modes'), findsOneWidget);
     expect(find.text('Windows Wintun'), findsOneWidget);
-    expect(find.textContaining('host implementation is still missing'), findsOneWidget);
+    expect(
+      find.textContaining('host implementation is still missing'),
+      findsOneWidget,
+    );
     final tunnelButton = find.text('Request startup', skipOffstage: false);
     await tester.ensureVisible(tunnelButton);
     await tester.pump();
@@ -305,10 +340,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Live work'), findsOneWidget);
-    final resolutionsScrollable = find.descendant(
-      of: find.byKey(const ValueKey<String>('resolutions-scroll')),
-      matching: find.byType(Scrollable),
-    ).first;
+    final resolutionsScrollable = find
+        .descendant(
+          of: find.byKey(const ValueKey<String>('resolutions-scroll')),
+          matching: find.byType(Scrollable),
+        )
+        .first;
     final openRoomButton = find.text('Open room', skipOffstage: false);
     await tester.scrollUntilVisible(
       openRoomButton,
@@ -328,6 +365,341 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     unawaited(api.dispose());
   });
+
+  testWidgets('desktop shell keeps unavailable presets explicit', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final api = _FakeControlPlaneApi(
+      providers: <ProviderDescriptor>[
+        ..._providerDescriptors,
+        _providerWithSettingsDescriptor,
+      ],
+    );
+    final controller = DesktopShellController(
+      api: api,
+      supervisor: _FakeHostSupervisor(),
+      stateStore: const _InMemoryShellStateStore(),
+      appBuild: _testGuiBuild,
+    );
+
+    await controller.initialize();
+    await tester.pumpWidget(
+      MaterialApp(home: DashboardPage(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+
+    final libraryScrollable = _libraryScrollable();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('preset-card-smarthome-default')),
+      180,
+      scrollable: libraryScrollable,
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining(
+        'does not advertise the RTK Smarthome provider family yet',
+      ),
+      findsOneWidget,
+    );
+
+    controller.dispose();
+    await tester.pumpWidget(const SizedBox.shrink());
+    unawaited(api.dispose());
+  });
+
+  testWidgets(
+    'desktop shell bootstraps an available preset into a new draft',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1600, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final api = _FakeControlPlaneApi(
+        providers: <ProviderDescriptor>[
+          ..._providerDescriptors,
+          _providerWithSettingsDescriptor,
+        ],
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _FakeHostSupervisor(),
+        stateStore: const _InMemoryShellStateStore(),
+        appBuild: _testGuiBuild,
+      );
+
+      await controller.initialize();
+      await tester.pumpWidget(
+        MaterialApp(home: DashboardPage(controller: controller)),
+      );
+      await tester.pumpAndSettle();
+
+      final libraryScrollable = _libraryScrollable();
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey<String>('preset-card-wb-stream-default')),
+        180,
+        scrollable: libraryScrollable,
+      );
+      await tester.pumpAndSettle();
+
+      final wbPresetButton = find.byKey(
+        const ValueKey<String>('preset-use-wb-stream-default'),
+      );
+      await tester.scrollUntilVisible(
+        wbPresetButton,
+        120,
+        scrollable: libraryScrollable,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(wbPresetButton);
+      await tester.pumpAndSettle();
+
+      expect(controller.selectedProfileId, isNull);
+      expect(controller.workspaceSurface, DesktopWorkspaceSurface.profile);
+      expect(controller.draft.name, 'WB Stream');
+      expect(controller.draft.spec.provider, 'wb-stream');
+
+      controller.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+      unawaited(api.dispose());
+    },
+  );
+
+  testWidgets('desktop shell creates, edits, and deletes provider configs', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final api = _FakeControlPlaneApi(
+      providers: <ProviderDescriptor>[
+        ..._providerDescriptors,
+        _providerWithSettingsDescriptor,
+      ],
+    );
+    final controller = DesktopShellController(
+      api: api,
+      supervisor: _FakeHostSupervisor(),
+      stateStore: const _InMemoryShellStateStore(),
+      appBuild: _testGuiBuild,
+    );
+
+    await controller.initialize();
+    await tester.pumpWidget(
+      MaterialApp(home: DashboardPage(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+
+    final libraryScrollable = _libraryScrollable();
+    await tester.scrollUntilVisible(
+      find.text('Provider configs'),
+      180,
+      scrollable: libraryScrollable,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('provider-config-create-button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(controller.workspaceSurface, DesktopWorkspaceSurface.providerConfig);
+    expect(find.text('Provider config workspace'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField).first, 'WB Central');
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Save config'));
+    await tester.pumpAndSettle();
+
+    expect(controller.providerConfigs, hasLength(1));
+    expect(controller.providerConfigs.single.name, 'WB Central');
+
+    await tester.enterText(find.byType(TextField).first, 'WB Central Updated');
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Save config'));
+    await tester.pumpAndSettle();
+
+    expect(controller.providerConfigs, hasLength(1));
+    expect(controller.providerConfigs.single.name, 'WB Central Updated');
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Delete'));
+    await tester.pumpAndSettle();
+
+    expect(controller.providerConfigs, isEmpty);
+    expect(controller.workspaceSurface, DesktopWorkspaceSurface.profile);
+
+    controller.dispose();
+    await tester.pumpWidget(const SizedBox.shrink());
+    unawaited(api.dispose());
+  });
+
+  testWidgets('desktop shell blocks unavailable provider configs explicitly', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final api = _FakeControlPlaneApi(
+      providerConfigs: <ProviderConfigRecord>[
+        _providerConfigRecord(
+          id: 'provider-config-1',
+          provider: 'wb-stream',
+          name: 'WB Central',
+          providerSettings: const <String, dynamic>{'region': 'eu-west'},
+          availability: const ProviderConfigAvailability(
+            state: ProviderConfigAvailabilityState.providerUnavailable,
+            message:
+                'The connected host no longer advertises WB Stream provider settings.',
+          ),
+        ),
+      ],
+    );
+    final controller = DesktopShellController(
+      api: api,
+      supervisor: _FakeHostSupervisor(),
+      stateStore: const _InMemoryShellStateStore(),
+      appBuild: _testGuiBuild,
+    );
+
+    await controller.initialize();
+    await tester.pumpWidget(
+      MaterialApp(home: DashboardPage(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+
+    controller.selectProviderConfig('provider-config-1');
+    await tester.pumpAndSettle();
+
+    await tester.pumpAndSettle();
+
+    expect(controller.workspaceSurface, DesktopWorkspaceSurface.providerConfig);
+    expect(
+      find.textContaining('no longer advertises WB Stream'),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Apply to profile draft'),
+          )
+          .onPressed,
+      isNull,
+    );
+
+    controller.dispose();
+    await tester.pumpWidget(const SizedBox.shrink());
+    unawaited(api.dispose());
+  });
+
+  testWidgets(
+    'desktop shell applies provider configs as saved-profile snapshots',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1600, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final api = _FakeControlPlaneApi(
+        providers: <ProviderDescriptor>[
+          ..._providerDescriptors,
+          _providerWithSettingsDescriptor,
+        ],
+        providerConfigs: <ProviderConfigRecord>[
+          _providerConfigRecord(
+            id: 'provider-config-1',
+            provider: 'wb-stream',
+            name: 'WB Central',
+            providerSettings: const <String, dynamic>{'region': 'eu-west'},
+          ),
+        ],
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _FakeHostSupervisor(),
+        stateStore: const _InMemoryShellStateStore(),
+        appBuild: _testGuiBuild,
+      );
+
+      await controller.initialize();
+      await tester.pumpWidget(
+        MaterialApp(home: DashboardPage(controller: controller)),
+      );
+      await tester.pumpAndSettle();
+
+      controller.selectProviderConfig('provider-config-1');
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.widgetWithText(FilledButton, 'Apply to profile draft'),
+      );
+      await tester.pumpAndSettle();
+
+      expect(controller.workspaceSurface, DesktopWorkspaceSurface.profile);
+      expect(controller.draft.spec.provider, 'wb-stream');
+      expect(controller.draft.spec.providerSettings['region'], 'eu-west');
+
+      await controller.saveDraft();
+      await tester.pumpAndSettle();
+
+      final savedProfile = controller.profiles.firstWhere(
+        (ProfileRecord profile) => profile.id == 'profile-1',
+      );
+      expect(savedProfile.spec.provider, 'wb-stream');
+      expect(savedProfile.spec.providerSettings['region'], 'eu-west');
+
+      await api.upsertProviderConfig(
+        _providerConfigRecord(
+          id: 'provider-config-1',
+          provider: 'wb-stream',
+          name: 'WB Central',
+          providerSettings: const <String, dynamic>{'region': 'ru-central'},
+        ),
+      );
+      await controller.refresh();
+      await tester.pumpAndSettle();
+
+      final refreshedProfile = controller.profiles.firstWhere(
+        (ProfileRecord profile) => profile.id == 'profile-1',
+      );
+      expect(refreshedProfile.spec.providerSettings['region'], 'eu-west');
+
+      controller.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+      unawaited(api.dispose());
+    },
+  );
+}
+
+Finder _libraryScrollable() {
+  return find
+      .descendant(
+        of: find.byKey(const ValueKey<String>('workflow-library-scroll')),
+        matching: find.byType(Scrollable),
+      )
+      .first;
+}
+
+ProviderConfigRecord _providerConfigRecord({
+  required String id,
+  required String provider,
+  required String name,
+  required Map<String, dynamic> providerSettings,
+  ProviderConfigAvailability availability = const ProviderConfigAvailability(),
+}) {
+  return ProviderConfigRecord(
+    id: id,
+    provider: provider,
+    name: name,
+    providerSettings: providerSettings,
+    createdAt: DateTime.utc(2026, 4, 12, 18, 0),
+    updatedAt: DateTime.utc(2026, 4, 12, 18, 1),
+    availability: availability,
+  );
 }
 
 class _InMemoryShellStateStore implements DesktopShellStateStore {
@@ -343,9 +715,20 @@ class _InMemoryShellStateStore implements DesktopShellStateStore {
 }
 
 class _FakeControlPlaneApi implements ControlPlaneApi {
-  _FakeControlPlaneApi({this.resolutionsList = const <ResolutionRecord>[]});
+  _FakeControlPlaneApi({
+    this.resolutionsList = const <ResolutionRecord>[],
+    List<ProviderDescriptor>? providers,
+    List<ProviderConfigRecord>? providerConfigs,
+  }) : _providers = List<ProviderDescriptor>.of(
+         providers ?? _providerDescriptors,
+       ),
+       _providerConfigs = List<ProviderConfigRecord>.of(
+         providerConfigs ?? const <ProviderConfigRecord>[],
+       );
 
   final List<ResolutionRecord> resolutionsList;
+  final List<ProviderDescriptor> _providers;
+  final List<ProviderConfigRecord> _providerConfigs;
   final List<String> startedProfileIDs = <String>[];
   final List<PlatformTunnelMode> startedPlatformTunnels =
       <PlatformTunnelMode>[];
@@ -391,6 +774,13 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   }
 
   @override
+  Future<void> deleteProviderConfig(String configId) async {
+    _providerConfigs.removeWhere(
+      (ProviderConfigRecord config) => config.id == configId,
+    );
+  }
+
+  @override
   Future<void> deleteProfile(String profileId) async {
     _profiles.removeWhere((ProfileRecord profile) => profile.id == profileId);
   }
@@ -414,6 +804,10 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
 
   @override
   Stream<EventRecord> events() => _events.stream;
+
+  @override
+  Future<List<ProviderConfigRecord>> providerConfigs() async =>
+      _providerConfigs;
 
   @override
   Future<HostInfo> hostInfo() async {
@@ -461,7 +855,7 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   }
 
   @override
-  Future<List<ProviderDescriptor>> providers() async => _providerDescriptors;
+  Future<List<ProviderDescriptor>> providers() async => _providers;
 
   @override
   Future<List<ProfileRecord>> profiles() async => _profiles;
@@ -552,6 +946,25 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
       ..removeWhere((ProfileRecord current) => current.id == profile.id)
       ..add(profile);
     return profile;
+  }
+
+  @override
+  Future<ProviderConfigRecord> upsertProviderConfig(
+    ProviderConfigRecord config,
+  ) async {
+    final next = config.copyWith(
+      id: config.id.isEmpty
+          ? 'provider-config-${_providerConfigs.length + 1}'
+          : config.id,
+      createdAt: config.createdAt.millisecondsSinceEpoch == 0
+          ? DateTime.utc(2026, 4, 12, 18, 0)
+          : config.createdAt,
+      updatedAt: DateTime.utc(2026, 4, 12, 18, 1),
+    );
+    _providerConfigs
+      ..removeWhere((ProviderConfigRecord current) => current.id == next.id)
+      ..add(next);
+    return next;
   }
 
   Future<void> dispose() async {

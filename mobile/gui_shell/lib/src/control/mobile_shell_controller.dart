@@ -17,6 +17,8 @@ typedef IDFactory = String Function();
 
 enum ShellStatus { booting, ready, blocked }
 
+enum MobileWorkflowSurface { profile, providerConfig }
+
 abstract class BrowserLauncher {
   Future<bool> open(String url);
 }
@@ -68,12 +70,16 @@ class MobileShellController extends ChangeNotifier {
   ShellStatus status = ShellStatus.booting;
   MobileHostConnectionResult? hostConnection;
   List<ProviderDescriptor> providerDescriptors = const <ProviderDescriptor>[];
+  List<ProviderConfigRecord> providerConfigs = const <ProviderConfigRecord>[];
   List<ProfileRecord> profiles = const <ProfileRecord>[];
   List<ResolutionRecord> resolutions = const <ResolutionRecord>[];
   List<SessionRecord> sessions = const <SessionRecord>[];
   List<EventRecord> events = const <EventRecord>[];
   ProfileDraft draft = ProfileDraft.defaults();
+  ProviderConfigDraft providerConfigDraft = ProviderConfigDraft.defaults();
+  MobileWorkflowSurface workflowSurface = MobileWorkflowSurface.profile;
   String? selectedProfileId;
+  String? selectedProviderConfigId;
   String? selectedResolutionId;
   String? selectedSessionId;
   final Map<PlatformTunnelMode, PlatformTunnelStartResult>
@@ -96,6 +102,7 @@ class MobileShellController extends ChangeNotifier {
     Capability.mobileHostBridge,
     Capability.platformTunnels,
     Capability.profiles,
+    Capability.providerConfigs,
     Capability.providerRuntimeArtifacts,
     Capability.sessions,
     Capability.challenges,
@@ -116,6 +123,33 @@ class MobileShellController extends ChangeNotifier {
 
   PlatformTunnelStartResult? platformTunnelResultFor(PlatformTunnelMode mode) {
     return _platformTunnelResults[mode];
+  }
+
+  List<ProviderPreset> get presetCatalog => kProviderPresetCatalog;
+
+  List<ProviderDescriptor> get providerConfigDescriptors => providerDescriptors
+      .where(
+        (ProviderDescriptor descriptor) => descriptor.settingsSchema != null,
+      )
+      .toList(growable: false);
+
+  ProviderDescriptor? get activeProviderConfigDescriptor =>
+      providerConfigDescriptorForProvider(providerConfigDraft.provider);
+
+  List<ProviderConfigRecord> get availableProviderConfigsForDraft {
+    final providerId = draft.spec.provider.trim().toLowerCase();
+    if (providerId.isEmpty) {
+      return providerConfigs
+          .where((ProviderConfigRecord config) => config.isAvailable)
+          .toList(growable: false);
+    }
+    return providerConfigs
+        .where(
+          (ProviderConfigRecord config) =>
+              config.isAvailable &&
+              config.provider.trim().toLowerCase() == providerId,
+        )
+        .toList(growable: false);
   }
 
   Future<void> initialize() async {
@@ -168,6 +202,7 @@ class MobileShellController extends ChangeNotifier {
     }
     try {
       final nextProviders = await bridge.providers();
+      final nextProviderConfigs = await bridge.providerConfigs();
       final nextResolutions = await bridge.resolutions();
       final nextSessions = _orderedSessions(await bridge.sessions());
       final nextChallenges = await _loadActiveChallenges(
@@ -175,11 +210,24 @@ class MobileShellController extends ChangeNotifier {
         nextResolutions,
       );
       providerDescriptors = nextProviders;
+      providerConfigs = nextProviderConfigs;
       resolutions = nextResolutions;
       draft = _normalizeDraft(draft);
+      providerConfigDraft = _normalizeProviderConfigDraft(providerConfigDraft);
       selectedResolutionId = _resolveSelectedResolutionId(nextResolutions);
       _replaceSessions(nextSessions);
       _mergeChallenges(nextChallenges);
+      if (selectedProviderConfigId != null &&
+          !providerConfigs.any(
+            (ProviderConfigRecord config) =>
+                config.id == selectedProviderConfigId,
+          )) {
+        selectedProviderConfigId = null;
+        providerConfigDraft = _defaultProviderConfigDraft();
+        if (workflowSurface == MobileWorkflowSurface.providerConfig) {
+          workflowSurface = MobileWorkflowSurface.profile;
+        }
+      }
       _notify();
     } catch (error) {
       await _handleBridgeFailure(error);
@@ -187,6 +235,7 @@ class MobileShellController extends ChangeNotifier {
   }
 
   void selectProfile(String profileId) {
+    workflowSurface = MobileWorkflowSurface.profile;
     selectedProfileId = profileId;
     final selected = profiles.firstWhere(
       (ProfileRecord profile) => profile.id == profileId,
@@ -208,16 +257,144 @@ class MobileShellController extends ChangeNotifier {
   }
 
   void updateDraft(ProfileDraft nextDraft) {
+    workflowSurface = MobileWorkflowSurface.profile;
     draft = _normalizeDraft(nextDraft);
     _scheduleStatePersist();
     notifyListeners();
   }
 
   void resetDraft() {
+    workflowSurface = MobileWorkflowSurface.profile;
     selectedProfileId = null;
     draft = _defaultDraft();
     _scheduleStatePersist();
     notifyListeners();
+  }
+
+  void showProfileWorkspace() {
+    workflowSurface = MobileWorkflowSurface.profile;
+    notifyListeners();
+  }
+
+  void showProviderConfigWorkspace({String? preferredProvider}) {
+    workflowSurface = MobileWorkflowSurface.providerConfig;
+    if (selectedProviderConfigId == null) {
+      providerConfigDraft = _defaultProviderConfigDraft(
+        preferredProvider: preferredProvider,
+      );
+    }
+    notifyListeners();
+  }
+
+  void selectProviderConfig(String configId) {
+    workflowSurface = MobileWorkflowSurface.providerConfig;
+    selectedProviderConfigId = configId;
+    final selected = providerConfigs.firstWhere(
+      (ProviderConfigRecord config) => config.id == configId,
+      orElse: () => _defaultProviderConfigDraft().toRecord(),
+    );
+    providerConfigDraft = _normalizeProviderConfigDraft(
+      ProviderConfigDraft.fromRecord(selected),
+    );
+    notifyListeners();
+  }
+
+  void updateProviderConfigDraft(ProviderConfigDraft nextDraft) {
+    workflowSurface = MobileWorkflowSurface.providerConfig;
+    providerConfigDraft = _normalizeProviderConfigDraft(nextDraft);
+    notifyListeners();
+  }
+
+  void resetProviderConfigDraft({String? preferredProvider}) {
+    workflowSurface = MobileWorkflowSurface.providerConfig;
+    selectedProviderConfigId = null;
+    providerConfigDraft = _defaultProviderConfigDraft(
+      preferredProvider: preferredProvider,
+    );
+    notifyListeners();
+  }
+
+  Future<void> saveProviderConfigDraft() async {
+    await _runBridgeMutation(() async {
+      final descriptor = activeProviderConfigDescriptor;
+      if (descriptor == null) {
+        notice =
+            'The selected provider config target is not advertised by the connected mobile host.';
+        return;
+      }
+      final blockReason = _providerSettingsBlockReason(descriptor);
+      if (blockReason != null) {
+        notice = blockReason;
+        return;
+      }
+      if (descriptor.settingsSchema == null) {
+        notice =
+            '${descriptor.displayName} does not advertise reusable provider settings.';
+        return;
+      }
+      final saved = await bridge.upsertProviderConfig(
+        providerConfigDraft.toRecord(),
+      );
+      notice =
+          'Saved provider config ${saved.name.isEmpty ? saved.id : saved.name}.';
+      await refresh();
+      selectProviderConfig(saved.id);
+      _scheduleStatePersist();
+    });
+  }
+
+  Future<void> deleteSelectedProviderConfig() async {
+    final configId = selectedProviderConfigId;
+    if (configId == null) {
+      return;
+    }
+    await _runBridgeMutation(() async {
+      await bridge.deleteProviderConfig(configId);
+      notice = 'Deleted provider config $configId.';
+      selectedProviderConfigId = null;
+      providerConfigDraft = _defaultProviderConfigDraft();
+      workflowSurface = MobileWorkflowSurface.profile;
+      await refresh();
+      _scheduleStatePersist();
+    });
+  }
+
+  void applyProviderConfigToDraft(String configId) {
+    final config = providerConfigById(configId);
+    if (config == null) {
+      notice = 'Provider config $configId is no longer available.';
+      _notify();
+      return;
+    }
+    if (!config.isAvailable) {
+      notice = _providerConfigBlockReason(config);
+      _notify();
+      return;
+    }
+    workflowSurface = MobileWorkflowSurface.profile;
+    draft = _normalizeDraft(draft.applyProviderConfig(config));
+    selectedProviderConfigId = configId;
+    notice =
+        'Applied provider config ${config.name.isEmpty ? config.id : config.name} to the active mobile profile draft.';
+    _scheduleStatePersist();
+    _notify();
+  }
+
+  void applyPreset(ProviderPreset preset) {
+    final availability = preset.availabilityFor(providerDescriptors);
+    if (!availability.isAvailable) {
+      notice = availability.message;
+      _notify();
+      return;
+    }
+    workflowSurface = MobileWorkflowSurface.profile;
+    selectedProfileId = null;
+    draft = _normalizeDraft(
+      draft.applyProviderPreset(preset, descriptor: availability.descriptor),
+    );
+    notice = 'Bootstrapped a new mobile draft from the ${preset.title} preset.';
+    _scheduleStatePersist();
+    _notify();
   }
 
   Future<void> clearLocalState() async {
@@ -227,13 +404,17 @@ class MobileShellController extends ChangeNotifier {
       await _stopRuntimeMonitoring();
       await stateStore.clear();
       _challengeCache.clear();
+      providerConfigs = const <ProviderConfigRecord>[];
       providerDescriptors = const <ProviderDescriptor>[];
       profiles = const <ProfileRecord>[];
       resolutions = const <ResolutionRecord>[];
       sessions = const <SessionRecord>[];
       events = const <EventRecord>[];
       draft = ProfileDraft.defaults();
+      providerConfigDraft = ProviderConfigDraft.defaults();
+      workflowSurface = MobileWorkflowSurface.profile;
       selectedProfileId = null;
+      selectedProviderConfigId = null;
       selectedResolutionId = null;
       selectedSessionId = null;
       _persistedStateSignature = MobileShellState.empty().signature();
@@ -623,8 +804,34 @@ class MobileShellController extends ChangeNotifier {
     return null;
   }
 
+  ProviderDescriptor? providerConfigDescriptorForProvider(String providerId) {
+    final normalized = providerId.trim().toLowerCase();
+    if (normalized.isEmpty) {
+      return null;
+    }
+    for (final descriptor in providerConfigDescriptors) {
+      if (descriptor.id.trim().toLowerCase() == normalized) {
+        return descriptor;
+      }
+    }
+    return null;
+  }
+
   ProviderDescriptor? get activeProviderDescriptor =>
       descriptorForProvider(draft.spec.provider);
+
+  ProviderConfigRecord? providerConfigById(String configId) {
+    final normalized = configId.trim();
+    if (normalized.isEmpty) {
+      return null;
+    }
+    for (final config in providerConfigs) {
+      if (config.id == normalized) {
+        return config;
+      }
+    }
+    return null;
+  }
 
   @override
   void dispose() {
@@ -670,6 +877,7 @@ class MobileShellController extends ChangeNotifier {
     status = ShellStatus.ready;
     notice = hostConnection?.message;
     try {
+      await _rehydrateProviderConfigs();
       await _rehydrateProfiles();
       await refresh();
     } catch (error) {
@@ -849,6 +1057,18 @@ class MobileShellController extends ChangeNotifier {
     _scheduleStatePersist();
   }
 
+  Future<void> _rehydrateProviderConfigs() async {
+    if (providerConfigs.isEmpty || hostConnection?.isReady != true) {
+      return;
+    }
+    final restored = <ProviderConfigRecord>[];
+    for (final config in providerConfigs) {
+      restored.add(await bridge.upsertProviderConfig(config));
+    }
+    providerConfigs = restored;
+    _scheduleStatePersist();
+  }
+
   Future<List<ChallengeRecord>> _loadActiveChallenges(
     List<SessionRecord> nextSessions,
     List<ResolutionRecord> nextResolutions,
@@ -990,8 +1210,10 @@ class MobileShellController extends ChangeNotifier {
         return;
       }
       profiles = state.profiles;
+      providerConfigs = state.providerConfigs;
       selectedProfileId = state.selectedProfileId;
       draft = state.draft;
+      providerConfigDraft = _defaultProviderConfigDraft();
       _persistedStateSignature = state.signature();
     } catch (error) {
       _requiresLocalStateReset = true;
@@ -1011,6 +1233,7 @@ class MobileShellController extends ChangeNotifier {
   Future<void> _persistState() async {
     final next = MobileShellState(
       profiles: profiles,
+      providerConfigs: providerConfigs,
       selectedProfileId: selectedProfileId,
       draft: draft,
     );
@@ -1071,6 +1294,17 @@ class MobileShellController extends ChangeNotifier {
     return _normalizeDraft(base.copyWith(spec: base.spec.copyWith(link: '')));
   }
 
+  ProviderConfigDraft _defaultProviderConfigDraft({String? preferredProvider}) {
+    final providerId =
+        preferredProvider ??
+        activeProviderDescriptor?.id ??
+        _firstProviderConfigDescriptor()?.id ??
+        '';
+    return _normalizeProviderConfigDraft(
+      ProviderConfigDraft.defaults(provider: providerId),
+    );
+  }
+
   ProfileDraft _normalizeDraft(ProfileDraft candidate) {
     if (providerDescriptors.isEmpty) {
       return candidate;
@@ -1105,12 +1339,61 @@ class MobileShellController extends ChangeNotifier {
     );
   }
 
+  ProviderConfigDraft _normalizeProviderConfigDraft(
+    ProviderConfigDraft candidate,
+  ) {
+    final descriptors = providerConfigDescriptors;
+    if (descriptors.isEmpty) {
+      return candidate;
+    }
+    final descriptor =
+        providerConfigDescriptorForProvider(candidate.provider) ??
+        ((candidate.id != null || !candidate.availability.isAvailable)
+            ? null
+            : descriptors.first);
+    if (descriptor == null) {
+      return candidate;
+    }
+    final sameProvider =
+        descriptor.id.trim().toLowerCase() ==
+        candidate.provider.trim().toLowerCase();
+    final providerSettings = switch (descriptor.settingsSchema) {
+      null => const <String, dynamic>{},
+      _ when descriptor.supportsProviderSettings =>
+        descriptor.normalizeProviderSettings(
+          sameProvider ? candidate.providerSettings : const <String, dynamic>{},
+        ),
+      _ =>
+        sameProvider ? candidate.providerSettings : const <String, dynamic>{},
+    };
+    return candidate.copyWith(
+      provider: descriptor.id,
+      providerSettings: providerSettings,
+    );
+  }
+
   String? _providerSettingsBlockReason(ProviderDescriptor descriptor) {
     final reason = descriptor.providerSettingsSupportError;
     if (reason == null) {
       return null;
     }
     return 'The connected mobile shell cannot render provider settings for ${descriptor.displayName}: $reason';
+  }
+
+  String _providerConfigBlockReason(ProviderConfigRecord config) {
+    final availability = config.availability;
+    if (availability.message.isNotEmpty) {
+      return availability.message;
+    }
+    return 'Provider config ${config.name.isEmpty ? config.id : config.name} is ${availability.state.label.toLowerCase()}.';
+  }
+
+  ProviderDescriptor? _firstProviderConfigDescriptor() {
+    final descriptors = providerConfigDescriptors;
+    if (descriptors.isEmpty) {
+      return null;
+    }
+    return descriptors.first;
   }
 
   void _notify() {

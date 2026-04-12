@@ -54,6 +54,9 @@ func TestHandlerHostAndNegotiate(t *testing.T) {
 	if !containsCapability(info.Capabilities, CapabilityPlatformTunnels) {
 		t.Fatalf("capabilities = %v, want platform_tunnels", info.Capabilities)
 	}
+	if !containsCapability(info.Capabilities, CapabilityProviderConfigs) {
+		t.Fatalf("capabilities = %v, want provider_configs", info.Capabilities)
+	}
 	if len(info.PlatformTunnels) != 1 {
 		t.Fatalf("platform_tunnels len = %d, want 1", len(info.PlatformTunnels))
 	}
@@ -67,6 +70,7 @@ func TestHandlerHostAndNegotiate(t *testing.T) {
 			CapabilityMobileHostBridge,
 			CapabilityPlatformTunnels,
 			CapabilityProfiles,
+			CapabilityProviderConfigs,
 			CapabilityProviderRuntimeArtifacts,
 			CapabilitySessions,
 			CapabilityChallenges,
@@ -230,6 +234,140 @@ func TestHandlerProfileUpsertReturnsFieldAwareProviderSettingsFailure(t *testing
 	}
 	if got := errPayload["violation"]; got != providerSettingsViolationPersistence {
 		t.Fatalf("error violation = %v, want %s", got, providerSettingsViolationPersistence)
+	}
+}
+
+func TestHandlerProviderConfigLifecycle(t *testing.T) {
+	host := New(
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name:       "schema-provider",
+			descriptor: providerSettingsTestDescriptor("schema-provider"),
+		})),
+		withNow(func() time.Time {
+			return time.Date(2026, 4, 13, 10, 15, 0, 0, time.UTC)
+		}),
+	)
+	handler := Handler(host)
+
+	payload, _ := json.Marshal(ProviderConfig{
+		Name:     "EU guest",
+		Provider: "schema-provider",
+		ProviderSettings: ProviderSettings{
+			"region":       "eu-west",
+			"device_index": 2,
+		},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/provider-configs", bytes.NewReader(payload))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /v1/provider-configs code = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var saved ProviderConfig
+	if err := json.Unmarshal(rec.Body.Bytes(), &saved); err != nil {
+		t.Fatalf("decode provider config: %v", err)
+	}
+	if saved.ID == "" {
+		t.Fatal("saved provider config id is empty")
+	}
+	if saved.Availability.State != ProviderConfigAvailabilityAvailable {
+		t.Fatalf("saved availability = %q, want %q", saved.Availability.State, ProviderConfigAvailabilityAvailable)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/v1/provider-configs", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /v1/provider-configs code = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var listed []ProviderConfig
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatalf("decode provider configs: %v", err)
+	}
+	if len(listed) != 1 {
+		t.Fatalf("provider configs len = %d, want 1", len(listed))
+	}
+	if listed[0].ID != saved.ID {
+		t.Fatalf("listed provider config id = %q, want %q", listed[0].ID, saved.ID)
+	}
+
+	req = httptest.NewRequest(http.MethodDelete, "/v1/provider-configs/"+saved.ID, nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("DELETE /v1/provider-configs/{id} code = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandlerProviderConfigReturnsFieldAwareProviderSettingsFailure(t *testing.T) {
+	host := New(
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name:       "schema-provider",
+			descriptor: providerSettingsTestDescriptor("schema-provider"),
+		})),
+	)
+	handler := Handler(host)
+
+	payload, _ := json.Marshal(ProviderConfig{
+		Name:     "Prompt-only",
+		Provider: "schema-provider",
+		ProviderSettings: ProviderSettings{
+			"region":     "eu-west",
+			"device_pin": "123456",
+		},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/provider-configs", bytes.NewReader(payload))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("POST /v1/provider-configs code = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var errPayload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &errPayload); err != nil {
+		t.Fatalf("decode error payload: %v", err)
+	}
+	if got := errPayload["code"]; got != "provider_settings_invalid" {
+		t.Fatalf("error code = %v, want provider_settings_invalid", got)
+	}
+	if got := errPayload["field"]; got != "device_pin" {
+		t.Fatalf("error field = %v, want device_pin", got)
+	}
+	if got := errPayload["violation"]; got != providerSettingsViolationPersistence {
+		t.Fatalf("error violation = %v, want %s", got, providerSettingsViolationPersistence)
+	}
+}
+
+func TestHandlerProviderConfigRestoreKeepsUnavailableRecordExplicit(t *testing.T) {
+	host := New(WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))))
+	handler := Handler(host)
+
+	restoredAt := time.Date(2026, 4, 13, 10, 15, 0, 0, time.UTC)
+	payload, _ := json.Marshal(ProviderConfig{
+		ID:       "cfg-1",
+		Name:     "Legacy WB config",
+		Provider: "wb-stream",
+		ProviderSettings: ProviderSettings{
+			"region": "eu-west",
+		},
+		CreatedAt: restoredAt,
+		UpdatedAt: restoredAt,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/provider-configs", bytes.NewReader(payload))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /v1/provider-configs restore code = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var saved ProviderConfig
+	if err := json.Unmarshal(rec.Body.Bytes(), &saved); err != nil {
+		t.Fatalf("decode provider config: %v", err)
+	}
+	if saved.Availability.State != ProviderConfigAvailabilityProviderUnavailable {
+		t.Fatalf("saved availability = %q, want %q", saved.Availability.State, ProviderConfigAvailabilityProviderUnavailable)
 	}
 }
 

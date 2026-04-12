@@ -34,6 +34,7 @@ const HostInfo _readyHostInfo = HostInfo(
     Capability.mobileHostBridge,
     Capability.platformTunnels,
     Capability.profiles,
+    Capability.providerConfigs,
     Capability.providerRuntimeArtifacts,
     Capability.sessions,
     Capability.challenges,
@@ -170,6 +171,7 @@ void main() {
         stateStore: _InMemoryStateStore(
           MobileShellState(
             profiles: <ProfileRecord>[profile],
+            providerConfigs: const <ProviderConfigRecord>[],
             selectedProfileId: profile.id,
             draft: ProfileDraft.fromProfile(profile),
           ),
@@ -282,6 +284,7 @@ void main() {
         stateStore: _InMemoryStateStore(
           MobileShellState(
             profiles: <ProfileRecord>[profile],
+            providerConfigs: const <ProviderConfigRecord>[],
             selectedProfileId: profile.id,
             draft: ProfileDraft.fromProfile(profile),
           ),
@@ -335,6 +338,7 @@ void main() {
                 spec: _profileSpec(),
               ),
             ],
+            providerConfigs: const <ProviderConfigRecord>[],
             selectedProfileId: 'profile-1',
             draft: ProfileDraft.fromProfile(
               ProfileRecord(
@@ -403,6 +407,7 @@ void main() {
                 spec: _profileSpec(),
               ),
             ],
+            providerConfigs: const <ProviderConfigRecord>[],
             selectedProfileId: 'profile-1',
             draft: ProfileDraft.fromProfile(
               ProfileRecord(
@@ -473,6 +478,7 @@ void main() {
                 spec: _profileSpec(),
               ),
             ],
+            providerConfigs: const <ProviderConfigRecord>[],
             selectedProfileId: 'profile-1',
             draft: ProfileDraft.fromProfile(
               ProfileRecord(
@@ -509,6 +515,7 @@ void main() {
         stateStore: _InMemoryStateStore(
           MobileShellState(
             profiles: const <ProfileRecord>[],
+            providerConfigs: const <ProviderConfigRecord>[],
             draft: ProfileDraft.defaults(),
           ),
         ),
@@ -553,6 +560,7 @@ void main() {
         stateStore: _InMemoryStateStore(
           MobileShellState(
             profiles: const <ProfileRecord>[],
+            providerConfigs: const <ProviderConfigRecord>[],
             draft: ProfileDraft.defaults(),
           ),
         ),
@@ -644,6 +652,7 @@ void main() {
                 spec: _profileSpec(),
               ),
             ],
+            providerConfigs: const <ProviderConfigRecord>[],
             selectedProfileId: 'profile-1',
             draft: ProfileDraft.fromProfile(
               ProfileRecord(
@@ -690,6 +699,7 @@ void main() {
         stateStore: _InMemoryStateStore(
           MobileShellState(
             profiles: const <ProfileRecord>[],
+            providerConfigs: const <ProviderConfigRecord>[],
             draft: ProfileDraft.defaults(),
           ),
         ),
@@ -749,6 +759,7 @@ void main() {
         stateStore: _InMemoryStateStore(
           MobileShellState(
             profiles: const <ProfileRecord>[],
+            providerConfigs: const <ProviderConfigRecord>[],
             draft: ProfileDraft.defaults(),
           ),
         ),
@@ -781,6 +792,7 @@ void main() {
         stateStore: _InMemoryStateStore(
           MobileShellState(
             profiles: const <ProfileRecord>[],
+            providerConfigs: const <ProviderConfigRecord>[],
             draft: ProfileDraft.defaults(),
           ),
         ),
@@ -832,6 +844,7 @@ void main() {
         stateStore: _InMemoryStateStore(
           MobileShellState(
             profiles: const <ProfileRecord>[],
+            providerConfigs: const <ProviderConfigRecord>[],
             draft: ProfileDraft.defaults(),
           ),
         ),
@@ -870,6 +883,7 @@ void main() {
         stateStore: _InMemoryStateStore(
           MobileShellState(
             profiles: const <ProfileRecord>[],
+            providerConfigs: const <ProviderConfigRecord>[],
             draft: ProfileDraft.defaults(),
           ),
         ),
@@ -911,6 +925,7 @@ void main() {
         stateStore: _InMemoryStateStore(
           MobileShellState(
             profiles: const <ProfileRecord>[],
+            providerConfigs: const <ProviderConfigRecord>[],
             draft: ProfileDraft.defaults(),
           ),
         ),
@@ -938,6 +953,7 @@ void main() {
         stateStore: _InMemoryStateStore(
           MobileShellState(
             profiles: const <ProfileRecord>[],
+            providerConfigs: const <ProviderConfigRecord>[],
             draft: ProfileDraft.defaults(),
           ),
         ),
@@ -999,6 +1015,7 @@ void main() {
                 spec: _profileSpec(),
               ),
             ],
+            providerConfigs: const <ProviderConfigRecord>[],
             selectedProfileId: 'profile-1',
             draft: ProfileDraft.fromProfile(
               ProfileRecord(
@@ -1085,6 +1102,7 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       description: 'native bridge',
     ),
     List<ProviderDescriptor>? providersList,
+    List<ProviderConfigRecord>? providerConfigsList,
     List<ResolutionRecord>? resolutionsList,
     this.sessionsList = const <SessionRecord>[],
     this.challengeMap = const <String, ChallengeRecord>{},
@@ -1113,12 +1131,16 @@ class _FakeMobileHostBridge implements MobileHostBridge {
        _providers = List<ProviderDescriptor>.of(
          providersList ?? _providerDescriptors,
        ),
+       _providerConfigs = List<ProviderConfigRecord>.of(
+         providerConfigsList ?? const <ProviderConfigRecord>[],
+       ),
        _resolutions = List<ResolutionRecord>.of(
          resolutionsList ?? const <ResolutionRecord>[],
        );
 
   final MobileHostConnectionResult ensureReadyResult;
   final List<ProviderDescriptor> _providers;
+  final List<ProviderConfigRecord> _providerConfigs;
   final List<SessionRecord> sessionsList;
   final Map<String, ChallengeRecord> challengeMap;
   final ControlPlaneError? startSessionError;
@@ -1165,6 +1187,13 @@ class _FakeMobileHostBridge implements MobileHostBridge {
 
   @override
   Future<void> deleteProfile(String profileId) async {}
+
+  @override
+  Future<void> deleteProviderConfig(String configId) async {
+    _providerConfigs.removeWhere(
+      (ProviderConfigRecord config) => config.id == configId,
+    );
+  }
 
   @override
   Future<DiagnosticsBundle> diagnostics(String sessionId) async {
@@ -1233,6 +1262,10 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   Future<List<ProviderDescriptor>> providers() async => _providers;
 
   @override
+  Future<List<ProviderConfigRecord>> providerConfigs() async =>
+      _providerConfigs;
+
+  @override
   Future<List<ProfileRecord>> profiles() async => const <ProfileRecord>[];
 
   @override
@@ -1295,6 +1328,25 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   Future<ProfileRecord> upsertProfile(ProfileRecord profile) async {
     upsertedProfiles.add(profile);
     return profile;
+  }
+
+  @override
+  Future<ProviderConfigRecord> upsertProviderConfig(
+    ProviderConfigRecord config,
+  ) async {
+    final next = config.copyWith(
+      id: config.id.isEmpty
+          ? 'provider-config-${_providerConfigs.length + 1}'
+          : config.id,
+      createdAt: config.createdAt.millisecondsSinceEpoch == 0
+          ? DateTime.utc(2026, 4, 12, 18, 0)
+          : config.createdAt,
+      updatedAt: DateTime.utc(2026, 4, 12, 18, 1),
+    );
+    _providerConfigs
+      ..removeWhere((ProviderConfigRecord current) => current.id == next.id)
+      ..add(next);
+    return next;
   }
 }
 

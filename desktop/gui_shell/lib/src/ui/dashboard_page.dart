@@ -5,6 +5,7 @@ import 'package:gui_shell/src/control/control_plane_models.dart';
 import 'package:gui_shell/src/control/desktop_host_supervisor.dart';
 import 'package:gui_shell/src/control/desktop_shell_controller.dart';
 import 'package:gui_shell/src/ui/profile_library_panel.dart';
+import 'package:gui_shell/src/ui/provider_config_editor.dart';
 import 'package:gui_shell/src/ui/profile_editor.dart';
 
 class DashboardPage extends StatelessWidget {
@@ -20,24 +21,48 @@ class DashboardPage extends StatelessWidget {
         final theme = Theme.of(context);
         final busy = controller.busy || controller.status != ShellStatus.ready;
         final profileLibrary = ProfileLibraryPanel(
+          presets: controller.presetCatalog,
+          providerDescriptors: controller.providerDescriptors,
+          providerConfigs: controller.providerConfigs,
           profiles: controller.profiles,
+          selectedProviderConfigId: controller.selectedProviderConfigId,
+          activeSurface: controller.workspaceSurface,
           selectedProfileId: controller.selectedProfileId,
           busy: busy,
+          onApplyPreset: controller.applyPreset,
+          onSelectProviderConfig: controller.selectProviderConfig,
+          onCreateProviderConfig: controller.resetProviderConfigDraft,
           onSelectProfile: controller.selectProfile,
           onCreateDraft: controller.resetDraft,
         );
-        final profileWorkspace = ProfileEditorPanel(
-          providerDescriptors: controller.providerDescriptors,
-          selectedProfileId: controller.selectedProfileId,
-          draft: controller.draft,
-          busy: busy,
-          onDraftChanged: controller.updateDraft,
-          onSave: controller.saveDraft,
-          onDelete: controller.deleteSelectedProfile,
-          onReset: controller.resetDraft,
-          onResolve: controller.startResolutionFromDraft,
-          onStart: controller.startSelectedProfile,
-        );
+        final profileWorkspace =
+            controller.workspaceSurface == DesktopWorkspaceSurface.profile
+            ? ProfileEditorPanel(
+                providerDescriptors: controller.providerDescriptors,
+                availableProviderConfigs:
+                    controller.availableProviderConfigsForDraft,
+                selectedProfileId: controller.selectedProfileId,
+                draft: controller.draft,
+                busy: busy,
+                onDraftChanged: controller.updateDraft,
+                onApplyProviderConfig: controller.applyProviderConfigToDraft,
+                onSave: controller.saveDraft,
+                onDelete: controller.deleteSelectedProfile,
+                onReset: controller.resetDraft,
+                onResolve: controller.startResolutionFromDraft,
+                onStart: controller.startSelectedProfile,
+              )
+            : ProviderConfigEditorPanel(
+                providerDescriptors: controller.providerDescriptors,
+                selectedProviderConfigId: controller.selectedProviderConfigId,
+                draft: controller.providerConfigDraft,
+                busy: busy,
+                onDraftChanged: controller.updateProviderConfigDraft,
+                onSave: controller.saveProviderConfigDraft,
+                onDelete: controller.deleteSelectedProviderConfig,
+                onReset: controller.resetProviderConfigDraft,
+                onApplyToProfileDraft: controller.applyProviderConfigToDraft,
+              );
         final hasLiveWork =
             controller.resolutions.isNotEmpty || controller.sessions.isNotEmpty;
 

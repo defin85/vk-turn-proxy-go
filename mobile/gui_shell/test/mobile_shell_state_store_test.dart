@@ -71,6 +71,19 @@ void main() {
             ),
           ),
         ],
+        providerConfigs: <ProviderConfigRecord>[
+          ProviderConfigRecord(
+            id: 'provider-config-1',
+            provider: 'wb-stream',
+            name: 'WB Central',
+            providerSettings: const <String, dynamic>{
+              'region': 'eu-west',
+              'device_alias': 'trusted-device',
+            },
+            createdAt: DateTime.utc(2026, 4, 12, 10, 0),
+            updatedAt: DateTime.utc(2026, 4, 12, 10, 5),
+          ),
+        ],
         selectedProfileId: 'profile-1',
         draft: const ProfileDraft(
           id: 'draft-1',
@@ -112,6 +125,14 @@ void main() {
       });
       expect(restored.profiles.single.spec.turnServer, '155.212.199.161');
       expect(restored.profiles.single.spec.turnPort, '19302');
+      expect(restored.providerConfigs, hasLength(1));
+      expect(
+        restored.providerConfigs.single.providerSettings,
+        <String, dynamic>{
+          'region': 'eu-west',
+          'device_alias': 'trusted-device',
+        },
+      );
       expect(restored.draft.spec.link, '');
       expect(restored.draft.spec.providerSettings, <String, dynamic>{
         'region': 'ru-central',
@@ -124,6 +145,9 @@ void main() {
       final profileJson =
           (sanitizedJson['profiles'] as List<dynamic>).single
               as Map<String, dynamic>;
+      final providerConfigJson =
+          (sanitizedJson['provider_configs'] as List<dynamic>).single
+              as Map<String, dynamic>;
       final draftJson = sanitizedJson['draft'] as Map<String, dynamic>;
       expect((profileJson['spec'] as Map<String, dynamic>)['link'], '');
       expect(
@@ -135,6 +159,10 @@ void main() {
         (draftJson['spec'] as Map<String, dynamic>)['provider_settings'],
         <String, dynamic>{'region': 'ru-central'},
       );
+      expect(providerConfigJson['provider_settings'], <String, dynamic>{
+        'region': 'eu-west',
+        'device_alias': 'trusted-device',
+      });
     },
   );
 

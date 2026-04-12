@@ -56,6 +56,7 @@ void main() {
               spec: _profileSpec(),
             ),
           ],
+          providerConfigs: const <ProviderConfigRecord>[],
           selectedProfileId: 'profile-1',
           draft: ProfileDraft.fromProfile(
             ProfileRecord(
@@ -183,6 +184,7 @@ void main() {
         stateStore: _InMemoryStateStore(
           MobileShellState(
             profiles: <ProfileRecord>[profile],
+            providerConfigs: const <ProviderConfigRecord>[],
             selectedProfileId: profile.id,
             draft: ProfileDraft.fromProfile(profile),
           ),
@@ -249,6 +251,7 @@ void main() {
               spec: _profileSpec(),
             ),
           ],
+          providerConfigs: const <ProviderConfigRecord>[],
           selectedProfileId: 'profile-1',
           draft: ProfileDraft.fromProfile(
             ProfileRecord(
@@ -335,6 +338,7 @@ void main() {
       stateStore: _InMemoryStateStore(
         MobileShellState(
           profiles: const <ProfileRecord>[],
+          providerConfigs: const <ProviderConfigRecord>[],
           draft: ProfileDraft.defaults(),
         ),
       ),
@@ -405,6 +409,7 @@ void main() {
       stateStore: _InMemoryStateStore(
         MobileShellState(
           profiles: const <ProfileRecord>[],
+          providerConfigs: const <ProviderConfigRecord>[],
           draft: ProfileDraft.defaults(),
         ),
       ),
@@ -439,6 +444,7 @@ void main() {
       stateStore: _InMemoryStateStore(
         MobileShellState(
           profiles: const <ProfileRecord>[],
+          providerConfigs: const <ProviderConfigRecord>[],
           draft: ProfileDraft.defaults(),
         ),
       ),
@@ -483,6 +489,331 @@ void main() {
     );
     expect(find.text('session-1', skipOffstage: false), findsOneWidget);
   });
+
+  testWidgets('mobile shell keeps unavailable presets explicit', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 2200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final controller = MobileShellController(
+      bridge: _FakeMobileHostBridge(
+        providersList: <ProviderDescriptor>[
+          ..._providerDescriptors,
+          _providerWithSettingsDescriptor,
+        ],
+      ),
+      stateStore: _InMemoryStateStore(
+        MobileShellState(
+          profiles: const <ProfileRecord>[],
+          providerConfigs: const <ProviderConfigRecord>[],
+          draft: ProfileDraft.defaults(),
+        ),
+      ),
+    );
+
+    await controller.initialize();
+    await tester.pumpWidget(MobileShellApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('preset-card-smarthome-default')),
+      240,
+      scrollable: _workflowScrollable(),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining(
+        'does not advertise the RTK Smarthome provider family yet',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('mobile shell bootstraps an available preset into a new draft', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 2200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final controller = MobileShellController(
+      bridge: _FakeMobileHostBridge(
+        providersList: <ProviderDescriptor>[
+          ..._providerDescriptors,
+          _providerWithSettingsDescriptor,
+        ],
+      ),
+      stateStore: _InMemoryStateStore(
+        MobileShellState(
+          profiles: <ProfileRecord>[
+            ProfileRecord(
+              id: 'profile-1',
+              name: 'vk live',
+              spec: _profileSpec(),
+            ),
+          ],
+          providerConfigs: const <ProviderConfigRecord>[],
+          selectedProfileId: 'profile-1',
+          draft: ProfileDraft.fromProfile(
+            ProfileRecord(
+              id: 'profile-1',
+              name: 'vk live',
+              spec: _profileSpec(),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await controller.initialize();
+    await tester.pumpWidget(MobileShellApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    final workflowScrollable = _workflowScrollable();
+    final wbPresetButton = find.byKey(
+      const ValueKey<String>('preset-use-wb-stream-default'),
+    );
+    await tester.scrollUntilVisible(
+      wbPresetButton,
+      240,
+      scrollable: workflowScrollable,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(wbPresetButton);
+    await tester.pumpAndSettle();
+
+    expect(controller.selectedProfileId, isNull);
+    expect(controller.workflowSurface, MobileWorkflowSurface.profile);
+    expect(controller.draft.name, 'WB Stream');
+    expect(controller.draft.spec.provider, 'wb-stream');
+  });
+
+  testWidgets('mobile shell creates edits and deletes provider configs', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 2200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final controller = MobileShellController(
+      bridge: _FakeMobileHostBridge(
+        providersList: <ProviderDescriptor>[
+          ..._providerDescriptors,
+          _providerWithSettingsDescriptor,
+        ],
+      ),
+      stateStore: _InMemoryStateStore(
+        MobileShellState(
+          profiles: const <ProfileRecord>[],
+          providerConfigs: const <ProviderConfigRecord>[],
+          draft: ProfileDraft.defaults(),
+        ),
+      ),
+    );
+
+    await controller.initialize();
+    await tester.pumpWidget(MobileShellApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    final workflowScrollable = _workflowScrollable();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('provider-config-create-button')),
+      240,
+      scrollable: workflowScrollable,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('provider-config-create-button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(controller.workflowSurface, MobileWorkflowSurface.providerConfig);
+    expect(find.text('Save config'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField).first, 'WB Central');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save config'));
+    await tester.pumpAndSettle();
+
+    expect(controller.providerConfigs, hasLength(1));
+    expect(controller.providerConfigs.single.name, 'WB Central');
+
+    await tester.enterText(find.byType(TextField).first, 'WB Central Updated');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save config'));
+    await tester.pumpAndSettle();
+
+    expect(controller.providerConfigs.single.name, 'WB Central Updated');
+
+    final deleteButton = tester.widget<OutlinedButton>(
+      find.byKey(const ValueKey<String>('provider-config-delete-button')),
+    );
+    expect(deleteButton.onPressed, isNotNull);
+    deleteButton.onPressed!.call();
+    await tester.pumpAndSettle();
+
+    expect(controller.providerConfigs, isEmpty);
+    expect(controller.workflowSurface, MobileWorkflowSurface.profile);
+  });
+
+  testWidgets('mobile shell blocks unavailable provider configs explicitly', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 2200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final controller = MobileShellController(
+      bridge: _FakeMobileHostBridge(
+        providerConfigsList: <ProviderConfigRecord>[
+          _providerConfigRecord(
+            id: 'provider-config-1',
+            provider: 'wb-stream',
+            name: 'WB Central',
+            providerSettings: const <String, dynamic>{'region': 'eu-west'},
+            availability: const ProviderConfigAvailability(
+              state: ProviderConfigAvailabilityState.providerUnavailable,
+              message:
+                  'The connected mobile host no longer advertises WB Stream provider settings.',
+            ),
+          ),
+        ],
+      ),
+      stateStore: _InMemoryStateStore(
+        MobileShellState(
+          profiles: const <ProfileRecord>[],
+          providerConfigs: const <ProviderConfigRecord>[],
+          draft: ProfileDraft.defaults(),
+        ),
+      ),
+    );
+
+    await controller.initialize();
+    controller.selectProviderConfig('provider-config-1');
+    await tester.pumpWidget(MobileShellApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    expect(controller.workflowSurface, MobileWorkflowSurface.providerConfig);
+    expect(find.textContaining('no longer advertises WB Stream'), findsWidgets);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Apply to profile draft'),
+          )
+          .onPressed,
+      isNull,
+    );
+  });
+
+  testWidgets(
+    'mobile shell applies provider configs as saved-profile snapshots',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 2200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final bridge = _FakeMobileHostBridge(
+        providersList: <ProviderDescriptor>[
+          ..._providerDescriptors,
+          _providerWithSettingsDescriptor,
+        ],
+        providerConfigsList: <ProviderConfigRecord>[
+          _providerConfigRecord(
+            id: 'provider-config-1',
+            provider: 'wb-stream',
+            name: 'WB Central',
+            providerSettings: const <String, dynamic>{'region': 'eu-west'},
+          ),
+        ],
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: 'profile-1',
+            draft: ProfileDraft.fromProfile(
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await controller.initialize();
+      controller.selectProviderConfig('provider-config-1');
+      await tester.pumpWidget(MobileShellApp(controller: controller));
+      await tester.pumpAndSettle();
+
+      final applyButton = tester.widget<FilledButton>(
+        find.byKey(const ValueKey<String>('provider-config-apply-button')),
+      );
+      expect(applyButton.onPressed, isNotNull);
+      applyButton.onPressed!.call();
+      await tester.pumpAndSettle();
+
+      expect(controller.workflowSurface, MobileWorkflowSurface.profile);
+      expect(controller.draft.spec.provider, 'wb-stream');
+      expect(controller.draft.spec.providerSettings['region'], 'eu-west');
+
+      await controller.saveDraft();
+      await tester.pumpAndSettle();
+
+      final savedProfile = controller.profiles.firstWhere(
+        (ProfileRecord profile) => profile.id == 'profile-1',
+      );
+      expect(savedProfile.spec.providerSettings['region'], 'eu-west');
+
+      await bridge.upsertProviderConfig(
+        _providerConfigRecord(
+          id: 'provider-config-1',
+          provider: 'wb-stream',
+          name: 'WB Central',
+          providerSettings: const <String, dynamic>{'region': 'ru-central'},
+        ),
+      );
+      await controller.refresh();
+      await tester.pumpAndSettle();
+
+      final refreshedProfile = controller.profiles.firstWhere(
+        (ProfileRecord profile) => profile.id == 'profile-1',
+      );
+      expect(refreshedProfile.spec.providerSettings['region'], 'eu-west');
+    },
+  );
+}
+
+Finder _workflowScrollable() => find.byType(Scrollable).first;
+
+ProviderConfigRecord _providerConfigRecord({
+  required String id,
+  required String provider,
+  required String name,
+  required Map<String, dynamic> providerSettings,
+  ProviderConfigAvailability availability = const ProviderConfigAvailability(),
+}) {
+  return ProviderConfigRecord(
+    id: id,
+    provider: provider,
+    name: name,
+    providerSettings: providerSettings,
+    createdAt: DateTime.utc(2026, 4, 12, 18, 0),
+    updatedAt: DateTime.utc(2026, 4, 12, 18, 1),
+    availability: availability,
+  );
 }
 
 const HostInfo _readyHostInfo = HostInfo(
@@ -499,6 +830,7 @@ const HostInfo _readyHostInfo = HostInfo(
     Capability.mobileHostBridge,
     Capability.platformTunnels,
     Capability.profiles,
+    Capability.providerConfigs,
     Capability.providerRuntimeArtifacts,
     Capability.sessions,
     Capability.challenges,
@@ -539,6 +871,31 @@ const List<ProviderDescriptor> _providerDescriptors = <ProviderDescriptor>[
   ),
 ];
 
+const ProviderDescriptor _providerWithSettingsDescriptor = ProviderDescriptor(
+  id: 'wb-stream',
+  displayName: 'WB Stream',
+  description: 'Descriptor-driven provider settings test fixture.',
+  inputKind: ProviderInputKind.link,
+  authPosture: ProviderAuthPosture.account,
+  browserPolicy: ProviderBrowserPolicy.notRequired,
+  artifactFamilies: <ArtifactFamily>[ArtifactFamily.genericTurn],
+  settingsSchema: ProviderSettingsSchema(
+    type: 'object',
+    additionalProperties: false,
+    requiredKeys: <String>['region'],
+    properties: <String, ProviderSettingProperty>{
+      'region': ProviderSettingProperty(
+        type: ProviderSettingType.string,
+        title: 'Region',
+        enumValues: <dynamic>['ru-central', 'eu-west'],
+        defaultValue: 'ru-central',
+        control: ProviderSettingControl.select,
+        persistence: ProviderSettingPersistence.profile,
+      ),
+    },
+  ),
+);
+
 ProfileSpec _profileSpec() {
   return const ProfileSpec(
     provider: 'vk',
@@ -577,6 +934,7 @@ class _FakeBrowserLauncher implements BrowserLauncher {
 class _FakeMobileHostBridge implements MobileHostBridge {
   _FakeMobileHostBridge({
     List<ProviderDescriptor>? providersList,
+    List<ProviderConfigRecord>? providerConfigsList,
     List<ResolutionRecord>? resolutionsList,
     this.sessionsList = const <SessionRecord>[],
     this.challengeMap = const <String, ChallengeRecord>{},
@@ -596,11 +954,15 @@ class _FakeMobileHostBridge implements MobileHostBridge {
            ),
        _eventStream = eventStream ?? const Stream<EventRecord>.empty(),
        _hostInfo = hostInfo ?? readyResult?.info ?? _readyHostInfo,
+       _providerConfigs = List<ProviderConfigRecord>.of(
+         providerConfigsList ?? const <ProviderConfigRecord>[],
+       ),
        _resolutions = List<ResolutionRecord>.of(
          resolutionsList ?? const <ResolutionRecord>[],
        );
 
   final List<ProviderDescriptor> _providers;
+  final List<ProviderConfigRecord> _providerConfigs;
   final MobileHostConnectionResult ensureReadyResult;
   final List<SessionRecord> sessionsList;
   final Map<String, ChallengeRecord> challengeMap;
@@ -632,6 +994,13 @@ class _FakeMobileHostBridge implements MobileHostBridge {
 
   @override
   Future<void> deleteProfile(String profileId) async {}
+
+  @override
+  Future<void> deleteProviderConfig(String configId) async {
+    _providerConfigs.removeWhere(
+      (ProviderConfigRecord config) => config.id == configId,
+    );
+  }
 
   @override
   Future<DiagnosticsBundle> diagnostics(String sessionId) async {
@@ -689,6 +1058,10 @@ class _FakeMobileHostBridge implements MobileHostBridge {
 
   @override
   Future<List<ProviderDescriptor>> providers() async => _providers;
+
+  @override
+  Future<List<ProviderConfigRecord>> providerConfigs() async =>
+      _providerConfigs;
 
   @override
   Future<List<ProfileRecord>> profiles() async => const <ProfileRecord>[];
@@ -756,6 +1129,25 @@ class _FakeMobileHostBridge implements MobileHostBridge {
 
   @override
   Future<ProfileRecord> upsertProfile(ProfileRecord profile) async => profile;
+
+  @override
+  Future<ProviderConfigRecord> upsertProviderConfig(
+    ProviderConfigRecord config,
+  ) async {
+    final next = config.copyWith(
+      id: config.id.isEmpty
+          ? 'provider-config-${_providerConfigs.length + 1}'
+          : config.id,
+      createdAt: config.createdAt.millisecondsSinceEpoch == 0
+          ? DateTime.utc(2026, 4, 12, 18, 0)
+          : config.createdAt,
+      updatedAt: DateTime.utc(2026, 4, 12, 18, 1),
+    );
+    _providerConfigs
+      ..removeWhere((ProviderConfigRecord current) => current.id == next.id)
+      ..add(next);
+    return next;
+  }
 }
 
 class _ThrowingStateStore implements MobileShellStateStore {

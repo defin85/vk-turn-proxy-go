@@ -27,6 +27,7 @@ const defaultHistoryLimit = 256
 
 var (
 	ErrProfileNotFound            = errors.New("client control profile not found")
+	ErrProviderConfigNotFound     = errors.New("client control provider config not found")
 	ErrSessionNotFound            = errors.New("client control session not found")
 	ErrChallengeNotFound          = errors.New("client control challenge not found")
 	ErrResolutionNotFound         = errors.New("client control resolution not found")
@@ -106,12 +107,13 @@ type Host struct {
 	platformTunnels   []PlatformTunnelCapability
 	startTunnel       func(context.Context, PlatformTunnelStartRequest) (PlatformTunnelStartResult, error)
 
-	profiles    map[string]Profile
-	resolutions map[string]*managedResolution
-	sessions    map[string]*managedSession
-	challenges  map[string]*managedChallenge
-	subscribers map[uint64]chan Event
-	nextSubID   uint64
+	profiles        map[string]Profile
+	providerConfigs map[string]ProviderConfig
+	resolutions     map[string]*managedResolution
+	sessions        map[string]*managedSession
+	challenges      map[string]*managedChallenge
+	subscribers     map[uint64]chan Event
+	nextSubID       uint64
 }
 
 type managedSession struct {
@@ -212,6 +214,7 @@ func New(opts ...Option) *Host {
 		platformTunnels:   cfg.platformTunnels,
 		startTunnel:       cfg.startTunnel,
 		profiles:          make(map[string]Profile),
+		providerConfigs:   make(map[string]ProviderConfig),
 		resolutions:       make(map[string]*managedResolution),
 		sessions:          make(map[string]*managedSession),
 		challenges:        make(map[string]*managedChallenge),
@@ -294,6 +297,7 @@ func (h *Host) Info() HostInfo {
 			CapabilityMobileHostBridge,
 			CapabilityPlatformTunnels,
 			CapabilityProfiles,
+			CapabilityProviderConfigs,
 			CapabilityProviderRuntimeArtifacts,
 			CapabilitySessions,
 		},

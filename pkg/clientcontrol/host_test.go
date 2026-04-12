@@ -108,6 +108,9 @@ func TestHostInfoExposesContractVersionAndBuildIdentity(t *testing.T) {
 	if !containsCapability(info.Capabilities, CapabilityPlatformTunnels) {
 		t.Fatalf("capabilities = %v, want platform_tunnels", info.Capabilities)
 	}
+	if !containsCapability(info.Capabilities, CapabilityProviderConfigs) {
+		t.Fatalf("capabilities = %v, want provider_configs", info.Capabilities)
+	}
 	if !containsCapability(info.Capabilities, CapabilityProviderRuntimeArtifacts) {
 		t.Fatalf("capabilities = %v, want provider-runtime-artifacts", info.Capabilities)
 	}
@@ -283,6 +286,131 @@ func TestHostUpsertProfileRejectsPromptOnlyProviderSettings(t *testing.T) {
 	}
 	if validationErr.Violation != providerSettingsViolationPersistence {
 		t.Fatalf("validation violation = %q, want %q", validationErr.Violation, providerSettingsViolationPersistence)
+	}
+}
+
+func TestHostProviderConfigLifecycle(t *testing.T) {
+	host := New(
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name:       "schema-provider",
+			descriptor: providerSettingsTestDescriptor("schema-provider"),
+		})),
+		withNow(func() time.Time {
+			return time.Date(2026, 4, 13, 10, 15, 0, 0, time.UTC)
+		}),
+	)
+
+	saved, err := host.UpsertProviderConfig(ProviderConfig{
+		Name:     "EU guest",
+		Provider: "schema-provider",
+		ProviderSettings: ProviderSettings{
+			"region":       "eu-west",
+			"device_index": 3,
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpsertProviderConfig() error = %v", err)
+	}
+	if saved.ID == "" {
+		t.Fatal("saved provider config id is empty")
+	}
+	if saved.Availability.State != ProviderConfigAvailabilityAvailable {
+		t.Fatalf("saved availability = %q, want %q", saved.Availability.State, ProviderConfigAvailabilityAvailable)
+	}
+	if got := saved.ProviderSettings["device_index"]; got != int64(3) {
+		t.Fatalf("saved provider setting device_index = %#v, want int64(3)", got)
+	}
+
+	listed := host.ProviderConfigs()
+	if len(listed) != 1 {
+		t.Fatalf("ProviderConfigs() len = %d, want 1", len(listed))
+	}
+	if listed[0].ID != saved.ID {
+		t.Fatalf("listed provider config id = %q, want %q", listed[0].ID, saved.ID)
+	}
+
+	stored, err := host.ProviderConfig(saved.ID)
+	if err != nil {
+		t.Fatalf("ProviderConfig() error = %v", err)
+	}
+	if stored.Name != "EU guest" {
+		t.Fatalf("ProviderConfig().Name = %q, want EU guest", stored.Name)
+	}
+
+	if err := host.DeleteProviderConfig(saved.ID); err != nil {
+		t.Fatalf("DeleteProviderConfig() error = %v", err)
+	}
+	if _, err := host.ProviderConfig(saved.ID); !errors.Is(err, ErrProviderConfigNotFound) {
+		t.Fatalf("ProviderConfig() after delete error = %v, want ErrProviderConfigNotFound", err)
+	}
+}
+
+func TestHostProviderConfigRejectsPromptOnlySettings(t *testing.T) {
+	host := New(
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name:       "schema-provider",
+			descriptor: providerSettingsTestDescriptor("schema-provider"),
+		})),
+	)
+
+	_, err := host.UpsertProviderConfig(ProviderConfig{
+		Name:     "Prompt-only",
+		Provider: "schema-provider",
+		ProviderSettings: ProviderSettings{
+			"region":     "eu-west",
+			"device_pin": "123456",
+		},
+	})
+	if err == nil {
+		t.Fatal("UpsertProviderConfig() expected provider settings persistence error")
+	}
+
+	var validationErr *ProviderSettingsValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("UpsertProviderConfig() error = %v, want ProviderSettingsValidationError", err)
+	}
+	if validationErr.Field != "device_pin" {
+		t.Fatalf("validation field = %q, want device_pin", validationErr.Field)
+	}
+	if validationErr.Violation != providerSettingsViolationPersistence {
+		t.Fatalf("validation violation = %q, want %q", validationErr.Violation, providerSettingsViolationPersistence)
+	}
+}
+
+func TestHostProviderConfigRestoreKeepsUnavailableRecordExplicit(t *testing.T) {
+	host := New(WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))))
+	restoredAt := time.Date(2026, 4, 13, 10, 15, 0, 0, time.UTC)
+
+	saved, err := host.UpsertProviderConfig(ProviderConfig{
+		ID:       "cfg-1",
+		Name:     "Legacy WB config",
+		Provider: "wb-stream",
+		ProviderSettings: ProviderSettings{
+			"region":       "eu-west",
+			"device_index": 2,
+		},
+		CreatedAt: restoredAt,
+		UpdatedAt: restoredAt,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProviderConfig() restore error = %v", err)
+	}
+	if saved.Availability.State != ProviderConfigAvailabilityProviderUnavailable {
+		t.Fatalf("saved availability = %q, want %q", saved.Availability.State, ProviderConfigAvailabilityProviderUnavailable)
+	}
+	if saved.Availability.Message == "" {
+		t.Fatal("saved availability message is empty")
+	}
+
+	listed := host.ProviderConfigs()
+	if len(listed) != 1 {
+		t.Fatalf("ProviderConfigs() len = %d, want 1", len(listed))
+	}
+	if listed[0].Availability.State != ProviderConfigAvailabilityProviderUnavailable {
+		t.Fatalf("listed availability = %q, want %q", listed[0].Availability.State, ProviderConfigAvailabilityProviderUnavailable)
+	}
+	if got := listed[0].ProviderSettings["region"]; got != "eu-west" {
+		t.Fatalf("listed provider setting region = %#v, want eu-west", got)
 	}
 }
 

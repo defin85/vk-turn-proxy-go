@@ -11,6 +11,7 @@ const String _secureSecretsKey = 'mobile_gui_shell_secure_state_v1';
 class MobileShellState {
   const MobileShellState({
     required this.profiles,
+    required this.providerConfigs,
     required this.draft,
     this.selectedProfileId,
   });
@@ -18,6 +19,7 @@ class MobileShellState {
   factory MobileShellState.empty() {
     return MobileShellState(
       profiles: const <ProfileRecord>[],
+      providerConfigs: const <ProviderConfigRecord>[],
       draft: ProfileDraft.defaults(),
     );
   }
@@ -30,6 +32,13 @@ class MobileShellState {
                 ProfileRecord.fromJson(raw as Map<String, dynamic>),
           )
           .toList(growable: false),
+      providerConfigs:
+          (json['provider_configs'] as List<dynamic>? ?? const <dynamic>[])
+              .map(
+                (dynamic raw) =>
+                    ProviderConfigRecord.fromJson(raw as Map<String, dynamic>),
+              )
+              .toList(growable: false),
       selectedProfileId: json['selected_profile_id'] as String?,
       draft: json['draft'] is Map<String, dynamic>
           ? ProfileDraft.fromJson(json['draft'] as Map<String, dynamic>)
@@ -38,6 +47,7 @@ class MobileShellState {
   }
 
   final List<ProfileRecord> profiles;
+  final List<ProviderConfigRecord> providerConfigs;
   final String? selectedProfileId;
   final ProfileDraft draft;
 
@@ -45,6 +55,9 @@ class MobileShellState {
     return <String, dynamic>{
       'profiles': profiles
           .map((ProfileRecord profile) => profile.toJson())
+          .toList(growable: false),
+      'provider_configs': providerConfigs
+          .map((ProviderConfigRecord config) => config.toJson())
           .toList(growable: false),
       'selected_profile_id': selectedProfileId,
       'draft': draft.toJson(),
@@ -66,6 +79,15 @@ class MobileShellState {
             (ProfileRecord profile) => _sanitizeProfile(
               profile,
               descriptorById[profile.spec.provider.trim().toLowerCase()],
+            ),
+          )
+          .toList(growable: false),
+      providerConfigs: providerConfigs
+          .map(
+            (ProviderConfigRecord config) => config.copyWith(
+              providerSettings: Map<String, dynamic>.from(
+                config.providerSettings,
+              ),
             ),
           )
           .toList(growable: false),
@@ -200,6 +222,7 @@ class SecureMobileShellStateStore implements MobileShellStateStore {
             return _profileFromSanitized(profile.toJson(), secret);
           })
           .toList(growable: false),
+      providerConfigs: sanitized.providerConfigs,
       selectedProfileId: sanitized.selectedProfileId,
       draft: ProfileDraft.fromJson(
         _draftFromSanitized(sanitized.draft.toJson(), draftSecrets),

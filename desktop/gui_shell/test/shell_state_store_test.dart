@@ -79,6 +79,19 @@ void main() {
             ),
           ),
         ],
+        providerConfigs: <ProviderConfigRecord>[
+          ProviderConfigRecord(
+            id: 'provider-config-1',
+            provider: 'wb-stream',
+            name: 'WB Central',
+            providerSettings: const <String, dynamic>{
+              'region': 'eu-west',
+              'device_alias': 'trusted-device',
+            },
+            createdAt: DateTime.utc(2026, 4, 12, 10, 0),
+            updatedAt: DateTime.utc(2026, 4, 12, 10, 5),
+          ),
+        ],
         selectedProfileId: 'profile-2',
         draft: const ProfileDraft(
           id: 'draft-1',
@@ -128,6 +141,7 @@ void main() {
 
       final decoded = jsonDecode(payload) as Map<String, dynamic>;
       final profiles = decoded['profiles'] as List<dynamic>;
+      final providerConfigs = decoded['provider_configs'] as List<dynamic>;
       final runtimeDefaults =
           decoded['runtime_defaults'] as Map<String, dynamic>;
       expect((profiles[0] as Map<String, dynamic>)['spec']['link'], '');
@@ -140,6 +154,14 @@ void main() {
       expect(
         (decoded['draft'] as Map<String, dynamic>)['spec']['provider_settings'],
         <String, dynamic>{'region': 'ru-central'},
+      );
+      expect(providerConfigs, hasLength(1));
+      expect(
+        (providerConfigs.single as Map<String, dynamic>)['provider_settings'],
+        <String, dynamic>{
+          'region': 'eu-west',
+          'device_alias': 'trusted-device',
+        },
       );
       expect(runtimeDefaults['listen_addr'], '127.0.0.1:9101');
       expect(runtimeDefaults['peer_addr'], '127.0.0.1:56100');

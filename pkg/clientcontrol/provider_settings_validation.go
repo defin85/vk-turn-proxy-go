@@ -28,6 +28,7 @@ type providerSettingsValidationMode int
 const (
 	providerSettingsModeImmediate providerSettingsValidationMode = iota + 1
 	providerSettingsModePersistedProfile
+	providerSettingsModePersistedProviderConfig
 )
 
 type ProviderSettingsValidationError struct {
@@ -204,12 +205,17 @@ func normalizeProviderSettingsForDescriptor(
 				fmt.Sprintf("provider_settings.%s is not declared by provider %q", key, descriptor.ID),
 			)
 		}
-		if mode == providerSettingsModePersistedProfile {
+		if mode == providerSettingsModePersistedProfile ||
+			mode == providerSettingsModePersistedProviderConfig {
 			if property.WriteOnly || property.Persistence != ProviderSettingPersistenceProfile {
 				return nil, providerSettingsValidationError(
 					key,
 					providerSettingsViolationPersistence,
-					fmt.Sprintf("provider_settings.%s is prompt-only and cannot be persisted in saved profiles", key),
+					fmt.Sprintf(
+						"provider_settings.%s is prompt-only and cannot be persisted in %s",
+						key,
+						providerSettingsPersistenceTarget(mode),
+					),
 				)
 			}
 		}
@@ -225,7 +231,8 @@ func normalizeProviderSettingsForDescriptor(
 		if !ok {
 			continue
 		}
-		if mode == providerSettingsModePersistedProfile &&
+		if (mode == providerSettingsModePersistedProfile ||
+			mode == providerSettingsModePersistedProviderConfig) &&
 			(property.WriteOnly || property.Persistence != ProviderSettingPersistenceProfile) {
 			continue
 		}
@@ -243,6 +250,17 @@ func normalizeProviderSettingsForDescriptor(
 		return nil, nil
 	}
 	return normalized, nil
+}
+
+func providerSettingsPersistenceTarget(mode providerSettingsValidationMode) string {
+	switch mode {
+	case providerSettingsModePersistedProfile:
+		return "saved profiles"
+	case providerSettingsModePersistedProviderConfig:
+		return "reusable provider configs"
+	default:
+		return "persisted state"
+	}
 }
 
 func redactProviderSettingsForOrdinaryRead(

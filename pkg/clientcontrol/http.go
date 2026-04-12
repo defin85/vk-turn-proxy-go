@@ -67,6 +67,26 @@ func Handler(host *Host) http.Handler {
 			writeMethodNotAllowed(w, r.Method)
 		}
 	})
+	mux.HandleFunc("/v1/provider-configs", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			writeJSON(w, http.StatusOK, host.ProviderConfigs())
+		case http.MethodPost:
+			var config ProviderConfig
+			if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_json", err)
+				return
+			}
+			saved, err := host.UpsertProviderConfig(config)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, errorCodeForBadRequest(err, "provider_config_invalid"), err)
+				return
+			}
+			writeJSON(w, http.StatusOK, saved)
+		default:
+			writeMethodNotAllowed(w, r.Method)
+		}
+	})
 	mux.HandleFunc("/v1/profiles/", func(w http.ResponseWriter, r *http.Request) {
 		profileID := strings.TrimPrefix(r.URL.Path, "/v1/profiles/")
 		if profileID == "" {
@@ -83,6 +103,30 @@ func Handler(host *Host) http.Handler {
 			writeJSON(w, http.StatusOK, profile)
 		case http.MethodDelete:
 			if err := host.DeleteProfile(profileID); err != nil {
+				writeNotFound(w, err)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			writeMethodNotAllowed(w, r.Method)
+		}
+	})
+	mux.HandleFunc("/v1/provider-configs/", func(w http.ResponseWriter, r *http.Request) {
+		configID := strings.TrimPrefix(r.URL.Path, "/v1/provider-configs/")
+		if configID == "" {
+			http.NotFound(w, r)
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			config, err := host.ProviderConfig(configID)
+			if err != nil {
+				writeNotFound(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, config)
+		case http.MethodDelete:
+			if err := host.DeleteProviderConfig(configID); err != nil {
 				writeNotFound(w, err)
 				return
 			}

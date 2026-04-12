@@ -36,6 +36,7 @@ const HostInfo _readyHostInfo = HostInfo(
     Capability.desktopSidecar,
     Capability.platformTunnels,
     Capability.profiles,
+    Capability.providerConfigs,
     Capability.providerRuntimeArtifacts,
     Capability.sessions,
     Capability.challenges,
@@ -402,6 +403,7 @@ void main() {
       final store = _FakeShellStateStore(
         loaded: DesktopShellState(
           profiles: <ProfileRecord>[persistedProfile],
+          providerConfigs: const <ProviderConfigRecord>[],
           selectedProfileId: 'profile-1',
           draft: ProfileDraft(
             id: 'profile-1',
@@ -994,12 +996,16 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   _FakeControlPlaneApi({
     required List<ProfileRecord> profiles,
     List<ProviderDescriptor>? providers,
+    List<ProviderConfigRecord>? providerConfigs,
     List<ResolutionRecord>? resolutions,
     required List<SessionRecord> sessions,
     Map<String, ChallengeRecord>? challenges,
   }) : _profiles = List<ProfileRecord>.of(profiles),
        _providers = List<ProviderDescriptor>.of(
          providers ?? _providerDescriptors,
+       ),
+       _providerConfigs = List<ProviderConfigRecord>.of(
+         providerConfigs ?? const <ProviderConfigRecord>[],
        ),
        _resolutions = List<ResolutionRecord>.of(
          resolutions ?? const <ResolutionRecord>[],
@@ -1010,6 +1016,7 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
        );
 
   final List<ProviderDescriptor> _providers;
+  final List<ProviderConfigRecord> _providerConfigs;
   final List<ProfileRecord> _profiles;
   final List<ResolutionRecord> _resolutions;
   final List<SessionRecord> _sessions;
@@ -1050,6 +1057,13 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   @override
   Future<ChallengeRecord> continueChallenge(String challengeId) async {
     return _challenges[challengeId]!;
+  }
+
+  @override
+  Future<void> deleteProviderConfig(String configId) async {
+    _providerConfigs.removeWhere(
+      (ProviderConfigRecord config) => config.id == configId,
+    );
   }
 
   @override
@@ -1098,6 +1112,10 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   Future<HostInfo> hostInfo() async {
     return _readyHostInfo;
   }
+
+  @override
+  Future<List<ProviderConfigRecord>> providerConfigs() async =>
+      _providerConfigs;
 
   @override
   Future<SessionRecord> materializeResolution({
@@ -1240,6 +1258,30 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
       _profiles.add(profile);
     }
     return profile;
+  }
+
+  @override
+  Future<ProviderConfigRecord> upsertProviderConfig(
+    ProviderConfigRecord config,
+  ) async {
+    final next = config.copyWith(
+      id: config.id.isEmpty
+          ? 'provider-config-${_providerConfigs.length + 1}'
+          : config.id,
+      createdAt: config.createdAt.millisecondsSinceEpoch == 0
+          ? DateTime.utc(2026, 4, 12, 18, 0)
+          : config.createdAt,
+      updatedAt: DateTime.utc(2026, 4, 12, 18, 1),
+    );
+    final index = _providerConfigs.indexWhere(
+      (ProviderConfigRecord existing) => existing.id == next.id,
+    );
+    if (index >= 0) {
+      _providerConfigs[index] = next;
+    } else {
+      _providerConfigs.add(next);
+    }
+    return next;
   }
 }
 

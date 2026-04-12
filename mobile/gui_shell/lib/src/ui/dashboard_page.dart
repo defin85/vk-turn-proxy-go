@@ -5,6 +5,7 @@ import 'package:mobile_gui_shell/src/control/control_plane_models.dart';
 import 'package:mobile_gui_shell/src/control/mobile_host_bridge.dart';
 import 'package:mobile_gui_shell/src/control/mobile_shell_controller.dart';
 import 'package:mobile_gui_shell/src/ui/profile_editor.dart';
+import 'package:mobile_gui_shell/src/ui/provider_config_editor.dart';
 
 enum _DashboardDestination { workflow, activity, diagnostics }
 
@@ -138,21 +139,328 @@ class _WorkflowPage extends StatelessWidget {
           onOpenActivity: onOpenActivity,
         ),
         const SizedBox(height: 20),
-        ProfileEditorPanel(
-          profiles: controller.profiles,
-          providerDescriptors: controller.providerDescriptors,
-          selectedProfileId: controller.selectedProfileId,
-          draft: controller.draft,
-          busy: controller.busy,
-          onSelectProfile: controller.selectProfile,
-          onDraftChanged: controller.updateDraft,
-          onSave: controller.saveDraft,
-          onDelete: controller.deleteSelectedProfile,
-          onReset: controller.resetDraft,
-          onResolve: controller.startResolutionFromDraft,
-          onStart: controller.startSelectedProfile,
+        _WorkflowSurfacePicker(controller: controller),
+        const SizedBox(height: 16),
+        _PresetLibrarySection(controller: controller),
+        const SizedBox(height: 16),
+        _ProviderConfigLibrarySection(controller: controller),
+        const SizedBox(height: 20),
+        if (controller.workflowSurface == MobileWorkflowSurface.profile)
+          ProfileEditorPanel(
+            profiles: controller.profiles,
+            providerDescriptors: controller.providerDescriptors,
+            availableProviderConfigs:
+                controller.availableProviderConfigsForDraft,
+            selectedProfileId: controller.selectedProfileId,
+            draft: controller.draft,
+            busy: controller.busy,
+            onSelectProfile: controller.selectProfile,
+            onDraftChanged: controller.updateDraft,
+            onApplyProviderConfig: controller.applyProviderConfigToDraft,
+            onSave: controller.saveDraft,
+            onDelete: controller.deleteSelectedProfile,
+            onReset: controller.resetDraft,
+            onResolve: controller.startResolutionFromDraft,
+            onStart: controller.startSelectedProfile,
+          )
+        else
+          SizedBox(
+            height: 640,
+            child: ProviderConfigEditorPanel(
+              providerDescriptors: controller.providerDescriptors,
+              selectedProviderConfigId: controller.selectedProviderConfigId,
+              draft: controller.providerConfigDraft,
+              busy: controller.busy,
+              onDraftChanged: controller.updateProviderConfigDraft,
+              onSave: controller.saveProviderConfigDraft,
+              onDelete: controller.deleteSelectedProviderConfig,
+              onReset: controller.resetProviderConfigDraft,
+              onApplyToProfileDraft: controller.applyProviderConfigToDraft,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _WorkflowSurfacePicker extends StatelessWidget {
+  const _WorkflowSurfacePicker({required this.controller});
+
+  final MobileShellController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: <Widget>[
+        ChoiceChip(
+          selected: controller.workflowSurface == MobileWorkflowSurface.profile,
+          label: const Text('Profile draft'),
+          onSelected: (_) => controller.showProfileWorkspace(),
+        ),
+        ChoiceChip(
+          selected:
+              controller.workflowSurface ==
+              MobileWorkflowSurface.providerConfig,
+          label: const Text('Provider config'),
+          onSelected: (_) => controller.showProviderConfigWorkspace(),
         ),
       ],
+    );
+  }
+}
+
+class _PresetLibrarySection extends StatelessWidget {
+  const _PresetLibrarySection({required this.controller});
+
+  final MobileShellController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              'Presets',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Bootstrap the main provider families without manually re-entering taxonomy every time.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ...controller.presetCatalog.map((ProviderPreset preset) {
+              final availability = preset.availabilityFor(
+                controller.providerDescriptors,
+              );
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Container(
+                  key: ValueKey<String>('preset-card-${preset.id}'),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest.withValues(
+                      alpha: 0.35,
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Row(
+                        children: <Widget>[
+                          Expanded(
+                            child: Text(
+                              preset.title,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          _StatusChip(
+                            label: availability.isAvailable
+                                ? 'Available'
+                                : 'Unavailable',
+                            accent: availability.isAvailable,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        preset.description,
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                      if (!availability.isAvailable) ...<Widget>[
+                        const SizedBox(height: 6),
+                        Text(
+                          availability.message,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                      FilledButton.tonal(
+                        key: ValueKey<String>('preset-use-${preset.id}'),
+                        onPressed: controller.busy || !availability.isAvailable
+                            ? null
+                            : () => controller.applyPreset(preset),
+                        child: const Text('Use preset'),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProviderConfigLibrarySection extends StatelessWidget {
+  const _ProviderConfigLibrarySection({required this.controller});
+
+  final MobileShellController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    'Provider configs',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                FilledButton.tonal(
+                  key: const ValueKey<String>('provider-config-create-button'),
+                  onPressed: controller.busy
+                      ? null
+                      : controller.resetProviderConfigDraft,
+                  child: const Text('New'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Reusable non-secret provider settings stay separate from profiles and runtime controls.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            if (controller.providerConfigs.isEmpty)
+              Text(
+                'No provider configs yet.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              )
+            else
+              ...controller.providerConfigs.map(
+                (ProviderConfigRecord config) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Material(
+                    color:
+                        controller.workflowSurface ==
+                                MobileWorkflowSurface.providerConfig &&
+                            controller.selectedProviderConfigId == config.id
+                        ? theme.colorScheme.primary.withValues(alpha: 0.1)
+                        : theme.colorScheme.surfaceContainerHighest.withValues(
+                            alpha: 0.35,
+                          ),
+                    borderRadius: BorderRadius.circular(14),
+                    child: InkWell(
+                      key: ValueKey<String>(
+                        'provider-config-item-${config.id}',
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: () => controller.selectProviderConfig(config.id),
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Row(
+                              children: <Widget>[
+                                Expanded(
+                                  child: Text(
+                                    config.name.isEmpty
+                                        ? config.id
+                                        : config.name,
+                                    style: theme.textTheme.titleSmall?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                                _StatusChip(
+                                  label: config.availability.state.label,
+                                  accent: config.isAvailable,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              config.provider,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            if (config
+                                .availability
+                                .message
+                                .isNotEmpty) ...<Widget>[
+                              const SizedBox(height: 4),
+                              Text(
+                                config.availability.message,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({required this.label, required this.accent});
+
+  final String label;
+  final bool accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final background = accent
+        ? theme.colorScheme.primary.withValues(alpha: 0.14)
+        : theme.colorScheme.surfaceContainerHighest;
+    final foreground = accent
+        ? theme.colorScheme.primary
+        : theme.colorScheme.onSurfaceVariant;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: foreground,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
     );
   }
 }

@@ -93,6 +93,95 @@ void main() {
     },
   );
 
+  test('provider config records and drafts round-trip through json', () {
+    final createdAt = DateTime.utc(2026, 4, 13, 10, 15);
+    final updatedAt = DateTime.utc(2026, 4, 13, 10, 16);
+    final record = ProviderConfigRecord(
+      id: 'cfg-1',
+      provider: 'wb-stream',
+      name: 'WB EU guest',
+      providerSettings: const <String, dynamic>{
+        'region': 'eu-west',
+        'device_index': 2,
+      },
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+      availability: const ProviderConfigAvailability(),
+    );
+
+    final restored = ProviderConfigRecord.fromJson(record.toJson());
+    final draft = ProviderConfigDraft.fromRecord(restored);
+    final roundTrip = ProviderConfigDraft.fromJson(draft.toJson()).toRecord();
+
+    expect(restored.id, 'cfg-1');
+    expect(restored.provider, 'wb-stream');
+    expect(restored.providerSettings['device_index'], 2);
+    expect(draft.name, 'WB EU guest');
+    expect(roundTrip.id, 'cfg-1');
+    expect(roundTrip.createdAt.toUtc(), createdAt);
+    expect(roundTrip.updatedAt.toUtc(), updatedAt);
+  });
+
+  test('profile draft bootstrap applies provider configs snapshot-style', () {
+    final draft = ProfileDraft.defaults().copyWith(
+      name: 'Current profile',
+      spec: ProfileDraft.defaults().spec.copyWith(
+        provider: 'vk',
+        link: 'https://vk.com/call/join/test',
+      ),
+    );
+    final config = ProviderConfigRecord(
+      id: 'cfg-1',
+      provider: 'wb-stream',
+      name: 'WB EU guest',
+      providerSettings: const <String, dynamic>{'region': 'eu-west'},
+      createdAt: DateTime.utc(2026, 4, 13, 10, 15),
+      updatedAt: DateTime.utc(2026, 4, 13, 10, 16),
+    );
+
+    final applied = draft.applyProviderConfig(config);
+
+    expect(applied.name, 'Current profile');
+    expect(applied.spec.provider, 'wb-stream');
+    expect(applied.spec.link, isEmpty);
+    expect(applied.spec.providerSettings, const <String, dynamic>{
+      'region': 'eu-west',
+    });
+  });
+
+  test('preset catalog gates availability on provider descriptors', () {
+    const descriptors = <ProviderDescriptor>[
+      ProviderDescriptor(
+        id: 'vk',
+        displayName: 'VK Calls',
+        inputKind: ProviderInputKind.link,
+        authPosture: ProviderAuthPosture.guestOrAccount,
+        browserPolicy: ProviderBrowserPolicy.externalRequired,
+      ),
+    ];
+
+    final vkPreset = kProviderPresetCatalog.firstWhere(
+      (ProviderPreset preset) => preset.id == 'vk-default',
+    );
+    final wbPreset = kProviderPresetCatalog.firstWhere(
+      (ProviderPreset preset) => preset.id == 'wb-stream-default',
+    );
+
+    final available = vkPreset.availabilityFor(descriptors);
+    final unavailable = wbPreset.availabilityFor(descriptors);
+    final seeded = ProfileDraft.defaults().applyProviderPreset(
+      vkPreset,
+      descriptor: descriptors.single,
+    );
+
+    expect(available.isAvailable, isTrue);
+    expect(available.descriptor?.id, 'vk');
+    expect(unavailable.isAvailable, isFalse);
+    expect(unavailable.message, contains('WB Stream'));
+    expect(seeded.name, 'VK Calls');
+    expect(seeded.spec.provider, 'vk');
+  });
+
   test('build identity keeps shared labels and round-trips through json', () {
     const build = BuildIdentity(
       product: 'vk-turn-proxy-go',

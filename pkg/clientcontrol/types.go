@@ -8,6 +8,7 @@ type Capability string
 
 const (
 	CapabilityProfiles                 Capability = "profiles"
+	CapabilityProviderConfigs          Capability = "provider_configs"
 	CapabilitySessions                 Capability = "sessions"
 	CapabilityChallenges               Capability = "challenges"
 	CapabilityDiagnostics              Capability = "diagnostics"
@@ -169,6 +170,32 @@ type Profile struct {
 	ID   string      `json:"id"`
 	Name string      `json:"name,omitempty"`
 	Spec ProfileSpec `json:"spec"`
+}
+
+type ProviderConfigAvailabilityState string
+
+const (
+	ProviderConfigAvailabilityAvailable           ProviderConfigAvailabilityState = "available"
+	ProviderConfigAvailabilityProviderUnavailable ProviderConfigAvailabilityState = "provider_unavailable"
+	ProviderConfigAvailabilitySchemaUnsupported   ProviderConfigAvailabilityState = "schema_unsupported"
+	ProviderConfigAvailabilitySettingsInvalid     ProviderConfigAvailabilityState = "settings_invalid"
+)
+
+type ProviderConfigAvailability struct {
+	State     ProviderConfigAvailabilityState `json:"state"`
+	Message   string                          `json:"message,omitempty"`
+	Field     string                          `json:"field,omitempty"`
+	Violation string                          `json:"violation,omitempty"`
+}
+
+type ProviderConfig struct {
+	ID               string                     `json:"id"`
+	Provider         string                     `json:"provider"`
+	Name             string                     `json:"name"`
+	ProviderSettings ProviderSettings           `json:"provider_settings,omitempty"`
+	Availability     ProviderConfigAvailability `json:"availability"`
+	CreatedAt        time.Time                  `json:"created_at"`
+	UpdatedAt        time.Time                  `json:"updated_at"`
 }
 
 type ResolutionInput struct {

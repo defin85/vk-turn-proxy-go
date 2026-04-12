@@ -9,6 +9,7 @@ typedef StateFileProvider = Future<File> Function();
 class DesktopShellState {
   const DesktopShellState({
     required this.profiles,
+    required this.providerConfigs,
     required this.draft,
     this.selectedProfileId,
     this.runtimeDefaults = const RuntimeDefaults(
@@ -20,6 +21,7 @@ class DesktopShellState {
   factory DesktopShellState.empty() {
     return DesktopShellState(
       profiles: const <ProfileRecord>[],
+      providerConfigs: const <ProviderConfigRecord>[],
       draft: ProfileDraft.defaults(),
     );
   }
@@ -35,6 +37,14 @@ class DesktopShellState {
                 ProfileRecord.fromJson(raw as Map<String, dynamic>),
           )
           .toList(growable: false),
+      providerConfigs:
+          (json['provider_configs'] as List<dynamic>? ?? const <dynamic>[])
+              .map(
+                (dynamic raw) => ProviderConfigRecord.fromJson(
+                  raw as Map<String, dynamic>,
+                ),
+              )
+              .toList(growable: false),
       selectedProfileId: json['selected_profile_id'] as String?,
       draft: draft,
       runtimeDefaults: json['runtime_defaults'] is Map<String, dynamic>
@@ -46,6 +56,7 @@ class DesktopShellState {
   }
 
   final List<ProfileRecord> profiles;
+  final List<ProviderConfigRecord> providerConfigs;
   final String? selectedProfileId;
   final ProfileDraft draft;
   final RuntimeDefaults runtimeDefaults;
@@ -54,6 +65,9 @@ class DesktopShellState {
     return <String, dynamic>{
       'profiles': profiles
           .map((ProfileRecord profile) => profile.toJson())
+          .toList(growable: false),
+      'provider_configs': providerConfigs
+          .map((ProviderConfigRecord config) => config.toJson())
           .toList(growable: false),
       'selected_profile_id': selectedProfileId,
       'draft': draft.toJson(),
@@ -78,6 +92,15 @@ class DesktopShellState {
             (ProfileRecord profile) => _sanitizeProfile(
               profile,
               descriptorById[profile.spec.provider.trim().toLowerCase()],
+            ),
+          )
+          .toList(growable: false),
+      providerConfigs: providerConfigs
+          .map(
+            (ProviderConfigRecord config) => config.copyWith(
+              providerSettings: Map<String, dynamic>.from(
+                config.providerSettings,
+              ),
             ),
           )
           .toList(growable: false),

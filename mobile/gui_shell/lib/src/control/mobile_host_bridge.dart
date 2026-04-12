@@ -175,6 +175,7 @@ class HttpMobileHostBridge implements MobileHostBridge {
       Capability.mobileHostBridge,
       Capability.platformTunnels,
       Capability.profiles,
+      Capability.providerConfigs,
       Capability.providerRuntimeArtifacts,
       Capability.sessions,
       Capability.challenges,
@@ -213,8 +214,18 @@ class HttpMobileHostBridge implements MobileHostBridge {
   }
 
   @override
+  Future<void> deleteProviderConfig(String configId) {
+    return _client.deleteProviderConfig(configId);
+  }
+
+  @override
   Future<List<ProviderDescriptor>> providers() {
     return _client.providers();
+  }
+
+  @override
+  Future<List<ProviderConfigRecord>> providerConfigs() {
+    return _client.providerConfigs();
   }
 
   @override
@@ -359,6 +370,13 @@ class HttpMobileHostBridge implements MobileHostBridge {
   Future<ProfileRecord> upsertProfile(ProfileRecord profile) {
     return _client.upsertProfile(profile);
   }
+
+  @override
+  Future<ProviderConfigRecord> upsertProviderConfig(
+    ProviderConfigRecord config,
+  ) {
+    return _client.upsertProviderConfig(config);
+  }
 }
 
 class UnavailableMobileHostBridge implements MobileHostBridge {
@@ -384,6 +402,9 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
 
   @override
   Future<void> deleteProfile(String profileId) => _fail();
+
+  @override
+  Future<void> deleteProviderConfig(String configId) => _fail();
 
   @override
   Future<ResolutionRecord> cancelResolution(String resolutionId) => _fail();
@@ -428,6 +449,9 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
   Future<List<ProfileRecord>> profiles() => _fail();
 
   @override
+  Future<List<ProviderConfigRecord>> providerConfigs() => _fail();
+
+  @override
   Future<List<ProviderDescriptor>> providers() => _fail();
 
   @override
@@ -458,6 +482,11 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
 
   @override
   Future<ProfileRecord> upsertProfile(ProfileRecord profile) => _fail();
+
+  @override
+  Future<ProviderConfigRecord> upsertProviderConfig(
+    ProviderConfigRecord config,
+  ) => _fail();
 
   Future<T> _fail<T>() {
     throw ControlPlaneError(

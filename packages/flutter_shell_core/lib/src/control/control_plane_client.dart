@@ -14,6 +14,11 @@ abstract class ControlPlaneApi {
     required PlatformTunnelMode mode,
   });
   Future<List<ProviderDescriptor>> providers();
+  Future<List<ProviderConfigRecord>> providerConfigs();
+  Future<ProviderConfigRecord> upsertProviderConfig(
+    ProviderConfigRecord config,
+  );
+  Future<void> deleteProviderConfig(String configId);
   Future<List<ProfileRecord>> profiles();
   Future<ProfileRecord> upsertProfile(ProfileRecord profile);
   Future<void> deleteProfile(String profileId);
@@ -99,6 +104,29 @@ class ControlPlaneClient implements ControlPlaneApi {
   Future<List<ProviderDescriptor>> providers() async {
     final payload = await _jsonRequestList('GET', '/v1/providers');
     return payload.map(ProviderDescriptor.fromJson).toList(growable: false);
+  }
+
+  @override
+  Future<List<ProviderConfigRecord>> providerConfigs() async {
+    final payload = await _jsonRequestList('GET', '/v1/provider-configs');
+    return payload.map(ProviderConfigRecord.fromJson).toList(growable: false);
+  }
+
+  @override
+  Future<ProviderConfigRecord> upsertProviderConfig(
+    ProviderConfigRecord config,
+  ) async {
+    final payload = await _jsonRequest(
+      'POST',
+      '/v1/provider-configs',
+      body: config.toJson(),
+    );
+    return ProviderConfigRecord.fromJson(payload);
+  }
+
+  @override
+  Future<void> deleteProviderConfig(String configId) async {
+    await _request('DELETE', '/v1/provider-configs/$configId');
   }
 
   @override
