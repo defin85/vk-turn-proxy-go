@@ -70,7 +70,7 @@ The required host capabilities for this shell are:
 - `desktop_sidecar`
 - `platform_tunnels`
 - `profiles`
-- `provider-resolution-handoff`
+- `provider-runtime-artifacts`
 - `sessions`
 - `challenges`
 - `diagnostics`
@@ -137,8 +137,9 @@ Default state-file paths:
 
 When the GUI reconnects to a compatible host, it rehydrates the persisted profiles back into the local control plane before normal profile/session refresh continues.
 The persisted plaintext state keeps the same-device runtime defaults separate
-from secret-bearing handoff links; `generic-turn://...` handoff secrets are
-redacted before the state file is written.
+from secret-bearing provider input links; invite URLs, room/bootstrap tokens,
+and `generic-turn://...` handoff credentials are cleared before the plaintext
+state file is written.
 
 ## Challenge, tray, and notifications behavior
 

@@ -47,8 +47,7 @@ class MobileShellController extends ChangeNotifier {
     IDFactory? idFactory,
     BuildIdentity? appBuild,
   }) : _browserLauncher = browserLauncher ?? ExternalBrowserLauncher(),
-       _handoffAdapter =
-           handoffAdapter ?? const SystemMobileHandoffAdapter(),
+       _handoffAdapter = handoffAdapter ?? const SystemMobileHandoffAdapter(),
        _diagnosticsDirectoryProvider =
            diagnosticsDirectoryProvider ?? defaultDiagnosticsDirectory,
        _clock = clock ?? DateTime.now,
@@ -68,6 +67,7 @@ class MobileShellController extends ChangeNotifier {
 
   ShellStatus status = ShellStatus.booting;
   MobileHostConnectionResult? hostConnection;
+  List<ProviderDescriptor> providerDescriptors = const <ProviderDescriptor>[];
   List<ProfileRecord> profiles = const <ProfileRecord>[];
   List<ResolutionRecord> resolutions = const <ResolutionRecord>[];
   List<SessionRecord> sessions = const <SessionRecord>[];
@@ -96,7 +96,7 @@ class MobileShellController extends ChangeNotifier {
     Capability.mobileHostBridge,
     Capability.platformTunnels,
     Capability.profiles,
-    Capability.providerResolutionHandoff,
+    Capability.providerRuntimeArtifacts,
     Capability.sessions,
     Capability.challenges,
     Capability.diagnostics,
@@ -167,13 +167,16 @@ class MobileShellController extends ChangeNotifier {
       return;
     }
     try {
+      final nextProviders = await bridge.providers();
       final nextResolutions = await bridge.resolutions();
       final nextSessions = _orderedSessions(await bridge.sessions());
       final nextChallenges = await _loadActiveChallenges(
         nextSessions,
         nextResolutions,
       );
+      providerDescriptors = nextProviders;
       resolutions = nextResolutions;
+      draft = _normalizeDraft(draft);
       selectedResolutionId = _resolveSelectedResolutionId(nextResolutions);
       _replaceSessions(nextSessions);
       _mergeChallenges(nextChallenges);
@@ -189,7 +192,7 @@ class MobileShellController extends ChangeNotifier {
       (ProfileRecord profile) => profile.id == profileId,
       orElse: () => ProfileDraft.defaults().toProfile(),
     );
-    draft = ProfileDraft.fromProfile(selected);
+    draft = _normalizeDraft(ProfileDraft.fromProfile(selected));
     _scheduleStatePersist();
     notifyListeners();
   }
@@ -205,14 +208,14 @@ class MobileShellController extends ChangeNotifier {
   }
 
   void updateDraft(ProfileDraft nextDraft) {
-    draft = nextDraft;
+    draft = _normalizeDraft(nextDraft);
     _scheduleStatePersist();
     notifyListeners();
   }
 
   void resetDraft() {
     selectedProfileId = null;
-    draft = ProfileDraft.defaults();
+    draft = _defaultDraft();
     _scheduleStatePersist();
     notifyListeners();
   }
@@ -224,6 +227,7 @@ class MobileShellController extends ChangeNotifier {
       await _stopRuntimeMonitoring();
       await stateStore.clear();
       _challengeCache.clear();
+      providerDescriptors = const <ProviderDescriptor>[];
       profiles = const <ProfileRecord>[];
       resolutions = const <ResolutionRecord>[];
       sessions = const <SessionRecord>[];
@@ -349,13 +353,26 @@ class MobileShellController extends ChangeNotifier {
 
   Future<void> startResolutionFromDraft() async {
     await _runBridgeMutation(() async {
+      final descriptor = activeProviderDescriptor;
+      if (descriptor == null) {
+        notice =
+            'The selected provider is not advertised by the connected mobile host.';
+        return;
+      }
+      if (descriptor.inputKind != ProviderInputKind.link) {
+        notice =
+            '${descriptor.displayName} expects ${descriptor.inputKind.value} input. This mobile shell currently supports link entry only.';
+        return;
+      }
       final resolution = await bridge.startResolution(
-        provider: draft.spec.provider,
-        link: draft.spec.link,
-        interactiveProvider: draft.spec.interactiveProvider,
+        provider: descriptor.id,
+        input: ProviderInputEnvelope(
+          kind: descriptor.inputKind,
+          link: draft.spec.link,
+        ),
       );
       selectedResolutionId = resolution.id;
-      notice = 'Started mobile resolution ${resolution.id}.';
+      notice = _resolutionStartedNotice(descriptor, resolution.id);
       await refresh();
     });
   }
@@ -365,6 +382,34 @@ class MobileShellController extends ChangeNotifier {
       final resolution = await bridge.cancelResolution(resolutionId);
       selectedResolutionId = resolution.id;
       notice = 'Cancelled mobile resolution ${resolution.id}.';
+      await refresh();
+    });
+  }
+
+  Future<void> materializeResolution(String resolutionId) async {
+    await _runBridgeMutation(() async {
+      final resolution = _resolutionById(resolutionId);
+      if (resolution == null) {
+        notice = 'Resolution $resolutionId is no longer available.';
+        return;
+      }
+      final advertised = resolution.artifact?.action(
+        ArtifactAction.startOnThisDevice,
+      );
+      if (advertised == null ||
+          advertised.executionOwner != ActionExecutionOwner.host) {
+        notice =
+            'Resolution $resolutionId does not advertise ${ArtifactAction.startOnThisDevice.label.toLowerCase()}.';
+        return;
+      }
+      final session = await bridge.materializeResolution(
+        resolutionId: resolutionId,
+        runtimeDefaults: RuntimeDefaults.fromProfileSpec(draft.spec),
+      );
+      selectedResolutionId = resolutionId;
+      selectedSessionId = session.id;
+      notice =
+          'Started mobile session ${session.id} from resolution $resolutionId. Ready is reported only after runtime startup succeeds.';
       await refresh();
     });
   }
@@ -386,6 +431,38 @@ class MobileShellController extends ChangeNotifier {
       selectedResolutionId = resolutionId;
       notice =
           'Shared handoff link for $resolutionId. Expires ${_formatNoticeTimestamp(exported.expiresAt)}.';
+    });
+  }
+
+  Future<void> openResolutionExternalAction(
+    String resolutionId,
+    ArtifactAction action,
+  ) async {
+    await _runBridgeMutation(() async {
+      final resolution = _resolutionById(resolutionId);
+      if (resolution == null) {
+        notice = 'Resolution $resolutionId is no longer available.';
+        return;
+      }
+      final advertised = resolution.artifact?.action(action);
+      if (advertised == null ||
+          advertised.executionOwner != ActionExecutionOwner.shellExternal) {
+        notice =
+            'Resolution $resolutionId does not advertise ${action.label.toLowerCase()}.';
+        return;
+      }
+      final targetUrl = resolution.externalTargetUrl(action);
+      if (targetUrl == null) {
+        notice =
+            'Resolution $resolutionId does not expose a browser target for ${action.label.toLowerCase()}.';
+        return;
+      }
+      final opened = await _browserLauncher.open(targetUrl);
+      final targetLabel = _externalActionTargetLabel(action);
+      selectedResolutionId = resolutionId;
+      notice = opened
+          ? 'Opened $targetLabel for $resolutionId.'
+          : 'Failed to open $targetLabel for $resolutionId.';
     });
   }
 
@@ -489,6 +566,39 @@ class MobileShellController extends ChangeNotifier {
     }
     return null;
   }
+
+  ResolutionRecord? _resolutionById(String resolutionId) {
+    final normalized = resolutionId.trim();
+    if (normalized.isEmpty) {
+      return null;
+    }
+    for (final resolution in resolutions) {
+      if (resolution.id == normalized) {
+        return resolution;
+      }
+    }
+    return null;
+  }
+
+  String _externalActionTargetLabel(ArtifactAction action) {
+    return action.label.replaceFirst(RegExp(r'^Open\s+'), '').toLowerCase();
+  }
+
+  ProviderDescriptor? descriptorForProvider(String providerId) {
+    final normalized = providerId.trim().toLowerCase();
+    if (normalized.isEmpty) {
+      return null;
+    }
+    for (final descriptor in providerDescriptors) {
+      if (descriptor.id.trim().toLowerCase() == normalized) {
+        return descriptor;
+      }
+    }
+    return null;
+  }
+
+  ProviderDescriptor? get activeProviderDescriptor =>
+      descriptorForProvider(draft.spec.provider);
 
   @override
   void dispose() {
@@ -911,6 +1021,48 @@ class MobileShellController extends ChangeNotifier {
       buffer.write(' ${result.message}');
     }
     return buffer.toString();
+  }
+
+  String _resolutionStartedNotice(
+    ProviderDescriptor descriptor,
+    String resolutionId,
+  ) {
+    if (descriptor.browserPolicy == ProviderBrowserPolicy.externalRequired) {
+      return 'Started mobile resolution $resolutionId for ${descriptor.displayName}. Expect an external browser step when the provider requires it.';
+    }
+    if (descriptor.mayRequireBrowserContinuation) {
+      return 'Started mobile resolution $resolutionId for ${descriptor.displayName}. Complete any browser continuation before expecting a resolved artifact.';
+    }
+    return 'Started mobile resolution $resolutionId for ${descriptor.displayName}.';
+  }
+
+  ProfileDraft _defaultDraft() {
+    final base = ProfileDraft.defaults();
+    if (providerDescriptors.isEmpty) {
+      return base;
+    }
+    return _normalizeDraft(base.copyWith(spec: base.spec.copyWith(link: '')));
+  }
+
+  ProfileDraft _normalizeDraft(ProfileDraft candidate) {
+    if (providerDescriptors.isEmpty) {
+      return candidate;
+    }
+    final descriptor =
+        descriptorForProvider(candidate.spec.provider) ??
+        providerDescriptors.first;
+    final link =
+        descriptor.id.trim().toLowerCase() ==
+            candidate.spec.provider.trim().toLowerCase()
+        ? candidate.spec.link
+        : '';
+    return candidate.copyWith(
+      spec: candidate.spec.copyWith(
+        provider: descriptor.id,
+        link: link,
+        interactiveProvider: descriptor.mayRequireBrowserContinuation,
+      ),
+    );
   }
 
   void _notify() {

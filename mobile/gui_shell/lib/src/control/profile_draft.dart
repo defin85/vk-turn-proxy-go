@@ -7,7 +7,7 @@ class ProfileDraft {
     return const ProfileDraft(
       name: '',
       spec: ProfileSpec(
-        provider: 'vk',
+        provider: '',
         link: '',
         listenAddress: '127.0.0.1:9001',
         peerAddress: '127.0.0.1:56000',

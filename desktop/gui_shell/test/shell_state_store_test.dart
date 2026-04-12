@@ -8,7 +8,7 @@ import 'package:gui_shell/src/control/shell_state_store.dart';
 
 void main() {
   test(
-    'desktop state store redacts generic-turn links from persisted plaintext state',
+    'desktop state store redacts provider links from persisted plaintext state',
     () async {
       final directory = await Directory.systemTemp.createTemp(
         'desktop-shell-state-',
@@ -66,24 +66,27 @@ void main() {
       await store.save(state);
 
       final payload = await file.readAsString();
-      expect(payload, contains('https://vk.com/call/join/test-token'));
+      expect(payload, isNot(contains('https://vk.com/call/join/test-token')));
       expect(
         payload,
-        isNot(contains('generic-turn://turn-user:turn-pass@turn.example.test:3478')),
+        isNot(
+          contains('generic-turn://turn-user:turn-pass@turn.example.test:3478'),
+        ),
       );
       expect(
         payload,
-        isNot(contains('generic-turn://draft-user:draft-pass@turn.example.test:3478')),
+        isNot(
+          contains(
+            'generic-turn://draft-user:draft-pass@turn.example.test:3478',
+          ),
+        ),
       );
 
       final decoded = jsonDecode(payload) as Map<String, dynamic>;
       final profiles = decoded['profiles'] as List<dynamic>;
       final runtimeDefaults =
           decoded['runtime_defaults'] as Map<String, dynamic>;
-      expect(
-        (profiles[0] as Map<String, dynamic>)['spec']['link'],
-        'https://vk.com/call/join/test-token',
-      );
+      expect((profiles[0] as Map<String, dynamic>)['spec']['link'], '');
       expect((profiles[1] as Map<String, dynamic>)['spec']['link'], '');
       expect((decoded['draft'] as Map<String, dynamic>)['spec']['link'], '');
       expect(runtimeDefaults['listen_addr'], '127.0.0.1:9101');

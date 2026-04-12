@@ -198,7 +198,7 @@ void main() {
     );
   });
 
-  testWidgets('mobile shell exposes copy and share handoff actions', (
+  testWidgets('mobile shell exposes same-device and handoff actions', (
     WidgetTester tester,
   ) async {
     tester.view.physicalSize = const Size(1200, 1800);
@@ -213,10 +213,24 @@ void main() {
             provider: 'vk',
             input: const ResolutionInput(
               provider: 'vk',
+              kind: ProviderInputKind.link,
               linkRedacted: 'https://vk.com/call/join/<redacted:invite-token>',
               interactiveProvider: true,
             ),
             state: ResolutionState.resolved,
+            artifact: const ResolutionArtifactRecord(
+              family: ArtifactFamily.genericTurn,
+              actions: <ResolutionActionRecord>[
+                ResolutionActionRecord(
+                  id: ArtifactAction.startOnThisDevice,
+                  executionOwner: ActionExecutionOwner.host,
+                ),
+                ResolutionActionRecord(
+                  id: ArtifactAction.exportHandoff,
+                  executionOwner: ActionExecutionOwner.host,
+                ),
+              ],
+            ),
             export: ResolutionExportStatus(
               supported: true,
               expiresAt: DateTime.utc(2026, 4, 10, 20, 17, 6),
@@ -242,8 +256,82 @@ void main() {
     await tester.drag(find.byType(Scrollable).first, const Offset(0, -900));
     await tester.pumpAndSettle();
 
+    expect(
+      find.text('Start on this device', skipOffstage: false),
+      findsOneWidget,
+    );
     expect(find.text('Copy handoff', skipOffstage: false), findsOneWidget);
     expect(find.text('Share handoff', skipOffstage: false), findsOneWidget);
+  });
+
+  testWidgets('mobile shell renders and executes open room actions', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 1800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final browser = _FakeBrowserLauncher();
+    final controller = MobileShellController(
+      bridge: _FakeMobileHostBridge(
+        resolutionsList: <ResolutionRecord>[
+          ResolutionRecord(
+            id: 'resolution-room-1',
+            provider: 'roomy',
+            input: ResolutionInput(
+              provider: 'roomy',
+              kind: ProviderInputKind.link,
+              linkRedacted:
+                  'https://room.example.test/join/<redacted:room-token>',
+            ),
+            state: ResolutionState.resolved,
+            artifact: ResolutionArtifactRecord(
+              family: ArtifactFamily.conferenceRoom,
+              actions: <ResolutionActionRecord>[
+                ResolutionActionRecord(
+                  id: ArtifactAction.openRoom,
+                  executionOwner: ActionExecutionOwner.shellExternal,
+                ),
+              ],
+              summary: ResolutionArtifactSummary(
+                conferenceRoom: ConferenceRoomArtifactSummary(
+                  roomUrl: 'https://room.example.test/rooms/team-sync',
+                ),
+              ),
+            ),
+            export: ResolutionExportStatus(supported: false),
+            startedAt: DateTime.utc(2026, 4, 10, 12, 0),
+            updatedAt: DateTime.utc(2026, 4, 10, 12, 1),
+            resolvedAt: DateTime.utc(2026, 4, 10, 12, 1),
+          ),
+        ],
+      ),
+      stateStore: _InMemoryStateStore(
+        MobileShellState(
+          profiles: const <ProfileRecord>[],
+          draft: ProfileDraft.defaults(),
+        ),
+      ),
+      browserLauncher: browser,
+    );
+    await controller.initialize();
+    await tester.pumpWidget(MobileShellApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    final openRoomButton = find.text('Open room', skipOffstage: false);
+    await tester.scrollUntilVisible(
+      openRoomButton,
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
+    await tester.tap(openRoomButton);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(browser.openedUrls, <String>[
+      'https://room.example.test/rooms/team-sync',
+    ]);
   });
 }
 
@@ -261,7 +349,7 @@ const HostInfo _readyHostInfo = HostInfo(
     Capability.mobileHostBridge,
     Capability.platformTunnels,
     Capability.profiles,
-    Capability.providerResolutionHandoff,
+    Capability.providerRuntimeArtifacts,
     Capability.sessions,
     Capability.challenges,
     Capability.diagnostics,
@@ -276,6 +364,30 @@ const HostInfo _readyHostInfo = HostInfo(
     ),
   ],
 );
+
+const List<ProviderDescriptor> _providerDescriptors = <ProviderDescriptor>[
+  ProviderDescriptor(
+    id: 'vk',
+    displayName: 'VK Calls',
+    description:
+        'Invite-first provider with browser-mediated continuation that resolves into transport-ready TURN credentials.',
+    inputKind: ProviderInputKind.link,
+    authPosture: ProviderAuthPosture.guestOrAccount,
+    browserPolicy: ProviderBrowserPolicy.externalRequired,
+    challengeModes: <ProviderChallengeMode>[ProviderChallengeMode.browser],
+    artifactFamilies: <ArtifactFamily>[ArtifactFamily.genericTurn],
+  ),
+  ProviderDescriptor(
+    id: 'generic-turn',
+    displayName: 'Generic TURN',
+    description:
+        'Static TURN handoff for deterministic transport testing and operator-driven runtime startup.',
+    inputKind: ProviderInputKind.link,
+    authPosture: ProviderAuthPosture.staticSecret,
+    browserPolicy: ProviderBrowserPolicy.notRequired,
+    artifactFamilies: <ArtifactFamily>[ArtifactFamily.genericTurn],
+  ),
+];
 
 ProfileSpec _profileSpec() {
   return const ProfileSpec(
@@ -302,15 +414,30 @@ class _InMemoryStateStore implements MobileShellStateStore {
   Future<void> clear() async {}
 }
 
+class _FakeBrowserLauncher implements BrowserLauncher {
+  final List<String> openedUrls = <String>[];
+
+  @override
+  Future<bool> open(String url) async {
+    openedUrls.add(url);
+    return true;
+  }
+}
+
 class _FakeMobileHostBridge implements MobileHostBridge {
   _FakeMobileHostBridge({
+    List<ProviderDescriptor>? providersList,
     List<ResolutionRecord>? resolutionsList,
     this.sessionsList = const <SessionRecord>[],
     this.challengeMap = const <String, ChallengeRecord>{},
-  }) : _resolutions = List<ResolutionRecord>.of(
+  }) : _providers = List<ProviderDescriptor>.of(
+         providersList ?? _providerDescriptors,
+       ),
+       _resolutions = List<ResolutionRecord>.of(
          resolutionsList ?? const <ResolutionRecord>[],
        );
 
+  final List<ProviderDescriptor> _providers;
   final List<SessionRecord> sessionsList;
   final Map<String, ChallengeRecord> challengeMap;
   final List<ResolutionRecord> _resolutions;
@@ -404,6 +531,9 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   }
 
   @override
+  Future<List<ProviderDescriptor>> providers() async => _providers;
+
+  @override
   Future<List<ProfileRecord>> profiles() async => const <ProfileRecord>[];
 
   @override
@@ -412,14 +542,27 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   @override
   Future<ResolutionRecord> startResolution({
     required String provider,
-    required String link,
-    required bool interactiveProvider,
+    required ProviderInputEnvelope input,
   }) async {
     return ResolutionRecord(
       id: 'resolution-1',
       provider: provider,
-      input: ResolutionInput(provider: provider, linkRedacted: link),
+      input: ResolutionInput(
+        provider: provider,
+        kind: input.kind,
+        linkRedacted: input.link,
+        interactiveProvider: provider == 'vk',
+      ),
       state: ResolutionState.resolved,
+      artifact: const ResolutionArtifactRecord(
+        family: ArtifactFamily.genericTurn,
+        actions: <ResolutionActionRecord>[
+          ResolutionActionRecord(
+            id: ArtifactAction.exportHandoff,
+            executionOwner: ActionExecutionOwner.host,
+          ),
+        ],
+      ),
       export: ResolutionExportStatus(
         supported: true,
         expiresAt: DateTime.utc(2026, 4, 10, 20, 17, 6),

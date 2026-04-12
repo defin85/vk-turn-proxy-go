@@ -14,17 +14,49 @@ typedef DirectoryProvider = Future<Directory> Function();
 
 enum ShellStatus { booting, ready, blocked }
 
+abstract class BrowserLauncher {
+  Future<bool> open(String url);
+}
+
+class DesktopBrowserLauncher implements BrowserLauncher {
+  const DesktopBrowserLauncher();
+
+  @override
+  Future<bool> open(String url) async {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) {
+      return false;
+    }
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null || uri.scheme.isEmpty) {
+      return false;
+    }
+
+    late final ProcessResult result;
+    if (Platform.isWindows) {
+      result = await Process.run('cmd', <String>['/c', 'start', '', trimmed]);
+    } else if (Platform.isMacOS) {
+      result = await Process.run('open', <String>[trimmed]);
+    } else {
+      result = await Process.run('xdg-open', <String>[trimmed]);
+    }
+    return result.exitCode == 0;
+  }
+}
+
 class DesktopShellController extends ChangeNotifier {
   DesktopShellController({
     required this.api,
     required this.supervisor,
     DesktopShellStateStore? stateStore,
     DirectoryProvider? diagnosticsDirectoryProvider,
+    BrowserLauncher? browserLauncher,
     DesktopHandoffAdapter? handoffAdapter,
     DateTime Function()? clock,
     BuildIdentity? appBuild,
   }) : _diagnosticsDirectoryProvider =
            diagnosticsDirectoryProvider ?? _defaultDiagnosticsDirectory,
+       _browserLauncher = browserLauncher ?? const DesktopBrowserLauncher(),
        _handoffAdapter =
            handoffAdapter ?? const ClipboardDesktopHandoffAdapter(),
        _stateStore = stateStore ?? FileDesktopShellStateStore(),
@@ -34,6 +66,7 @@ class DesktopShellController extends ChangeNotifier {
   final ControlPlaneApi api;
   final HostSupervisor supervisor;
   final DirectoryProvider _diagnosticsDirectoryProvider;
+  final BrowserLauncher _browserLauncher;
   final DesktopHandoffAdapter _handoffAdapter;
   final DesktopShellStateStore _stateStore;
   final DateTime Function() _clock;
@@ -41,6 +74,7 @@ class DesktopShellController extends ChangeNotifier {
 
   ShellStatus status = ShellStatus.booting;
   HostConnectionResult? hostConnection;
+  List<ProviderDescriptor> providerDescriptors = const <ProviderDescriptor>[];
   List<ProfileRecord> profiles = const <ProfileRecord>[];
   List<ResolutionRecord> resolutions = const <ResolutionRecord>[];
   List<SessionRecord> sessions = const <SessionRecord>[];
@@ -112,6 +146,7 @@ class DesktopShellController extends ChangeNotifier {
     if (hostConnection?.isReady != true) {
       await _stopRuntimeMonitoring();
       _challengeCache.clear();
+      providerDescriptors = const <ProviderDescriptor>[];
       resolutions = const <ResolutionRecord>[];
       sessions = const <SessionRecord>[];
       selectedResolutionId = null;
@@ -149,6 +184,7 @@ class DesktopShellController extends ChangeNotifier {
       return;
     }
     try {
+      final nextProviders = await api.providers();
       final nextProfiles = await api.profiles();
       final nextResolutions = await api.resolutions();
       final nextSessions = await api.sessions();
@@ -157,10 +193,13 @@ class DesktopShellController extends ChangeNotifier {
         nextResolutions,
       );
 
+      providerDescriptors = nextProviders;
       profiles = nextProfiles;
       resolutions = nextResolutions;
       sessions = nextSessions;
       _mergeChallenges(nextChallenges);
+
+      draft = _normalizeDraft(draft);
 
       if (!_restoredState && selectedProfileId == null && profiles.isNotEmpty) {
         selectProfile(profiles.first.id);
@@ -206,7 +245,7 @@ class DesktopShellController extends ChangeNotifier {
       (ProfileRecord profile) => profile.id == profileId,
       orElse: () => ProfileDraft.defaults().toProfile(),
     );
-    draft = ProfileDraft.fromProfile(selected);
+    draft = _normalizeDraft(ProfileDraft.fromProfile(selected));
     materializeDefaults = RuntimeDefaults.fromProfileSpec(selected.spec);
     _scheduleStatePersist();
     notifyListeners();
@@ -224,8 +263,8 @@ class DesktopShellController extends ChangeNotifier {
 
   void updateDraft(ProfileDraft nextDraft) {
     _restoredState = true;
-    draft = nextDraft;
-    materializeDefaults = RuntimeDefaults.fromProfileSpec(nextDraft.spec);
+    draft = _normalizeDraft(nextDraft);
+    materializeDefaults = RuntimeDefaults.fromProfileSpec(draft.spec);
     _scheduleStatePersist();
     notifyListeners();
   }
@@ -233,7 +272,7 @@ class DesktopShellController extends ChangeNotifier {
   void resetDraft() {
     _restoredState = true;
     selectedProfileId = null;
-    draft = ProfileDraft.defaults();
+    draft = _defaultDraft();
     materializeDefaults = RuntimeDefaults.fromProfileSpec(draft.spec);
     _scheduleStatePersist();
     notifyListeners();
@@ -276,13 +315,26 @@ class DesktopShellController extends ChangeNotifier {
 
   Future<void> startResolutionFromDraft() async {
     await _runMutation(() async {
+      final descriptor = activeProviderDescriptor;
+      if (descriptor == null) {
+        notice =
+            'The selected provider is not advertised by the connected host.';
+        return;
+      }
+      if (descriptor.inputKind != ProviderInputKind.link) {
+        notice =
+            '${descriptor.displayName} expects ${descriptor.inputKind.value} input. This desktop shell currently supports link entry only.';
+        return;
+      }
       final resolution = await api.startResolution(
-        provider: draft.spec.provider,
-        link: draft.spec.link,
-        interactiveProvider: draft.spec.interactiveProvider,
+        provider: descriptor.id,
+        input: ProviderInputEnvelope(
+          kind: descriptor.inputKind,
+          link: draft.spec.link,
+        ),
       );
       selectedResolutionId = resolution.id;
-      notice = _resolutionStartedNotice(draft.spec, resolution.id);
+      notice = _resolutionStartedNotice(descriptor, resolution.id);
       await refresh();
     });
   }
@@ -317,6 +369,38 @@ class DesktopShellController extends ChangeNotifier {
       selectedResolutionId = resolutionId;
       notice =
           'Copied handoff link for $resolutionId. Expires ${_formatNoticeTimestamp(exported.expiresAt)}.';
+    });
+  }
+
+  Future<void> openResolutionExternalAction(
+    String resolutionId,
+    ArtifactAction action,
+  ) async {
+    await _runMutation(() async {
+      final resolution = _resolutionById(resolutionId);
+      if (resolution == null) {
+        notice = 'Resolution $resolutionId is no longer available.';
+        return;
+      }
+      final advertised = resolution.artifact?.action(action);
+      if (advertised == null ||
+          advertised.executionOwner != ActionExecutionOwner.shellExternal) {
+        notice =
+            'Resolution $resolutionId does not advertise ${action.label.toLowerCase()}.';
+        return;
+      }
+      final targetUrl = resolution.externalTargetUrl(action);
+      if (targetUrl == null) {
+        notice =
+            'Resolution $resolutionId does not expose a browser target for ${action.label.toLowerCase()}.';
+        return;
+      }
+      final opened = await _browserLauncher.open(targetUrl);
+      final targetLabel = _externalActionTargetLabel(action);
+      selectedResolutionId = resolutionId;
+      notice = opened
+          ? 'Opened $targetLabel for $resolutionId.'
+          : 'Failed to open $targetLabel for $resolutionId.';
     });
   }
 
@@ -407,6 +491,39 @@ class DesktopShellController extends ChangeNotifier {
     }
     return null;
   }
+
+  ResolutionRecord? _resolutionById(String resolutionId) {
+    final normalized = resolutionId.trim();
+    if (normalized.isEmpty) {
+      return null;
+    }
+    for (final resolution in resolutions) {
+      if (resolution.id == normalized) {
+        return resolution;
+      }
+    }
+    return null;
+  }
+
+  String _externalActionTargetLabel(ArtifactAction action) {
+    return action.label.replaceFirst(RegExp(r'^Open\s+'), '').toLowerCase();
+  }
+
+  ProviderDescriptor? descriptorForProvider(String providerId) {
+    final normalized = providerId.trim().toLowerCase();
+    if (normalized.isEmpty) {
+      return null;
+    }
+    for (final descriptor in providerDescriptors) {
+      if (descriptor.id.trim().toLowerCase() == normalized) {
+        return descriptor;
+      }
+    }
+    return null;
+  }
+
+  ProviderDescriptor? get activeProviderDescriptor =>
+      descriptorForProvider(draft.spec.provider);
 
   @override
   void dispose() {
@@ -717,24 +834,60 @@ class DesktopShellController extends ChangeNotifier {
     return buffer.toString();
   }
 
-  String _resolutionStartedNotice(ProfileSpec spec, String resolutionId) {
-    if (!spec.isManagedVkInviteWorkflow) {
-      return 'Started resolution $resolutionId.';
+  String _resolutionStartedNotice(
+    ProviderDescriptor descriptor,
+    String resolutionId,
+  ) {
+    if (descriptor.browserPolicy == ProviderBrowserPolicy.externalRequired) {
+      return 'Started resolution $resolutionId for ${descriptor.displayName}. Finish the required external browser steps before expecting a resolved artifact.';
     }
-    if (!spec.interactiveProvider) {
-      return 'Started resolution $resolutionId. Interactive browser continuation is off, so preview-only VK invites will fail closed.';
+    if (descriptor.mayRequireBrowserContinuation) {
+      return 'Started resolution $resolutionId for ${descriptor.displayName}. Continue any browser challenge flow before expecting a resolved artifact.';
     }
-    return 'Started resolution $resolutionId. Continue in browser and click Join if VK stops at preview before expecting a ready session.';
+    return 'Started resolution $resolutionId for ${descriptor.displayName}.';
   }
 
   String _challengeContinuedNotice(ChallengeRecord challenge) {
-    if (challenge.provider.trim().toLowerCase() != 'vk') {
+    final descriptor = descriptorForProvider(challenge.provider);
+    if (descriptor == null) {
       return 'Continued challenge ${challenge.id}.';
     }
-    if ((challenge.resolutionId ?? '').isNotEmpty) {
-      return 'Continued challenge ${challenge.id}. Finish the VK browser flow and click Join before expecting a resolved handoff.';
+    if (descriptor.browserPolicy == ProviderBrowserPolicy.externalRequired) {
+      return 'Continued challenge ${challenge.id}. Finish the external browser flow for ${descriptor.displayName} before expecting the next state transition.';
     }
-    return 'Continued challenge ${challenge.id}. Finish the VK browser flow and click Join before expecting the session to reach ready.';
+    if ((challenge.resolutionId ?? '').isNotEmpty) {
+      return 'Continued challenge ${challenge.id}. Finish the provider flow for ${descriptor.displayName} before expecting a resolved artifact.';
+    }
+    return 'Continued challenge ${challenge.id}. Finish the provider flow for ${descriptor.displayName} before expecting the session to reach ready.';
+  }
+
+  ProfileDraft _defaultDraft() {
+    final base = ProfileDraft.defaults();
+    if (providerDescriptors.isEmpty) {
+      return base;
+    }
+    return _normalizeDraft(base.copyWith(spec: base.spec.copyWith(link: '')));
+  }
+
+  ProfileDraft _normalizeDraft(ProfileDraft candidate) {
+    if (providerDescriptors.isEmpty) {
+      return candidate;
+    }
+    final descriptor =
+        descriptorForProvider(candidate.spec.provider) ??
+        providerDescriptors.first;
+    final link =
+        descriptor.id.trim().toLowerCase() ==
+            candidate.spec.provider.trim().toLowerCase()
+        ? candidate.spec.link
+        : '';
+    return candidate.copyWith(
+      spec: candidate.spec.copyWith(
+        provider: descriptor.id,
+        link: link,
+        interactiveProvider: descriptor.mayRequireBrowserContinuation,
+      ),
+    );
   }
 
   void _notify() {

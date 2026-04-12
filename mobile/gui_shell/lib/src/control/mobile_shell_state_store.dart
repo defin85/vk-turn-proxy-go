@@ -196,24 +196,12 @@ class SecureMobileShellStateStore implements MobileShellStateStore {
       selectedProfileId: state.selectedProfileId,
       draft: ProfileDraft.fromJson(_sanitizeDraft(state.draft.toJson())),
     );
-    final secretState = <String, dynamic>{
-      'profiles': <String, dynamic>{
-        for (final profile in state.profiles)
-          if (profile.id.isNotEmpty)
-            profile.id: _extractSecrets(
-              profile.toJson()['spec'] as Map<String, dynamic>,
-            ),
-      },
-      'draft': _extractSecrets(
-        state.draft.toJson()['spec'] as Map<String, dynamic>,
-      ),
-    };
     final sanitizedJson = sanitized.toJson()
       ..['secret_manifest'] = secretManifest.toJson();
 
     final encoder = const JsonEncoder.withIndent('  ');
     await preferences.write(_prefsStateKey, encoder.convert(sanitizedJson));
-    await secrets.write(_secureSecretsKey, encoder.convert(secretState));
+    await secrets.delete(_secureSecretsKey);
   }
 
   @override
@@ -251,13 +239,7 @@ class _SecretManifest {
   }
 
   factory _SecretManifest.fromState(MobileShellState state) {
-    return _SecretManifest(
-      profileIds: state.profiles
-          .map((ProfileRecord profile) => profile.id.trim())
-          .where((String id) => id.isNotEmpty)
-          .toList(growable: false),
-      hasDraft: _draftRequiresSecretState(state.draft),
-    );
+    return const _SecretManifest(profileIds: <String>[], hasDraft: false);
   }
 
   final List<String> profileIds;
@@ -271,11 +253,7 @@ class _SecretManifest {
 }
 
 bool _draftRequiresSecretState(ProfileDraft draft) {
-  return draft.id != null ||
-      draft.name.trim().isNotEmpty ||
-      draft.spec.link.trim().isNotEmpty ||
-      (draft.spec.turnServer ?? '').trim().isNotEmpty ||
-      (draft.spec.turnPort ?? '').trim().isNotEmpty;
+  return draft.spec.link.trim().isNotEmpty;
 }
 
 Map<String, dynamic> _sanitizeProfile(Map<String, dynamic> json) {
@@ -284,8 +262,6 @@ Map<String, dynamic> _sanitizeProfile(Map<String, dynamic> json) {
     sanitized['spec'] as Map<String, dynamic>? ?? const <String, dynamic>{},
   );
   spec['link'] = '';
-  spec.remove('turn_server');
-  spec.remove('turn_port');
   sanitized['spec'] = spec;
   return sanitized;
 }
@@ -296,20 +272,8 @@ Map<String, dynamic> _sanitizeDraft(Map<String, dynamic> json) {
     sanitized['spec'] as Map<String, dynamic>? ?? const <String, dynamic>{},
   );
   spec['link'] = '';
-  spec.remove('turn_server');
-  spec.remove('turn_port');
   sanitized['spec'] = spec;
   return sanitized;
-}
-
-Map<String, dynamic> _extractSecrets(Map<String, dynamic> spec) {
-  return <String, dynamic>{
-    'link': spec['link'] as String? ?? '',
-    if ((spec['turn_server'] as String?)?.isNotEmpty == true)
-      'turn_server': spec['turn_server'],
-    if ((spec['turn_port'] as String?)?.isNotEmpty == true)
-      'turn_port': spec['turn_port'],
-  };
 }
 
 ProfileRecord _profileFromSanitized(

@@ -49,6 +49,7 @@ class DashboardPage extends StatelessWidget {
                   height: 760,
                   child: ProfileEditorPanel(
                     profiles: controller.profiles,
+                    providerDescriptors: controller.providerDescriptors,
                     selectedProfileId: controller.selectedProfileId,
                     draft: controller.draft,
                     busy: controller.busy,
@@ -196,7 +197,7 @@ class _ResolutionsPanel extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Resolve the invite first, then copy the short-lived handoff link through the typed host contract when another device should consume it.',
+              'Resolve the invite first, then use the capability-gated action set to start on this device, export a handoff, or open provider-native targets.',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -240,18 +241,61 @@ class _ResolutionsPanel extends StatelessWidget {
                           onCancelChallenge: challenge == null
                               ? null
                               : () => controller.cancelChallenge(challenge.id),
+                          onMaterialize:
+                              resolution.state == ResolutionState.resolved &&
+                                  resolution.supportsAction(
+                                    ArtifactAction.startOnThisDevice,
+                                  )
+                              ? () => controller.materializeResolution(
+                                  resolution.id,
+                                )
+                              : null,
                           onCopyExport:
-                              resolution.export.supported &&
-                                  resolution.state == ResolutionState.resolved
+                              resolution.state == ResolutionState.resolved &&
+                                  resolution.supportsAction(
+                                    ArtifactAction.exportHandoff,
+                                  )
                               ? () => controller.copyResolutionExport(
                                   resolution.id,
                                 )
                               : null,
                           onShareExport:
-                              resolution.export.supported &&
-                                  resolution.state == ResolutionState.resolved
+                              resolution.state == ResolutionState.resolved &&
+                                  resolution.supportsAction(
+                                    ArtifactAction.exportHandoff,
+                                  )
                               ? () => controller.shareResolutionExport(
                                   resolution.id,
+                                )
+                              : null,
+                          onOpenRoom:
+                              resolution.state == ResolutionState.resolved &&
+                                  resolution.supportsAction(
+                                    ArtifactAction.openRoom,
+                                  )
+                              ? () => controller.openResolutionExternalAction(
+                                  resolution.id,
+                                  ArtifactAction.openRoom,
+                                )
+                              : null,
+                          onOpenCamera:
+                              resolution.state == ResolutionState.resolved &&
+                                  resolution.supportsAction(
+                                    ArtifactAction.openCamera,
+                                  )
+                              ? () => controller.openResolutionExternalAction(
+                                  resolution.id,
+                                  ArtifactAction.openCamera,
+                                )
+                              : null,
+                          onOpenArchive:
+                              resolution.state == ResolutionState.resolved &&
+                                  resolution.supportsAction(
+                                    ArtifactAction.openArchive,
+                                  )
+                              ? () => controller.openResolutionExternalAction(
+                                  resolution.id,
+                                  ArtifactAction.openArchive,
                                 )
                               : null,
                           onCancel: resolution.isTerminal
@@ -431,8 +475,12 @@ class _ResolutionCard extends StatelessWidget {
     required this.onOpenChallenge,
     required this.onContinueChallenge,
     required this.onCancelChallenge,
+    required this.onMaterialize,
     required this.onCopyExport,
     required this.onShareExport,
+    required this.onOpenRoom,
+    required this.onOpenCamera,
+    required this.onOpenArchive,
     required this.onCancel,
   });
 
@@ -444,8 +492,12 @@ class _ResolutionCard extends StatelessWidget {
   final Future<void> Function()? onOpenChallenge;
   final Future<void> Function()? onContinueChallenge;
   final Future<void> Function()? onCancelChallenge;
+  final Future<void> Function()? onMaterialize;
   final Future<void> Function()? onCopyExport;
   final Future<void> Function()? onShareExport;
+  final Future<void> Function()? onOpenRoom;
+  final Future<void> Function()? onOpenCamera;
+  final Future<void> Function()? onOpenArchive;
   final Future<void> Function()? onCancel;
 
   @override
@@ -491,6 +543,21 @@ class _ResolutionCard extends StatelessWidget {
                 Text(
                   'TURN ${resolution.credentials!.address} | ${resolution.credentials!.usernameRedacted}',
                   style: theme.textTheme.bodySmall,
+                ),
+              ],
+              if (resolution.artifact != null) ...<Widget>[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: <Widget>[
+                    _Tag(label: resolution.artifact!.family.label),
+                    for (final action in resolution.artifact!.actions)
+                      _Tag(
+                        label:
+                            '${action.id.label} · ${action.executionOwner.value}',
+                      ),
+                  ],
                 ),
               ],
               if (resolution.export.expiresAt != null) ...<Widget>[
@@ -566,6 +633,13 @@ class _ResolutionCard extends StatelessWidget {
                 spacing: 10,
                 runSpacing: 10,
                 children: <Widget>[
+                  if (onMaterialize != null)
+                    FilledButton(
+                      onPressed: busy
+                          ? null
+                          : () => unawaited(onMaterialize!.call()),
+                      child: const Text('Start on this device'),
+                    ),
                   OutlinedButton(
                     onPressed: busy || onCopyExport == null
                         ? null
@@ -578,6 +652,27 @@ class _ResolutionCard extends StatelessWidget {
                         : () => unawaited(onShareExport!.call()),
                     child: const Text('Share handoff'),
                   ),
+                  if (onOpenRoom != null)
+                    OutlinedButton(
+                      onPressed: busy
+                          ? null
+                          : () => unawaited(onOpenRoom!.call()),
+                      child: const Text('Open room'),
+                    ),
+                  if (onOpenCamera != null)
+                    OutlinedButton(
+                      onPressed: busy
+                          ? null
+                          : () => unawaited(onOpenCamera!.call()),
+                      child: const Text('Open camera'),
+                    ),
+                  if (onOpenArchive != null)
+                    OutlinedButton(
+                      onPressed: busy
+                          ? null
+                          : () => unawaited(onOpenArchive!.call()),
+                      child: const Text('Open archive'),
+                    ),
                   if (onCancel != null)
                     OutlinedButton(
                       onPressed: busy

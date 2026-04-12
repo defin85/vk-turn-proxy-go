@@ -30,6 +30,27 @@ func (a *Adapter) Name() string {
 	return providerName
 }
 
+func (a *Adapter) Descriptor() provider.ProviderDescriptor {
+	return provider.ProviderDescriptor{
+		ID:            providerName,
+		DisplayName:   "Generic TURN",
+		Description:   "Static TURN handoff for deterministic transport testing and operator-driven runtime startup.",
+		InputKind:     provider.ProviderInputKindLink,
+		AuthPosture:   provider.ProviderAuthPostureStaticSecret,
+		BrowserPolicy: provider.ProviderBrowserPolicyNotRequired,
+		ArtifactFamilies: []provider.ArtifactFamily{
+			provider.ArtifactFamilyGenericTURN,
+		},
+		CapabilityHints: provider.ProviderCapabilityHints{
+			PotentialActions: []provider.ArtifactAction{
+				provider.ArtifactActionStartOnThisDevice,
+				provider.ArtifactActionExportHandoff,
+			},
+			RedactionPolicy: provider.SummaryOnlyArtifactRedactionPolicy(),
+		},
+	}
+}
+
 func (a *Adapter) Resolve(_ context.Context, link string) (provider.Resolution, error) {
 	username, password, address, artifact, err := parseLink(link)
 	if err != nil {

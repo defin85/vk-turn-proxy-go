@@ -8,6 +8,7 @@ class ProfileEditorPanel extends StatefulWidget {
   const ProfileEditorPanel({
     super.key,
     required this.profiles,
+    required this.providerDescriptors,
     required this.selectedProfileId,
     required this.draft,
     required this.busy,
@@ -21,6 +22,7 @@ class ProfileEditorPanel extends StatefulWidget {
   });
 
   final List<ProfileRecord> profiles;
+  final List<ProviderDescriptor> providerDescriptors;
   final String? selectedProfileId;
   final ProfileDraft draft;
   final bool busy;
@@ -90,7 +92,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final managedVkInviteWorkflow = widget.draft.spec.isManagedVkInviteWorkflow;
+    final descriptor = _selectedDescriptor();
 
     return Card(
       child: Padding(
@@ -118,8 +120,8 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
             Expanded(
               child: ListView(
                 children: <Widget>[
-                  if (managedVkInviteWorkflow) ...<Widget>[
-                    _workflowBanner(theme),
+                  if (descriptor != null) ...<Widget>[
+                    _providerDescriptorCard(theme, descriptor),
                     const SizedBox(height: 16),
                   ],
                   _field(
@@ -127,57 +129,16 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                     label: 'Profile name',
                     onChanged: (String value) => _pushDraft(name: value),
                   ),
-                  _field(
-                    controller: _providerController,
-                    label: 'Provider',
-                    onChanged: (String value) => _pushDraft(
-                      spec: widget.draft.spec.copyWith(provider: value.trim()),
-                    ),
-                  ),
+                  _providerField(),
                   _field(
                     controller: _linkController,
-                    label: 'Provider link',
+                    label: _providerLinkLabel(descriptor),
                     maxLines: 3,
                     onChanged: (String value) => _pushDraft(
                       spec: widget.draft.spec.copyWith(link: value.trim()),
                     ),
                   ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: widget.draft.spec.interactiveProvider,
-                    onChanged: widget.busy
-                        ? null
-                        : (bool enabled) => _pushDraft(
-                            spec: widget.draft.spec.copyWith(
-                              interactiveProvider: enabled,
-                            ),
-                          ),
-                    title: Text(
-                      managedVkInviteWorkflow
-                          ? 'Browser continuation enabled'
-                          : 'Interactive provider challenges',
-                    ),
-                    subtitle: Text(
-                      managedVkInviteWorkflow
-                          ? 'Keep this on for the standard VK flow so the operator can continue in the browser and click Join before ready.'
-                          : 'Enable host-driven browser continuation when the provider requires a manual step.',
-                    ),
-                  ),
-                  if (managedVkInviteWorkflow &&
-                      !widget.draft.spec.interactiveProvider) ...<Widget>[
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFF1D6),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Text(
-                        'The standard VK invite workflow expects browser continuation to stay enabled. Turn it off only for support or compatibility work.',
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                    ),
-                  ],
+                  _providerFlowCard(theme, descriptor),
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 12,
@@ -197,90 +158,63 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                       ),
                     ],
                   ),
-                  if (managedVkInviteWorkflow) ...<Widget>[
-                    const SizedBox(height: 20),
-                    Text(
-                      'Operator-managed runtime defaults',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
+                  const SizedBox(height: 20),
+                  Text(
+                    'Operator-managed runtime defaults',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'These runtime defaults stay separate from the provider input. They are reused only after the resolution reaches a family that supports Start on this device.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    childrenPadding: const EdgeInsets.only(top: 8),
+                    title: const Text('Inspect or edit runtime defaults'),
+                    subtitle: Text(_runtimeDefaultsSummary(widget.draft.spec)),
+                    children: _runtimeDefaultsFields(),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Operator/support actions',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Direct profile start and raw transport tuning remain available for support work, but descriptor-driven resolution is the primary provider entry path.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: <Widget>[
+                      FilledButton.tonal(
+                        onPressed:
+                            widget.busy || widget.selectedProfileId == null
+                            ? null
+                            : () => unawaited(widget.onStart()),
+                        child: const Text('Start saved profile'),
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'These runtime defaults stay separate from the user-supplied VK invite. They are reused only after the resolution reaches resolved and you choose Start on this device.',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
+                      OutlinedButton(
+                        onPressed:
+                            widget.busy || widget.selectedProfileId == null
+                            ? null
+                            : () => unawaited(widget.onDelete()),
+                        child: const Text('Delete'),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    ExpansionTile(
-                      tilePadding: EdgeInsets.zero,
-                      childrenPadding: const EdgeInsets.only(top: 8),
-                      title: const Text('Inspect or edit runtime defaults'),
-                      subtitle: Text(
-                        _runtimeDefaultsSummary(widget.draft.spec),
-                      ),
-                      children: _runtimeDefaultsFields(),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Operator/support actions',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Direct profile start and raw transport tuning remain available for support work, but they are not the standard end-user VK workflow.',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      children: <Widget>[
-                        FilledButton.tonal(
-                          onPressed:
-                              widget.busy || widget.selectedProfileId == null
-                              ? null
-                              : () => unawaited(widget.onStart()),
-                          child: const Text('Start saved profile'),
-                        ),
-                        OutlinedButton(
-                          onPressed:
-                              widget.busy || widget.selectedProfileId == null
-                              ? null
-                              : () => unawaited(widget.onDelete()),
-                          child: const Text('Delete'),
-                        ),
-                      ],
-                    ),
-                  ] else ...<Widget>[
-                    ..._runtimeDefaultsFields(),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      children: <Widget>[
-                        FilledButton.tonal(
-                          onPressed:
-                              widget.busy || widget.selectedProfileId == null
-                              ? null
-                              : () => unawaited(widget.onStart()),
-                          child: const Text('Start saved profile'),
-                        ),
-                        OutlinedButton(
-                          onPressed:
-                              widget.busy || widget.selectedProfileId == null
-                              ? null
-                              : () => unawaited(widget.onDelete()),
-                          child: const Text('Delete'),
-                        ),
-                      ],
-                    ),
-                  ],
+                    ],
+                  ),
                   const SizedBox(height: 24),
                   Text(
                     'Saved profiles',
@@ -341,7 +275,10 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     );
   }
 
-  Widget _workflowBanner(ThemeData theme) {
+  Widget _providerDescriptorCard(
+    ThemeData theme,
+    ProviderDescriptor descriptor,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -352,18 +289,144 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
-            'Standard VK invite workflow',
+            descriptor.displayName,
             style: theme.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w800,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            'An organizer or dispatcher creates the VK call outside the product and shares the invite link. The end user pastes that shared invite here, then continues in the browser and clicks Join before the product may report ready.',
+            descriptor.description.isEmpty
+                ? '${descriptor.authPosture.label}. ${descriptor.browserPolicy.label}.'
+                : descriptor.description,
             style: theme.textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: <Widget>[
+              _workflowTag('Input: ${descriptor.inputKind.value}'),
+              _workflowTag('Auth: ${descriptor.authPosture.label}'),
+              _workflowTag('Browser: ${descriptor.browserPolicy.label}'),
+              for (final family in descriptor.artifactFamilies)
+                _workflowTag('Family: ${family.label}'),
+            ],
           ),
         ],
       ),
+    );
+  }
+
+  Widget _providerField() {
+    if (widget.providerDescriptors.isEmpty) {
+      return _field(
+        controller: _providerController,
+        label: 'Provider',
+        onChanged: (String value) => _pushDraft(
+          spec: widget.draft.spec.copyWith(provider: value.trim()),
+        ),
+      );
+    }
+
+    final providerId =
+        _selectedDescriptor()?.id ?? widget.providerDescriptors.first.id;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: DropdownButtonFormField<String>(
+        initialValue: providerId,
+        decoration: const InputDecoration(labelText: 'Provider'),
+        items: widget.providerDescriptors
+            .map(
+              (ProviderDescriptor descriptor) => DropdownMenuItem<String>(
+                value: descriptor.id,
+                child: Text(descriptor.displayName),
+              ),
+            )
+            .toList(growable: false),
+        onChanged: widget.busy
+            ? null
+            : (String? value) {
+                if (value == null) {
+                  return;
+                }
+                _pushDraft(
+                  spec: widget.draft.spec.copyWith(
+                    provider: value,
+                    link: value == widget.draft.spec.provider
+                        ? widget.draft.spec.link
+                        : '',
+                  ),
+                );
+              },
+      ),
+    );
+  }
+
+  Widget _providerFlowCard(ThemeData theme, ProviderDescriptor? descriptor) {
+    final message = switch (descriptor?.browserPolicy) {
+      ProviderBrowserPolicy.externalRequired =>
+        'This provider requires an external browser when challenge continuation appears.',
+      ProviderBrowserPolicy.embeddedAllowed =>
+        'This provider allows an embedded browser surface, but the host still controls whether a browser challenge appears.',
+      _ => 'This provider does not report a required browser surface.',
+    };
+    final continuation = descriptor?.mayRequireBrowserContinuation == true
+        ? 'Browser continuation may appear for this provider.'
+        : 'No browser challenge mode is currently advertised for this provider.';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF1D6),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            message,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(continuation, style: theme.textTheme.bodyMedium),
+        ],
+      ),
+    );
+  }
+
+  String _providerLinkLabel(ProviderDescriptor? descriptor) {
+    if (descriptor == null) {
+      return 'Provider input';
+    }
+    return switch (descriptor.inputKind) {
+      ProviderInputKind.link => 'Provider link',
+    };
+  }
+
+  ProviderDescriptor? _selectedDescriptor() {
+    final providerId = widget.draft.spec.provider.trim().toLowerCase();
+    for (final descriptor in widget.providerDescriptors) {
+      if (descriptor.id.trim().toLowerCase() == providerId) {
+        return descriptor;
+      }
+    }
+    return widget.providerDescriptors.isEmpty
+        ? null
+        : widget.providerDescriptors.first;
+  }
+
+  Widget _workflowTag(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(label),
     );
   }
 

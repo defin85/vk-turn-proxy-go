@@ -34,7 +34,7 @@ const HostInfo _readyHostInfo = HostInfo(
     Capability.mobileHostBridge,
     Capability.platformTunnels,
     Capability.profiles,
-    Capability.providerResolutionHandoff,
+    Capability.providerRuntimeArtifacts,
     Capability.sessions,
     Capability.challenges,
     Capability.diagnostics,
@@ -49,6 +49,54 @@ const HostInfo _readyHostInfo = HostInfo(
     ),
   ],
 );
+
+const List<ProviderDescriptor> _providerDescriptors = <ProviderDescriptor>[
+  ProviderDescriptor(
+    id: 'vk',
+    displayName: 'VK Calls',
+    description:
+        'Invite-first provider with browser-mediated continuation that resolves into transport-ready TURN credentials.',
+    inputKind: ProviderInputKind.link,
+    authPosture: ProviderAuthPosture.guestOrAccount,
+    browserPolicy: ProviderBrowserPolicy.externalRequired,
+    challengeModes: <ProviderChallengeMode>[ProviderChallengeMode.browser],
+    artifactFamilies: <ArtifactFamily>[ArtifactFamily.genericTurn],
+    capabilityHints: ProviderCapabilityHints(
+      potentialActions: <ArtifactAction>[
+        ArtifactAction.startOnThisDevice,
+        ArtifactAction.exportHandoff,
+      ],
+      redactionPolicy: ArtifactRedactionPolicy(
+        ordinaryReads: 'summary_only',
+        events: 'summary_only',
+        diagnostics: 'summary_only',
+        persistedState: 'summary_only',
+      ),
+    ),
+  ),
+  ProviderDescriptor(
+    id: 'generic-turn',
+    displayName: 'Generic TURN',
+    description:
+        'Static TURN handoff for deterministic transport testing and operator-driven runtime startup.',
+    inputKind: ProviderInputKind.link,
+    authPosture: ProviderAuthPosture.staticSecret,
+    browserPolicy: ProviderBrowserPolicy.notRequired,
+    artifactFamilies: <ArtifactFamily>[ArtifactFamily.genericTurn],
+    capabilityHints: ProviderCapabilityHints(
+      potentialActions: <ArtifactAction>[
+        ArtifactAction.startOnThisDevice,
+        ArtifactAction.exportHandoff,
+      ],
+      redactionPolicy: ArtifactRedactionPolicy(
+        ordinaryReads: 'summary_only',
+        events: 'summary_only',
+        diagnostics: 'summary_only',
+        persistedState: 'summary_only',
+      ),
+    ),
+  ),
+];
 
 void main() {
   test(
@@ -393,6 +441,117 @@ void main() {
   );
 
   test(
+    'controller opens shell-external conference-room actions from typed artifact summaries',
+    () async {
+      final bridge = _FakeMobileHostBridge(
+        resolutionsList: <ResolutionRecord>[_conferenceRoomResolutionRecord()],
+      );
+      final browser = _FakeBrowserLauncher();
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: const <ProfileRecord>[],
+            draft: ProfileDraft.defaults(),
+          ),
+        ),
+        browserLauncher: browser,
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.openResolutionExternalAction(
+        controller.resolutions.single.id,
+        ArtifactAction.openRoom,
+      );
+
+      expect(browser.openedUrls, <String>[
+        'https://room.example.test/rooms/team-sync',
+      ]);
+      expect(controller.notice, contains('Opened room'));
+    },
+  );
+
+  test(
+    'controller materializes typed same-device actions with draft runtime defaults',
+    () async {
+      final bridge = _FakeMobileHostBridge(
+        resolutionsList: <ResolutionRecord>[_resolutionRecord()],
+        sessionsList: <SessionRecord>[
+          SessionRecord(
+            id: 'materialized-session',
+            profileId: '',
+            profileName: 'materialized',
+            sourceResolutionId: 'resolution-1',
+            profile: _profileSpec().copyWith(provider: 'generic-turn'),
+            state: SessionState.ready,
+            startedAt: DateTime.utc(2026, 4, 10, 12, 2),
+            updatedAt: DateTime.utc(2026, 4, 10, 12, 3),
+          ),
+        ],
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: const <ProfileRecord>[],
+            draft: ProfileDraft.defaults(),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      controller.updateDraft(
+        controller.draft.copyWith(
+          spec: controller.draft.spec.copyWith(
+            listenAddress: '127.0.0.1:9101',
+            peerAddress: '127.0.0.1:56100',
+            turnServer: 'override.example.test',
+            turnPort: '5349',
+            bindInterface: '127.0.0.1',
+            mode: TransportMode.udp,
+            useDtls: false,
+            logLevel: 'debug',
+          ),
+        ),
+      );
+
+      await controller.materializeResolution('resolution-1');
+
+      expect(bridge.materializeResolutionCalls, <String>['resolution-1']);
+      expect(bridge.materializeResolutionDefaults, hasLength(1));
+      expect(
+        bridge.materializeResolutionDefaults.single.listenAddress,
+        '127.0.0.1:9101',
+      );
+      expect(
+        bridge.materializeResolutionDefaults.single.peerAddress,
+        '127.0.0.1:56100',
+      );
+      expect(
+        bridge.materializeResolutionDefaults.single.turnServer,
+        'override.example.test',
+      );
+      expect(bridge.materializeResolutionDefaults.single.turnPort, '5349');
+      expect(
+        bridge.materializeResolutionDefaults.single.bindInterface,
+        '127.0.0.1',
+      );
+      expect(
+        bridge.materializeResolutionDefaults.single.mode,
+        TransportMode.udp,
+      );
+      expect(bridge.materializeResolutionDefaults.single.useDtls, isFalse);
+      expect(bridge.materializeResolutionDefaults.single.logLevel, 'debug');
+      expect(controller.selectedSessionId, 'materialized-session');
+      expect(controller.notice, contains('Started mobile session'));
+    },
+  );
+
+  test(
     'controller exports diagnostics with GUI and host build identities',
     () async {
       final tempRoot = await Directory.systemTemp.createTemp(
@@ -495,6 +654,15 @@ void main() {
 
       await controller.startResolutionFromDraft();
       expect(bridge.startResolutionCalls, hasLength(1));
+      expect(bridge.startResolutionCalls.single.provider, 'vk');
+      expect(
+        bridge.startResolutionCalls.single.input.kind,
+        ProviderInputKind.link,
+      );
+      expect(
+        bridge.startResolutionCalls.single.input.link,
+        'https://vk.com/call/join/fresh',
+      );
       expect(controller.resolutions, hasLength(1));
 
       final resolutionID = controller.resolutions.single.id;
@@ -509,6 +677,64 @@ void main() {
       ]);
       expect(controller.selectedResolutionId, resolutionID);
       expect(controller.notice, contains('Shared handoff link'));
+    },
+  );
+
+  test(
+    'controller fails closed when the mobile host does not advertise the provider',
+    () async {
+      final bridge = _FakeMobileHostBridge(
+        providersList: const <ProviderDescriptor>[],
+        resolutionsList: const <ResolutionRecord>[],
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: const <ProfileRecord>[],
+            draft: ProfileDraft.defaults(),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.startResolutionFromDraft();
+
+      expect(bridge.startResolutionCalls, isEmpty);
+      expect(
+        controller.notice,
+        contains('not advertised by the connected mobile host'),
+      );
+    },
+  );
+
+  test(
+    'controller defaults to the first advertised provider instead of a hard-coded VK flow',
+    () async {
+      final bridge = _FakeMobileHostBridge(
+        providersList: <ProviderDescriptor>[
+          _providerDescriptors[1],
+          _providerDescriptors[0],
+        ],
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: const <ProfileRecord>[],
+            draft: ProfileDraft.defaults(),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(controller.draft.spec.provider, 'generic-turn');
+      expect(controller.draft.spec.interactiveProvider, isFalse);
     },
   );
 
@@ -712,6 +938,7 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       info: _readyHostInfo,
       description: 'native bridge',
     ),
+    List<ProviderDescriptor>? providersList,
     List<ResolutionRecord>? resolutionsList,
     this.sessionsList = const <SessionRecord>[],
     this.challengeMap = const <String, ChallengeRecord>{},
@@ -737,11 +964,15 @@ class _FakeMobileHostBridge implements MobileHostBridge {
              hostBuild: _testHostBuild,
              contractVersion: '1',
            ),
+       _providers = List<ProviderDescriptor>.of(
+         providersList ?? _providerDescriptors,
+       ),
        _resolutions = List<ResolutionRecord>.of(
          resolutionsList ?? const <ResolutionRecord>[],
        );
 
   final MobileHostConnectionResult ensureReadyResult;
+  final List<ProviderDescriptor> _providers;
   final List<SessionRecord> sessionsList;
   final Map<String, ChallengeRecord> challengeMap;
   final ControlPlaneError? startSessionError;
@@ -752,6 +983,9 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   final List<String> continueChallengeCalls = <String>[];
   final List<_StartResolutionCall> startResolutionCalls =
       <_StartResolutionCall>[];
+  final List<String> materializeResolutionCalls = <String>[];
+  final List<RuntimeDefaults> materializeResolutionDefaults =
+      <RuntimeDefaults>[];
   final List<PlatformTunnelMode> startedPlatformTunnels =
       <PlatformTunnelMode>[];
   int ensureReadyCalls = 0;
@@ -850,6 +1084,9 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   }
 
   @override
+  Future<List<ProviderDescriptor>> providers() async => _providers;
+
+  @override
   Future<List<ProfileRecord>> profiles() async => const <ProfileRecord>[];
 
   @override
@@ -858,20 +1095,15 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   @override
   Future<ResolutionRecord> startResolution({
     required String provider,
-    required String link,
-    required bool interactiveProvider,
+    required ProviderInputEnvelope input,
   }) async {
     startResolutionCalls.add(
-      _StartResolutionCall(
-        provider: provider,
-        link: link,
-        interactiveProvider: interactiveProvider,
-      ),
+      _StartResolutionCall(provider: provider, input: input),
     );
     final resolution = _resolutionRecord(
       id: 'resolution-${startResolutionCalls.length}',
       provider: provider,
-      linkRedacted: link,
+      linkRedacted: input.link,
     );
     _resolutions
       ..clear()
@@ -903,6 +1135,8 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     required String resolutionId,
     required RuntimeDefaults runtimeDefaults,
   }) async {
+    materializeResolutionCalls.add(resolutionId);
+    materializeResolutionDefaults.add(runtimeDefaults);
     return sessionsList.first;
   }
 
@@ -981,10 +1215,31 @@ ResolutionRecord _resolutionRecord({
     provider: provider,
     input: ResolutionInput(
       provider: provider,
+      kind: ProviderInputKind.link,
       linkRedacted: linkRedacted,
-      interactiveProvider: true,
+      interactiveProvider: provider == 'vk',
     ),
     state: state,
+    artifact: const ResolutionArtifactRecord(
+      family: ArtifactFamily.genericTurn,
+      actions: <ResolutionActionRecord>[
+        ResolutionActionRecord(
+          id: ArtifactAction.startOnThisDevice,
+          executionOwner: ActionExecutionOwner.host,
+        ),
+        ResolutionActionRecord(
+          id: ArtifactAction.exportHandoff,
+          executionOwner: ActionExecutionOwner.host,
+        ),
+      ],
+      summary: ResolutionArtifactSummary(
+        genericTurn: ResolutionCredentials(
+          address: 'turn.example.test:3478',
+          usernameRedacted: '<redacted:turn-username>',
+          passwordRedacted: '<redacted:turn-password>',
+        ),
+      ),
+    ),
     credentials: const ResolutionCredentials(
       address: 'turn.example.test:3478',
       usernameRedacted: '<redacted:turn-username>',
@@ -1008,14 +1263,42 @@ ResolutionRecord _resolutionRecord({
   );
 }
 
+ResolutionRecord _conferenceRoomResolutionRecord({
+  String id = 'resolution-room-1',
+}) {
+  return ResolutionRecord(
+    id: id,
+    provider: 'roomy',
+    input: const ResolutionInput(
+      provider: 'roomy',
+      kind: ProviderInputKind.link,
+      linkRedacted: 'https://room.example.test/join/<redacted:room-token>',
+    ),
+    state: ResolutionState.resolved,
+    artifact: const ResolutionArtifactRecord(
+      family: ArtifactFamily.conferenceRoom,
+      actions: <ResolutionActionRecord>[
+        ResolutionActionRecord(
+          id: ArtifactAction.openRoom,
+          executionOwner: ActionExecutionOwner.shellExternal,
+        ),
+      ],
+      summary: ResolutionArtifactSummary(
+        conferenceRoom: ConferenceRoomArtifactSummary(
+          roomUrl: 'https://room.example.test/rooms/team-sync',
+        ),
+      ),
+    ),
+    export: ResolutionExportStatus(supported: false),
+    startedAt: DateTime.utc(2026, 4, 10, 12, 0),
+    updatedAt: DateTime.utc(2026, 4, 10, 12, 1),
+    resolvedAt: DateTime.utc(2026, 4, 10, 12, 1),
+  );
+}
+
 class _StartResolutionCall {
-  const _StartResolutionCall({
-    required this.provider,
-    required this.link,
-    required this.interactiveProvider,
-  });
+  const _StartResolutionCall({required this.provider, required this.input});
 
   final String provider;
-  final String link;
-  final bool interactiveProvider;
+  final ProviderInputEnvelope input;
 }

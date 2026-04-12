@@ -8,6 +8,7 @@ class ProfileEditorPanel extends StatefulWidget {
   const ProfileEditorPanel({
     super.key,
     required this.profiles,
+    required this.providerDescriptors,
     required this.selectedProfileId,
     required this.draft,
     required this.busy,
@@ -21,6 +22,7 @@ class ProfileEditorPanel extends StatefulWidget {
   });
 
   final List<ProfileRecord> profiles;
+  final List<ProviderDescriptor> providerDescriptors;
   final String? selectedProfileId;
   final ProfileDraft draft;
   final bool busy;
@@ -90,6 +92,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final descriptor = _selectedDescriptor();
 
     return Card(
       child: Padding(
@@ -117,26 +120,25 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
             Expanded(
               child: ListView(
                 children: <Widget>[
+                  if (descriptor != null) ...<Widget>[
+                    _providerDescriptorCard(theme, descriptor),
+                    const SizedBox(height: 16),
+                  ],
                   _field(
                     controller: _nameController,
                     label: 'Profile name',
                     onChanged: (String value) => _pushDraft(name: value),
                   ),
-                  _field(
-                    controller: _providerController,
-                    label: 'Provider',
-                    onChanged: (String value) => _pushDraft(
-                      spec: widget.draft.spec.copyWith(provider: value.trim()),
-                    ),
-                  ),
+                  _providerField(),
                   _field(
                     controller: _linkController,
-                    label: 'Provider link',
+                    label: _providerLinkLabel(descriptor),
                     maxLines: 3,
                     onChanged: (String value) => _pushDraft(
                       spec: widget.draft.spec.copyWith(link: value.trim()),
                     ),
                   ),
+                  _providerFlowCard(theme, descriptor),
                   Row(
                     children: <Widget>[
                       Expanded(
@@ -261,17 +263,6 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                           ),
                     title: const Text('DTLS enabled'),
                   ),
-                  SwitchListTile(
-                    value: widget.draft.spec.interactiveProvider,
-                    onChanged: widget.busy
-                        ? null
-                        : (bool enabled) => _pushDraft(
-                            spec: widget.draft.spec.copyWith(
-                              interactiveProvider: enabled,
-                            ),
-                          ),
-                    title: const Text('Interactive provider challenges'),
-                  ),
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 12,
@@ -380,6 +371,161 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
         decoration: InputDecoration(labelText: label),
         onChanged: onChanged,
       ),
+    );
+  }
+
+  Widget _providerField() {
+    if (widget.providerDescriptors.isEmpty) {
+      return _field(
+        controller: _providerController,
+        label: 'Provider',
+        onChanged: (String value) => _pushDraft(
+          spec: widget.draft.spec.copyWith(provider: value.trim()),
+        ),
+      );
+    }
+
+    final providerId =
+        _selectedDescriptor()?.id ?? widget.providerDescriptors.first.id;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: DropdownButtonFormField<String>(
+        initialValue: providerId,
+        decoration: const InputDecoration(labelText: 'Provider'),
+        items: widget.providerDescriptors
+            .map(
+              (ProviderDescriptor descriptor) => DropdownMenuItem<String>(
+                value: descriptor.id,
+                child: Text(descriptor.displayName),
+              ),
+            )
+            .toList(growable: false),
+        onChanged: widget.busy
+            ? null
+            : (String? value) {
+                if (value == null) {
+                  return;
+                }
+                _pushDraft(
+                  spec: widget.draft.spec.copyWith(
+                    provider: value,
+                    link: value == widget.draft.spec.provider
+                        ? widget.draft.spec.link
+                        : '',
+                  ),
+                );
+              },
+      ),
+    );
+  }
+
+  Widget _providerDescriptorCard(
+    ThemeData theme,
+    ProviderDescriptor descriptor,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE6EDF7),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            descriptor.displayName,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            descriptor.description.isEmpty
+                ? '${descriptor.authPosture.label}. ${descriptor.browserPolicy.label}.'
+                : descriptor.description,
+            style: theme.textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: <Widget>[
+              _descriptorTag('Input: ${descriptor.inputKind.value}'),
+              _descriptorTag('Auth: ${descriptor.authPosture.label}'),
+              _descriptorTag('Browser: ${descriptor.browserPolicy.label}'),
+              for (final family in descriptor.artifactFamilies)
+                _descriptorTag('Family: ${family.label}'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _providerFlowCard(ThemeData theme, ProviderDescriptor? descriptor) {
+    final message = switch (descriptor?.browserPolicy) {
+      ProviderBrowserPolicy.externalRequired =>
+        'This provider requires an external browser when challenge continuation appears.',
+      ProviderBrowserPolicy.embeddedAllowed =>
+        'This provider allows an embedded browser surface, but the host still decides whether a browser challenge appears.',
+      _ => 'This provider does not report a required browser surface.',
+    };
+    final continuation = descriptor?.mayRequireBrowserContinuation == true
+        ? 'Browser continuation may appear for this provider.'
+        : 'No browser challenge mode is currently advertised for this provider.';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF1D6),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            message,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(continuation, style: theme.textTheme.bodyMedium),
+        ],
+      ),
+    );
+  }
+
+  String _providerLinkLabel(ProviderDescriptor? descriptor) {
+    if (descriptor == null) {
+      return 'Provider input';
+    }
+    return switch (descriptor.inputKind) {
+      ProviderInputKind.link => 'Provider link',
+    };
+  }
+
+  ProviderDescriptor? _selectedDescriptor() {
+    final providerId = widget.draft.spec.provider.trim().toLowerCase();
+    for (final descriptor in widget.providerDescriptors) {
+      if (descriptor.id.trim().toLowerCase() == providerId) {
+        return descriptor;
+      }
+    }
+    return widget.providerDescriptors.isEmpty
+        ? null
+        : widget.providerDescriptors.first;
+  }
+
+  Widget _descriptorTag(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(label),
     );
   }
 

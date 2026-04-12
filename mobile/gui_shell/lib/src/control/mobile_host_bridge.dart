@@ -175,7 +175,7 @@ class HttpMobileHostBridge implements MobileHostBridge {
       Capability.mobileHostBridge,
       Capability.platformTunnels,
       Capability.profiles,
-      Capability.providerResolutionHandoff,
+      Capability.providerRuntimeArtifacts,
       Capability.sessions,
       Capability.challenges,
       Capability.diagnostics,
@@ -213,6 +213,11 @@ class HttpMobileHostBridge implements MobileHostBridge {
   }
 
   @override
+  Future<List<ProviderDescriptor>> providers() {
+    return _client.providers();
+  }
+
+  @override
   Future<List<ResolutionRecord>> resolutions() {
     return _client.resolutions();
   }
@@ -220,14 +225,9 @@ class HttpMobileHostBridge implements MobileHostBridge {
   @override
   Future<ResolutionRecord> startResolution({
     required String provider,
-    required String link,
-    required bool interactiveProvider,
+    required ProviderInputEnvelope input,
   }) {
-    return _client.startResolution(
-      provider: provider,
-      link: link,
-      interactiveProvider: interactiveProvider,
-    );
+    return _client.startResolution(provider: provider, input: input);
   }
 
   @override
@@ -423,6 +423,9 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
   Future<List<ProfileRecord>> profiles() => _fail();
 
   @override
+  Future<List<ProviderDescriptor>> providers() => _fail();
+
+  @override
   Future<List<ResolutionRecord>> resolutions() => _fail();
 
   @override
@@ -431,8 +434,7 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
   @override
   Future<ResolutionRecord> startResolution({
     required String provider,
-    required String link,
-    required bool interactiveProvider,
+    required ProviderInputEnvelope input,
   }) => _fail();
 
   @override

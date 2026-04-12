@@ -40,15 +40,26 @@ type ProbeArtifactStageOutcome struct {
 }
 
 type ProbeArtifactOutcome struct {
-	ResultKind    string                      `json:"result_kind"`
-	Resolution    *ProbeArtifactResolution    `json:"resolution,omitempty"`
-	ProviderError *ProbeArtifactProviderError `json:"provider_error,omitempty"`
+	ResultKind     string                       `json:"result_kind"`
+	Resolution     *ProbeArtifactResolution     `json:"resolution,omitempty"`
+	ConferenceRoom *ProbeArtifactConferenceRoom `json:"conference_room,omitempty"`
+	CameraStream   *ProbeArtifactCameraStream   `json:"camera_stream,omitempty"`
+	ProviderError  *ProbeArtifactProviderError  `json:"provider_error,omitempty"`
 }
 
 type ProbeArtifactResolution struct {
 	UsernameRedacted string `json:"username_redacted"`
 	PasswordRedacted string `json:"password_redacted"`
 	Address          string `json:"address"`
+}
+
+type ProbeArtifactConferenceRoom struct {
+	RoomURL string `json:"room_url"`
+}
+
+type ProbeArtifactCameraStream struct {
+	CameraURL  string `json:"camera_url,omitempty"`
+	ArchiveURL string `json:"archive_url,omitempty"`
 }
 
 type ProbeArtifactProviderError struct {

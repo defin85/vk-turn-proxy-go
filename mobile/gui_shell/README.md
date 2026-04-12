@@ -6,7 +6,8 @@ It is an app-owned shell over the local client-control semantics, not a second r
 ## Scope
 
 - manage saved profiles inside the mobile app
-- persist provider/runtime secrets through platform-native secure storage
+- persist non-secret profile metadata and runtime defaults while clearing
+  provider input links from persisted shell state
 - connect to a compatible embedded or bridged mobile host
 - start and stop sessions through that mobile host bridge
 - surface typed session state, challenge state, and diagnostics export
@@ -46,7 +47,7 @@ Required capabilities for the first slice are:
 - `mobile_host_bridge`
 - `platform_tunnels`
 - `profiles`
-- `provider-resolution-handoff`
+- `provider-runtime-artifacts`
 - `sessions`
 - `challenges`
 - `diagnostics`
@@ -96,7 +97,7 @@ For a Windows-native build from the mirror:
 powershell -NoProfile -ExecutionPolicy Bypass -File E:\Projects\vk-turn-proxy-go\scripts\build-gui-android.ps1
 ```
 
-## Secure storage
+## Local state
 
 The shell persists:
 
@@ -104,10 +105,13 @@ The shell persists:
 - the selected profile
 - the in-progress draft
 
-Non-secret profile state stays in general app preferences.
-Runtime secrets such as invite links and TURN overrides are stored separately through platform-native secure storage.
-If secure storage becomes unavailable while sanitized profile metadata still exists, the shell fails closed during restore instead of silently rehydrating empty secrets.
-Recovery for that case is explicit: the operator must use `Reset local state` before the shell will reconnect and resume runtime control.
+Persisted shell state keeps only non-secret metadata.
+Provider input links are cleared before preferences are written, so invite URLs,
+room/bootstrap tokens, and `generic-turn://...` credentials do not survive app
+restart as persisted shell state.
+The mobile store still keeps a fail-closed migration guard for older installs
+that referenced secure-only link state; if that legacy secure payload is
+missing, the operator must use `Reset local state` before reconnecting.
 
 ## Lifecycle and browser handoff
 

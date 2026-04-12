@@ -26,6 +26,7 @@ type Resolution struct {
 
 type Adapter interface {
 	Name() string
+	Descriptor() ProviderDescriptor
 	Resolve(context.Context, string) (Resolution, error)
 }
 
@@ -67,4 +68,27 @@ func (r *Registry) Names() []string {
 	sort.Strings(names)
 
 	return names
+}
+
+func (r *Registry) Descriptor(name string) (ProviderDescriptor, error) {
+	adapter, err := r.Get(name)
+	if err != nil {
+		return ProviderDescriptor{}, err
+	}
+
+	return cloneProviderDescriptor(adapter.Descriptor()), nil
+}
+
+func (r *Registry) Descriptors() []ProviderDescriptor {
+	names := r.Names()
+	descriptors := make([]ProviderDescriptor, 0, len(names))
+	for _, name := range names {
+		adapter, ok := r.adapters[name]
+		if !ok {
+			continue
+		}
+		descriptors = append(descriptors, cloneProviderDescriptor(adapter.Descriptor()))
+	}
+
+	return descriptors
 }

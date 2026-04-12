@@ -36,7 +36,7 @@ const HostInfo _readyHostInfo = HostInfo(
     Capability.desktopSidecar,
     Capability.platformTunnels,
     Capability.profiles,
-    Capability.providerResolutionHandoff,
+    Capability.providerRuntimeArtifacts,
     Capability.sessions,
     Capability.challenges,
     Capability.diagnostics,
@@ -51,6 +51,54 @@ const HostInfo _readyHostInfo = HostInfo(
     ),
   ],
 );
+
+const List<ProviderDescriptor> _providerDescriptors = <ProviderDescriptor>[
+  ProviderDescriptor(
+    id: 'vk',
+    displayName: 'VK Calls',
+    description:
+        'Invite-first provider with browser-mediated continuation that resolves into transport-ready TURN credentials.',
+    inputKind: ProviderInputKind.link,
+    authPosture: ProviderAuthPosture.guestOrAccount,
+    browserPolicy: ProviderBrowserPolicy.externalRequired,
+    challengeModes: <ProviderChallengeMode>[ProviderChallengeMode.browser],
+    artifactFamilies: <ArtifactFamily>[ArtifactFamily.genericTurn],
+    capabilityHints: ProviderCapabilityHints(
+      potentialActions: <ArtifactAction>[
+        ArtifactAction.startOnThisDevice,
+        ArtifactAction.exportHandoff,
+      ],
+      redactionPolicy: ArtifactRedactionPolicy(
+        ordinaryReads: 'summary_only',
+        events: 'summary_only',
+        diagnostics: 'summary_only',
+        persistedState: 'summary_only',
+      ),
+    ),
+  ),
+  ProviderDescriptor(
+    id: 'generic-turn',
+    displayName: 'Generic TURN',
+    description:
+        'Static TURN handoff for deterministic transport testing and operator-driven runtime startup.',
+    inputKind: ProviderInputKind.link,
+    authPosture: ProviderAuthPosture.staticSecret,
+    browserPolicy: ProviderBrowserPolicy.notRequired,
+    artifactFamilies: <ArtifactFamily>[ArtifactFamily.genericTurn],
+    capabilityHints: ProviderCapabilityHints(
+      potentialActions: <ArtifactAction>[
+        ArtifactAction.startOnThisDevice,
+        ArtifactAction.exportHandoff,
+      ],
+      redactionPolicy: ArtifactRedactionPolicy(
+        ordinaryReads: 'summary_only',
+        events: 'summary_only',
+        diagnostics: 'summary_only',
+        persistedState: 'summary_only',
+      ),
+    ),
+  ),
+];
 
 void main() {
   test('controller restores active challenge details during refresh', () async {
@@ -251,10 +299,14 @@ void main() {
   );
 
   test(
-    'controller defaults to managed VK invite flow with browser continuation enabled',
+    'controller defaults to the first advertised provider instead of a hard-coded VK flow',
     () async {
       final api = _FakeControlPlaneApi(
         profiles: const <ProfileRecord>[],
+        providers: <ProviderDescriptor>[
+          _providerDescriptors[1],
+          _providerDescriptors[0],
+        ],
         sessions: const <SessionRecord>[],
       );
       final controller = DesktopShellController(
@@ -272,8 +324,8 @@ void main() {
 
       await controller.initialize();
 
-      expect(controller.draft.spec.provider, 'vk');
-      expect(controller.draft.spec.interactiveProvider, isTrue);
+      expect(controller.draft.spec.provider, 'generic-turn');
+      expect(controller.draft.spec.interactiveProvider, isFalse);
     },
   );
 
@@ -421,7 +473,7 @@ void main() {
   );
 
   test(
-    'controller starts managed VK invite resolution with Join guidance',
+    'controller starts descriptor-driven VK resolution with browser guidance',
     () async {
       final api = _FakeControlPlaneApi(
         profiles: const <ProfileRecord>[],
@@ -454,8 +506,48 @@ void main() {
       await controller.startResolutionFromDraft();
 
       expect(api.startResolutionCalls, hasLength(1));
-      expect(api.startResolutionCalls.single.interactiveProvider, isTrue);
-      expect(controller.notice, contains('Continue in browser and click Join'));
+      expect(api.startResolutionCalls.single.provider, 'vk');
+      expect(
+        api.startResolutionCalls.single.input.kind,
+        ProviderInputKind.link,
+      );
+      expect(
+        api.startResolutionCalls.single.input.link,
+        'https://vk.com/call/join/fresh',
+      );
+      expect(controller.notice, contains('external browser steps'));
+    },
+  );
+
+  test(
+    'controller fails closed when the host does not advertise the provider',
+    () async {
+      final api = _FakeControlPlaneApi(
+        profiles: const <ProfileRecord>[],
+        providers: const <ProviderDescriptor>[],
+        resolutions: const <ResolutionRecord>[],
+        sessions: const <SessionRecord>[],
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(const <HostConnectionResult>[
+          HostConnectionResult(
+            state: HostLifecycleState.ready,
+            message: 'ready',
+            info: _readyHostInfo,
+          ),
+        ]),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.startResolutionFromDraft();
+
+      expect(api.startResolutionCalls, isEmpty);
+      expect(
+        controller.notice,
+        contains('not advertised by the connected host'),
+      );
     },
   );
 
@@ -518,6 +610,41 @@ void main() {
         controller.notice,
         contains('Started session materialized-session from resolution'),
       );
+    },
+  );
+
+  test(
+    'controller opens shell-external conference-room actions from typed artifact summaries',
+    () async {
+      final api = _FakeControlPlaneApi(
+        profiles: const <ProfileRecord>[],
+        resolutions: <ResolutionRecord>[_conferenceRoomResolutionRecord()],
+        sessions: const <SessionRecord>[],
+      );
+      final browser = _FakeDesktopBrowserLauncher();
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(const <HostConnectionResult>[
+          HostConnectionResult(
+            state: HostLifecycleState.ready,
+            message: 'ready',
+            info: _readyHostInfo,
+          ),
+        ]),
+        browserLauncher: browser,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.openResolutionExternalAction(
+        controller.resolutions.single.id,
+        ArtifactAction.openRoom,
+      );
+
+      expect(browser.openedUrls, <String>[
+        'https://room.example.test/rooms/team-sync',
+      ]);
+      expect(controller.notice, contains('Opened room'));
     },
   );
 
@@ -717,10 +844,14 @@ void main() {
 class _FakeControlPlaneApi implements ControlPlaneApi {
   _FakeControlPlaneApi({
     required List<ProfileRecord> profiles,
+    List<ProviderDescriptor>? providers,
     List<ResolutionRecord>? resolutions,
     required List<SessionRecord> sessions,
     Map<String, ChallengeRecord>? challenges,
   }) : _profiles = List<ProfileRecord>.of(profiles),
+       _providers = List<ProviderDescriptor>.of(
+         providers ?? _providerDescriptors,
+       ),
        _resolutions = List<ResolutionRecord>.of(
          resolutions ?? const <ResolutionRecord>[],
        ),
@@ -729,6 +860,7 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
          challenges ?? <String, ChallengeRecord>{},
        );
 
+  final List<ProviderDescriptor> _providers;
   final List<ProfileRecord> _profiles;
   final List<ResolutionRecord> _resolutions;
   final List<SessionRecord> _sessions;
@@ -892,25 +1024,23 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   }
 
   @override
+  Future<List<ProviderDescriptor>> providers() async => _providers;
+
+  @override
   Future<List<ResolutionRecord>> resolutions() async => _resolutions;
 
   @override
   Future<ResolutionRecord> startResolution({
     required String provider,
-    required String link,
-    required bool interactiveProvider,
+    required ProviderInputEnvelope input,
   }) async {
     startResolutionCalls.add(
-      _StartResolutionCall(
-        provider: provider,
-        link: link,
-        interactiveProvider: interactiveProvider,
-      ),
+      _StartResolutionCall(provider: provider, input: input),
     );
     final resolution = _resolutionRecord(
       id: 'resolution-${startResolutionCalls.length}',
       provider: provider,
-      linkRedacted: link,
+      linkRedacted: input.link,
     );
     _resolutions
       ..clear()
@@ -983,6 +1113,16 @@ class _FakeDesktopHandoffAdapter implements DesktopHandoffAdapter {
   }
 }
 
+class _FakeDesktopBrowserLauncher implements BrowserLauncher {
+  final List<String> openedUrls = <String>[];
+
+  @override
+  Future<bool> open(String url) async {
+    openedUrls.add(url);
+    return true;
+  }
+}
+
 class _SequencedHostSupervisor implements HostSupervisor {
   _SequencedHostSupervisor(this._results);
 
@@ -1023,10 +1163,31 @@ ResolutionRecord _resolutionRecord({
     provider: provider,
     input: ResolutionInput(
       provider: provider,
+      kind: ProviderInputKind.link,
       linkRedacted: linkRedacted,
-      interactiveProvider: true,
+      interactiveProvider: provider == 'vk',
     ),
     state: state,
+    artifact: const ResolutionArtifactRecord(
+      family: ArtifactFamily.genericTurn,
+      actions: <ResolutionActionRecord>[
+        ResolutionActionRecord(
+          id: ArtifactAction.startOnThisDevice,
+          executionOwner: ActionExecutionOwner.host,
+        ),
+        ResolutionActionRecord(
+          id: ArtifactAction.exportHandoff,
+          executionOwner: ActionExecutionOwner.host,
+        ),
+      ],
+      summary: ResolutionArtifactSummary(
+        genericTurn: ResolutionCredentials(
+          address: 'turn.example.test:3478',
+          usernameRedacted: '<redacted:turn-username>',
+          passwordRedacted: '<redacted:turn-password>',
+        ),
+      ),
+    ),
     credentials: const ResolutionCredentials(
       address: 'turn.example.test:3478',
       usernameRedacted: '<redacted:turn-username>',
@@ -1050,14 +1211,42 @@ ResolutionRecord _resolutionRecord({
   );
 }
 
+ResolutionRecord _conferenceRoomResolutionRecord({
+  String id = 'resolution-room-1',
+}) {
+  return ResolutionRecord(
+    id: id,
+    provider: 'roomy',
+    input: const ResolutionInput(
+      provider: 'roomy',
+      kind: ProviderInputKind.link,
+      linkRedacted: 'https://room.example.test/join/<redacted:room-token>',
+    ),
+    state: ResolutionState.resolved,
+    artifact: const ResolutionArtifactRecord(
+      family: ArtifactFamily.conferenceRoom,
+      actions: <ResolutionActionRecord>[
+        ResolutionActionRecord(
+          id: ArtifactAction.openRoom,
+          executionOwner: ActionExecutionOwner.shellExternal,
+        ),
+      ],
+      summary: ResolutionArtifactSummary(
+        conferenceRoom: ConferenceRoomArtifactSummary(
+          roomUrl: 'https://room.example.test/rooms/team-sync',
+        ),
+      ),
+    ),
+    export: ResolutionExportStatus(supported: false),
+    startedAt: DateTime.utc(2026, 4, 10, 12, 0),
+    updatedAt: DateTime.utc(2026, 4, 10, 12, 1),
+    resolvedAt: DateTime.utc(2026, 4, 10, 12, 1),
+  );
+}
+
 class _StartResolutionCall {
-  const _StartResolutionCall({
-    required this.provider,
-    required this.link,
-    required this.interactiveProvider,
-  });
+  const _StartResolutionCall({required this.provider, required this.input});
 
   final String provider;
-  final String link;
-  final bool interactiveProvider;
+  final ProviderInputEnvelope input;
 }

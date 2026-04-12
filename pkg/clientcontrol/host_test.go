@@ -2,6 +2,7 @@ package clientcontrol
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -16,11 +17,36 @@ import (
 )
 
 type fakeAdapter struct {
-	name    string
-	resolve func(context.Context, string) (provider.Resolution, error)
+	name       string
+	descriptor provider.ProviderDescriptor
+	resolve    func(context.Context, string) (provider.Resolution, error)
 }
 
 func (a fakeAdapter) Name() string { return a.name }
+
+func (a fakeAdapter) Descriptor() provider.ProviderDescriptor {
+	if a.descriptor.ID != "" {
+		return a.descriptor
+	}
+
+	return provider.ProviderDescriptor{
+		ID:            a.name,
+		DisplayName:   a.name,
+		InputKind:     provider.ProviderInputKindLink,
+		AuthPosture:   provider.ProviderAuthPostureNotApplicable,
+		BrowserPolicy: provider.ProviderBrowserPolicyNotRequired,
+		ArtifactFamilies: []provider.ArtifactFamily{
+			provider.ArtifactFamilyGenericTURN,
+		},
+		CapabilityHints: provider.ProviderCapabilityHints{
+			PotentialActions: []provider.ArtifactAction{
+				provider.ArtifactActionStartOnThisDevice,
+				provider.ArtifactActionExportHandoff,
+			},
+			RedactionPolicy: provider.SummaryOnlyArtifactRedactionPolicy(),
+		},
+	}
+}
 
 func (a fakeAdapter) Resolve(ctx context.Context, link string) (provider.Resolution, error) {
 	return a.resolve(ctx, link)
@@ -82,6 +108,9 @@ func TestHostInfoExposesContractVersionAndBuildIdentity(t *testing.T) {
 	if !containsCapability(info.Capabilities, CapabilityPlatformTunnels) {
 		t.Fatalf("capabilities = %v, want platform_tunnels", info.Capabilities)
 	}
+	if !containsCapability(info.Capabilities, CapabilityProviderRuntimeArtifacts) {
+		t.Fatalf("capabilities = %v, want provider-runtime-artifacts", info.Capabilities)
+	}
 	if len(info.PlatformTunnels) != 1 {
 		t.Fatalf("platform_tunnels len = %d, want 1", len(info.PlatformTunnels))
 	}
@@ -117,6 +146,56 @@ func TestHostNegotiateRejectsIncompatibleVersionAndCapability(t *testing.T) {
 		RequiredCapabilities: []Capability{CapabilityPlatformTunnels},
 	}); err != nil {
 		t.Fatalf("Negotiate(platform_tunnels) error = %v", err)
+	}
+}
+
+func TestHostProvidersExposeSortedDescriptorCatalog(t *testing.T) {
+	host := New(
+		withRegistry(provider.NewRegistry(
+			fakeAdapter{
+				name: "zeta",
+				descriptor: provider.ProviderDescriptor{
+					ID:               "zeta",
+					DisplayName:      "Zeta",
+					InputKind:        provider.ProviderInputKindLink,
+					AuthPosture:      provider.ProviderAuthPostureAccount,
+					BrowserPolicy:    provider.ProviderBrowserPolicyExternalRequired,
+					ChallengeModes:   []provider.ProviderChallengeMode{provider.ProviderChallengeModeBrowser},
+					ArtifactFamilies: []provider.ArtifactFamily{provider.ArtifactFamilyConferenceRoom},
+					CapabilityHints: provider.ProviderCapabilityHints{
+						PotentialActions: []provider.ArtifactAction{provider.ArtifactActionOpenRoom},
+					},
+				},
+			},
+			fakeAdapter{
+				name: "alpha",
+				descriptor: provider.ProviderDescriptor{
+					ID:               "alpha",
+					DisplayName:      "Alpha",
+					InputKind:        provider.ProviderInputKindLink,
+					AuthPosture:      provider.ProviderAuthPostureStaticSecret,
+					BrowserPolicy:    provider.ProviderBrowserPolicyNotRequired,
+					ArtifactFamilies: []provider.ArtifactFamily{provider.ArtifactFamilyGenericTURN},
+					CapabilityHints: provider.ProviderCapabilityHints{
+						PotentialActions: []provider.ArtifactAction{provider.ArtifactActionExportHandoff},
+					},
+				},
+			},
+		)),
+	)
+
+	descriptors := host.Providers()
+	if len(descriptors) != 2 {
+		t.Fatalf("Providers() len = %d, want 2", len(descriptors))
+	}
+	if descriptors[0].ID != "alpha" || descriptors[1].ID != "zeta" {
+		t.Fatalf("Providers() order = %+v, want alpha,zeta", descriptors)
+	}
+
+	descriptors[0].ArtifactFamilies[0] = ArtifactFamilyCameraStream
+	again := host.Providers()
+	if len(again[0].ArtifactFamilies) != 1 || again[0].ArtifactFamilies[0] != ArtifactFamilyGenericTURN {
+		t.Fatalf("Providers() mutated internal descriptor state: %+v", again[0])
 	}
 }
 
@@ -568,18 +647,48 @@ func TestHostStartsResolvesExportsAndMaterializesResolution(t *testing.T) {
 
 	resolutionState, err := host.StartResolution(context.Background(), StartResolutionRequest{
 		Provider: "vk",
-		Link:     "https://vk.com/call/join/test-token",
+		Input: &ProviderInputEnvelope{
+			Kind: ProviderInputKindLink,
+			Link: "https://vk.com/call/join/test-token",
+		},
 	})
 	if err != nil {
 		t.Fatalf("StartResolution() error = %v", err)
 	}
 
 	resolved := waitForResolutionState(t, host, resolutionState.ID, ResolutionStateResolved)
+	if resolved.Input.Kind != ProviderInputKindLink {
+		t.Fatalf("resolution input kind = %q, want %q", resolved.Input.Kind, ProviderInputKindLink)
+	}
 	if strings.Contains(resolved.Input.LinkRedacted, "test-token") {
 		t.Fatalf("resolution input leaked invite token: %q", resolved.Input.LinkRedacted)
 	}
 	if resolved.Credentials == nil {
 		t.Fatal("resolved credentials missing")
+	}
+	if resolved.Artifact == nil {
+		t.Fatal("resolved artifact missing")
+	}
+	if resolved.Artifact.Family != ArtifactFamilyGenericTURN {
+		t.Fatalf("resolved artifact family = %q, want %q", resolved.Artifact.Family, ArtifactFamilyGenericTURN)
+	}
+	if len(resolved.Artifact.Actions) != 2 {
+		t.Fatalf("resolved artifact actions len = %d, want 2", len(resolved.Artifact.Actions))
+	}
+	if resolved.Artifact.Actions[0].ID != ArtifactActionStartOnThisDevice {
+		t.Fatalf("resolved artifact action[0] = %q, want %q", resolved.Artifact.Actions[0].ID, ArtifactActionStartOnThisDevice)
+	}
+	if resolved.Artifact.Actions[0].ExecutionOwner != ActionExecutionOwnerHost {
+		t.Fatalf("resolved artifact action[0].execution_owner = %q, want %q", resolved.Artifact.Actions[0].ExecutionOwner, ActionExecutionOwnerHost)
+	}
+	if resolved.Artifact.Actions[1].ID != ArtifactActionExportHandoff {
+		t.Fatalf("resolved artifact action[1] = %q, want %q", resolved.Artifact.Actions[1].ID, ArtifactActionExportHandoff)
+	}
+	if resolved.Artifact.Actions[1].ExecutionOwner != ActionExecutionOwnerHost {
+		t.Fatalf("resolved artifact action[1].execution_owner = %q, want %q", resolved.Artifact.Actions[1].ExecutionOwner, ActionExecutionOwnerHost)
+	}
+	if resolved.Artifact.Summary.GenericTURN == nil {
+		t.Fatal("resolved artifact generic_turn summary missing")
 	}
 	if resolved.Credentials.Address != "turn.example.test:3478" {
 		t.Fatalf("resolution address = %q, want turn.example.test:3478", resolved.Credentials.Address)
@@ -668,6 +777,14 @@ func TestHostResolutionChallengeContinuation(t *testing.T) {
 		WithBuildIdentity(testBuildIdentity()),
 		withRegistry(provider.NewRegistry(fakeAdapter{
 			name: "vk",
+			descriptor: provider.ProviderDescriptor{
+				ID:             "vk",
+				DisplayName:    "VK Calls",
+				InputKind:      provider.ProviderInputKindLink,
+				AuthPosture:    provider.ProviderAuthPostureGuestOrAccount,
+				BrowserPolicy:  provider.ProviderBrowserPolicyExternalRequired,
+				ChallengeModes: []provider.ProviderChallengeMode{provider.ProviderChallengeModeBrowser},
+			},
 			resolve: func(ctx context.Context, link string) (provider.Resolution, error) {
 				handler := provider.BrowserContinuationHandlerFromContext(ctx)
 				if handler == nil {
@@ -705,9 +822,11 @@ func TestHostResolutionChallengeContinuation(t *testing.T) {
 	defer cancel()
 
 	resolutionState, err := host.StartResolution(context.Background(), StartResolutionRequest{
-		Provider:            "vk",
-		Link:                "https://vk.com/call/join/test-token",
-		InteractiveProvider: true,
+		Provider: "vk",
+		Input: &ProviderInputEnvelope{
+			Kind: ProviderInputKindLink,
+			Link: "https://vk.com/call/join/test-token",
+		},
 	})
 	if err != nil {
 		t.Fatalf("StartResolution() error = %v", err)
@@ -730,8 +849,363 @@ func TestHostResolutionChallengeContinuation(t *testing.T) {
 	}
 
 	waitForEvent(t, events, EventChallengeUpdated)
-	waitForEvent(t, events, EventResolutionResolved)
-	waitForResolutionState(t, host, resolutionState.ID, ResolutionStateResolved)
+	resolvedEvent := waitForEvent(t, events, EventResolutionResolved)
+	if resolvedEvent.Artifact == nil || resolvedEvent.Artifact.Family != ArtifactFamilyGenericTURN {
+		t.Fatalf("resolved event artifact = %#v, want generic_turn artifact", resolvedEvent.Artifact)
+	}
+	resolved := waitForResolutionState(t, host, resolutionState.ID, ResolutionStateResolved)
+	if !resolved.Input.InteractiveProvider {
+		t.Fatalf("resolution input interactive_provider = false, want true")
+	}
+}
+
+func TestResolutionArtifactFromNonTURNFamilyKeepsSummaryRedacted(t *testing.T) {
+	descriptor := ProviderDescriptor{
+		ID:               "roomy",
+		DisplayName:      "Roomy",
+		InputKind:        ProviderInputKindLink,
+		ArtifactFamilies: []ArtifactFamily{ArtifactFamilyConferenceRoom},
+		CapabilityHints: ProviderCapabilityHints{
+			PotentialActions: []ArtifactAction{ArtifactActionOpenRoom},
+			RedactionPolicy: ArtifactRedactionPolicy{
+				OrdinaryReads:  ArtifactRedactionModeSummaryOnly,
+				Events:         ArtifactRedactionModeSummaryOnly,
+				Diagnostics:    ArtifactRedactionModeSummaryOnly,
+				PersistedState: ArtifactRedactionModeSummaryOnly,
+			},
+		},
+	}
+	resolved := provider.Resolution{
+		Artifact: &provider.ProbeArtifact{
+			Provider:         "roomy",
+			ResolutionMethod: "room_join",
+			Input: provider.ProbeArtifactInput{
+				LinkRedacted: "https://room.example.test/join/<redacted:room-token>",
+			},
+			Stages: []provider.ProbeArtifactStage{
+				{
+					Name:       "room_join",
+					EndpointID: "room_join",
+					Request: provider.ProbeArtifactStageRequest{
+						Method:         "POST",
+						FormKeys:       []string{"room_token", "chat_token"},
+						RedactedFields: []string{"room_token", "chat_token"},
+					},
+					Response: provider.ProbeArtifactStageResponse{
+						StatusCode: 200,
+						Body: map[string]any{
+							"room_token": "secret-room-token",
+							"chat_token": "secret-chat-token",
+						},
+					},
+					Outcome: provider.ProbeArtifactStageOutcome{
+						Kind: "resolution",
+						Extracted: map[string]any{
+							"room_token": "secret-room-token",
+							"chat_token": "secret-chat-token",
+						},
+					},
+				},
+			},
+			Outcome: provider.ProbeArtifactOutcome{
+				ResultKind: "conference_room",
+				ConferenceRoom: &provider.ProbeArtifactConferenceRoom{
+					RoomURL: "https://room.example.test/rooms/team-sync",
+				},
+			},
+		},
+	}
+
+	artifact := resolutionArtifactFromResolution(
+		descriptor,
+		resolved,
+		ResolutionExportStatus{Supported: false},
+	)
+	if artifact == nil {
+		t.Fatal("resolution artifact = nil, want conference_room artifact")
+	}
+	if artifact.Family != ArtifactFamilyConferenceRoom {
+		t.Fatalf("resolution artifact family = %q, want %q", artifact.Family, ArtifactFamilyConferenceRoom)
+	}
+	if len(artifact.Actions) != 1 || artifact.Actions[0].ID != ArtifactActionOpenRoom {
+		t.Fatalf("resolution artifact actions = %#v, want open_room only", artifact.Actions)
+	}
+	if artifact.Actions[0].ExecutionOwner != ActionExecutionOwnerShellExternal {
+		t.Fatalf("resolution artifact action execution_owner = %q, want %q", artifact.Actions[0].ExecutionOwner, ActionExecutionOwnerShellExternal)
+	}
+	if artifact.Summary.GenericTURN != nil {
+		t.Fatalf("resolution artifact generic_turn summary = %#v, want nil", artifact.Summary.GenericTURN)
+	}
+	if artifact.Summary.ConferenceRoom == nil {
+		t.Fatal("resolution artifact conference_room summary = nil, want room summary")
+	}
+	if artifact.Summary.ConferenceRoom.RoomURL != "https://room.example.test/rooms/team-sync" {
+		t.Fatalf("resolution artifact conference_room room_url = %q, want team-sync room", artifact.Summary.ConferenceRoom.RoomURL)
+	}
+
+	artifactJSON, err := json.Marshal(artifact)
+	if err != nil {
+		t.Fatalf("json.Marshal(artifact) error = %v", err)
+	}
+	if strings.Contains(string(artifactJSON), "secret-room-token") || strings.Contains(string(artifactJSON), "secret-chat-token") {
+		t.Fatalf("resolution artifact leaked non-TURN secrets: %s", artifactJSON)
+	}
+
+	eventJSON, err := json.Marshal(
+		resolutionSnapshotEvent(
+			Resolution{
+				ID:        "resolution-1",
+				State:     ResolutionStateResolved,
+				UpdatedAt: time.Date(2026, 4, 11, 12, 0, 0, 0, time.UTC),
+				Artifact:  artifact,
+			},
+			EventResolutionResolved,
+			"",
+		),
+	)
+	if err != nil {
+		t.Fatalf("json.Marshal(event) error = %v", err)
+	}
+	if strings.Contains(string(eventJSON), "secret-room-token") || strings.Contains(string(eventJSON), "secret-chat-token") {
+		t.Fatalf("resolution event leaked non-TURN secrets: %s", eventJSON)
+	}
+}
+
+func TestResolutionArtifactFromCameraStreamFamilyExposesTypedExternalTargets(t *testing.T) {
+	descriptor := ProviderDescriptor{
+		ID:               "cams",
+		DisplayName:      "Camera portal",
+		InputKind:        ProviderInputKindLink,
+		ArtifactFamilies: []ArtifactFamily{ArtifactFamilyCameraStream},
+		CapabilityHints: ProviderCapabilityHints{
+			PotentialActions: []ArtifactAction{
+				ArtifactActionOpenCamera,
+				ArtifactActionOpenArchive,
+			},
+			RedactionPolicy: ArtifactRedactionPolicy{
+				OrdinaryReads:  ArtifactRedactionModeSummaryOnly,
+				Events:         ArtifactRedactionModeSummaryOnly,
+				Diagnostics:    ArtifactRedactionModeSummaryOnly,
+				PersistedState: ArtifactRedactionModeSummaryOnly,
+			},
+		},
+	}
+	resolved := provider.Resolution{
+		Artifact: &provider.ProbeArtifact{
+			Provider:         "cams",
+			ResolutionMethod: "camera_open",
+			Input: provider.ProbeArtifactInput{
+				LinkRedacted: "https://camera.example.test/devices/<redacted:device-id>",
+			},
+			Outcome: provider.ProbeArtifactOutcome{
+				ResultKind: "camera_stream",
+				CameraStream: &provider.ProbeArtifactCameraStream{
+					CameraURL:  "https://camera.example.test/devices/42/live",
+					ArchiveURL: "https://camera.example.test/devices/42/archive",
+				},
+			},
+		},
+	}
+
+	artifact := resolutionArtifactFromResolution(
+		descriptor,
+		resolved,
+		ResolutionExportStatus{Supported: false},
+	)
+	if artifact == nil {
+		t.Fatal("resolution artifact = nil, want camera_stream artifact")
+	}
+	if artifact.Family != ArtifactFamilyCameraStream {
+		t.Fatalf("resolution artifact family = %q, want %q", artifact.Family, ArtifactFamilyCameraStream)
+	}
+	if len(artifact.Actions) != 2 {
+		t.Fatalf("resolution artifact actions len = %d, want 2", len(artifact.Actions))
+	}
+	if artifact.Actions[0].ID != ArtifactActionOpenCamera || artifact.Actions[1].ID != ArtifactActionOpenArchive {
+		t.Fatalf("resolution artifact actions = %#v, want open_camera/open_archive", artifact.Actions)
+	}
+	if artifact.Summary.CameraStream == nil {
+		t.Fatal("resolution artifact camera_stream summary = nil, want typed summary")
+	}
+	if artifact.Summary.CameraStream.CameraURL != "https://camera.example.test/devices/42/live" {
+		t.Fatalf("resolution artifact camera_url = %q, want live target", artifact.Summary.CameraStream.CameraURL)
+	}
+	if artifact.Summary.CameraStream.ArchiveURL != "https://camera.example.test/devices/42/archive" {
+		t.Fatalf("resolution artifact archive_url = %q, want archive target", artifact.Summary.CameraStream.ArchiveURL)
+	}
+}
+
+func TestHostStartResolutionResolvesConferenceRoomArtifactWithoutTURNCredentials(t *testing.T) {
+	host := New(
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name: "roomy",
+			descriptor: provider.ProviderDescriptor{
+				ID:               "roomy",
+				DisplayName:      "Roomy",
+				InputKind:        provider.ProviderInputKindLink,
+				ArtifactFamilies: []provider.ArtifactFamily{provider.ArtifactFamilyConferenceRoom},
+				CapabilityHints: provider.ProviderCapabilityHints{
+					PotentialActions: []provider.ArtifactAction{provider.ArtifactActionOpenRoom},
+					RedactionPolicy:  provider.SummaryOnlyArtifactRedactionPolicy(),
+				},
+			},
+			resolve: func(context.Context, string) (provider.Resolution, error) {
+				return provider.Resolution{
+					Metadata: map[string]string{
+						"provider":          "roomy",
+						"resolution_method": "room_join",
+					},
+					Artifact: &provider.ProbeArtifact{
+						Provider:         "roomy",
+						ResolutionMethod: "room_join",
+						Input: provider.ProbeArtifactInput{
+							LinkRedacted: "https://room.example.test/join/<redacted:room-token>",
+						},
+						Outcome: provider.ProbeArtifactOutcome{
+							ResultKind: "conference_room",
+							ConferenceRoom: &provider.ProbeArtifactConferenceRoom{
+								RoomURL: "https://room.example.test/rooms/team-sync",
+							},
+						},
+					},
+				}, nil
+			},
+		})),
+	)
+
+	resolutionState, err := host.StartResolution(context.Background(), StartResolutionRequest{
+		Provider: "roomy",
+		Input: &ProviderInputEnvelope{
+			Kind: ProviderInputKindLink,
+			Link: "https://room.example.test/join/test-room-token",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartResolution() error = %v", err)
+	}
+
+	resolved := waitForResolutionState(t, host, resolutionState.ID, ResolutionStateResolved)
+	if resolved.Credentials != nil {
+		t.Fatalf("resolved credentials = %#v, want nil for conference_room artifact", resolved.Credentials)
+	}
+	if resolved.Export.Supported {
+		t.Fatal("resolved export supported = true, want false for conference_room artifact")
+	}
+	if resolved.Artifact == nil {
+		t.Fatal("resolved artifact = nil, want conference_room artifact")
+	}
+	if resolved.Artifact.Family != ArtifactFamilyConferenceRoom {
+		t.Fatalf("resolved artifact family = %q, want %q", resolved.Artifact.Family, ArtifactFamilyConferenceRoom)
+	}
+	if resolved.Artifact.Summary.ConferenceRoom == nil {
+		t.Fatal("resolved artifact conference_room summary = nil, want room target")
+	}
+	if resolved.Artifact.Summary.ConferenceRoom.RoomURL != "https://room.example.test/rooms/team-sync" {
+		t.Fatalf("resolved room_url = %q, want room target", resolved.Artifact.Summary.ConferenceRoom.RoomURL)
+	}
+	if len(resolved.Artifact.Actions) != 1 || resolved.Artifact.Actions[0].ID != ArtifactActionOpenRoom {
+		t.Fatalf("resolved artifact actions = %#v, want open_room only", resolved.Artifact.Actions)
+	}
+}
+
+func TestHostResolutionFailureRedactsArtifactErrorMessage(t *testing.T) {
+	host := New(
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name: "roomy",
+			descriptor: provider.ProviderDescriptor{
+				ID:               "roomy",
+				DisplayName:      "Roomy",
+				InputKind:        provider.ProviderInputKindLink,
+				ArtifactFamilies: []provider.ArtifactFamily{provider.ArtifactFamilyConferenceRoom},
+				CapabilityHints: provider.ProviderCapabilityHints{
+					PotentialActions: []provider.ArtifactAction{provider.ArtifactActionOpenRoom},
+					RedactionPolicy:  provider.SummaryOnlyArtifactRedactionPolicy(),
+				},
+			},
+			resolve: func(context.Context, string) (provider.Resolution, error) {
+				return provider.Resolution{}, &provider.ArtifactError{
+					Err: errors.New("room token leaked: secret-room-token"),
+					ProbeArtifact: &provider.ProbeArtifact{
+						Provider: "roomy",
+						Input: provider.ProbeArtifactInput{
+							LinkRedacted: "https://room.example.test/join/<redacted:room-token>",
+						},
+						Outcome: provider.ProbeArtifactOutcome{
+							ResultKind: "provider_error",
+							ProviderError: &provider.ProbeArtifactProviderError{
+								Stage: "room_join",
+								Code:  "invalid_room_token",
+							},
+						},
+					},
+				}
+			},
+		})),
+	)
+
+	events, cancel := host.Subscribe(16)
+	defer cancel()
+
+	resolutionState, err := host.StartResolution(context.Background(), StartResolutionRequest{
+		Provider: "roomy",
+		Input: &ProviderInputEnvelope{
+			Kind: ProviderInputKindLink,
+			Link: "https://room.example.test/join/secret-room-token",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartResolution() error = %v", err)
+	}
+
+	failed := waitForResolutionState(t, host, resolutionState.ID, ResolutionStateFailed)
+	if failed.Failure == nil {
+		t.Fatal("resolution failure = nil, want redacted failure info")
+	}
+	if strings.Contains(failed.Failure.Message, "secret-room-token") {
+		t.Fatalf("resolution failure leaked raw secret: %q", failed.Failure.Message)
+	}
+	if failed.Failure.Message != "provider resolution failed at room_join [invalid_room_token]" {
+		t.Fatalf("resolution failure message = %q", failed.Failure.Message)
+	}
+	if failed.Failure.Stage != "room_join" {
+		t.Fatalf("resolution failure stage = %q, want room_join", failed.Failure.Stage)
+	}
+	if strings.Contains(failed.Input.LinkRedacted, "secret-room-token") {
+		t.Fatalf("resolution input leaked room token: %q", failed.Input.LinkRedacted)
+	}
+
+	failedEvent := waitForEvent(t, events, EventResolutionFailed)
+	if strings.Contains(failedEvent.Message, "secret-room-token") {
+		t.Fatalf("resolution failure event leaked raw secret: %q", failedEvent.Message)
+	}
+	if failedEvent.Message != failed.Failure.Message {
+		t.Fatalf("resolution failure event message = %q, want %q", failedEvent.Message, failed.Failure.Message)
+	}
+}
+
+func TestHostRequiresTypedInputEnvelope(t *testing.T) {
+	host := New(
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name: "future",
+			descriptor: provider.ProviderDescriptor{
+				ID:          "future",
+				DisplayName: "Future",
+				InputKind:   provider.ProviderInputKind("opaque_token"),
+			},
+			resolve: func(ctx context.Context, link string) (provider.Resolution, error) {
+				t.Fatal("Resolve() should not be called when legacy bridge is rejected")
+				return provider.Resolution{}, nil
+			},
+		})),
+	)
+
+	if _, err := host.StartResolution(context.Background(), StartResolutionRequest{
+		Provider: "future",
+	}); err == nil {
+		t.Fatal("StartResolution() error = nil, want missing typed input")
+	} else if !strings.Contains(err.Error(), "input is required") {
+		t.Fatalf("StartResolution() error = %v, want missing typed input", err)
+	}
 }
 
 func TestHostResolutionExportFailsWithoutAuthoritativeExpiry(t *testing.T) {
@@ -758,15 +1232,116 @@ func TestHostResolutionExportFailsWithoutAuthoritativeExpiry(t *testing.T) {
 
 	resolutionState, err := host.StartResolution(context.Background(), StartResolutionRequest{
 		Provider: "vk",
-		Link:     "https://vk.com/call/join/test-token",
+		Input: &ProviderInputEnvelope{
+			Kind: ProviderInputKindLink,
+			Link: "https://vk.com/call/join/test-token",
+		},
 	})
 	if err != nil {
 		t.Fatalf("StartResolution() error = %v", err)
 	}
 	waitForResolutionState(t, host, resolutionState.ID, ResolutionStateResolved)
 
-	if _, err := host.ExportResolution(resolutionState.ID); !errors.Is(err, errResolutionExportUnavailable) {
+	current, err := host.Resolution(resolutionState.ID)
+	if err != nil {
+		t.Fatalf("Resolution() error = %v", err)
+	}
+	if current.Artifact == nil {
+		t.Fatal("resolution artifact missing")
+	}
+	if len(current.Artifact.Actions) != 1 || current.Artifact.Actions[0].ID != ArtifactActionStartOnThisDevice {
+		t.Fatalf("resolution artifact actions = %#v, want start_on_this_device only", current.Artifact.Actions)
+	}
+	if current.Artifact.Actions[0].ExecutionOwner != ActionExecutionOwnerHost {
+		t.Fatalf("resolution artifact action execution_owner = %q, want %q", current.Artifact.Actions[0].ExecutionOwner, ActionExecutionOwnerHost)
+	}
+
+	_, err = host.ExportResolution(resolutionState.ID)
+	if !errors.Is(err, errResolutionExportUnavailable) {
 		t.Fatalf("ExportResolution() error = %v, want export unavailable", err)
+	}
+	var actionErr *ResolutionActionError
+	if !errors.As(err, &actionErr) {
+		t.Fatalf("ExportResolution() error = %T, want ResolutionActionError", err)
+	}
+	if actionErr.Action != ArtifactActionExportHandoff {
+		t.Fatalf("ExportResolution() action = %q, want %q", actionErr.Action, ArtifactActionExportHandoff)
+	}
+}
+
+func TestHostMaterializeResolutionFailsWhenArtifactDoesNotAdvertiseStartAction(t *testing.T) {
+	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
+	host := New(
+		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+		WithBuildIdentity(testBuildIdentity()),
+		withNow(func() time.Time { return now }),
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name: "vk",
+			descriptor: provider.ProviderDescriptor{
+				ID:               "vk",
+				DisplayName:      "VK Calls",
+				InputKind:        provider.ProviderInputKindLink,
+				BrowserPolicy:    provider.ProviderBrowserPolicyExternalRequired,
+				ArtifactFamilies: []provider.ArtifactFamily{provider.ArtifactFamilyGenericTURN},
+				CapabilityHints: provider.ProviderCapabilityHints{
+					PotentialActions: []provider.ArtifactAction{provider.ArtifactActionExportHandoff},
+					RedactionPolicy:  provider.SummaryOnlyArtifactRedactionPolicy(),
+				},
+			},
+			resolve: func(ctx context.Context, link string) (provider.Resolution, error) {
+				return provider.Resolution{
+					Credentials: provider.Credentials{
+						Username: "turn-user",
+						Password: "turn-pass",
+						Address:  "turn.example.test:3478",
+						TTL:      time.Hour,
+					},
+					Metadata: map[string]string{
+						"provider":                      "vk",
+						"resolution_method":             "staged_http",
+						"turn_credential_expires_at":    now.Add(time.Hour).Format(time.RFC3339),
+						"turn_credential_expiry_source": "turn_rest_username",
+					},
+				}, nil
+			},
+		})),
+	)
+
+	resolutionState, err := host.StartResolution(context.Background(), StartResolutionRequest{
+		Provider: "vk",
+		Input: &ProviderInputEnvelope{
+			Kind: ProviderInputKindLink,
+			Link: "https://vk.com/call/join/test-token",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartResolution() error = %v", err)
+	}
+
+	resolved := waitForResolutionState(t, host, resolutionState.ID, ResolutionStateResolved)
+	if resolved.Artifact == nil {
+		t.Fatal("resolved artifact missing")
+	}
+	if len(resolved.Artifact.Actions) != 1 || resolved.Artifact.Actions[0].ID != ArtifactActionExportHandoff {
+		t.Fatalf("resolution artifact actions = %#v, want export_handoff only", resolved.Artifact.Actions)
+	}
+
+	_, err = host.MaterializeResolution(context.Background(), resolved.ID, RuntimeDefaults{
+		ListenAddr:  reserveUDPAddr(t),
+		PeerAddr:    "127.0.0.1:56000",
+		Connections: 1,
+		Mode:        TransportModeAuto,
+		UseDTLS:     boolRef(true),
+	})
+	if !errors.Is(err, errResolutionNotTransportReady) {
+		t.Fatalf("MaterializeResolution() error = %v, want not transport-ready", err)
+	}
+	var actionErr *ResolutionActionError
+	if !errors.As(err, &actionErr) {
+		t.Fatalf("MaterializeResolution() error = %T, want ResolutionActionError", err)
+	}
+	if actionErr.Action != ArtifactActionStartOnThisDevice {
+		t.Fatalf("MaterializeResolution() action = %q, want %q", actionErr.Action, ArtifactActionStartOnThisDevice)
 	}
 }
 
@@ -797,7 +1372,10 @@ func TestHostResolutionExpiresAndFailsClosed(t *testing.T) {
 
 	resolutionState, err := host.StartResolution(context.Background(), StartResolutionRequest{
 		Provider: "vk",
-		Link:     "https://vk.com/call/join/test-token",
+		Input: &ProviderInputEnvelope{
+			Kind: ProviderInputKindLink,
+			Link: "https://vk.com/call/join/test-token",
+		},
 	})
 	if err != nil {
 		t.Fatalf("StartResolution() error = %v", err)
@@ -811,6 +1389,12 @@ func TestHostResolutionExpiresAndFailsClosed(t *testing.T) {
 	}
 	if expired.State != ResolutionStateExpired {
 		t.Fatalf("resolution state = %q, want expired", expired.State)
+	}
+	if expired.Artifact == nil {
+		t.Fatal("expired resolution artifact missing")
+	}
+	if len(expired.Artifact.Actions) != 0 {
+		t.Fatalf("expired resolution artifact actions = %#v, want none", expired.Artifact.Actions)
 	}
 	if _, err := host.ExportResolution(resolutionState.ID); !errors.Is(err, errResolutionExpired) {
 		t.Fatalf("ExportResolution() error = %v, want expired", err)
@@ -855,7 +1439,10 @@ func TestHostCancelResolutionStaysCancelledIfProviderFinishesLate(t *testing.T) 
 
 	resolutionState, err := host.StartResolution(context.Background(), StartResolutionRequest{
 		Provider: "vk",
-		Link:     "https://vk.com/call/join/test-token",
+		Input: &ProviderInputEnvelope{
+			Kind: ProviderInputKindLink,
+			Link: "https://vk.com/call/join/test-token",
+		},
 	})
 	if err != nil {
 		t.Fatalf("StartResolution() error = %v", err)

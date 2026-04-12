@@ -7,15 +7,15 @@ const ContractVersion = "1"
 type Capability string
 
 const (
-	CapabilityProfiles                  Capability = "profiles"
-	CapabilitySessions                  Capability = "sessions"
-	CapabilityChallenges                Capability = "challenges"
-	CapabilityDiagnostics               Capability = "diagnostics"
-	CapabilityEventStream               Capability = "event_stream"
-	CapabilityDesktopSidecar            Capability = "desktop_sidecar"
-	CapabilityMobileHostBridge          Capability = "mobile_host_bridge"
-	CapabilityPlatformTunnels           Capability = "platform_tunnels"
-	CapabilityProviderResolutionHandoff Capability = "provider-resolution-handoff"
+	CapabilityProfiles                 Capability = "profiles"
+	CapabilitySessions                 Capability = "sessions"
+	CapabilityChallenges               Capability = "challenges"
+	CapabilityDiagnostics              Capability = "diagnostics"
+	CapabilityEventStream              Capability = "event_stream"
+	CapabilityDesktopSidecar           Capability = "desktop_sidecar"
+	CapabilityMobileHostBridge         Capability = "mobile_host_bridge"
+	CapabilityPlatformTunnels          Capability = "platform_tunnels"
+	CapabilityProviderRuntimeArtifacts Capability = "provider-runtime-artifacts"
 )
 
 type TransportMode string
@@ -171,9 +171,10 @@ type Profile struct {
 }
 
 type ResolutionInput struct {
-	Provider            string `json:"provider"`
-	LinkRedacted        string `json:"link_redacted,omitempty"`
-	InteractiveProvider bool   `json:"interactive_provider,omitempty"`
+	Provider            string            `json:"provider"`
+	Kind                ProviderInputKind `json:"kind,omitempty"`
+	LinkRedacted        string            `json:"link_redacted,omitempty"`
+	InteractiveProvider bool              `json:"interactive_provider,omitempty"`
 }
 
 type ResolutionCredentials struct {
@@ -193,6 +194,7 @@ type Resolution struct {
 	Provider          string                 `json:"provider"`
 	ResolutionMethod  string                 `json:"resolution_method,omitempty"`
 	Input             ResolutionInput        `json:"input"`
+	Artifact          *ResolutionArtifact    `json:"artifact,omitempty"`
 	State             ResolutionState        `json:"state"`
 	Credentials       *ResolutionCredentials `json:"credentials,omitempty"`
 	Export            ResolutionExportStatus `json:"export"`
@@ -239,20 +241,21 @@ type Challenge struct {
 }
 
 type Event struct {
-	ID              string          `json:"id"`
-	Timestamp       time.Time       `json:"timestamp"`
-	SessionID       string          `json:"session_id"`
-	ResolutionID    string          `json:"resolution_id,omitempty"`
-	Type            EventType       `json:"type"`
-	State           SessionState    `json:"state,omitempty"`
-	ResolutionState ResolutionState `json:"resolution_state,omitempty"`
-	Stage           string          `json:"stage,omitempty"`
-	Message         string          `json:"message,omitempty"`
-	Connections     int             `json:"connections,omitempty"`
-	ReadyWorkers    int             `json:"ready_workers,omitempty"`
-	Restart         int             `json:"restart,omitempty"`
-	Backoff         string          `json:"backoff,omitempty"`
-	Challenge       *Challenge      `json:"challenge,omitempty"`
+	ID              string              `json:"id"`
+	Timestamp       time.Time           `json:"timestamp"`
+	SessionID       string              `json:"session_id"`
+	ResolutionID    string              `json:"resolution_id,omitempty"`
+	Type            EventType           `json:"type"`
+	State           SessionState        `json:"state,omitempty"`
+	ResolutionState ResolutionState     `json:"resolution_state,omitempty"`
+	Stage           string              `json:"stage,omitempty"`
+	Message         string              `json:"message,omitempty"`
+	Connections     int                 `json:"connections,omitempty"`
+	ReadyWorkers    int                 `json:"ready_workers,omitempty"`
+	Restart         int                 `json:"restart,omitempty"`
+	Backoff         string              `json:"backoff,omitempty"`
+	Challenge       *Challenge          `json:"challenge,omitempty"`
+	Artifact        *ResolutionArtifact `json:"artifact,omitempty"`
 }
 
 type Diagnostics struct {
@@ -271,9 +274,10 @@ type StartSessionRequest struct {
 }
 
 type StartResolutionRequest struct {
-	Provider            string `json:"provider"`
-	Link                string `json:"link"`
-	InteractiveProvider bool   `json:"interactive_provider,omitempty"`
+	Provider            string                 `json:"provider"`
+	Input               *ProviderInputEnvelope `json:"input,omitempty"`
+	Link                string                 `json:"-"`
+	InteractiveProvider bool                   `json:"-"`
 }
 
 type ResolutionExportResult struct {

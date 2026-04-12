@@ -294,11 +294,15 @@ func (h *Host) Info() HostInfo {
 			CapabilityMobileHostBridge,
 			CapabilityPlatformTunnels,
 			CapabilityProfiles,
-			CapabilityProviderResolutionHandoff,
+			CapabilityProviderRuntimeArtifacts,
 			CapabilitySessions,
 		},
 		PlatformTunnels: clonePlatformTunnelCapabilities(h.platformTunnels),
 	}
+}
+
+func (h *Host) Providers() []ProviderDescriptor {
+	return providerDescriptorsFromInternal(h.registry.Descriptors())
 }
 
 func (h *Host) Negotiate(req NegotiateRequest) (HostInfo, error) {

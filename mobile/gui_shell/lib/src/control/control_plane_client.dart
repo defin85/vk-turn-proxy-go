@@ -13,14 +13,14 @@ abstract class ControlPlaneApi {
   Future<PlatformTunnelStartResult> startPlatformTunnel({
     required PlatformTunnelMode mode,
   });
+  Future<List<ProviderDescriptor>> providers();
   Future<List<ProfileRecord>> profiles();
   Future<ProfileRecord> upsertProfile(ProfileRecord profile);
   Future<void> deleteProfile(String profileId);
   Future<List<ResolutionRecord>> resolutions();
   Future<ResolutionRecord> startResolution({
     required String provider,
-    required String link,
-    required bool interactiveProvider,
+    required ProviderInputEnvelope input,
   });
   Future<ResolutionRecord> cancelResolution(String resolutionId);
   Future<ResolutionExportResult> exportResolution(String resolutionId);
@@ -95,6 +95,12 @@ class ControlPlaneClient implements ControlPlaneApi {
   }
 
   @override
+  Future<List<ProviderDescriptor>> providers() async {
+    final payload = await _jsonRequestList('GET', '/v1/providers');
+    return payload.map(ProviderDescriptor.fromJson).toList(growable: false);
+  }
+
+  @override
   Future<List<ProfileRecord>> profiles() async {
     final payload = await _jsonRequestList('GET', '/v1/profiles');
     return payload.map(ProfileRecord.fromJson).toList(growable: false);
@@ -124,17 +130,12 @@ class ControlPlaneClient implements ControlPlaneApi {
   @override
   Future<ResolutionRecord> startResolution({
     required String provider,
-    required String link,
-    required bool interactiveProvider,
+    required ProviderInputEnvelope input,
   }) async {
     final payload = await _jsonRequest(
       'POST',
       '/v1/resolutions',
-      body: <String, dynamic>{
-        'provider': provider,
-        'link': link,
-        if (interactiveProvider) 'interactive_provider': true,
-      },
+      body: <String, dynamic>{'provider': provider, 'input': input.toJson()},
     );
     return ResolutionRecord.fromJson(payload);
   }
@@ -347,6 +348,9 @@ class ControlPlaneClient implements ControlPlaneApi {
             statusCode: statusCode,
             code: decoded['code'] as String? ?? 'request_failed',
             message: decoded['message'] as String? ?? body,
+            action: decoded['action'] as String?,
+            stage: decoded['stage'] as String?,
+            notImplemented: decoded['not_implemented'] as bool? ?? false,
           );
         }
       } on FormatException {

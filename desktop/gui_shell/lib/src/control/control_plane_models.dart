@@ -9,7 +9,7 @@ enum Capability {
   desktopSidecar('desktop_sidecar'),
   mobileHostBridge('mobile_host_bridge'),
   platformTunnels('platform_tunnels'),
-  providerResolutionHandoff('provider-resolution-handoff');
+  providerRuntimeArtifacts('provider-runtime-artifacts');
 
   const Capability(this.value);
 
@@ -22,6 +22,296 @@ enum Capability {
       }
     }
     return null;
+  }
+}
+
+enum ProviderInputKind {
+  link('link');
+
+  const ProviderInputKind(this.value);
+
+  final String value;
+
+  static ProviderInputKind fromJson(String? raw) {
+    for (final kind in values) {
+      if (kind.value == raw) {
+        return kind;
+      }
+    }
+    return ProviderInputKind.link;
+  }
+}
+
+enum ProviderAuthPosture {
+  notApplicable('not_applicable'),
+  guest('guest'),
+  account('account'),
+  guestOrAccount('guest_or_account'),
+  staticSecret('static_secret');
+
+  const ProviderAuthPosture(this.value);
+
+  final String value;
+
+  static ProviderAuthPosture fromJson(String? raw) {
+    for (final posture in values) {
+      if (posture.value == raw) {
+        return posture;
+      }
+    }
+    return ProviderAuthPosture.notApplicable;
+  }
+}
+
+extension ProviderAuthPostureDisplay on ProviderAuthPosture {
+  String get label => switch (this) {
+    ProviderAuthPosture.notApplicable => 'no auth requirement reported',
+    ProviderAuthPosture.guest => 'guest auth',
+    ProviderAuthPosture.account => 'account auth',
+    ProviderAuthPosture.guestOrAccount => 'guest or account auth',
+    ProviderAuthPosture.staticSecret => 'static secret input',
+  };
+}
+
+enum ProviderBrowserPolicy {
+  notRequired('not_required'),
+  externalRequired('external_required'),
+  embeddedAllowed('embedded_allowed');
+
+  const ProviderBrowserPolicy(this.value);
+
+  final String value;
+
+  static ProviderBrowserPolicy fromJson(String? raw) {
+    for (final policy in values) {
+      if (policy.value == raw) {
+        return policy;
+      }
+    }
+    return ProviderBrowserPolicy.notRequired;
+  }
+}
+
+extension ProviderBrowserPolicyDisplay on ProviderBrowserPolicy {
+  String get label => switch (this) {
+    ProviderBrowserPolicy.notRequired => 'no browser requirement reported',
+    ProviderBrowserPolicy.externalRequired => 'external browser required',
+    ProviderBrowserPolicy.embeddedAllowed => 'embedded browser allowed',
+  };
+}
+
+enum ProviderChallengeMode {
+  browser('browser');
+
+  const ProviderChallengeMode(this.value);
+
+  final String value;
+
+  static ProviderChallengeMode? fromJson(String? raw) {
+    for (final mode in values) {
+      if (mode.value == raw) {
+        return mode;
+      }
+    }
+    return null;
+  }
+}
+
+enum ArtifactFamily {
+  genericTurn('generic_turn'),
+  conferenceRoom('conference_room'),
+  cameraStream('camera_stream');
+
+  const ArtifactFamily(this.value);
+
+  final String value;
+
+  static ArtifactFamily? fromJson(String? raw) {
+    for (final family in values) {
+      if (family.value == raw) {
+        return family;
+      }
+    }
+    return null;
+  }
+}
+
+extension ArtifactFamilyDisplay on ArtifactFamily {
+  String get label => switch (this) {
+    ArtifactFamily.genericTurn => 'Generic TURN',
+    ArtifactFamily.conferenceRoom => 'Conference room',
+    ArtifactFamily.cameraStream => 'Camera stream',
+  };
+}
+
+enum ArtifactAction {
+  startOnThisDevice('start_on_this_device'),
+  exportHandoff('export_handoff'),
+  openRoom('open_room'),
+  openCamera('open_camera'),
+  openArchive('open_archive');
+
+  const ArtifactAction(this.value);
+
+  final String value;
+
+  static ArtifactAction? fromJson(String? raw) {
+    for (final action in values) {
+      if (action.value == raw) {
+        return action;
+      }
+    }
+    return null;
+  }
+}
+
+extension ArtifactActionDisplay on ArtifactAction {
+  String get label => switch (this) {
+    ArtifactAction.startOnThisDevice => 'Start on this device',
+    ArtifactAction.exportHandoff => 'Export handoff',
+    ArtifactAction.openRoom => 'Open room',
+    ArtifactAction.openCamera => 'Open camera',
+    ArtifactAction.openArchive => 'Open archive',
+  };
+}
+
+enum ActionExecutionOwner {
+  host('host'),
+  shellLocal('shell_local'),
+  shellExternal('shell_external');
+
+  const ActionExecutionOwner(this.value);
+
+  final String value;
+
+  static ActionExecutionOwner fromJson(String? raw) {
+    for (final owner in values) {
+      if (owner.value == raw) {
+        return owner;
+      }
+    }
+    return ActionExecutionOwner.host;
+  }
+}
+
+class ArtifactRedactionPolicy {
+  const ArtifactRedactionPolicy({
+    this.ordinaryReads,
+    this.events,
+    this.diagnostics,
+    this.persistedState,
+  });
+
+  factory ArtifactRedactionPolicy.fromJson(Map<String, dynamic> json) {
+    return ArtifactRedactionPolicy(
+      ordinaryReads: json['ordinary_reads'] as String?,
+      events: json['events'] as String?,
+      diagnostics: json['diagnostics'] as String?,
+      persistedState: json['persisted_state'] as String?,
+    );
+  }
+
+  final String? ordinaryReads;
+  final String? events;
+  final String? diagnostics;
+  final String? persistedState;
+}
+
+class ProviderCapabilityHints {
+  const ProviderCapabilityHints({
+    this.potentialActions = const <ArtifactAction>[],
+    this.redactionPolicy = const ArtifactRedactionPolicy(),
+  });
+
+  factory ProviderCapabilityHints.fromJson(Map<String, dynamic> json) {
+    return ProviderCapabilityHints(
+      potentialActions:
+          (json['potential_actions'] as List<dynamic>? ?? const <dynamic>[])
+              .map((dynamic raw) => ArtifactAction.fromJson(raw as String?))
+              .whereType<ArtifactAction>()
+              .toList(growable: false),
+      redactionPolicy: json['redaction_policy'] is Map<String, dynamic>
+          ? ArtifactRedactionPolicy.fromJson(
+              json['redaction_policy'] as Map<String, dynamic>,
+            )
+          : const ArtifactRedactionPolicy(),
+    );
+  }
+
+  final List<ArtifactAction> potentialActions;
+  final ArtifactRedactionPolicy redactionPolicy;
+}
+
+class ProviderDescriptor {
+  const ProviderDescriptor({
+    required this.id,
+    required this.displayName,
+    required this.inputKind,
+    required this.authPosture,
+    required this.browserPolicy,
+    this.description = '',
+    this.challengeModes = const <ProviderChallengeMode>[],
+    this.artifactFamilies = const <ArtifactFamily>[],
+    this.capabilityHints = const ProviderCapabilityHints(),
+  });
+
+  factory ProviderDescriptor.fromJson(Map<String, dynamic> json) {
+    return ProviderDescriptor(
+      id: json['id'] as String? ?? '',
+      displayName: json['display_name'] as String? ?? '',
+      description: json['description'] as String? ?? '',
+      inputKind: ProviderInputKind.fromJson(json['input_kind'] as String?),
+      authPosture: ProviderAuthPosture.fromJson(
+        json['auth_posture'] as String?,
+      ),
+      browserPolicy: ProviderBrowserPolicy.fromJson(
+        json['browser_policy'] as String?,
+      ),
+      challengeModes:
+          (json['challenge_modes'] as List<dynamic>? ?? const <dynamic>[])
+              .map(
+                (dynamic raw) => ProviderChallengeMode.fromJson(raw as String?),
+              )
+              .whereType<ProviderChallengeMode>()
+              .toList(growable: false),
+      artifactFamilies:
+          (json['artifact_families'] as List<dynamic>? ?? const <dynamic>[])
+              .map((dynamic raw) => ArtifactFamily.fromJson(raw as String?))
+              .whereType<ArtifactFamily>()
+              .toList(growable: false),
+      capabilityHints: json['capability_hints'] is Map<String, dynamic>
+          ? ProviderCapabilityHints.fromJson(
+              json['capability_hints'] as Map<String, dynamic>,
+            )
+          : const ProviderCapabilityHints(),
+    );
+  }
+
+  final String id;
+  final String displayName;
+  final String description;
+  final ProviderInputKind inputKind;
+  final ProviderAuthPosture authPosture;
+  final ProviderBrowserPolicy browserPolicy;
+  final List<ProviderChallengeMode> challengeModes;
+  final List<ArtifactFamily> artifactFamilies;
+  final ProviderCapabilityHints capabilityHints;
+
+  bool get mayRequireBrowserContinuation =>
+      challengeModes.contains(ProviderChallengeMode.browser);
+}
+
+class ProviderInputEnvelope {
+  const ProviderInputEnvelope({required this.kind, this.link = ''});
+
+  final ProviderInputKind kind;
+  final String link;
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{
+      'kind': kind.value,
+      'link': link.isEmpty ? null : link,
+    });
   }
 }
 
@@ -713,6 +1003,7 @@ class RuntimeDefaults {
 class ResolutionInput {
   const ResolutionInput({
     required this.provider,
+    this.kind = ProviderInputKind.link,
     this.linkRedacted = '',
     this.interactiveProvider = false,
   });
@@ -720,20 +1011,193 @@ class ResolutionInput {
   factory ResolutionInput.fromJson(Map<String, dynamic> json) {
     return ResolutionInput(
       provider: json['provider'] as String? ?? '',
+      kind: ProviderInputKind.fromJson(json['kind'] as String?),
       linkRedacted: json['link_redacted'] as String? ?? '',
       interactiveProvider: json['interactive_provider'] as bool? ?? false,
     );
   }
 
   final String provider;
+  final ProviderInputKind kind;
   final String linkRedacted;
   final bool interactiveProvider;
 
   Map<String, dynamic> toJson() {
     return _compact(<String, dynamic>{
       'provider': provider,
+      'kind': kind.value,
       'link_redacted': linkRedacted.isEmpty ? null : linkRedacted,
       'interactive_provider': interactiveProvider ? true : null,
+    });
+  }
+}
+
+class ResolutionActionRecord {
+  const ResolutionActionRecord({
+    required this.id,
+    required this.executionOwner,
+  });
+
+  factory ResolutionActionRecord.fromJson(Map<String, dynamic> json) {
+    return ResolutionActionRecord(
+      id:
+          ArtifactAction.fromJson(json['id'] as String?) ??
+          ArtifactAction.exportHandoff,
+      executionOwner: ActionExecutionOwner.fromJson(
+        json['execution_owner'] as String?,
+      ),
+    );
+  }
+
+  final ArtifactAction id;
+  final ActionExecutionOwner executionOwner;
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id.value,
+      'execution_owner': executionOwner.value,
+    };
+  }
+}
+
+class ConferenceRoomArtifactSummary {
+  const ConferenceRoomArtifactSummary({required this.roomUrl});
+
+  factory ConferenceRoomArtifactSummary.fromJson(Map<String, dynamic> json) {
+    return ConferenceRoomArtifactSummary(
+      roomUrl: json['room_url'] as String? ?? '',
+    );
+  }
+
+  final String roomUrl;
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{'room_url': roomUrl});
+  }
+}
+
+class CameraStreamArtifactSummary {
+  const CameraStreamArtifactSummary({
+    this.cameraUrl = '',
+    this.archiveUrl = '',
+  });
+
+  factory CameraStreamArtifactSummary.fromJson(Map<String, dynamic> json) {
+    return CameraStreamArtifactSummary(
+      cameraUrl: json['camera_url'] as String? ?? '',
+      archiveUrl: json['archive_url'] as String? ?? '',
+    );
+  }
+
+  final String cameraUrl;
+  final String archiveUrl;
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{
+      'camera_url': cameraUrl.isEmpty ? null : cameraUrl,
+      'archive_url': archiveUrl.isEmpty ? null : archiveUrl,
+    });
+  }
+}
+
+class ResolutionArtifactSummary {
+  const ResolutionArtifactSummary({
+    this.genericTurn,
+    this.conferenceRoom,
+    this.cameraStream,
+  });
+
+  factory ResolutionArtifactSummary.fromJson(Map<String, dynamic> json) {
+    return ResolutionArtifactSummary(
+      genericTurn: json['generic_turn'] is Map<String, dynamic>
+          ? ResolutionCredentials.fromJson(
+              json['generic_turn'] as Map<String, dynamic>,
+            )
+          : null,
+      conferenceRoom: json['conference_room'] is Map<String, dynamic>
+          ? ConferenceRoomArtifactSummary.fromJson(
+              json['conference_room'] as Map<String, dynamic>,
+            )
+          : null,
+      cameraStream: json['camera_stream'] is Map<String, dynamic>
+          ? CameraStreamArtifactSummary.fromJson(
+              json['camera_stream'] as Map<String, dynamic>,
+            )
+          : null,
+    );
+  }
+
+  final ResolutionCredentials? genericTurn;
+  final ConferenceRoomArtifactSummary? conferenceRoom;
+  final CameraStreamArtifactSummary? cameraStream;
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{
+      'generic_turn': genericTurn?.toJson(),
+      'conference_room': conferenceRoom?.toJson(),
+      'camera_stream': cameraStream?.toJson(),
+    });
+  }
+}
+
+class ResolutionArtifactRecord {
+  const ResolutionArtifactRecord({
+    required this.family,
+    this.actions = const <ResolutionActionRecord>[],
+    this.summary = const ResolutionArtifactSummary(),
+  });
+
+  factory ResolutionArtifactRecord.fromJson(Map<String, dynamic> json) {
+    return ResolutionArtifactRecord(
+      family:
+          ArtifactFamily.fromJson(json['family'] as String?) ??
+          ArtifactFamily.genericTurn,
+      actions: (json['actions'] as List<dynamic>? ?? const <dynamic>[])
+          .map(
+            (dynamic entry) =>
+                ResolutionActionRecord.fromJson(entry as Map<String, dynamic>),
+          )
+          .toList(growable: false),
+      summary: json['summary'] is Map<String, dynamic>
+          ? ResolutionArtifactSummary.fromJson(
+              json['summary'] as Map<String, dynamic>,
+            )
+          : const ResolutionArtifactSummary(),
+    );
+  }
+
+  final ArtifactFamily family;
+  final List<ResolutionActionRecord> actions;
+  final ResolutionArtifactSummary summary;
+
+  bool supports(ArtifactAction action) =>
+      actions.any((ResolutionActionRecord candidate) => candidate.id == action);
+
+  ResolutionActionRecord? action(ArtifactAction action) {
+    for (final candidate in actions) {
+      if (candidate.id == action) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  String? externalTargetUrl(ArtifactAction action) {
+    return switch (action) {
+      ArtifactAction.openRoom => _nonEmpty(summary.conferenceRoom?.roomUrl),
+      ArtifactAction.openCamera => _nonEmpty(summary.cameraStream?.cameraUrl),
+      ArtifactAction.openArchive => _nonEmpty(summary.cameraStream?.archiveUrl),
+      _ => null,
+    };
+  }
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{
+      'family': family.value,
+      'actions': actions
+          .map((ResolutionActionRecord item) => item.toJson())
+          .toList(growable: false),
+      'summary': summary.toJson(),
     });
   }
 }
@@ -806,6 +1270,7 @@ class ResolutionRecord {
     required this.startedAt,
     required this.updatedAt,
     this.resolutionMethod,
+    this.artifact,
     this.credentials,
     this.failure,
     this.activeChallengeId,
@@ -824,6 +1289,11 @@ class ResolutionRecord {
       state:
           ResolutionState.fromJson(json['state'] as String?) ??
           ResolutionState.starting,
+      artifact: json['artifact'] is Map<String, dynamic>
+          ? ResolutionArtifactRecord.fromJson(
+              json['artifact'] as Map<String, dynamic>,
+            )
+          : null,
       credentials: json['credentials'] is Map<String, dynamic>
           ? ResolutionCredentials.fromJson(
               json['credentials'] as Map<String, dynamic>,
@@ -852,6 +1322,7 @@ class ResolutionRecord {
   final String? resolutionMethod;
   final ResolutionInput input;
   final ResolutionState state;
+  final ResolutionArtifactRecord? artifact;
   final ResolutionCredentials? credentials;
   final ResolutionExportStatus export;
   final FailureInfo? failure;
@@ -868,6 +1339,12 @@ class ResolutionRecord {
     _ => false,
   };
 
+  bool supportsAction(ArtifactAction action) =>
+      artifact?.supports(action) ?? false;
+
+  String? externalTargetUrl(ArtifactAction action) =>
+      artifact?.externalTargetUrl(action);
+
   Map<String, dynamic> toJson() {
     return _compact(<String, dynamic>{
       'id': id,
@@ -875,6 +1352,7 @@ class ResolutionRecord {
       'resolution_method': resolutionMethod,
       'input': input.toJson(),
       'state': state.value,
+      'artifact': artifact?.toJson(),
       'credentials': credentials?.toJson(),
       'export': export.toJson(),
       'failure': failure?.toJson(),
@@ -1092,6 +1570,7 @@ class EventRecord {
     this.restart,
     this.backoff,
     this.challenge,
+    this.artifact,
   });
 
   factory EventRecord.fromJson(Map<String, dynamic> json) {
@@ -1116,6 +1595,11 @@ class EventRecord {
       challenge: json['challenge'] is Map<String, dynamic>
           ? ChallengeRecord.fromJson(json['challenge'] as Map<String, dynamic>)
           : null,
+      artifact: json['artifact'] is Map<String, dynamic>
+          ? ResolutionArtifactRecord.fromJson(
+              json['artifact'] as Map<String, dynamic>,
+            )
+          : null,
     );
   }
 
@@ -1133,6 +1617,7 @@ class EventRecord {
   final int? restart;
   final String? backoff;
   final ChallengeRecord? challenge;
+  final ResolutionArtifactRecord? artifact;
 
   String summary() {
     final buffer = StringBuffer(type.value);
@@ -1172,6 +1657,7 @@ class EventRecord {
       'restart': restart,
       'backoff': backoff,
       'challenge': challenge?.toJson(),
+      'artifact': artifact?.toJson(),
     });
   }
 }
@@ -1267,17 +1753,23 @@ class ControlPlaneError implements Exception {
     required this.statusCode,
     required this.code,
     required this.message,
+    this.action,
+    this.stage,
+    this.notImplemented = false,
   });
 
   final int statusCode;
   final String code;
   final String message;
+  final String? action;
+  final String? stage;
+  final bool notImplemented;
 
   bool get incompatibleHost => statusCode == 409 && code == 'incompatible_host';
 
   @override
   String toString() {
-    return 'ControlPlaneError(status=$statusCode, code=$code, message=$message)';
+    return 'ControlPlaneError(status=$statusCode, code=$code, message=$message, action=$action, stage=$stage, notImplemented=$notImplemented)';
   }
 }
 
@@ -1381,4 +1873,9 @@ PlatformTunnelStartupStage? _readOptionalPlatformTunnelStage(
     return stage;
   }
   throw FormatException('invalid $fieldName: $value');
+}
+
+String? _nonEmpty(String? value) {
+  final normalized = value?.trim() ?? '';
+  return normalized.isEmpty ? null : normalized;
 }

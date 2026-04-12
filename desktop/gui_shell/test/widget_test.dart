@@ -34,7 +34,7 @@ const HostInfo _readyHostInfo = HostInfo(
     Capability.desktopSidecar,
     Capability.platformTunnels,
     Capability.profiles,
-    Capability.providerResolutionHandoff,
+    Capability.providerRuntimeArtifacts,
     Capability.sessions,
     Capability.challenges,
     Capability.diagnostics,
@@ -49,6 +49,30 @@ const HostInfo _readyHostInfo = HostInfo(
     ),
   ],
 );
+
+const List<ProviderDescriptor> _providerDescriptors = <ProviderDescriptor>[
+  ProviderDescriptor(
+    id: 'vk',
+    displayName: 'VK Calls',
+    description:
+        'Invite-first provider with browser-mediated continuation that resolves into transport-ready TURN credentials.',
+    inputKind: ProviderInputKind.link,
+    authPosture: ProviderAuthPosture.guestOrAccount,
+    browserPolicy: ProviderBrowserPolicy.externalRequired,
+    challengeModes: <ProviderChallengeMode>[ProviderChallengeMode.browser],
+    artifactFamilies: <ArtifactFamily>[ArtifactFamily.genericTurn],
+  ),
+  ProviderDescriptor(
+    id: 'generic-turn',
+    displayName: 'Generic TURN',
+    description:
+        'Static TURN handoff for deterministic transport testing and operator-driven runtime startup.',
+    inputKind: ProviderInputKind.link,
+    authPosture: ProviderAuthPosture.staticSecret,
+    browserPolicy: ProviderBrowserPolicy.notRequired,
+    artifactFamilies: <ArtifactFamily>[ArtifactFamily.genericTurn],
+  ),
+];
 
 void main() {
   testWidgets('desktop shell starts a saved profile from the GUI', (
@@ -129,6 +153,81 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     unawaited(api.dispose());
   });
+
+  testWidgets('desktop shell renders and executes open room actions', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final api = _FakeControlPlaneApi(
+      resolutionsList: <ResolutionRecord>[
+        ResolutionRecord(
+          id: 'resolution-room-1',
+          provider: 'roomy',
+          input: ResolutionInput(
+            provider: 'roomy',
+            kind: ProviderInputKind.link,
+            linkRedacted:
+                'https://room.example.test/join/<redacted:room-token>',
+          ),
+          state: ResolutionState.resolved,
+          artifact: ResolutionArtifactRecord(
+            family: ArtifactFamily.conferenceRoom,
+            actions: <ResolutionActionRecord>[
+              ResolutionActionRecord(
+                id: ArtifactAction.openRoom,
+                executionOwner: ActionExecutionOwner.shellExternal,
+              ),
+            ],
+            summary: ResolutionArtifactSummary(
+              conferenceRoom: ConferenceRoomArtifactSummary(
+                roomUrl: 'https://room.example.test/rooms/team-sync',
+              ),
+            ),
+          ),
+          export: ResolutionExportStatus(supported: false),
+          startedAt: DateTime.utc(2026, 4, 10, 12, 0),
+          updatedAt: DateTime.utc(2026, 4, 10, 12, 1),
+          resolvedAt: DateTime.utc(2026, 4, 10, 12, 1),
+        ),
+      ],
+    );
+    final browser = _FakeDesktopBrowserLauncher();
+    final controller = DesktopShellController(
+      api: api,
+      supervisor: _FakeHostSupervisor(),
+      stateStore: const _InMemoryShellStateStore(),
+      browserLauncher: browser,
+      appBuild: _testGuiBuild,
+    );
+
+    await controller.initialize();
+    await tester.pumpWidget(
+      MaterialApp(home: DashboardPage(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+
+    final openRoomButton = find.text('Open room', skipOffstage: false);
+    await tester.scrollUntilVisible(
+      openRoomButton,
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
+    await tester.tap(openRoomButton);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(browser.openedUrls, <String>[
+      'https://room.example.test/rooms/team-sync',
+    ]);
+
+    controller.dispose();
+    await tester.pumpWidget(const SizedBox.shrink());
+    unawaited(api.dispose());
+  });
 }
 
 class _InMemoryShellStateStore implements DesktopShellStateStore {
@@ -144,6 +243,9 @@ class _InMemoryShellStateStore implements DesktopShellStateStore {
 }
 
 class _FakeControlPlaneApi implements ControlPlaneApi {
+  _FakeControlPlaneApi({this.resolutionsList = const <ResolutionRecord>[]});
+
+  final List<ResolutionRecord> resolutionsList;
   final List<String> startedProfileIDs = <String>[];
   final List<PlatformTunnelMode> startedPlatformTunnels =
       <PlatformTunnelMode>[];
@@ -249,23 +351,42 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   }
 
   @override
+  Future<List<ProviderDescriptor>> providers() async => _providerDescriptors;
+
+  @override
   Future<List<ProfileRecord>> profiles() async => _profiles;
 
   @override
-  Future<List<ResolutionRecord>> resolutions() async =>
-      const <ResolutionRecord>[];
+  Future<List<ResolutionRecord>> resolutions() async => resolutionsList;
 
   @override
   Future<ResolutionRecord> startResolution({
     required String provider,
-    required String link,
-    required bool interactiveProvider,
+    required ProviderInputEnvelope input,
   }) async {
     return ResolutionRecord(
       id: 'resolution-1',
       provider: provider,
-      input: ResolutionInput(provider: provider, linkRedacted: link),
+      input: ResolutionInput(
+        provider: provider,
+        kind: input.kind,
+        linkRedacted: input.link,
+        interactiveProvider: provider == 'vk',
+      ),
       state: ResolutionState.resolved,
+      artifact: const ResolutionArtifactRecord(
+        family: ArtifactFamily.genericTurn,
+        actions: <ResolutionActionRecord>[
+          ResolutionActionRecord(
+            id: ArtifactAction.startOnThisDevice,
+            executionOwner: ActionExecutionOwner.host,
+          ),
+          ResolutionActionRecord(
+            id: ArtifactAction.exportHandoff,
+            executionOwner: ActionExecutionOwner.host,
+          ),
+        ],
+      ),
       export: ResolutionExportStatus(
         supported: true,
         expiresAt: DateTime.utc(2026, 4, 10, 20, 17, 6),
@@ -338,5 +459,15 @@ class _FakeHostSupervisor implements HostSupervisor {
       message: 'Connected to local host 127.0.0.1:7777',
       info: _readyHostInfo,
     );
+  }
+}
+
+class _FakeDesktopBrowserLauncher implements BrowserLauncher {
+  final List<String> openedUrls = <String>[];
+
+  @override
+  Future<bool> open(String url) async {
+    openedUrls.add(url);
+    return true;
   }
 }

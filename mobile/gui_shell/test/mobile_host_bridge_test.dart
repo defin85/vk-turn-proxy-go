@@ -70,6 +70,10 @@ void main() {
       );
       expect(api.negotiateCalls, hasLength(1));
       expect(api.negotiateCalls.single, contains(Capability.platformTunnels));
+      expect(
+        api.negotiateCalls.single,
+        contains(Capability.providerRuntimeArtifacts),
+      );
     },
   );
 
@@ -199,6 +203,7 @@ void main() {
               'mobile_host_bridge',
               'platform_tunnels',
               'profiles',
+              'provider-runtime-artifacts',
               'sessions',
               'challenges',
               'diagnostics',
@@ -288,6 +293,7 @@ void main() {
               'mobile_host_bridge',
               'platform_tunnels',
               'profiles',
+              'provider-runtime-artifacts',
               'sessions',
               'challenges',
               'diagnostics',
@@ -356,6 +362,51 @@ void main() {
       );
     },
   );
+
+  test(
+    'mobile control plane client preserves typed resolution action failure details',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(server.close);
+
+      server.listen((HttpRequest request) async {
+        request.response.statusCode = HttpStatus.conflict;
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(
+          jsonEncode(<String, dynamic>{
+            'code': 'resolution_export_unavailable',
+            'message':
+                'resolution action "export_handoff" is unavailable: resolution export is not available',
+            'action': 'export_handoff',
+          }),
+        );
+        await request.response.close();
+      });
+
+      final realHttpOverrides = _RealHttpOverrides();
+      final client = ControlPlaneClient(
+        baseUri: Uri.parse('http://${server.address.address}:${server.port}'),
+        httpClientFactory: () => realHttpOverrides.createHttpClient(null),
+      );
+
+      await expectLater(
+        client.exportResolution('resolution-1'),
+        throwsA(
+          isA<ControlPlaneError>()
+              .having(
+                (ControlPlaneError error) => error.code,
+                'code',
+                'resolution_export_unavailable',
+              )
+              .having(
+                (ControlPlaneError error) => error.action,
+                'action',
+                'export_handoff',
+              ),
+        ),
+      );
+    },
+  );
 }
 
 class _RealHttpOverrides extends HttpOverrides {
@@ -379,6 +430,30 @@ class _FakeResolver implements MobileHostConfigResolver {
 class _ReadyControlPlaneApi implements ControlPlaneApi {
   _ReadyControlPlaneApi();
 
+  static const List<ProviderDescriptor> _providers = <ProviderDescriptor>[
+    ProviderDescriptor(
+      id: 'vk',
+      displayName: 'VK Calls',
+      description:
+          'Invite-first provider with browser-mediated continuation that resolves into transport-ready TURN credentials.',
+      inputKind: ProviderInputKind.link,
+      authPosture: ProviderAuthPosture.guestOrAccount,
+      browserPolicy: ProviderBrowserPolicy.externalRequired,
+      challengeModes: <ProviderChallengeMode>[ProviderChallengeMode.browser],
+      artifactFamilies: <ArtifactFamily>[ArtifactFamily.genericTurn],
+    ),
+    ProviderDescriptor(
+      id: 'generic-turn',
+      displayName: 'Generic TURN',
+      description:
+          'Static TURN handoff for deterministic transport testing and operator-driven runtime startup.',
+      inputKind: ProviderInputKind.link,
+      authPosture: ProviderAuthPosture.staticSecret,
+      browserPolicy: ProviderBrowserPolicy.notRequired,
+      artifactFamilies: <ArtifactFamily>[ArtifactFamily.genericTurn],
+    ),
+  ];
+
   static const HostInfo _hostInfo = HostInfo(
     contractVersion: '1',
     build: BuildIdentity(
@@ -393,7 +468,7 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
       Capability.mobileHostBridge,
       Capability.platformTunnels,
       Capability.profiles,
-      Capability.providerResolutionHandoff,
+      Capability.providerRuntimeArtifacts,
       Capability.sessions,
       Capability.challenges,
       Capability.diagnostics,
@@ -460,6 +535,9 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
   }
 
   @override
+  Future<List<ProviderDescriptor>> providers() async => _providers;
+
+  @override
   Future<PlatformTunnelStartResult> startPlatformTunnel({
     required PlatformTunnelMode mode,
   }) async {
@@ -482,8 +560,7 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
   @override
   Future<ResolutionRecord> startResolution({
     required String provider,
-    required String link,
-    required bool interactiveProvider,
+    required ProviderInputEnvelope input,
   }) {
     throw UnimplementedError();
   }

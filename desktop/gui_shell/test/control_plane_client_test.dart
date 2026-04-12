@@ -108,6 +108,49 @@ void main() {
           );
           await request.response.close();
           return;
+        case '/v1/resolutions':
+          request.response.headers.contentType = ContentType.json;
+          request.response.write(
+            jsonEncode(<Map<String, dynamic>>[
+              <String, dynamic>{
+                'id': 'resolution-room-1',
+                'provider': 'roomy',
+                'input': <String, dynamic>{
+                  'provider': 'roomy',
+                  'kind': 'link',
+                  'link_redacted':
+                      'https://room.example.test/join/<redacted:room-token>',
+                },
+                'state': 'resolved',
+                'artifact': <String, dynamic>{
+                  'family': 'conference_room',
+                  'actions': <Map<String, dynamic>>[
+                    <String, dynamic>{
+                      'id': 'open_room',
+                      'execution_owner': 'shell_external',
+                    },
+                  ],
+                  'summary': <String, dynamic>{
+                    'conference_room': <String, dynamic>{
+                      'room_url': 'https://room.example.test/rooms/team-sync',
+                    },
+                  },
+                },
+                'export': <String, dynamic>{'supported': false},
+                'started_at': DateTime.utc(2026, 4, 5, 14, 0).toIso8601String(),
+                'updated_at': DateTime.utc(2026, 4, 5, 14, 1).toIso8601String(),
+                'resolved_at': DateTime.utc(
+                  2026,
+                  4,
+                  5,
+                  14,
+                  1,
+                ).toIso8601String(),
+              },
+            ]),
+          );
+          await request.response.close();
+          return;
         default:
           request.response.statusCode = HttpStatus.notFound;
           request.response.headers.contentType = ContentType.json;
@@ -159,6 +202,14 @@ void main() {
     final challenge = await client.challenge('challenge-1');
     expect(challenge.id, 'challenge-1');
     expect(challenge.openUrl, 'https://vk.com/call/join/test');
+
+    final resolutions = await client.resolutions();
+    expect(resolutions, hasLength(1));
+    expect(resolutions.single.artifact?.family, ArtifactFamily.conferenceRoom);
+    expect(
+      resolutions.single.artifact?.summary.conferenceRoom?.roomUrl,
+      'https://room.example.test/rooms/team-sync',
+    );
   });
 
   test(
@@ -272,10 +323,7 @@ void main() {
               'event_stream',
             ],
             'platform_tunnels': <Map<String, dynamic>>[
-              <String, dynamic>{
-                'mode': 'windows_wintun',
-                'available': true,
-              },
+              <String, dynamic>{'mode': 'windows_wintun', 'available': true},
             ],
           }),
         );
@@ -325,6 +373,67 @@ void main() {
       await expectLater(
         client.startPlatformTunnel(mode: PlatformTunnelMode.windowsWintun),
         throwsA(isA<FormatException>()),
+      );
+    },
+  );
+
+  test(
+    'control plane client preserves typed resolution action failure details',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(server.close);
+
+      server.listen((HttpRequest request) async {
+        request.response.statusCode = HttpStatus.conflict;
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(
+          jsonEncode(<String, dynamic>{
+            'code': 'resolution_materialize_unavailable',
+            'message':
+                'resolution action "start_on_this_device" is unavailable: resolution is not transport-ready',
+            'action': 'start_on_this_device',
+            'stage': 'runtime_attach',
+            'not_implemented': true,
+          }),
+        );
+        await request.response.close();
+      });
+
+      final client = ControlPlaneClient(
+        baseUri: Uri.parse('http://${server.address.address}:${server.port}'),
+      );
+
+      await expectLater(
+        client.materializeResolution(
+          resolutionId: 'resolution-1',
+          runtimeDefaults: const RuntimeDefaults(
+            listenAddress: '127.0.0.1:9001',
+            peerAddress: '127.0.0.1:56000',
+          ),
+        ),
+        throwsA(
+          isA<ControlPlaneError>()
+              .having(
+                (ControlPlaneError error) => error.code,
+                'code',
+                'resolution_materialize_unavailable',
+              )
+              .having(
+                (ControlPlaneError error) => error.action,
+                'action',
+                'start_on_this_device',
+              )
+              .having(
+                (ControlPlaneError error) => error.stage,
+                'stage',
+                'runtime_attach',
+              )
+              .having(
+                (ControlPlaneError error) => error.notImplemented,
+                'notImplemented',
+                isTrue,
+              ),
+        ),
       );
     },
   );

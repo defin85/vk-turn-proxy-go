@@ -7,7 +7,7 @@ import 'package:mobile_gui_shell/src/control/profile_draft.dart';
 
 void main() {
   test(
-    'secure mobile state store keeps secrets out of shared preferences',
+    'mobile state store keeps provider links out of persisted preferences and secure storage',
     () async {
       final preferences = _MemoryBlobStore();
       final secrets = _MemoryBlobStore();
@@ -50,31 +50,22 @@ void main() {
       await store.save(state);
 
       final preferencesPayload = preferences.values.values.single;
-      final secretsPayload = secrets.values.values.single;
 
       expect(
         preferencesPayload,
         isNot(contains('https://vk.com/call/join/secret')),
       );
-      expect(preferencesPayload, isNot(contains('turn.example.test')));
+      expect(preferencesPayload, contains('turn.example.test'));
       expect(preferencesPayload, contains('176.109.104.105:38218'));
 
-      expect(secretsPayload, contains('https://vk.com/call/join/secret'));
-      expect(secretsPayload, contains('turn.example.test'));
-      expect(secretsPayload, isNot(contains('176.109.104.105:38218')));
+      expect(secrets.values, isEmpty);
 
       final restored = await store.load();
       expect(restored, isNotNull);
-      expect(
-        restored!.profiles.single.spec.link,
-        'https://vk.com/call/join/secret',
-      );
+      expect(restored!.profiles.single.spec.link, '');
       expect(restored.profiles.single.spec.turnServer, '155.212.199.161');
       expect(restored.profiles.single.spec.turnPort, '19302');
-      expect(
-        restored.draft.spec.link,
-        'generic-turn://user:pass@turn.example.test:3478',
-      );
+      expect(restored.draft.spec.link, '');
       expect(restored.draft.spec.turnServer, 'turn.example.test');
       expect(restored.draft.spec.turnPort, '3478');
 

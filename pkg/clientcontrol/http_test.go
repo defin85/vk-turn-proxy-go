@@ -62,14 +62,43 @@ func TestHandlerHostAndNegotiate(t *testing.T) {
 	}
 
 	body, _ := json.Marshal(NegotiateRequest{
-		SupportedVersions:    []string{ContractVersion},
-		RequiredCapabilities: []Capability{CapabilityMobileHostBridge, CapabilityPlatformTunnels, CapabilityProfiles, CapabilityProviderResolutionHandoff, CapabilitySessions, CapabilityChallenges, CapabilityDiagnostics, CapabilityEventStream},
+		SupportedVersions: []string{ContractVersion},
+		RequiredCapabilities: []Capability{
+			CapabilityMobileHostBridge,
+			CapabilityPlatformTunnels,
+			CapabilityProfiles,
+			CapabilityProviderRuntimeArtifacts,
+			CapabilitySessions,
+			CapabilityChallenges,
+			CapabilityDiagnostics,
+			CapabilityEventStream,
+		},
 	})
 	req = httptest.NewRequest(http.MethodPost, "/v1/negotiate", bytes.NewReader(body))
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("POST /v1/negotiate code = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/v1/providers", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /v1/providers code = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var providers []ProviderDescriptor
+	if err := json.Unmarshal(rec.Body.Bytes(), &providers); err != nil {
+		t.Fatalf("decode providers: %v", err)
+	}
+	if len(providers) != 2 {
+		t.Fatalf("providers len = %d, want 2", len(providers))
+	}
+	if providers[0].ID != "generic-turn" || providers[1].ID != "vk" {
+		t.Fatalf("providers order = %+v, want generic-turn,vk", providers)
+	}
+	if providers[1].BrowserPolicy != ProviderBrowserPolicyExternalRequired {
+		t.Fatalf("providers[1].browser_policy = %q, want %q", providers[1].BrowserPolicy, ProviderBrowserPolicyExternalRequired)
 	}
 
 	body, _ = json.Marshal(PlatformTunnelStartRequest{Mode: PlatformTunnelModeLinuxTun})
@@ -134,7 +163,10 @@ func TestHandlerResolutionLifecycle(t *testing.T) {
 
 	payload, _ := json.Marshal(StartResolutionRequest{
 		Provider: "vk",
-		Link:     "https://vk.com/call/join/test-token",
+		Input: &ProviderInputEnvelope{
+			Kind: ProviderInputKindLink,
+			Link: "https://vk.com/call/join/test-token",
+		},
 	})
 	req := httptest.NewRequest(http.MethodPost, "/v1/resolutions", bytes.NewReader(payload))
 	rec := httptest.NewRecorder()
@@ -148,6 +180,21 @@ func TestHandlerResolutionLifecycle(t *testing.T) {
 		t.Fatalf("decode resolution response: %v", err)
 	}
 	resolutionState = waitForResolutionState(t, host, resolutionState.ID, ResolutionStateResolved)
+	if resolutionState.Input.Kind != ProviderInputKindLink {
+		t.Fatalf("resolution input kind = %q, want %q", resolutionState.Input.Kind, ProviderInputKindLink)
+	}
+	if resolutionState.Artifact == nil {
+		t.Fatal("resolution artifact missing")
+	}
+	if resolutionState.Artifact.Family != ArtifactFamilyGenericTURN {
+		t.Fatalf("resolution artifact family = %q, want %q", resolutionState.Artifact.Family, ArtifactFamilyGenericTURN)
+	}
+	if len(resolutionState.Artifact.Actions) != 2 {
+		t.Fatalf("resolution artifact actions len = %d, want 2", len(resolutionState.Artifact.Actions))
+	}
+	if resolutionState.Artifact.Actions[0].ExecutionOwner != ActionExecutionOwnerHost {
+		t.Fatalf("resolution artifact action[0].execution_owner = %q, want %q", resolutionState.Artifact.Actions[0].ExecutionOwner, ActionExecutionOwnerHost)
+	}
 
 	req = httptest.NewRequest(http.MethodGet, "/v1/resolutions/"+resolutionState.ID, nil)
 	rec = httptest.NewRecorder()
@@ -157,6 +204,9 @@ func TestHandlerResolutionLifecycle(t *testing.T) {
 	}
 	if bytes.Contains(rec.Body.Bytes(), []byte("turn-user:turn-pass@")) {
 		t.Fatalf("GET /v1/resolutions/{id} leaked secret: %s", rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"family":"generic_turn"`)) {
+		t.Fatalf("GET /v1/resolutions/{id} missing generic_turn artifact: %s", rec.Body.String())
 	}
 
 	req = httptest.NewRequest(http.MethodPost, "/v1/resolutions/"+resolutionState.ID+"/export", nil)
@@ -530,5 +580,172 @@ func TestEventsStreamFlushesHeadersWithoutEvents(t *testing.T) {
 	}
 	if got := resp.Header.Get("Content-Type"); got != "application/x-ndjson" {
 		t.Fatalf("GET /v1/events content-type = %q, want %q", got, "application/x-ndjson")
+	}
+}
+
+func TestHandlerResolutionExportFailureIncludesTypedAction(t *testing.T) {
+	host := New(
+		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+		WithBuildIdentity(testBuildIdentity()),
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name: "roomy",
+			descriptor: provider.ProviderDescriptor{
+				ID:               "roomy",
+				DisplayName:      "Roomy",
+				InputKind:        provider.ProviderInputKindLink,
+				AuthPosture:      provider.ProviderAuthPostureNotApplicable,
+				BrowserPolicy:    provider.ProviderBrowserPolicyNotRequired,
+				ArtifactFamilies: []provider.ArtifactFamily{provider.ArtifactFamilyConferenceRoom},
+				CapabilityHints: provider.ProviderCapabilityHints{
+					PotentialActions: []provider.ArtifactAction{
+						provider.ArtifactActionOpenRoom,
+					},
+					RedactionPolicy: provider.SummaryOnlyArtifactRedactionPolicy(),
+				},
+			},
+			resolve: func(ctx context.Context, link string) (provider.Resolution, error) {
+				return provider.Resolution{
+					Artifact: &provider.ProbeArtifact{
+						Outcome: provider.ProbeArtifactOutcome{
+							ResultKind: "conference_room",
+							ConferenceRoom: &provider.ProbeArtifactConferenceRoom{
+								RoomURL: "https://room.example.test/rooms/team-sync",
+							},
+						},
+					},
+					Metadata: map[string]string{
+						"provider":          "roomy",
+						"resolution_method": "room",
+					},
+				}, nil
+			},
+		})),
+	)
+	handler := Handler(host)
+
+	payload, _ := json.Marshal(StartResolutionRequest{
+		Provider: "roomy",
+		Input: &ProviderInputEnvelope{
+			Kind: ProviderInputKindLink,
+			Link: "https://room.example.test/join/token",
+		},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/resolutions", bytes.NewReader(payload))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("POST /v1/resolutions code = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resolutionState Resolution
+	if err := json.Unmarshal(rec.Body.Bytes(), &resolutionState); err != nil {
+		t.Fatalf("decode resolution response: %v", err)
+	}
+	resolutionState = waitForResolutionState(t, host, resolutionState.ID, ResolutionStateResolved)
+
+	req = httptest.NewRequest(http.MethodPost, "/v1/resolutions/"+resolutionState.ID+"/export", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("POST /v1/resolutions/{id}/export code = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payloadBody map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payloadBody); err != nil {
+		t.Fatalf("decode export error response: %v", err)
+	}
+	if payloadBody["code"] != "resolution_export_unavailable" {
+		t.Fatalf("error code = %#v, want resolution_export_unavailable", payloadBody["code"])
+	}
+	if payloadBody["action"] != string(ArtifactActionExportHandoff) {
+		t.Fatalf("error action = %#v, want %q", payloadBody["action"], ArtifactActionExportHandoff)
+	}
+}
+
+func TestHandlerResolutionMaterializeFailureIncludesTypedAction(t *testing.T) {
+	host := New(
+		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+		WithBuildIdentity(testBuildIdentity()),
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name: "roomy",
+			descriptor: provider.ProviderDescriptor{
+				ID:               "roomy",
+				DisplayName:      "Roomy",
+				InputKind:        provider.ProviderInputKindLink,
+				AuthPosture:      provider.ProviderAuthPostureNotApplicable,
+				BrowserPolicy:    provider.ProviderBrowserPolicyNotRequired,
+				ArtifactFamilies: []provider.ArtifactFamily{provider.ArtifactFamilyConferenceRoom},
+				CapabilityHints: provider.ProviderCapabilityHints{
+					PotentialActions: []provider.ArtifactAction{
+						provider.ArtifactActionOpenRoom,
+					},
+					RedactionPolicy: provider.SummaryOnlyArtifactRedactionPolicy(),
+				},
+			},
+			resolve: func(ctx context.Context, link string) (provider.Resolution, error) {
+				return provider.Resolution{
+					Artifact: &provider.ProbeArtifact{
+						Outcome: provider.ProbeArtifactOutcome{
+							ResultKind: "conference_room",
+							ConferenceRoom: &provider.ProbeArtifactConferenceRoom{
+								RoomURL: "https://room.example.test/rooms/team-sync",
+							},
+						},
+					},
+					Metadata: map[string]string{
+						"provider":          "roomy",
+						"resolution_method": "room",
+					},
+				}, nil
+			},
+		})),
+	)
+	handler := Handler(host)
+
+	payload, _ := json.Marshal(StartResolutionRequest{
+		Provider: "roomy",
+		Input: &ProviderInputEnvelope{
+			Kind: ProviderInputKindLink,
+			Link: "https://room.example.test/join/token",
+		},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/resolutions", bytes.NewReader(payload))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("POST /v1/resolutions code = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resolutionState Resolution
+	if err := json.Unmarshal(rec.Body.Bytes(), &resolutionState); err != nil {
+		t.Fatalf("decode resolution response: %v", err)
+	}
+	resolutionState = waitForResolutionState(t, host, resolutionState.ID, ResolutionStateResolved)
+
+	payload, _ = json.Marshal(MaterializeResolutionRequest{
+		RuntimeDefaults: RuntimeDefaults{
+			ListenAddr:  reserveUDPAddr(t),
+			PeerAddr:    "127.0.0.1:56000",
+			Connections: 1,
+			Mode:        TransportModeAuto,
+			UseDTLS:     boolRef(true),
+		},
+	})
+	req = httptest.NewRequest(http.MethodPost, "/v1/resolutions/"+resolutionState.ID+"/materialize", bytes.NewReader(payload))
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("POST /v1/resolutions/{id}/materialize code = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payloadBody map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payloadBody); err != nil {
+		t.Fatalf("decode materialize error response: %v", err)
+	}
+	if payloadBody["code"] != "resolution_materialize_unavailable" {
+		t.Fatalf("error code = %#v, want resolution_materialize_unavailable", payloadBody["code"])
+	}
+	if payloadBody["action"] != string(ArtifactActionStartOnThisDevice) {
+		t.Fatalf("error action = %#v, want %q", payloadBody["action"], ArtifactActionStartOnThisDevice)
 	}
 }

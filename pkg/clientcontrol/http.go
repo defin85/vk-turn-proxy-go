@@ -40,6 +40,13 @@ func Handler(host *Host) http.Handler {
 		}
 		writeJSON(w, http.StatusOK, info)
 	})
+	mux.HandleFunc("/v1/providers", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeMethodNotAllowed(w, r.Method)
+			return
+		}
+		writeJSON(w, http.StatusOK, host.Providers())
+	})
 	mux.HandleFunc("/v1/profiles", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -362,8 +369,11 @@ func Handler(host *Host) http.Handler {
 }
 
 type errorResponse struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Code           string `json:"code"`
+	Message        string `json:"message"`
+	Action         string `json:"action,omitempty"`
+	Stage          string `json:"stage,omitempty"`
+	NotImplemented bool   `json:"not_implemented,omitempty"`
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {
@@ -377,7 +387,17 @@ func writeError(w http.ResponseWriter, status int, code string, err error) {
 	if err != nil {
 		message = err.Error()
 	}
-	writeJSON(w, status, errorResponse{Code: code, Message: message})
+	response := errorResponse{Code: code, Message: message}
+	var actionErr *ResolutionActionError
+	if errors.As(err, &actionErr) {
+		response.Action = string(actionErr.Action)
+	}
+	if err != nil {
+		info := failureInfoFromResolutionError(err)
+		response.Stage = info.Stage
+		response.NotImplemented = info.NotImplemented
+	}
+	writeJSON(w, status, response)
 }
 
 func writeMethodNotAllowed(w http.ResponseWriter, method string) {

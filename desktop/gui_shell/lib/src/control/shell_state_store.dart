@@ -30,7 +30,10 @@ class DesktopShellState {
         : ProfileDraft.defaults();
     return DesktopShellState(
       profiles: (json['profiles'] as List<dynamic>? ?? const <dynamic>[])
-          .map((dynamic raw) => ProfileRecord.fromJson(raw as Map<String, dynamic>))
+          .map(
+            (dynamic raw) =>
+                ProfileRecord.fromJson(raw as Map<String, dynamic>),
+          )
           .toList(growable: false),
       selectedProfileId: json['selected_profile_id'] as String?,
       draft: draft,
@@ -49,7 +52,9 @@ class DesktopShellState {
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
-      'profiles': profiles.map((ProfileRecord profile) => profile.toJson()).toList(growable: false),
+      'profiles': profiles
+          .map((ProfileRecord profile) => profile.toJson())
+          .toList(growable: false),
       'selected_profile_id': selectedProfileId,
       'draft': draft.toJson(),
       'runtime_defaults': runtimeDefaults.toJson(),
@@ -79,7 +84,7 @@ abstract class DesktopShellStateStore {
 
 class FileDesktopShellStateStore implements DesktopShellStateStore {
   FileDesktopShellStateStore({StateFileProvider? fileProvider})
-      : _fileProvider = fileProvider ?? defaultDesktopShellStateFile;
+    : _fileProvider = fileProvider ?? defaultDesktopShellStateFile;
 
   final StateFileProvider _fileProvider;
 
@@ -93,7 +98,9 @@ class FileDesktopShellStateStore implements DesktopShellStateStore {
     if (payload.trim().isEmpty) {
       return null;
     }
-    return DesktopShellState.fromJson(jsonDecode(payload) as Map<String, dynamic>);
+    return DesktopShellState.fromJson(
+      jsonDecode(payload) as Map<String, dynamic>,
+    );
   }
 
   @override
@@ -116,8 +123,7 @@ ProfileDraft _sanitizeDraft(ProfileDraft draft) {
 }
 
 ProfileSpec _sanitizeProfileSpec(ProfileSpec spec) {
-  final link = spec.link.trim();
-  if (!link.startsWith('generic-turn://')) {
+  if (spec.link.trim().isEmpty) {
     return spec;
   }
   return spec.copyWith(link: '');
@@ -128,19 +134,30 @@ Future<File> defaultDesktopShellStateFile() async {
   if (Platform.isWindows) {
     final appData = environment['APPDATA'] ?? environment['USERPROFILE'];
     if (appData != null && appData.isNotEmpty) {
-      return File(_join(<String>[appData, 'vk-turn-proxy-go', 'gui-shell-state.json']));
+      return File(
+        _join(<String>[appData, 'vk-turn-proxy-go', 'gui-shell-state.json']),
+      );
     }
   }
 
   final home = environment['HOME'];
   if (home != null && home.isNotEmpty) {
-    return File(_join(<String>[home, '.vk-turn-proxy-go', 'gui-shell-state.json']));
+    return File(
+      _join(<String>[home, '.vk-turn-proxy-go', 'gui-shell-state.json']),
+    );
   }
-  return File(_join(<String>[Directory.systemTemp.path, 'vk-turn-proxy-go-gui-shell-state.json']));
+  return File(
+    _join(<String>[
+      Directory.systemTemp.path,
+      'vk-turn-proxy-go-gui-shell-state.json',
+    ]),
+  );
 }
 
 String _join(List<String> parts) {
-  final filtered = parts.where((String part) => part.isNotEmpty).toList(growable: false);
+  final filtered = parts
+      .where((String part) => part.isNotEmpty)
+      .toList(growable: false);
   if (filtered.isEmpty) {
     return '';
   }
@@ -150,7 +167,8 @@ String _join(List<String> parts) {
       value = '$value${part.replaceFirst(RegExp(r'^[\\/]+'), '')}';
       continue;
     }
-    value = '$value${Platform.pathSeparator}${part.replaceFirst(RegExp(r'^[\\/]+'), '')}';
+    value =
+        '$value${Platform.pathSeparator}${part.replaceFirst(RegExp(r'^[\\/]+'), '')}';
   }
   return value;
 }

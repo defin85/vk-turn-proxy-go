@@ -29,6 +29,19 @@ type fakeAdapter struct {
 
 func (f *fakeAdapter) Name() string { return f.name }
 
+func (f *fakeAdapter) Descriptor() provider.ProviderDescriptor {
+	return provider.ProviderDescriptor{
+		ID:            f.name,
+		DisplayName:   f.name,
+		InputKind:     provider.ProviderInputKindLink,
+		AuthPosture:   provider.ProviderAuthPostureNotApplicable,
+		BrowserPolicy: provider.ProviderBrowserPolicyNotRequired,
+		CapabilityHints: provider.ProviderCapabilityHints{
+			RedactionPolicy: provider.SummaryOnlyArtifactRedactionPolicy(),
+		},
+	}
+}
+
 func (f *fakeAdapter) Resolve(ctx context.Context, link string) (provider.Resolution, error) {
 	f.calls++
 	if f.resolve != nil {

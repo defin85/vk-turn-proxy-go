@@ -28,9 +28,32 @@ var (
 	errInteractiveChallengeCanceled = errors.New("interactive provider challenge was cancelled")
 )
 
+type ResolutionActionError struct {
+	Action ArtifactAction
+	Err    error
+}
+
+func (e *ResolutionActionError) Error() string {
+	if e == nil {
+		return ""
+	}
+	if e.Err == nil {
+		return fmt.Sprintf("resolution action %q is unavailable", e.Action)
+	}
+	return fmt.Sprintf("resolution action %q is unavailable: %v", e.Action, e.Err)
+}
+
+func (e *ResolutionActionError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
+
 type managedResolution struct {
 	snapshot   Resolution
 	secret     provider.Resolution
+	descriptor ProviderDescriptor
 	cancel     context.CancelFunc
 	done       chan struct{}
 	input      StartResolutionRequest
@@ -39,11 +62,16 @@ type managedResolution struct {
 }
 
 func (h *Host) StartResolution(ctx context.Context, req StartResolutionRequest) (Resolution, error) {
-	normalized, err := normalizeStartResolutionRequest(req)
+	req.Provider = strings.TrimSpace(req.Provider)
+	if req.Provider == "" {
+		return Resolution{}, errors.New("provider is required")
+	}
+	descriptor, err := h.providerDescriptor(req.Provider)
 	if err != nil {
 		return Resolution{}, err
 	}
-	if _, err := h.registry.Get(normalized.Provider); err != nil {
+	normalized, err := normalizeStartResolutionRequest(req, descriptor)
+	if err != nil {
 		return Resolution{}, err
 	}
 
@@ -58,6 +86,7 @@ func (h *Host) StartResolution(ctx context.Context, req StartResolutionRequest) 
 		Provider: normalized.Provider,
 		Input: ResolutionInput{
 			Provider:            normalized.Provider,
+			Kind:                normalized.Input.Kind,
 			LinkRedacted:        redactResolutionInput(normalized.Provider, normalized.Link),
 			InteractiveProvider: normalized.InteractiveProvider,
 		},
@@ -67,10 +96,11 @@ func (h *Host) StartResolution(ctx context.Context, req StartResolutionRequest) 
 		UpdatedAt: startedAt,
 	}
 	managed := &managedResolution{
-		snapshot: snapshot,
-		cancel:   cancel,
-		done:     make(chan struct{}),
-		input:    normalized,
+		snapshot:   snapshot,
+		descriptor: descriptor,
+		cancel:     cancel,
+		done:       make(chan struct{}),
+		input:      normalized,
 	}
 
 	startEvent := resolutionSnapshotEvent(snapshot, EventResolutionStarting, "")
@@ -195,6 +225,12 @@ func (h *Host) ExportResolution(resolutionID string) (ResolutionExportResult, er
 	if snapshot.State != ResolutionStateResolved {
 		return ResolutionExportResult{}, errResolutionNotTransportReady
 	}
+	if !resolutionSupportsAction(snapshot, ArtifactActionExportHandoff) {
+		return ResolutionExportResult{}, &ResolutionActionError{
+			Action: ArtifactActionExportHandoff,
+			Err:    errResolutionExportUnavailable,
+		}
+	}
 	if !snapshot.Export.Supported || snapshot.Export.ExpiresAt == nil {
 		return ResolutionExportResult{}, errResolutionExportUnavailable
 	}
@@ -233,6 +269,12 @@ func (h *Host) MaterializeResolution(ctx context.Context, resolutionID string, d
 	}
 	if snapshot.State != ResolutionStateResolved {
 		return Session{}, errResolutionNotTransportReady
+	}
+	if !resolutionSupportsAction(snapshot, ArtifactActionStartOnThisDevice) {
+		return Session{}, &ResolutionActionError{
+			Action: ArtifactActionStartOnThisDevice,
+			Err:    errResolutionNotTransportReady,
+		}
 	}
 
 	spec, err := buildMaterializedProfileSpec(secret.Credentials, defaults)
@@ -281,13 +323,6 @@ func (h *Host) runResolution(ctx context.Context, resolutionID string) {
 }
 
 func (h *Host) finishResolutionSuccess(resolutionID string, resolved provider.Resolution) {
-	if strings.TrimSpace(resolved.Credentials.Username) == "" ||
-		strings.TrimSpace(resolved.Credentials.Password) == "" ||
-		strings.TrimSpace(resolved.Credentials.Address) == "" {
-		h.finishResolutionFailure(resolutionID, errors.New("provider resolution returned incomplete TURN credentials"))
-		return
-	}
-
 	now := h.now().UTC()
 	h.mu.Lock()
 	managed, ok := h.resolutions[resolutionID]
@@ -300,12 +335,19 @@ func (h *Host) finishResolutionSuccess(resolutionID string, resolved provider.Re
 		h.mu.Unlock()
 		return
 	}
+	credentials, export, artifact, err := resolvedSnapshotContract(managed.descriptor, resolved, now)
+	if err != nil {
+		h.mu.Unlock()
+		h.finishResolutionFailure(resolutionID, err)
+		return
+	}
 	managed.secret = resolved
 	managed.snapshot.Provider = firstNonEmpty(strings.TrimSpace(resolved.Metadata["provider"]), managed.snapshot.Provider)
 	managed.snapshot.ResolutionMethod = strings.TrimSpace(resolved.Metadata["resolution_method"])
 	managed.snapshot.Input.LinkRedacted = firstNonEmpty(redactedLinkFromArtifact(resolved.Artifact), managed.snapshot.Input.LinkRedacted)
-	managed.snapshot.Credentials = redactedResolutionCredentials(resolved)
-	managed.snapshot.Export = resolutionExportStatus(resolved, now)
+	managed.snapshot.Credentials = credentials
+	managed.snapshot.Export = export
+	managed.snapshot.Artifact = artifact
 	managed.snapshot.State = ResolutionStateResolved
 	managed.snapshot.ActiveChallengeID = ""
 	managed.snapshot.UpdatedAt = now
@@ -313,6 +355,9 @@ func (h *Host) finishResolutionSuccess(resolutionID string, resolved provider.Re
 	if managed.snapshot.Export.ExpiresAt != nil && !managed.snapshot.Export.ExpiresAt.After(now) {
 		managed.snapshot.State = ResolutionStateExpired
 		managed.snapshot.Export.Supported = false
+		if managed.snapshot.Artifact != nil {
+			managed.snapshot.Artifact.Actions = nil
+		}
 		managed.snapshot.ExpiredAt = &now
 		managed.secret = provider.Resolution{}
 	}
@@ -336,6 +381,40 @@ func (h *Host) finishResolutionSuccess(resolutionID string, resolved provider.Re
 	h.publishEvent(event)
 }
 
+func resolvedSnapshotContract(descriptor ProviderDescriptor, resolved provider.Resolution, now time.Time) (*ResolutionCredentials, ResolutionExportStatus, *ResolutionArtifact, error) {
+	family := resolutionArtifactFamily(descriptor, resolved)
+	if family == "" {
+		return nil, ResolutionExportStatus{}, nil, errors.New("provider resolution returned no supported runtime artifact")
+	}
+
+	switch family {
+	case ArtifactFamilyGenericTURN:
+		if !hasTransportReadyTURNCredentials(resolved) {
+			return nil, ResolutionExportStatus{}, nil, errors.New("provider resolution returned incomplete TURN credentials")
+		}
+		export := resolutionExportStatus(resolved, now)
+		artifact := resolutionArtifactFromResolution(descriptor, resolved, export)
+		if artifact == nil {
+			return nil, ResolutionExportStatus{}, nil, errors.New("provider resolution returned incomplete generic_turn runtime artifact")
+		}
+		return redactedResolutionCredentials(resolved), export, artifact, nil
+	case ArtifactFamilyConferenceRoom:
+		artifact := resolutionArtifactFromResolution(descriptor, resolved, ResolutionExportStatus{})
+		if artifact == nil {
+			return nil, ResolutionExportStatus{}, nil, errors.New("provider resolution returned incomplete conference_room runtime artifact")
+		}
+		return nil, ResolutionExportStatus{Supported: false}, artifact, nil
+	case ArtifactFamilyCameraStream:
+		artifact := resolutionArtifactFromResolution(descriptor, resolved, ResolutionExportStatus{})
+		if artifact == nil {
+			return nil, ResolutionExportStatus{}, nil, errors.New("provider resolution returned incomplete camera_stream runtime artifact")
+		}
+		return nil, ResolutionExportStatus{Supported: false}, artifact, nil
+	default:
+		return nil, ResolutionExportStatus{}, nil, fmt.Errorf("provider resolution returned unsupported artifact family %q", family)
+	}
+}
+
 func (h *Host) finishResolutionFailure(resolutionID string, err error) {
 	now := h.now().UTC()
 	h.mu.Lock()
@@ -345,7 +424,7 @@ func (h *Host) finishResolutionFailure(resolutionID string, err error) {
 		return
 	}
 	eventType := EventResolutionFailed
-	message := err.Error()
+	message := redactedResolutionErrorMessage(err)
 	if managed.snapshot.State != ResolutionStateCancelled {
 		switch {
 		case errors.Is(err, context.Canceled), errors.Is(err, errInteractiveChallengeCanceled):
@@ -408,6 +487,9 @@ func (h *Host) expireResolutionLocked(managed *managedResolution) *Event {
 	managed.snapshot.ActiveChallengeID = ""
 	managed.snapshot.UpdatedAt = now
 	managed.snapshot.ExpiredAt = &now
+	if managed.snapshot.Artifact != nil {
+		managed.snapshot.Artifact.Actions = nil
+	}
 	managed.secret = provider.Resolution{}
 	event := resolutionSnapshotEvent(managed.snapshot, EventResolutionExpired, "expired")
 	managed.events = appendWithLimit(managed.events, event, h.historyLimit)
@@ -528,16 +610,49 @@ func (h *Host) recordResolutionChallenge(resolutionID string, challenge Challeng
 	h.publishEvent(event)
 }
 
-func normalizeStartResolutionRequest(req StartResolutionRequest) (StartResolutionRequest, error) {
+func (h *Host) providerDescriptor(providerID string) (ProviderDescriptor, error) {
+	internalDescriptor, err := h.registry.Descriptor(providerID)
+	if err != nil {
+		return ProviderDescriptor{}, err
+	}
+	return providerDescriptorFromInternal(internalDescriptor), nil
+}
+
+func normalizeStartResolutionRequest(req StartResolutionRequest, descriptor ProviderDescriptor) (StartResolutionRequest, error) {
 	req.Provider = strings.TrimSpace(req.Provider)
-	req.Link = strings.TrimSpace(req.Link)
-	if req.Provider == "" {
-		return StartResolutionRequest{}, errors.New("provider is required")
+	req.InteractiveProvider = providerMayRequireInteractiveSupport(descriptor)
+
+	if req.Input == nil {
+		return StartResolutionRequest{}, errors.New("input is required")
 	}
-	if req.Link == "" {
-		return StartResolutionRequest{}, errors.New("link is required")
+
+	normalizedInput, err := normalizeProviderInputEnvelope(*req.Input)
+	if err != nil {
+		return StartResolutionRequest{}, err
 	}
-	return req, nil
+	if normalizedInput.Kind != descriptor.InputKind {
+		return StartResolutionRequest{}, fmt.Errorf("provider %q expects input kind %q, got %q", req.Provider, descriptor.InputKind, normalizedInput.Kind)
+	}
+	switch normalizedInput.Kind {
+	case ProviderInputKindLink:
+		if normalizedInput.Link == "" {
+			return StartResolutionRequest{}, errors.New("input.link is required")
+		}
+		req.Input = &normalizedInput
+		req.Link = normalizedInput.Link
+		return req, nil
+	default:
+		return StartResolutionRequest{}, fmt.Errorf("provider input kind %q is not supported by this host", normalizedInput.Kind)
+	}
+}
+
+func normalizeProviderInputEnvelope(input ProviderInputEnvelope) (ProviderInputEnvelope, error) {
+	input.Kind = ProviderInputKind(strings.TrimSpace(string(input.Kind)))
+	input.Link = strings.TrimSpace(input.Link)
+	if strings.TrimSpace(string(input.Kind)) == "" {
+		return ProviderInputEnvelope{}, errors.New("input.kind is required")
+	}
+	return input, nil
 }
 
 func buildMaterializedProfileSpec(credentials provider.Credentials, defaults RuntimeDefaults) (ProfileSpec, error) {
@@ -560,7 +675,7 @@ func buildMaterializedProfileSpec(credentials provider.Credentials, defaults Run
 
 func failureInfoFromResolutionError(err error) *FailureInfo {
 	info := &FailureInfo{
-		Message:        err.Error(),
+		Message:        redactedResolutionErrorMessage(err),
 		NotImplemented: errors.Is(err, provider.ErrNotImplemented),
 	}
 	var artifactErr *provider.ArtifactError
@@ -570,6 +685,31 @@ func failureInfoFromResolutionError(err error) *FailureInfo {
 	return info
 }
 
+func redactedResolutionErrorMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	var artifactErr *provider.ArtifactError
+	if errors.As(err, &artifactErr) && artifactErr.ProbeArtifact != nil {
+		if providerErr := artifactErr.ProbeArtifact.Outcome.ProviderError; providerErr != nil {
+			stage := strings.TrimSpace(providerErr.Stage)
+			code := strings.TrimSpace(providerErr.Code)
+			switch {
+			case stage != "" && code != "":
+				return fmt.Sprintf("provider resolution failed at %s [%s]", stage, code)
+			case stage != "":
+				return fmt.Sprintf("provider resolution failed at %s", stage)
+			case code != "":
+				return fmt.Sprintf("provider resolution failed [%s]", code)
+			}
+		}
+		return "provider resolution failed"
+	}
+
+	return err.Error()
+}
+
 func resolutionSnapshotEvent(snapshot Resolution, eventType EventType, message string) Event {
 	return Event{
 		Timestamp:       snapshot.UpdatedAt,
@@ -577,7 +717,163 @@ func resolutionSnapshotEvent(snapshot Resolution, eventType EventType, message s
 		Type:            eventType,
 		ResolutionState: snapshot.State,
 		Message:         message,
+		Artifact:        cloneResolutionArtifact(snapshot.Artifact),
 	}
+}
+
+func resolutionArtifactFromResolution(descriptor ProviderDescriptor, resolved provider.Resolution, export ResolutionExportStatus) *ResolutionArtifact {
+	family := resolutionArtifactFamily(descriptor, resolved)
+	if family == "" {
+		return nil
+	}
+	summary, ok := resolutionArtifactSummary(family, resolved)
+	if !ok {
+		return nil
+	}
+
+	artifact := &ResolutionArtifact{
+		Family:  family,
+		Actions: resolutionArtifactActions(descriptor, family, export, summary),
+		Summary: summary,
+	}
+	return artifact
+}
+
+func resolutionArtifactFamily(descriptor ProviderDescriptor, resolved provider.Resolution) ArtifactFamily {
+	if hasTransportReadyTURNCredentials(resolved) {
+		for _, family := range descriptor.ArtifactFamilies {
+			if family == ArtifactFamilyGenericTURN {
+				return ArtifactFamilyGenericTURN
+			}
+		}
+		return ArtifactFamilyGenericTURN
+	}
+	if artifact := resolved.Artifact; artifact != nil {
+		switch {
+		case artifact.Outcome.ConferenceRoom != nil || strings.TrimSpace(artifact.Outcome.ResultKind) == string(ArtifactFamilyConferenceRoom):
+			if providerDescriptorSupportsArtifactFamily(descriptor, ArtifactFamilyConferenceRoom) {
+				return ArtifactFamilyConferenceRoom
+			}
+		case artifact.Outcome.CameraStream != nil || strings.TrimSpace(artifact.Outcome.ResultKind) == string(ArtifactFamilyCameraStream):
+			if providerDescriptorSupportsArtifactFamily(descriptor, ArtifactFamilyCameraStream) {
+				return ArtifactFamilyCameraStream
+			}
+		}
+	}
+	if len(descriptor.ArtifactFamilies) == 1 {
+		return descriptor.ArtifactFamilies[0]
+	}
+	return ""
+}
+
+func resolutionArtifactSummary(family ArtifactFamily, resolved provider.Resolution) (ResolutionArtifactSummary, bool) {
+	summary := ResolutionArtifactSummary{}
+	switch family {
+	case ArtifactFamilyGenericTURN:
+		summary.GenericTURN = cloneResolutionCredentials(redactedResolutionCredentials(resolved))
+		return summary, summary.GenericTURN != nil
+	case ArtifactFamilyConferenceRoom:
+		if resolved.Artifact == nil || resolved.Artifact.Outcome.ConferenceRoom == nil {
+			return ResolutionArtifactSummary{}, false
+		}
+		roomURL := strings.TrimSpace(resolved.Artifact.Outcome.ConferenceRoom.RoomURL)
+		if roomURL == "" {
+			return ResolutionArtifactSummary{}, false
+		}
+		summary.ConferenceRoom = &ConferenceRoomArtifactSummary{RoomURL: roomURL}
+		return summary, true
+	case ArtifactFamilyCameraStream:
+		if resolved.Artifact == nil || resolved.Artifact.Outcome.CameraStream == nil {
+			return ResolutionArtifactSummary{}, false
+		}
+		cameraURL := strings.TrimSpace(resolved.Artifact.Outcome.CameraStream.CameraURL)
+		archiveURL := strings.TrimSpace(resolved.Artifact.Outcome.CameraStream.ArchiveURL)
+		if cameraURL == "" && archiveURL == "" {
+			return ResolutionArtifactSummary{}, false
+		}
+		summary.CameraStream = &CameraStreamArtifactSummary{
+			CameraURL:  cameraURL,
+			ArchiveURL: archiveURL,
+		}
+		return summary, true
+	default:
+		return ResolutionArtifactSummary{}, false
+	}
+}
+
+func resolutionArtifactActions(descriptor ProviderDescriptor, family ArtifactFamily, export ResolutionExportStatus, summary ResolutionArtifactSummary) []ResolutionAction {
+	actions := make([]ResolutionAction, 0, len(descriptor.CapabilityHints.PotentialActions))
+	for _, action := range descriptor.CapabilityHints.PotentialActions {
+		if !artifactActionSupported(action, family, export, summary) {
+			continue
+		}
+		actions = append(actions, ResolutionAction{
+			ID:             action,
+			ExecutionOwner: artifactActionExecutionOwner(action),
+		})
+	}
+	return actions
+}
+
+func artifactActionSupported(action ArtifactAction, family ArtifactFamily, export ResolutionExportStatus, summary ResolutionArtifactSummary) bool {
+	switch action {
+	case ArtifactActionStartOnThisDevice:
+		return family == ArtifactFamilyGenericTURN
+	case ArtifactActionExportHandoff:
+		return family == ArtifactFamilyGenericTURN && export.Supported
+	case ArtifactActionOpenRoom:
+		return family == ArtifactFamilyConferenceRoom &&
+			summary.ConferenceRoom != nil &&
+			strings.TrimSpace(summary.ConferenceRoom.RoomURL) != ""
+	case ArtifactActionOpenCamera:
+		return family == ArtifactFamilyCameraStream &&
+			summary.CameraStream != nil &&
+			strings.TrimSpace(summary.CameraStream.CameraURL) != ""
+	case ArtifactActionOpenArchive:
+		return family == ArtifactFamilyCameraStream &&
+			summary.CameraStream != nil &&
+			strings.TrimSpace(summary.CameraStream.ArchiveURL) != ""
+	default:
+		return false
+	}
+}
+
+func providerDescriptorSupportsArtifactFamily(descriptor ProviderDescriptor, family ArtifactFamily) bool {
+	for _, candidate := range descriptor.ArtifactFamilies {
+		if candidate == family {
+			return true
+		}
+	}
+	return false
+}
+
+func artifactActionExecutionOwner(action ArtifactAction) ActionExecutionOwner {
+	switch action {
+	case ArtifactActionStartOnThisDevice, ArtifactActionExportHandoff:
+		return ActionExecutionOwnerHost
+	case ArtifactActionOpenRoom, ArtifactActionOpenCamera, ArtifactActionOpenArchive:
+		return ActionExecutionOwnerShellExternal
+	default:
+		return ActionExecutionOwnerHost
+	}
+}
+
+func resolutionSupportsAction(snapshot Resolution, action ArtifactAction) bool {
+	if snapshot.Artifact == nil {
+		return false
+	}
+	for _, candidate := range snapshot.Artifact.Actions {
+		if candidate.ID == action {
+			return true
+		}
+	}
+	return false
+}
+
+func hasTransportReadyTURNCredentials(resolved provider.Resolution) bool {
+	return strings.TrimSpace(resolved.Credentials.Username) != "" &&
+		strings.TrimSpace(resolved.Credentials.Password) != "" &&
+		strings.TrimSpace(resolved.Credentials.Address) != ""
 }
 
 func redactedResolutionCredentials(resolved provider.Resolution) *ResolutionCredentials {
@@ -652,6 +948,10 @@ func redactResolutionInput(providerName string, raw string) string {
 	if err != nil {
 		return "<redacted:provider-link>"
 	}
+	if parsed.Scheme == "" || parsed.Host == "" {
+		return "<redacted:provider-link>"
+	}
+	parsed.User = nil
 	parsed.RawQuery = ""
 	parsed.Fragment = ""
 	if strings.Contains(parsed.Path, "/call/join/") {
@@ -659,6 +959,8 @@ func redactResolutionInput(providerName string, raw string) string {
 		if found {
 			parsed.Path = prefix + "/call/join/<redacted:invite-token>"
 		}
+	} else if path := strings.TrimSpace(parsed.Path); path != "" && path != "/" {
+		parsed.Path = "/<redacted:provider-link>"
 	}
 	if parsed.String() == "" {
 		return "<redacted:provider-link>"

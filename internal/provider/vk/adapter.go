@@ -31,6 +31,30 @@ func (a *Adapter) Name() string {
 	return "vk"
 }
 
+func (a *Adapter) Descriptor() provider.ProviderDescriptor {
+	return provider.ProviderDescriptor{
+		ID:            "vk",
+		DisplayName:   "VK Calls",
+		Description:   "Invite-first provider with browser-mediated continuation that resolves into transport-ready TURN credentials.",
+		InputKind:     provider.ProviderInputKindLink,
+		AuthPosture:   provider.ProviderAuthPostureGuestOrAccount,
+		BrowserPolicy: provider.ProviderBrowserPolicyExternalRequired,
+		ChallengeModes: []provider.ProviderChallengeMode{
+			provider.ProviderChallengeModeBrowser,
+		},
+		ArtifactFamilies: []provider.ArtifactFamily{
+			provider.ArtifactFamilyGenericTURN,
+		},
+		CapabilityHints: provider.ProviderCapabilityHints{
+			PotentialActions: []provider.ArtifactAction{
+				provider.ArtifactActionStartOnThisDevice,
+				provider.ArtifactActionExportHandoff,
+			},
+			RedactionPolicy: provider.SummaryOnlyArtifactRedactionPolicy(),
+		},
+	}
+}
+
 func (a *Adapter) Resolve(ctx context.Context, link string) (provider.Resolution, error) {
 	joinToken, err := normalizeJoinToken(link)
 	if err != nil {

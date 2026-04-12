@@ -15,6 +15,41 @@ import (
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
 )
 
+func TestDescriptorDescribesBrowserMediatedVKRuntime(t *testing.T) {
+	descriptor := New().Descriptor()
+
+	if descriptor.ID != "vk" {
+		t.Fatalf("descriptor.ID = %q, want vk", descriptor.ID)
+	}
+	if descriptor.InputKind != provider.ProviderInputKindLink {
+		t.Fatalf("descriptor.InputKind = %q, want %q", descriptor.InputKind, provider.ProviderInputKindLink)
+	}
+	if descriptor.AuthPosture != provider.ProviderAuthPostureGuestOrAccount {
+		t.Fatalf("descriptor.AuthPosture = %q, want %q", descriptor.AuthPosture, provider.ProviderAuthPostureGuestOrAccount)
+	}
+	if descriptor.BrowserPolicy != provider.ProviderBrowserPolicyExternalRequired {
+		t.Fatalf("descriptor.BrowserPolicy = %q, want %q", descriptor.BrowserPolicy, provider.ProviderBrowserPolicyExternalRequired)
+	}
+	if len(descriptor.ChallengeModes) != 1 || descriptor.ChallengeModes[0] != provider.ProviderChallengeModeBrowser {
+		t.Fatalf("descriptor.ChallengeModes = %#v, want [%q]", descriptor.ChallengeModes, provider.ProviderChallengeModeBrowser)
+	}
+	if len(descriptor.ArtifactFamilies) != 1 || descriptor.ArtifactFamilies[0] != provider.ArtifactFamilyGenericTURN {
+		t.Fatalf("descriptor.ArtifactFamilies = %#v, want [%q]", descriptor.ArtifactFamilies, provider.ArtifactFamilyGenericTURN)
+	}
+	if len(descriptor.CapabilityHints.PotentialActions) != 2 {
+		t.Fatalf("descriptor.CapabilityHints.PotentialActions len = %d, want 2", len(descriptor.CapabilityHints.PotentialActions))
+	}
+	if descriptor.CapabilityHints.PotentialActions[0] != provider.ArtifactActionStartOnThisDevice {
+		t.Fatalf("descriptor.CapabilityHints.PotentialActions[0] = %q, want %q", descriptor.CapabilityHints.PotentialActions[0], provider.ArtifactActionStartOnThisDevice)
+	}
+	if descriptor.CapabilityHints.PotentialActions[1] != provider.ArtifactActionExportHandoff {
+		t.Fatalf("descriptor.CapabilityHints.PotentialActions[1] = %q, want %q", descriptor.CapabilityHints.PotentialActions[1], provider.ArtifactActionExportHandoff)
+	}
+	if descriptor.CapabilityHints.RedactionPolicy != provider.SummaryOnlyArtifactRedactionPolicy() {
+		t.Fatalf("descriptor.CapabilityHints.RedactionPolicy = %#v, want summary-only policy", descriptor.CapabilityHints.RedactionPolicy)
+	}
+}
+
 type fixtureStage struct {
 	Name       string `json:"name"`
 	EndpointID string `json:"endpoint_id"`
