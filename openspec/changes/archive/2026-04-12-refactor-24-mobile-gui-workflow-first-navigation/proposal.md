@@ -13,9 +13,9 @@ can expose too many parallel actions for a phone-sized screen.
 - Order: `24`
 - Depends on: `add-03-mobile-gui-shell`,
   `add-21-provider-defined-entry-fields`,
-  `refactor-22-flutter-workspace-shell-core`
+  `refactor-12-flutter-workspace-shell-core`
 - Unblocks: later Android/iOS tunnel UX polish under
-  `add-16-android-vpn-service-ready-path`
+  `add-17-android-vpn-service-ready-path`
 
 ## What Changes
 - Replace the monolithic mobile dashboard with workflow-first navigation where

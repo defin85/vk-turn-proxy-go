@@ -97,4 +97,4 @@ They should add OS-specific host details, not reopen whether the desktop shell o
 - Fail-closed coverage for unsupported desktop targets, missing Windows driver or privilege, invalid route exclusion or DNS policy, and runtime-attach cleanup
 - At least one repo-owned packaged Windows smoke that proves `windows_wintun` can return `ready=true` on the documented supported target
 - Updated runtime and operator docs that describe the desktop umbrella explicitly, claim only the verified Windows desktop mode, and reserve Linux and Apple ready paths for later changes
-- `openspec validate add-19-desktop-platform-tunnel-ready-paths --strict --no-interactive`
+- `openspec validate add-18-desktop-platform-tunnel-ready-paths --strict --no-interactive`

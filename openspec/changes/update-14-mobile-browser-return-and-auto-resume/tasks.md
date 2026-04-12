@@ -9,4 +9,4 @@
 
 ## 3. Verification
 - [ ] 3.1 Add contract and shell coverage for app-return-compatible challenges and fallback manual confirmation
-- [ ] 3.2 Run `openspec validate update-12-mobile-browser-return-and-auto-resume --strict --no-interactive`
+- [ ] 3.2 Run `openspec validate update-14-mobile-browser-return-and-auto-resume --strict --no-interactive`

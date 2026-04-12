@@ -35,4 +35,4 @@
       `packages/flutter_shell_core`, `desktop/gui_shell`, and
       `mobile/gui_shell`.
 - [ ] 5.3 Run
-      `openspec validate add-25-provider-config-library-and-presets --strict --no-interactive`.
+      `openspec validate add-13-provider-config-library-and-presets --strict --no-interactive`.

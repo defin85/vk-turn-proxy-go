@@ -23,4 +23,4 @@
 - [x] 4.3 Run `cd packages/flutter_shell_core && flutter analyze && flutter test`
 - [x] 4.4 Run `cd desktop/gui_shell && flutter analyze && flutter test`
 - [x] 4.5 Run `cd mobile/gui_shell && flutter analyze && flutter test`
-- [x] 4.6 Run `openspec validate refactor-22-flutter-workspace-shell-core --strict --no-interactive`
+- [x] 4.6 Run `openspec validate refactor-12-flutter-workspace-shell-core --strict --no-interactive`

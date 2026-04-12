@@ -1,4 +1,4 @@
-# Change: [16] Add Android VPN service ready path
+# Change: [17] Add Android VPN service ready path
 
 ## Why
 `add-05-platform-tunnel-integrations` currently defines only a typed host contract and fail-closed defaults for platform tunnels.
@@ -8,7 +8,7 @@ The repository still lacks one concrete platform tunnel mode that can reach `rea
 Android is the smallest viable first target because the packaged mobile host, bridge, and release workflow already exist there.
 
 ## Sequence
-- Order: `16`
+- Order: `17`
 - Depends on: `add-05-platform-tunnel-integrations`, `add-14-android-embedded-mobile-host`
 - Unblocks: first concrete platform tunnel support claim, later iOS and desktop ready-path changes
 

@@ -1,4 +1,4 @@
-# Change: [19] Add desktop platform tunnel ready paths umbrella
+# Change: [18] Add desktop platform tunnel ready paths umbrella
 
 ## Why
 `add-05-platform-tunnel-integrations` defined the typed host contract for platform tunnels, but desktop support still exists only as OS-family responsibilities and fail-closed placeholders.
@@ -10,7 +10,7 @@ Today the validated Windows operator workflow still depends on an external `Wire
 Desktop needs one umbrella change so the first Windows delivery does not get mistaken for generic "desktop tunnel support", and later Linux or Apple desktop work can reuse the same host-owned contract instead of reopening the ownership boundary from scratch.
 
 ## Sequence
-- Order: `19`
+- Order: `18`
 - Depends on: `add-02-desktop-gui-shell`, `add-05-platform-tunnel-integrations`, `add-09-native-build-workflows`
 - Unblocks: first concrete desktop platform tunnel support claim on Windows, later Linux `linux_tun` and Apple desktop ready-path changes under the same desktop contract
 

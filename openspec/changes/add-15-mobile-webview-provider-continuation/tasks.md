@@ -9,4 +9,4 @@
 
 ## 3. Verification
 - [ ] 3.1 Add contract and integration coverage for owned-WebView challenge selection and failure handling
-- [ ] 3.2 Run `openspec validate add-13-mobile-webview-provider-continuation --strict --no-interactive`
+- [ ] 3.2 Run `openspec validate add-15-mobile-webview-provider-continuation --strict --no-interactive`

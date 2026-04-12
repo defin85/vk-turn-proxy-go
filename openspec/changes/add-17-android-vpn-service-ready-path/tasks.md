@@ -11,4 +11,4 @@
 - [ ] 3.1 Add a repo-owned packaged Android smoke that proves the documented `android_vpn_service` path can return `ready=true` on the supported target
 - [ ] 3.2 Add fail-closed coverage for denied VPN permission, invalid route exclusion or DNS bypass policy, and runtime-attach failure cleanup
 - [ ] 3.3 Update runtime and operator docs so they claim only the verified Android platform tunnel mode and list the required evidence for support
-- [ ] 3.4 Run `openspec validate add-16-android-vpn-service-ready-path --strict --no-interactive`
+- [ ] 3.4 Run `openspec validate add-17-android-vpn-service-ready-path --strict --no-interactive`

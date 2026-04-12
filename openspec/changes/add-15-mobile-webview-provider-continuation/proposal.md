@@ -1,4 +1,4 @@
-# Change: [13] Add optional mobile WebView provider continuation
+# Change: [15] Add optional mobile WebView provider continuation
 
 ## Why
 The recommended mobile path should stay platform-native browser handoff with safe auto-resume hints, but that path still leaves one structural limit:
@@ -8,7 +8,7 @@ For providers whose continuation state is tightly bound to a browser session, a 
 An optional owned WebView path is the most direct way to explore full in-app control on mobile without redefining the default browser-handoff contract for every provider.
 
 ## Sequence
-- Order: `13`
+- Order: `15`
 - Depends on: `add-03-mobile-gui-shell`
 - Unblocks: `add-05-platform-tunnel-integrations`
 

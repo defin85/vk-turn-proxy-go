@@ -1,4 +1,4 @@
-# Change: [12] Update mobile browser return and auto-resume
+# Change: [14] Update mobile browser return and auto-resume
 
 ## Why
 The current challenge model keeps browser continuation host-driven and explicit, but the live desktop UX already exposed a friction point: after the operator completes captcha or `Join` in the browser, the shell still needs a second explicit confirmation before the host continues.
@@ -12,7 +12,7 @@ The mobile contract needs one safe middle ground:
 - keep an explicit manual fallback when return is ambiguous or insufficient
 
 ## Sequence
-- Order: `12`
+- Order: `14`
 - Depends on: `add-03-mobile-gui-shell`
 - Unblocks: `add-05-platform-tunnel-integrations`
 

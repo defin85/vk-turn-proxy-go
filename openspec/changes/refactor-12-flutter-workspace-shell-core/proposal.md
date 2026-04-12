@@ -1,4 +1,4 @@
-# Change: [22] Introduce a repo-owned Flutter workspace with a shared shell core
+# Change: [12] Introduce a repo-owned Flutter workspace with a shared shell core
 
 ## Why
 `desktop/gui_shell` and `mobile/gui_shell` now share a meaningful amount of
@@ -16,7 +16,7 @@ shared shell core package, while keeping desktop and mobile as separate app
 packages.
 
 ## Sequence
-- Order: `22`
+- Order: `12`
 - Depends on: `add-02-desktop-gui-shell`, `add-03-mobile-gui-shell`,
   `add-11-build-version-surfacing`
 - Unblocks: future desktop/mobile shell work that should reuse one shared

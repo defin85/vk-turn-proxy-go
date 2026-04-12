@@ -12,4 +12,4 @@
 - [ ] 3.1 Add a repo-owned packaged Windows smoke that proves the documented `windows_wintun` path can return `ready=true` on the supported target
 - [ ] 3.2 Add fail-closed coverage for unsupported desktop targets, missing Windows driver or privilege, invalid route exclusion or DNS bypass policy, and runtime-attach failure cleanup
 - [ ] 3.3 Update runtime and operator docs so they describe the desktop umbrella explicitly, claim only the verified Windows desktop mode, and no longer rely on operator-managed external WireGuard or manual route commands for the repo-owned Windows ready path
-- [ ] 3.4 Run `openspec validate add-19-desktop-platform-tunnel-ready-paths --strict --no-interactive`
+- [ ] 3.4 Run `openspec validate add-18-desktop-platform-tunnel-ready-paths --strict --no-interactive`

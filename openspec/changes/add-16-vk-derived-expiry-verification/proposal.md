@@ -1,4 +1,4 @@
-# Change: [18] Add VK derived expiry verification
+# Change: [16] Add VK derived expiry verification
 
 ## Why
 The repository now derives VK TURN credential expiry from TURN REST style
@@ -10,7 +10,7 @@ post-expiry verification step so release decisions do not rely on pre-boundary
 evidence alone.
 
 ## Sequence
-- Order: `18`
+- Order: `16`
 - Depends on: `add-17-provider-resolution-handoff`
 - Unblocks: release confidence for VK export expiry gating
 

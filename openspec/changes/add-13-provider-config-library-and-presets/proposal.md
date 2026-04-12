@@ -1,4 +1,4 @@
-# Change: [25] Add provider config library and preset profile bootstrap
+# Change: [13] Add provider config library and preset profile bootstrap
 
 ## Why
 `add-21-provider-defined-entry-fields` made provider settings descriptor-driven,
@@ -17,6 +17,16 @@ That is no longer enough for the next shell UX slice:
 If the repository keeps provider settings trapped inside individual profiles,
 the shells will either duplicate the same fields across many profiles or start
 smuggling reusable provider meaning back into runtime defaults.
+
+## Sequence
+- Order: `13`
+- Depends on: `add-20-multi-provider-runtime-families`,
+  `add-21-provider-defined-entry-fields`,
+  `refactor-12-flutter-workspace-shell-core`,
+  `refactor-23-desktop-gui-workflow-first-layout`,
+  `refactor-24-mobile-gui-workflow-first-navigation`
+- Unblocks: future `wb-stream` and `smarthome` operator rollouts with reusable
+  provider-owned configuration instead of one-off shell drafts
 
 ## What Changes
 - Add a first-class provider-config library to the local control plane and both

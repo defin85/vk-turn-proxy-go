@@ -66,4 +66,4 @@ The first supported ready path is only complete when the Android host has finish
 - Android-specific fail-closed coverage for permission denial, invalid exclusion or DNS policy, and runtime-attach cleanup
 - At least one repo-owned packaged Android smoke that proves `android_vpn_service` can return `ready=true` on the documented supported target
 - Updated runtime and operator docs that describe only the verified Android mode and its evidence requirements
-- `openspec validate add-16-android-vpn-service-ready-path --strict --no-interactive`
+- `openspec validate add-17-android-vpn-service-ready-path --strict --no-interactive`

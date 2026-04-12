@@ -191,7 +191,7 @@ workspace topology.
 - `cd packages/flutter_shell_core && flutter analyze && flutter test`
 - `cd desktop/gui_shell && flutter analyze && flutter test`
 - `cd mobile/gui_shell && flutter analyze && flutter test`
-- `openspec validate refactor-22-flutter-workspace-shell-core --strict --no-interactive`
+- `openspec validate refactor-12-flutter-workspace-shell-core --strict --no-interactive`
 
 ## Archive Notes
 
