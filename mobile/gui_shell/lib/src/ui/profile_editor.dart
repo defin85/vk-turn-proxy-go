@@ -98,6 +98,13 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final descriptor = _selectedDescriptor();
+    final hasSavedProfile = widget.selectedProfileId != null;
+    final primaryLabel = hasSavedProfile
+        ? 'Start saved profile'
+        : 'Resolve invite';
+    final Future<void> Function() primaryAction = hasSavedProfile
+        ? widget.onStart
+        : widget.onResolve;
 
     return Card(
       child: Padding(
@@ -122,240 +129,85 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
               ],
             ),
             const SizedBox(height: 16),
-            Expanded(
-              child: ListView(
-                children: <Widget>[
-                  if (descriptor != null) ...<Widget>[
-                    _providerDescriptorCard(theme, descriptor),
-                    const SizedBox(height: 16),
-                  ],
-                  _field(
-                    controller: _nameController,
-                    label: 'Profile name',
-                    onChanged: (String value) => _pushDraft(name: value),
-                  ),
-                  _providerField(),
-                  _field(
-                    controller: _linkController,
-                    label: _providerLinkLabel(descriptor),
-                    maxLines: 3,
-                    onChanged: (String value) => _pushDraft(
-                      spec: widget.draft.spec.copyWith(link: value.trim()),
-                    ),
-                  ),
-                  _providerFlowCard(theme, descriptor),
-                  ..._providerSettingsSection(theme, descriptor),
-                  Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: _field(
-                          controller: _listenController,
-                          label: 'Local UDP listen',
-                          onChanged: (String value) => _pushDraft(
-                            spec: widget.draft.spec.copyWith(
-                              listenAddress: value.trim(),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _field(
-                          controller: _peerController,
-                          label: 'Peer address',
-                          onChanged: (String value) => _pushDraft(
-                            spec: widget.draft.spec.copyWith(
-                              peerAddress: value.trim(),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: _field(
-                          controller: _connectionsController,
-                          label: 'Connections',
-                          onChanged: (String value) => _pushDraft(
-                            spec: widget.draft.spec.copyWith(
-                              connections: int.tryParse(value.trim()) ?? 1,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: DropdownButtonFormField<TransportMode>(
-                          initialValue: widget.draft.spec.mode,
-                          decoration: const InputDecoration(
-                            labelText: 'TURN mode',
-                          ),
-                          items: TransportMode.values
-                              .map(
-                                (TransportMode mode) =>
-                                    DropdownMenuItem<TransportMode>(
-                                      value: mode,
-                                      child: Text(mode.value),
-                                    ),
-                              )
-                              .toList(growable: false),
-                          onChanged: widget.busy
-                              ? null
-                              : (TransportMode? mode) {
-                                  if (mode == null) {
-                                    return;
-                                  }
-                                  _pushDraft(
-                                    spec: widget.draft.spec.copyWith(
-                                      mode: mode,
-                                    ),
-                                  );
-                                },
-                        ),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: _field(
-                          controller: _turnServerController,
-                          label: 'TURN override',
-                          onChanged: (String value) => _pushDraft(
-                            spec: widget.draft.spec.copyWith(
-                              turnServer: value.trim(),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _field(
-                          controller: _turnPortController,
-                          label: 'TURN port',
-                          onChanged: (String value) => _pushDraft(
-                            spec: widget.draft.spec.copyWith(
-                              turnPort: value.trim(),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  _field(
-                    controller: _bindInterfaceController,
-                    label: 'Bind interface',
-                    onChanged: (String value) => _pushDraft(
-                      spec: widget.draft.spec.copyWith(
-                        bindInterface: value.trim(),
-                      ),
-                    ),
-                  ),
-                  _field(
-                    controller: _logLevelController,
-                    label: 'Log level',
-                    onChanged: (String value) => _pushDraft(
-                      spec: widget.draft.spec.copyWith(logLevel: value.trim()),
-                    ),
-                  ),
-                  SwitchListTile(
-                    value: widget.draft.spec.useDtls,
-                    onChanged: widget.busy
-                        ? null
-                        : (bool enabled) => _pushDraft(
-                            spec: widget.draft.spec.copyWith(useDtls: enabled),
-                          ),
-                    title: const Text('DTLS enabled'),
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: <Widget>[
-                      FilledButton(
-                        onPressed: widget.busy
-                            ? null
-                            : () => unawaited(widget.onSave()),
-                        child: const Text('Save profile'),
-                      ),
-                      FilledButton.tonal(
-                        onPressed: widget.busy
-                            ? null
-                            : () => unawaited(widget.onResolve()),
-                        child: const Text('Resolve invite'),
-                      ),
-                      FilledButton.tonal(
-                        onPressed:
-                            widget.busy || widget.selectedProfileId == null
-                            ? null
-                            : () => unawaited(widget.onStart()),
-                        child: const Text('Start saved profile'),
-                      ),
-                      OutlinedButton(
-                        onPressed:
-                            widget.busy || widget.selectedProfileId == null
-                            ? null
-                            : () => unawaited(widget.onDelete()),
-                        child: const Text('Delete'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    'Saved profiles',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  if (widget.profiles.isEmpty)
-                    Text(
-                      'No saved profiles yet.',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  for (final ProfileRecord profile
-                      in widget.profiles) ...<Widget>[
-                    const SizedBox(height: 8),
-                    Material(
-                      color: widget.selectedProfileId == profile.id
-                          ? theme.colorScheme.primary.withValues(alpha: 0.08)
-                          : theme.colorScheme.surfaceContainerHighest
-                                .withValues(alpha: 0.4),
-                      borderRadius: BorderRadius.circular(16),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(16),
-                        onTap: () => widget.onSelectProfile(profile.id),
-                        child: Padding(
-                          padding: const EdgeInsets.all(14),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              Text(
-                                profile.name.isEmpty
-                                    ? profile.id
-                                    : profile.name,
-                                style: theme.textTheme.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '${profile.spec.provider} -> ${profile.spec.peerAddress}',
-                                style: theme.textTheme.bodySmall,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
+            _savedProfilesSection(theme),
+            const SizedBox(height: 16),
+            _field(
+              controller: _nameController,
+              label: 'Profile name',
+              onChanged: (String value) => _pushDraft(name: value),
+            ),
+            _providerField(),
+            _field(
+              controller: _linkController,
+              label: _providerLinkLabel(descriptor),
+              maxLines: 3,
+              onChanged: (String value) => _pushDraft(
+                spec: widget.draft.spec.copyWith(link: value.trim()),
               ),
             ),
+            if (descriptor != null) ...<Widget>[
+              _disclosureSection(
+                title: 'Provider details',
+                subtitle:
+                    'Browser policy, artifact families, and challenge guidance',
+                initiallyExpanded: false,
+                children: <Widget>[
+                  _providerDescriptorCard(theme, descriptor),
+                  const SizedBox(height: 12),
+                  _providerFlowCard(theme, descriptor),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (descriptor?.settingsSchema != null) ...<Widget>[
+              _disclosureSection(
+                title: 'Provider settings',
+                subtitle: descriptor!.providerSettingsSupportError != null
+                    ? 'Unsupported schema subset blocks save and resolve'
+                    : 'Required and retained provider-specific values',
+                initiallyExpanded:
+                    descriptor.providerSettingsSupportError != null,
+                children: _providerSettingsSection(theme, descriptor),
+              ),
+              const SizedBox(height: 12),
+            ],
+            _disclosureSection(
+              title: 'Advanced runtime controls',
+              subtitle: 'Transport overrides, local bind, and logging',
+              initiallyExpanded: false,
+              children: _advancedRuntimeSection(),
+            ),
+            const SizedBox(height: 16),
+            _actionButton(
+              label: primaryLabel,
+              onPressed: widget.busy
+                  ? null
+                  : () => unawaited(primaryAction.call()),
+            ),
+            const SizedBox(height: 12),
+            _actionButton(
+              label: 'Save profile',
+              variant: _ProfileEditorActionVariant.secondary,
+              onPressed: widget.busy ? null : () => unawaited(widget.onSave()),
+            ),
+            if (hasSavedProfile) ...<Widget>[
+              const SizedBox(height: 12),
+              _actionButton(
+                label: 'Resolve invite',
+                variant: _ProfileEditorActionVariant.outlined,
+                onPressed: widget.busy
+                    ? null
+                    : () => unawaited(widget.onResolve()),
+              ),
+              const SizedBox(height: 12),
+              _actionButton(
+                label: 'Delete profile',
+                variant: _ProfileEditorActionVariant.text,
+                onPressed: widget.busy
+                    ? null
+                    : () => unawaited(widget.onDelete()),
+              ),
+            ],
           ],
         ),
       ),
@@ -393,16 +245,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
       return const <Widget>[];
     }
 
-    final section = <Widget>[
-      const SizedBox(height: 8),
-      Text(
-        'Provider settings',
-        style: theme.textTheme.titleMedium?.copyWith(
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-      const SizedBox(height: 6),
-    ];
+    final section = <Widget>[];
 
     final supportError = descriptor?.providerSettingsSupportError;
     if (supportError != null) {
@@ -438,6 +281,240 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
       ),
     );
     return section;
+  }
+
+  List<Widget> _advancedRuntimeSection() {
+    return <Widget>[
+      Row(
+        children: <Widget>[
+          Expanded(
+            child: _field(
+              controller: _listenController,
+              label: 'Local UDP listen',
+              onChanged: (String value) => _pushDraft(
+                spec: widget.draft.spec.copyWith(listenAddress: value.trim()),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _field(
+              controller: _peerController,
+              label: 'Peer address',
+              onChanged: (String value) => _pushDraft(
+                spec: widget.draft.spec.copyWith(peerAddress: value.trim()),
+              ),
+            ),
+          ),
+        ],
+      ),
+      Row(
+        children: <Widget>[
+          Expanded(
+            child: _field(
+              controller: _connectionsController,
+              label: 'Connections',
+              onChanged: (String value) => _pushDraft(
+                spec: widget.draft.spec.copyWith(
+                  connections: int.tryParse(value.trim()) ?? 1,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: DropdownButtonFormField<TransportMode>(
+                initialValue: widget.draft.spec.mode,
+                decoration: const InputDecoration(labelText: 'TURN mode'),
+                items: TransportMode.values
+                    .map(
+                      (TransportMode mode) => DropdownMenuItem<TransportMode>(
+                        value: mode,
+                        child: Text(mode.value),
+                      ),
+                    )
+                    .toList(growable: false),
+                onChanged: widget.busy
+                    ? null
+                    : (TransportMode? mode) {
+                        if (mode == null) {
+                          return;
+                        }
+                        _pushDraft(
+                          spec: widget.draft.spec.copyWith(mode: mode),
+                        );
+                      },
+              ),
+            ),
+          ),
+        ],
+      ),
+      Row(
+        children: <Widget>[
+          Expanded(
+            child: _field(
+              controller: _turnServerController,
+              label: 'TURN override',
+              onChanged: (String value) => _pushDraft(
+                spec: widget.draft.spec.copyWith(turnServer: value.trim()),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _field(
+              controller: _turnPortController,
+              label: 'TURN port',
+              onChanged: (String value) => _pushDraft(
+                spec: widget.draft.spec.copyWith(turnPort: value.trim()),
+              ),
+            ),
+          ),
+        ],
+      ),
+      _field(
+        controller: _bindInterfaceController,
+        label: 'Bind interface',
+        onChanged: (String value) => _pushDraft(
+          spec: widget.draft.spec.copyWith(bindInterface: value.trim()),
+        ),
+      ),
+      _field(
+        controller: _logLevelController,
+        label: 'Log level',
+        onChanged: (String value) => _pushDraft(
+          spec: widget.draft.spec.copyWith(logLevel: value.trim()),
+        ),
+      ),
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        value: widget.draft.spec.useDtls,
+        onChanged: widget.busy
+            ? null
+            : (bool enabled) => _pushDraft(
+                spec: widget.draft.spec.copyWith(useDtls: enabled),
+              ),
+        title: const Text('DTLS enabled'),
+      ),
+    ];
+  }
+
+  Widget _savedProfilesSection(ThemeData theme) {
+    if (widget.profiles.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest.withValues(
+            alpha: 0.4,
+          ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Text(
+          'No saved profiles yet. Build the draft below, then save it for repeat starts.',
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          'Saved profiles',
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: widget.profiles
+              .map((ProfileRecord profile) {
+                final label = profile.name.isEmpty ? profile.id : profile.name;
+                return ChoiceChip(
+                  selected: widget.selectedProfileId == profile.id,
+                  label: Text(label),
+                  onSelected: widget.busy
+                      ? null
+                      : (_) => widget.onSelectProfile(profile.id),
+                );
+              })
+              .toList(growable: false),
+        ),
+      ],
+    );
+  }
+
+  Widget _disclosureSection({
+    required String title,
+    required String subtitle,
+    required List<Widget> children,
+    bool initiallyExpanded = false,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(
+          context,
+        ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.22),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: initiallyExpanded,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          title: Text(
+            title,
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          subtitle: Text(
+            subtitle,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          children: children,
+        ),
+      ),
+    );
+  }
+
+  Widget _actionButton({
+    required String label,
+    required VoidCallback? onPressed,
+    _ProfileEditorActionVariant variant = _ProfileEditorActionVariant.primary,
+  }) {
+    final child = SizedBox(
+      width: double.infinity,
+      child: switch (variant) {
+        _ProfileEditorActionVariant.primary => FilledButton(
+          onPressed: onPressed,
+          child: Text(label),
+        ),
+        _ProfileEditorActionVariant.secondary => FilledButton.tonal(
+          onPressed: onPressed,
+          child: Text(label),
+        ),
+        _ProfileEditorActionVariant.outlined => OutlinedButton(
+          onPressed: onPressed,
+          child: Text(label),
+        ),
+        _ProfileEditorActionVariant.text => TextButton(
+          onPressed: onPressed,
+          child: Text(label),
+        ),
+      },
+    );
+    return child;
   }
 
   Widget _providerSettingsField(ProviderSettingsField field) {
@@ -760,3 +837,5 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     }
   }
 }
+
+enum _ProfileEditorActionVariant { primary, secondary, outlined, text }

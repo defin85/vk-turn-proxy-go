@@ -1,4 +1,6 @@
-import 'package:flutter/widgets.dart';
+import 'dart:async';
+
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_gui_shell/src/app.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_models.dart';
@@ -9,7 +11,7 @@ import 'package:mobile_gui_shell/src/control/mobile_shell_state_store.dart';
 import 'package:mobile_gui_shell/src/control/profile_draft.dart';
 
 void main() {
-  testWidgets('mobile shell renders challenge handoff and tunnel disclaimer', (
+  testWidgets('mobile shell uses workflow-first navigation', (
     WidgetTester tester,
   ) async {
     tester.view.physicalSize = const Size(1200, 1800);
@@ -69,13 +71,18 @@ void main() {
     await tester.pumpWidget(MobileShellApp(controller: controller));
     await tester.pumpAndSettle();
 
-    expect(find.text('Mobile host ready'), findsOneWidget);
+    expect(find.text('Workflow ready'), findsOneWidget);
+    expect(find.text('Open activity'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).first, 'vk mobile draft');
+    await tester.pump();
+
+    await tester.tap(find.text('Diagnostics'));
+    await tester.pumpAndSettle();
+
     expect(
-      find.textContaining('does not yet claim device-wide tunnel capture'),
+      find.text('Android VPN Service', skipOffstage: false),
       findsOneWidget,
     );
-    expect(find.text('Resolutions'), findsOneWidget);
-    expect(find.text('Android VPN Service'), findsOneWidget);
     final tunnelButton = find.text('Request startup', skipOffstage: false);
     expect(tunnelButton, findsOneWidget);
     await tester.tap(tunnelButton);
@@ -88,11 +95,19 @@ void main() {
       PlatformTunnelStartupStage.capabilityCheck,
     );
     expect(find.textContaining('Capability check'), findsWidgets);
-    await tester.drag(find.byType(Scrollable).first, const Offset(0, -1200));
+
+    await tester.tap(find.text('Activity'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Sessions (1)'));
+    await tester.pumpAndSettle();
+
     expect(find.text('Open browser', skipOffstage: false), findsOneWidget);
     expect(find.text("I've completed it", skipOffstage: false), findsOneWidget);
     expect(find.text('vk live'), findsWidgets);
+
+    await tester.tap(find.text('Workflow'));
+    await tester.pumpAndSettle();
+    expect(find.text('vk mobile draft'), findsOneWidget);
   });
 
   testWidgets('mobile shell exposes reset action for blocked local state', (
@@ -110,13 +125,84 @@ void main() {
     await tester.pumpWidget(MobileShellApp(controller: controller));
     await tester.pumpAndSettle();
 
-    expect(find.text('Mobile host blocked'), findsOneWidget);
+    expect(find.text('Workflow blocked by host state'), findsOneWidget);
     expect(find.text('Reset local state'), findsOneWidget);
     expect(
       find.textContaining('Secure profile secrets are unavailable'),
       findsWidgets,
     );
+
+    await tester.tap(find.text('Diagnostics'));
+    await tester.pumpAndSettle();
+    expect(find.text('Mobile host blocked'), findsOneWidget);
   });
+
+  testWidgets(
+    'mobile shell renders incompatible host state in workflow and diagnostics',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final profile = ProfileRecord(
+        id: 'profile-1',
+        name: 'vk live',
+        spec: _profileSpec(),
+      );
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(
+          readyResult: MobileHostConnectionResult(
+            state: MobileHostLifecycleState.incompatible,
+            message: 'contract mismatch',
+            info: const HostInfo(
+              contractVersion: '2',
+              build: BuildIdentity(
+                product: 'vk-turn-proxy-go',
+                version: '0.1.0',
+                buildNumber: '1',
+                revision: 'mobilehost9999',
+                role: 'mobile_host',
+                target: 'android/debug',
+              ),
+              capabilities: <Capability>[
+                Capability.mobileHostBridge,
+                Capability.platformTunnels,
+              ],
+              platformTunnels: <PlatformTunnelCapability>[
+                PlatformTunnelCapability(
+                  mode: PlatformTunnelMode.androidVpnService,
+                  available: false,
+                  missingPrerequisite:
+                      PlatformTunnelPrerequisite.hostImplementation,
+                ),
+              ],
+            ),
+            description: 'native bridge',
+          ),
+        ),
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[profile],
+            selectedProfileId: profile.id,
+            draft: ProfileDraft.fromProfile(profile),
+          ),
+        ),
+      );
+
+      await controller.initialize();
+      await tester.pumpWidget(MobileShellApp(controller: controller));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Workflow blocked by host mismatch'), findsOneWidget);
+      expect(find.textContaining('contract mismatch'), findsWidgets);
+
+      await tester.tap(find.text('Diagnostics'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Mobile host incompatible'), findsOneWidget);
+      expect(find.text('Contract 2'), findsOneWidget);
+    },
+  );
 
   testWidgets('mobile shell shows freshest sessions first with session metadata', (
     WidgetTester tester,
@@ -177,6 +263,11 @@ void main() {
     await controller.initialize();
     await tester.pumpWidget(MobileShellApp(controller: controller));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Activity'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sessions (2)'));
+    await tester.pumpAndSettle();
+
     final updatedAt = DateTime.utc(2026, 4, 7, 12, 3).toLocal();
     final updatedLabel =
         'Updated ${updatedAt.year}-${_twoDigits(updatedAt.month)}-${_twoDigits(updatedAt.day)} '
@@ -252,14 +343,19 @@ void main() {
     await controller.initialize();
     await tester.pumpWidget(MobileShellApp(controller: controller));
     await tester.pumpAndSettle();
-
-    await tester.drag(find.byType(Scrollable).first, const Offset(0, -900));
+    await tester.tap(find.text('Activity'));
     await tester.pumpAndSettle();
 
     expect(
       find.text('Start on this device', skipOffstage: false),
       findsOneWidget,
     );
+    expect(find.text('Copy handoff', skipOffstage: false), findsNothing);
+    expect(find.text('Share handoff', skipOffstage: false), findsNothing);
+
+    await tester.tap(find.byTooltip('More resolution actions'));
+    await tester.pumpAndSettle();
+
     expect(find.text('Copy handoff', skipOffstage: false), findsOneWidget);
     expect(find.text('Share handoff', skipOffstage: false), findsOneWidget);
   });
@@ -317,14 +413,10 @@ void main() {
     await controller.initialize();
     await tester.pumpWidget(MobileShellApp(controller: controller));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Activity'));
+    await tester.pumpAndSettle();
 
     final openRoomButton = find.text('Open room', skipOffstage: false);
-    await tester.scrollUntilVisible(
-      openRoomButton,
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pump();
     await tester.tap(openRoomButton);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
@@ -332,6 +424,64 @@ void main() {
     expect(browser.openedUrls, <String>[
       'https://room.example.test/rooms/team-sync',
     ]);
+  });
+
+  testWidgets('mobile shell renders event stream in diagnostics events', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 1800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final eventStream = StreamController<EventRecord>.broadcast();
+    final controller = MobileShellController(
+      bridge: _FakeMobileHostBridge(eventStream: eventStream.stream),
+      stateStore: _InMemoryStateStore(
+        MobileShellState(
+          profiles: const <ProfileRecord>[],
+          draft: ProfileDraft.defaults(),
+        ),
+      ),
+    );
+
+    await controller.initialize();
+    await tester.pumpWidget(MobileShellApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    eventStream.add(
+      EventRecord(
+        id: 'event-1',
+        timestamp: DateTime.utc(2026, 4, 12, 18, 31),
+        sessionId: 'session-1',
+        type: EventType.challengeUpdated,
+        stage: 'provider_resolve',
+        message: 'Browser handoff opened',
+        challenge: ChallengeRecord(
+          id: 'challenge-1',
+          sessionId: 'session-1',
+          provider: 'vk',
+          stage: 'provider_resolve',
+          kind: 'browser',
+          prompt: 'Return after the provider browser step.',
+          status: ChallengeStatus.pending,
+          createdAt: DateTime.utc(2026, 4, 12, 18, 30),
+          updatedAt: DateTime.utc(2026, 4, 12, 18, 31),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Diagnostics'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Events (1)'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Event stream', skipOffstage: false), findsOneWidget);
+    expect(
+      find.textContaining('challenge_updated', skipOffstage: false),
+      findsOneWidget,
+    );
+    expect(find.text('session-1', skipOffstage: false), findsOneWidget);
   });
 }
 
@@ -430,16 +580,32 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     List<ResolutionRecord>? resolutionsList,
     this.sessionsList = const <SessionRecord>[],
     this.challengeMap = const <String, ChallengeRecord>{},
+    MobileHostConnectionResult? readyResult,
+    Stream<EventRecord>? eventStream,
+    HostInfo? hostInfo,
   }) : _providers = List<ProviderDescriptor>.of(
          providersList ?? _providerDescriptors,
        ),
+       ensureReadyResult =
+           readyResult ??
+           const MobileHostConnectionResult(
+             state: MobileHostLifecycleState.ready,
+             message: 'Connected to embedded mobile host bridge',
+             info: _readyHostInfo,
+             description: 'fake-test-bridge',
+           ),
+       _eventStream = eventStream ?? const Stream<EventRecord>.empty(),
+       _hostInfo = hostInfo ?? readyResult?.info ?? _readyHostInfo,
        _resolutions = List<ResolutionRecord>.of(
          resolutionsList ?? const <ResolutionRecord>[],
        );
 
   final List<ProviderDescriptor> _providers;
+  final MobileHostConnectionResult ensureReadyResult;
   final List<SessionRecord> sessionsList;
   final Map<String, ChallengeRecord> challengeMap;
+  final Stream<EventRecord> _eventStream;
+  final HostInfo _hostInfo;
   final List<ResolutionRecord> _resolutions;
   final List<PlatformTunnelMode> startedPlatformTunnels =
       <PlatformTunnelMode>[];
@@ -474,8 +640,8 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       events: const <EventRecord>[],
       challenges: challengeMap.values.toList(growable: false),
       metrics: '',
-      hostBuild: _readyHostInfo.build,
-      contractVersion: _readyHostInfo.contractVersion,
+      hostBuild: _hostInfo.build,
+      contractVersion: _hostInfo.contractVersion,
     );
   }
 
@@ -483,28 +649,19 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   Future<void> dispose() async {}
 
   @override
-  Future<MobileHostConnectionResult> ensureReady() async {
-    return const MobileHostConnectionResult(
-      state: MobileHostLifecycleState.ready,
-      message: 'Connected to embedded mobile host bridge',
-      info: _readyHostInfo,
-      description: 'fake-test-bridge',
-    );
-  }
+  Future<MobileHostConnectionResult> ensureReady() async => ensureReadyResult;
 
   @override
-  Stream<EventRecord> events() => const Stream<EventRecord>.empty();
+  Stream<EventRecord> events() => _eventStream;
 
   @override
-  Future<HostInfo> hostInfo() async => _readyHostInfo;
+  Future<HostInfo> hostInfo() async => _hostInfo;
 
   @override
   Future<HostInfo> negotiate({
     required List<String> supportedVersions,
     required List<Capability> requiredCapabilities,
-  }) async {
-    return _readyHostInfo;
-  }
+  }) async => _hostInfo;
 
   @override
   Future<ResolutionExportResult> exportResolution(String resolutionId) async {

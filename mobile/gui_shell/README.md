@@ -115,6 +115,21 @@ The mobile store still keeps a fail-closed migration guard for older installs
 that referenced secure-only link state; if that legacy secure payload is
 missing, the operator must use `Reset local state` before reconnecting.
 
+## Workflow-first navigation
+
+The mobile shell no longer treats every surface as one long dashboard.
+The primary phone flow is now split into three destinations:
+
+- `Workflow`: compact host/tunnel summary plus profile selection, editing,
+  save, resolve, and start actions
+- `Activity`: mobile-sized resolutions and sessions surfaces
+- `Diagnostics`: detailed host state, platform-tunnel reporting, and event
+  stream
+
+Advanced runtime overrides, provider-specific settings, and secondary
+resolution/session actions stay reachable through explicit disclosure and
+overflow affordances instead of crowding the first mobile screen.
+
 ## Lifecycle and browser handoff
 
 The shell is app-owned and mobile-aware:

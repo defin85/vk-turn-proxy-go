@@ -46,7 +46,7 @@ const ProviderDescriptor _unsupportedProviderSettingsDescriptor =
       artifactFamilies: <ArtifactFamily>[ArtifactFamily.genericTurn],
       settingsSchema: ProviderSettingsSchema(
         type: 'object',
-        additionalProperties: false,
+        additionalProperties: true,
         properties: <String, ProviderSettingProperty>{
           'device_pin': ProviderSettingProperty(
             type: ProviderSettingType.string,
@@ -61,8 +61,12 @@ const ProviderDescriptor _unsupportedProviderSettingsDescriptor =
 
 void main() {
   testWidgets(
-    'mobile profile editor renders descriptor-driven provider settings',
+    'mobile profile editor progressively discloses provider and runtime sections',
     (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 2200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
       final baseDraft = ProfileDraft.defaults();
       final draft = baseDraft.copyWith(
         spec: baseDraft.spec.copyWith(
@@ -78,46 +82,59 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: SizedBox(
-              width: 900,
-              height: 1400,
-              child: ProfileEditorPanel(
-                profiles: const <ProfileRecord>[],
-                providerDescriptors: const <ProviderDescriptor>[
-                  _providerWithSettingsDescriptor,
-                ],
-                selectedProfileId: 'profile-1',
-                draft: draft,
-                busy: false,
-                onSelectProfile: (_) {},
-                onDraftChanged: (_) {},
-                onSave: () async {},
-                onDelete: () async {},
-                onReset: () {},
-                onResolve: () async {},
-                onStart: () async {},
+            body: SingleChildScrollView(
+              child: SizedBox(
+                width: 900,
+                child: ProfileEditorPanel(
+                  profiles: const <ProfileRecord>[],
+                  providerDescriptors: const <ProviderDescriptor>[
+                    _providerWithSettingsDescriptor,
+                  ],
+                  selectedProfileId: 'profile-1',
+                  draft: draft,
+                  busy: false,
+                  onSelectProfile: (_) {},
+                  onDraftChanged: (_) {},
+                  onSave: () async {},
+                  onDelete: () async {},
+                  onReset: () {},
+                  onResolve: () async {},
+                  onStart: () async {},
+                ),
               ),
             ),
           ),
         ),
       );
 
-      await tester.scrollUntilVisible(
-        find.text('Provider settings'),
-        300,
-        scrollable: find.byType(Scrollable).first,
-      );
+      expect(find.text('Provider settings'), findsOneWidget);
+      expect(find.text('Region'), findsNothing);
+      expect(find.text('Device PIN'), findsNothing);
+      expect(find.text('TURN override'), findsNothing);
+
+      await tester.tap(find.text('Provider settings'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Provider settings'), findsOneWidget);
       expect(find.text('Region'), findsOneWidget);
       expect(find.text('Device PIN'), findsOneWidget);
+
+      await tester.ensureVisible(find.text('Advanced runtime controls'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Advanced runtime controls'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('TURN override'), findsOneWidget);
+      expect(find.text('Bind interface'), findsOneWidget);
     },
   );
 
   testWidgets(
     'mobile profile editor shows fail-closed warning for unsupported schema',
     (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 2200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
       final baseDraft = ProfileDraft.defaults();
       final draft = baseDraft.copyWith(
         spec: baseDraft.spec.copyWith(
@@ -129,36 +146,30 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: SizedBox(
-              width: 900,
-              height: 1400,
-              child: ProfileEditorPanel(
-                profiles: const <ProfileRecord>[],
-                providerDescriptors: const <ProviderDescriptor>[
-                  _unsupportedProviderSettingsDescriptor,
-                ],
-                selectedProfileId: 'profile-1',
-                draft: draft,
-                busy: false,
-                onSelectProfile: (_) {},
-                onDraftChanged: (_) {},
-                onSave: () async {},
-                onDelete: () async {},
-                onReset: () {},
-                onResolve: () async {},
-                onStart: () async {},
+            body: SingleChildScrollView(
+              child: SizedBox(
+                width: 900,
+                child: ProfileEditorPanel(
+                  profiles: const <ProfileRecord>[],
+                  providerDescriptors: const <ProviderDescriptor>[
+                    _unsupportedProviderSettingsDescriptor,
+                  ],
+                  selectedProfileId: 'profile-1',
+                  draft: draft,
+                  busy: false,
+                  onSelectProfile: (_) {},
+                  onDraftChanged: (_) {},
+                  onSave: () async {},
+                  onDelete: () async {},
+                  onReset: () {},
+                  onResolve: () async {},
+                  onStart: () async {},
+                ),
               ),
             ),
           ),
         ),
       );
-
-      await tester.scrollUntilVisible(
-        find.textContaining('cannot render the provider settings schema'),
-        300,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.pumpAndSettle();
 
       expect(
         find.textContaining('cannot render the provider settings schema'),

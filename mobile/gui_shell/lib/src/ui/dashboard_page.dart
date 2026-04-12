@@ -6,82 +6,488 @@ import 'package:mobile_gui_shell/src/control/mobile_host_bridge.dart';
 import 'package:mobile_gui_shell/src/control/mobile_shell_controller.dart';
 import 'package:mobile_gui_shell/src/ui/profile_editor.dart';
 
-class DashboardPage extends StatelessWidget {
+enum _DashboardDestination { workflow, activity, diagnostics }
+
+enum _ActivitySurface { resolutions, sessions }
+
+enum _DiagnosticsSurface { overview, events }
+
+class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key, required this.controller});
 
   final MobileShellController controller;
 
   @override
+  State<DashboardPage> createState() => _DashboardPageState();
+}
+
+class _DashboardPageState extends State<DashboardPage> {
+  _DashboardDestination _destination = _DashboardDestination.workflow;
+  _ActivitySurface _activitySurface = _ActivitySurface.resolutions;
+  _DiagnosticsSurface _diagnosticsSurface = _DiagnosticsSurface.overview;
+
+  @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: controller,
+      animation: widget.controller,
       builder: (BuildContext context, Widget? child) {
-        final theme = Theme.of(context);
         return Scaffold(
           body: SafeArea(
-            child: ListView(
-              padding: const EdgeInsets.all(20),
+            child: IndexedStack(
+              index: _destination.index,
               children: <Widget>[
-                Text(
-                  'Mobile control shell',
-                  style: theme.textTheme.displaySmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: theme.colorScheme.primary,
-                  ),
+                _WorkflowPage(
+                  controller: widget.controller,
+                  onOpenActivity: () {
+                    setState(() {
+                      _destination = _DashboardDestination.activity;
+                    });
+                  },
+                  onOpenDiagnostics: () {
+                    setState(() {
+                      _destination = _DashboardDestination.diagnostics;
+                    });
+                  },
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'Embedded-host orchestration, secure local profiles, browser handoff, and typed runtime state for Android and iOS.',
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+                _ActivityPage(
+                  controller: widget.controller,
+                  surface: _activitySurface,
+                  onSurfaceChanged: (_ActivitySurface surface) {
+                    setState(() {
+                      _activitySurface = surface;
+                    });
+                  },
                 ),
-                const SizedBox(height: 16),
-                _HostBanner(controller: controller),
-                const SizedBox(height: 12),
-                _SystemTunnelBanner(controller: controller),
-                if (controller.notice != null) ...<Widget>[
-                  const SizedBox(height: 12),
-                  _NoticeBanner(message: controller.notice!),
-                ],
-                const SizedBox(height: 20),
-                SizedBox(
-                  height: 760,
-                  child: ProfileEditorPanel(
-                    profiles: controller.profiles,
-                    providerDescriptors: controller.providerDescriptors,
-                    selectedProfileId: controller.selectedProfileId,
-                    draft: controller.draft,
-                    busy: controller.busy,
-                    onSelectProfile: controller.selectProfile,
-                    onDraftChanged: controller.updateDraft,
-                    onSave: controller.saveDraft,
-                    onDelete: controller.deleteSelectedProfile,
-                    onReset: controller.resetDraft,
-                    onResolve: controller.startResolutionFromDraft,
-                    onStart: controller.startSelectedProfile,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  height: 420,
-                  child: _ResolutionsPanel(controller: controller),
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  height: 460,
-                  child: _SessionsPanel(controller: controller),
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  height: 320,
-                  child: _EventsPanel(controller: controller),
+                _DiagnosticsPage(
+                  controller: widget.controller,
+                  surface: _diagnosticsSurface,
+                  onSurfaceChanged: (_DiagnosticsSurface surface) {
+                    setState(() {
+                      _diagnosticsSurface = surface;
+                    });
+                  },
                 ),
               ],
             ),
           ),
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: _destination.index,
+            onDestinationSelected: (int index) {
+              setState(() {
+                _destination = _DashboardDestination.values[index];
+              });
+            },
+            destinations: const <NavigationDestination>[
+              NavigationDestination(
+                icon: Icon(Icons.home_outlined),
+                selectedIcon: Icon(Icons.home),
+                label: 'Workflow',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.bolt_outlined),
+                selectedIcon: Icon(Icons.bolt),
+                label: 'Activity',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.monitor_heart_outlined),
+                selectedIcon: Icon(Icons.monitor_heart),
+                label: 'Diagnostics',
+              ),
+            ],
+          ),
         );
       },
+    );
+  }
+}
+
+class _WorkflowPage extends StatelessWidget {
+  const _WorkflowPage({
+    required this.controller,
+    required this.onOpenActivity,
+    required this.onOpenDiagnostics,
+  });
+
+  final MobileShellController controller;
+  final VoidCallback onOpenActivity;
+  final VoidCallback onOpenDiagnostics;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: <Widget>[
+        _PageHeader(
+          title: 'Mobile control shell',
+          subtitle:
+              'Phone-first workflow for profile selection, resolve, start, and browser handoff.',
+        ),
+        const SizedBox(height: 16),
+        _WorkflowSummaryCard(
+          controller: controller,
+          onOpenDiagnostics: onOpenDiagnostics,
+        ),
+        if (controller.notice != null) ...<Widget>[
+          const SizedBox(height: 12),
+          _NoticeBanner(message: controller.notice!),
+        ],
+        const SizedBox(height: 12),
+        _ActivitySummaryCard(
+          resolutionsCount: controller.resolutions.length,
+          sessionsCount: controller.sessions.length,
+          onOpenActivity: onOpenActivity,
+        ),
+        const SizedBox(height: 20),
+        ProfileEditorPanel(
+          profiles: controller.profiles,
+          providerDescriptors: controller.providerDescriptors,
+          selectedProfileId: controller.selectedProfileId,
+          draft: controller.draft,
+          busy: controller.busy,
+          onSelectProfile: controller.selectProfile,
+          onDraftChanged: controller.updateDraft,
+          onSave: controller.saveDraft,
+          onDelete: controller.deleteSelectedProfile,
+          onReset: controller.resetDraft,
+          onResolve: controller.startResolutionFromDraft,
+          onStart: controller.startSelectedProfile,
+        ),
+      ],
+    );
+  }
+}
+
+class _ActivityPage extends StatelessWidget {
+  const _ActivityPage({
+    required this.controller,
+    required this.surface,
+    required this.onSurfaceChanged,
+  });
+
+  final MobileShellController controller;
+  final _ActivitySurface surface;
+  final ValueChanged<_ActivitySurface> onSurfaceChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const _PageHeader(
+            title: 'Activity',
+            subtitle:
+                'Inspect provider resolutions and session state without crowding the main workflow.',
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: <Widget>[
+              ChoiceChip(
+                selected: surface == _ActivitySurface.resolutions,
+                label: Text(
+                  'Resolutions (${controller.resolutions.length})',
+                  style: theme.textTheme.labelLarge,
+                ),
+                onSelected: (_) =>
+                    onSurfaceChanged(_ActivitySurface.resolutions),
+              ),
+              ChoiceChip(
+                selected: surface == _ActivitySurface.sessions,
+                label: Text(
+                  'Sessions (${controller.sessions.length})',
+                  style: theme.textTheme.labelLarge,
+                ),
+                onSelected: (_) => onSurfaceChanged(_ActivitySurface.sessions),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: switch (surface) {
+              _ActivitySurface.resolutions => _ResolutionsPanel(
+                controller: controller,
+              ),
+              _ActivitySurface.sessions => _SessionsPanel(
+                controller: controller,
+              ),
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DiagnosticsPage extends StatelessWidget {
+  const _DiagnosticsPage({
+    required this.controller,
+    required this.surface,
+    required this.onSurfaceChanged,
+  });
+
+  final MobileShellController controller;
+  final _DiagnosticsSurface surface;
+  final ValueChanged<_DiagnosticsSurface> onSurfaceChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const _PageHeader(
+            title: 'Diagnostics',
+            subtitle:
+                'Detailed host readiness, platform tunnel detail, and recent typed events.',
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: <Widget>[
+              ChoiceChip(
+                selected: surface == _DiagnosticsSurface.overview,
+                label: Text('Overview', style: theme.textTheme.labelLarge),
+                onSelected: (_) =>
+                    onSurfaceChanged(_DiagnosticsSurface.overview),
+              ),
+              ChoiceChip(
+                selected: surface == _DiagnosticsSurface.events,
+                label: Text(
+                  'Events (${controller.events.length})',
+                  style: theme.textTheme.labelLarge,
+                ),
+                onSelected: (_) => onSurfaceChanged(_DiagnosticsSurface.events),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: switch (surface) {
+              _DiagnosticsSurface.overview => ListView(
+                children: <Widget>[
+                  _HostBanner(controller: controller),
+                  const SizedBox(height: 12),
+                  _SystemTunnelBanner(controller: controller),
+                  if (controller.notice != null) ...<Widget>[
+                    const SizedBox(height: 12),
+                    _NoticeBanner(message: controller.notice!),
+                  ],
+                ],
+              ),
+              _DiagnosticsSurface.events => _EventsPanel(
+                controller: controller,
+              ),
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PageHeader extends StatelessWidget {
+  const _PageHeader({required this.title, required this.subtitle});
+
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          title,
+          style: theme.textTheme.headlineMedium?.copyWith(
+            fontWeight: FontWeight.w800,
+            color: theme.colorScheme.primary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          subtitle,
+          style: theme.textTheme.bodyLarge?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _WorkflowSummaryCard extends StatelessWidget {
+  const _WorkflowSummaryCard({
+    required this.controller,
+    required this.onOpenDiagnostics,
+  });
+
+  final MobileShellController controller;
+  final VoidCallback onOpenDiagnostics;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final connection = controller.hostConnection;
+    final hostInfo = connection?.info;
+    final statusColor = _hostStatusColor(connection);
+    final tunnelSummary = _homeTunnelSummary(controller);
+
+    return Card(
+      color: statusColor,
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              _homeWorkflowTitle(connection),
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              connection?.message ??
+                  'Waiting for mobile host bridge negotiation before workflow actions can continue.',
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: <Widget>[
+                _Tag(label: 'GUI ${controller.appBuild.shortLabel}'),
+                if (hostInfo != null)
+                  _Tag(label: 'Host ${hostInfo.build.shortLabel}'),
+                if (hostInfo != null)
+                  _Tag(label: 'Contract ${hostInfo.contractVersion}'),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.55),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    'Tunnel summary',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(tunnelSummary, style: theme.textTheme.bodyMedium),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: <Widget>[
+                FilledButton.tonal(
+                  onPressed: controller.busy
+                      ? null
+                      : controller.requiresLocalStateReset
+                      ? null
+                      : () => unawaited(controller.reconnect()),
+                  child: const Text('Reconnect'),
+                ),
+                FilledButton(
+                  onPressed:
+                      controller.busy ||
+                          controller.hostConnection?.isReady != true
+                      ? null
+                      : () => unawaited(controller.refresh()),
+                  child: const Text('Refresh'),
+                ),
+                OutlinedButton(
+                  onPressed: onOpenDiagnostics,
+                  child: const Text('Open diagnostics'),
+                ),
+                if (controller.requiresLocalStateReset)
+                  OutlinedButton(
+                    onPressed: controller.busy
+                        ? null
+                        : () => unawaited(controller.clearLocalState()),
+                    child: const Text('Reset local state'),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActivitySummaryCard extends StatelessWidget {
+  const _ActivitySummaryCard({
+    required this.resolutionsCount,
+    required this.sessionsCount,
+    required this.onOpenActivity,
+  });
+
+  final int resolutionsCount;
+  final int sessionsCount;
+  final VoidCallback onOpenActivity;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    'Live work',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Resolutions $resolutionsCount · Sessions $sessionsCount',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    resolutionsCount == 0 && sessionsCount == 0
+                        ? 'Nothing active yet. Resolve or start from the workflow screen.'
+                        : 'Move to Activity when you need current runtime state instead of draft editing.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            FilledButton.tonal(
+              onPressed: onOpenActivity,
+              child: const Text('Open activity'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -96,12 +502,7 @@ class _HostBanner extends StatelessWidget {
     final theme = Theme.of(context);
     final connection = controller.hostConnection;
     final hostInfo = connection?.info;
-    final color = switch (connection?.state) {
-      MobileHostLifecycleState.ready => const Color(0xFFDEF2E1),
-      MobileHostLifecycleState.incompatible => const Color(0xFFFFE5CC),
-      MobileHostLifecycleState.failed => const Color(0xFFFFE0DF),
-      _ => const Color(0xFFE5ECF6),
-    };
+    final color = _hostStatusColor(connection);
 
     return Card(
       color: color,
@@ -111,9 +512,7 @@ class _HostBanner extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              connection?.isReady == true
-                  ? 'Mobile host ready'
-                  : 'Mobile host blocked',
+              _diagnosticsHostTitle(connection),
               style: theme.textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w800,
               ),
@@ -604,24 +1003,33 @@ class _ResolutionCard extends StatelessWidget {
                         spacing: 10,
                         runSpacing: 10,
                         children: <Widget>[
-                          FilledButton.tonal(
-                            onPressed: busy || onOpenChallenge == null
-                                ? null
-                                : () => unawaited(onOpenChallenge!.call()),
-                            child: const Text('Open browser'),
-                          ),
-                          FilledButton(
-                            onPressed: busy || onContinueChallenge == null
-                                ? null
-                                : () => unawaited(onContinueChallenge!.call()),
-                            child: const Text("I've completed it"),
-                          ),
-                          OutlinedButton(
-                            onPressed: busy || onCancelChallenge == null
-                                ? null
-                                : () => unawaited(onCancelChallenge!.call()),
-                            child: const Text('Cancel'),
-                          ),
+                          if (onOpenChallenge != null)
+                            FilledButton.tonal(
+                              onPressed: busy
+                                  ? null
+                                  : () => unawaited(onOpenChallenge!.call()),
+                              child: const Text('Open browser'),
+                            ),
+                          if (onContinueChallenge != null)
+                            FilledButton(
+                              onPressed: busy
+                                  ? null
+                                  : () =>
+                                        unawaited(onContinueChallenge!.call()),
+                              child: const Text("I've completed it"),
+                            ),
+                          if (onCancelChallenge != null)
+                            _ActionOverflowButton(
+                              tooltip: 'More challenge actions',
+                              enabled: !busy,
+                              actions: <_CardActionEntry>[
+                                _CardActionEntry(
+                                  id: 'cancel-challenge',
+                                  label: 'Cancel challenge',
+                                  onSelected: onCancelChallenge!,
+                                ),
+                              ],
+                            ),
                         ],
                       ),
                     ],
@@ -629,64 +1037,107 @@ class _ResolutionCard extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 12),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: <Widget>[
-                  if (onMaterialize != null)
-                    FilledButton(
-                      onPressed: busy
-                          ? null
-                          : () => unawaited(onMaterialize!.call()),
-                      child: const Text('Start on this device'),
-                    ),
-                  OutlinedButton(
-                    onPressed: busy || onCopyExport == null
-                        ? null
-                        : () => unawaited(onCopyExport!.call()),
-                    child: const Text('Copy handoff'),
-                  ),
-                  OutlinedButton(
-                    onPressed: busy || onShareExport == null
-                        ? null
-                        : () => unawaited(onShareExport!.call()),
-                    child: const Text('Share handoff'),
-                  ),
-                  if (onOpenRoom != null)
-                    OutlinedButton(
-                      onPressed: busy
-                          ? null
-                          : () => unawaited(onOpenRoom!.call()),
-                      child: const Text('Open room'),
-                    ),
-                  if (onOpenCamera != null)
-                    OutlinedButton(
-                      onPressed: busy
-                          ? null
-                          : () => unawaited(onOpenCamera!.call()),
-                      child: const Text('Open camera'),
-                    ),
-                  if (onOpenArchive != null)
-                    OutlinedButton(
-                      onPressed: busy
-                          ? null
-                          : () => unawaited(onOpenArchive!.call()),
-                      child: const Text('Open archive'),
-                    ),
-                  if (onCancel != null)
-                    OutlinedButton(
-                      onPressed: busy
-                          ? null
-                          : () => unawaited(onCancel!.call()),
-                      child: const Text('Cancel resolution'),
-                    ),
-                ],
+              _ActionRow(
+                busy: busy,
+                primaryAction: _primaryAction(),
+                secondaryActions: _secondaryActions(),
+                overflowTooltip: 'More resolution actions',
               ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  _CardActionEntry? _primaryAction() {
+    final actions = <_CardActionEntry>[
+      if (onMaterialize != null)
+        _CardActionEntry(
+          id: 'materialize',
+          label: 'Start on this device',
+          onSelected: onMaterialize!,
+        ),
+      if (onShareExport != null)
+        _CardActionEntry(
+          id: 'share-export',
+          label: 'Share handoff',
+          onSelected: onShareExport!,
+        ),
+      if (onOpenRoom != null)
+        _CardActionEntry(
+          id: 'open-room',
+          label: 'Open room',
+          onSelected: onOpenRoom!,
+        ),
+      if (onOpenCamera != null)
+        _CardActionEntry(
+          id: 'open-camera',
+          label: 'Open camera',
+          onSelected: onOpenCamera!,
+        ),
+      if (onOpenArchive != null)
+        _CardActionEntry(
+          id: 'open-archive',
+          label: 'Open archive',
+          onSelected: onOpenArchive!,
+        ),
+      if (onCopyExport != null)
+        _CardActionEntry(
+          id: 'copy-export',
+          label: 'Copy handoff',
+          onSelected: onCopyExport!,
+        ),
+      if (onCancel != null)
+        _CardActionEntry(
+          id: 'cancel-resolution',
+          label: 'Cancel resolution',
+          onSelected: onCancel!,
+        ),
+    ];
+    return actions.isEmpty ? null : actions.first;
+  }
+
+  List<_CardActionEntry> _secondaryActions() {
+    final primaryId = _primaryAction()?.id;
+    return <_CardActionEntry>[
+      if (onCopyExport != null)
+        _CardActionEntry(
+          id: 'copy-export',
+          label: 'Copy handoff',
+          onSelected: onCopyExport!,
+        ),
+      if (onShareExport != null)
+        _CardActionEntry(
+          id: 'share-export',
+          label: 'Share handoff',
+          onSelected: onShareExport!,
+        ),
+      if (onOpenRoom != null)
+        _CardActionEntry(
+          id: 'open-room',
+          label: 'Open room',
+          onSelected: onOpenRoom!,
+        ),
+      if (onOpenCamera != null)
+        _CardActionEntry(
+          id: 'open-camera',
+          label: 'Open camera',
+          onSelected: onOpenCamera!,
+        ),
+      if (onOpenArchive != null)
+        _CardActionEntry(
+          id: 'open-archive',
+          label: 'Open archive',
+          onSelected: onOpenArchive!,
+        ),
+      if (onCancel != null)
+        _CardActionEntry(
+          id: 'cancel-resolution',
+          label: 'Cancel resolution',
+          onSelected: onCancel!,
+        ),
+    ].where((entry) => entry.id != primaryId).toList(growable: false);
   }
 }
 
@@ -870,24 +1321,33 @@ class _SessionCard extends StatelessWidget {
                         spacing: 10,
                         runSpacing: 10,
                         children: <Widget>[
-                          FilledButton.tonal(
-                            onPressed: busy || onOpenChallenge == null
-                                ? null
-                                : () => unawaited(onOpenChallenge!.call()),
-                            child: const Text('Open browser'),
-                          ),
-                          FilledButton(
-                            onPressed: busy || onContinueChallenge == null
-                                ? null
-                                : () => unawaited(onContinueChallenge!.call()),
-                            child: const Text("I've completed it"),
-                          ),
-                          OutlinedButton(
-                            onPressed: busy || onCancelChallenge == null
-                                ? null
-                                : () => unawaited(onCancelChallenge!.call()),
-                            child: const Text('Cancel'),
-                          ),
+                          if (onOpenChallenge != null)
+                            FilledButton.tonal(
+                              onPressed: busy
+                                  ? null
+                                  : () => unawaited(onOpenChallenge!.call()),
+                              child: const Text('Open browser'),
+                            ),
+                          if (onContinueChallenge != null)
+                            FilledButton(
+                              onPressed: busy
+                                  ? null
+                                  : () =>
+                                        unawaited(onContinueChallenge!.call()),
+                              child: const Text("I've completed it"),
+                            ),
+                          if (onCancelChallenge != null)
+                            _ActionOverflowButton(
+                              tooltip: 'More challenge actions',
+                              enabled: !busy,
+                              actions: <_CardActionEntry>[
+                                _CardActionEntry(
+                                  id: 'cancel-challenge',
+                                  label: 'Cancel challenge',
+                                  onSelected: onCancelChallenge!,
+                                ),
+                              ],
+                            ),
                         ],
                       ),
                     ],
@@ -895,27 +1355,51 @@ class _SessionCard extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 12),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: <Widget>[
-                  FilledButton.tonal(
-                    onPressed: busy ? null : () => unawaited(onExport()),
-                    child: const Text('Export diagnostics'),
-                  ),
-                  if (session.state != SessionState.stopped &&
-                      session.state != SessionState.failed)
-                    OutlinedButton(
-                      onPressed: busy ? null : () => unawaited(onStop()),
-                      child: const Text('Stop session'),
-                    ),
-                ],
+              _ActionRow(
+                busy: busy,
+                primaryAction: _primaryAction(),
+                secondaryActions: _secondaryActions(),
+                overflowTooltip: 'More session actions',
               ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  _CardActionEntry _primaryAction() {
+    if (session.state != SessionState.stopped &&
+        session.state != SessionState.failed) {
+      return _CardActionEntry(
+        id: 'stop-session',
+        label: 'Stop session',
+        onSelected: onStop,
+      );
+    }
+    return _CardActionEntry(
+      id: 'export-diagnostics',
+      label: 'Export diagnostics',
+      onSelected: onExport,
+    );
+  }
+
+  List<_CardActionEntry> _secondaryActions() {
+    final primaryId = _primaryAction().id;
+    return <_CardActionEntry>[
+      _CardActionEntry(
+        id: 'export-diagnostics',
+        label: 'Export diagnostics',
+        onSelected: onExport,
+      ),
+      if (session.state != SessionState.stopped &&
+          session.state != SessionState.failed)
+        _CardActionEntry(
+          id: 'stop-session',
+          label: 'Stop session',
+          onSelected: onStop,
+        ),
+    ].where((entry) => entry.id != primaryId).toList(growable: false);
   }
 }
 
@@ -1097,6 +1581,93 @@ class _Tag extends StatelessWidget {
   }
 }
 
+class _ActionRow extends StatelessWidget {
+  const _ActionRow({
+    required this.busy,
+    required this.primaryAction,
+    required this.secondaryActions,
+    required this.overflowTooltip,
+  });
+
+  final bool busy;
+  final _CardActionEntry? primaryAction;
+  final List<_CardActionEntry> secondaryActions;
+  final String overflowTooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    if (primaryAction == null && secondaryActions.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Row(
+      children: <Widget>[
+        if (primaryAction != null)
+          Expanded(
+            child: FilledButton(
+              onPressed: busy
+                  ? null
+                  : () => unawaited(primaryAction!.onSelected()),
+              child: Text(primaryAction!.label),
+            ),
+          ),
+        if (primaryAction != null && secondaryActions.isNotEmpty)
+          const SizedBox(width: 12),
+        if (secondaryActions.isNotEmpty)
+          _ActionOverflowButton(
+            tooltip: overflowTooltip,
+            enabled: !busy,
+            actions: secondaryActions,
+          ),
+      ],
+    );
+  }
+}
+
+class _ActionOverflowButton extends StatelessWidget {
+  const _ActionOverflowButton({
+    required this.tooltip,
+    required this.enabled,
+    required this.actions,
+  });
+
+  final String tooltip;
+  final bool enabled;
+  final List<_CardActionEntry> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<_CardActionEntry>(
+      enabled: enabled,
+      tooltip: tooltip,
+      icon: const Icon(Icons.more_horiz),
+      onSelected: (_CardActionEntry action) => unawaited(action.onSelected()),
+      itemBuilder: (BuildContext context) {
+        return actions
+            .map((entry) {
+              return PopupMenuItem<_CardActionEntry>(
+                value: entry,
+                child: Text(entry.label),
+              );
+            })
+            .toList(growable: false);
+      },
+    );
+  }
+}
+
+class _CardActionEntry {
+  const _CardActionEntry({
+    required this.id,
+    required this.label,
+    required this.onSelected,
+  });
+
+  final String id;
+  final String label;
+  final Future<void> Function() onSelected;
+}
+
 class _NoticeBanner extends StatelessWidget {
   const _NoticeBanner({required this.message});
 
@@ -1118,6 +1689,61 @@ class _NoticeBanner extends StatelessWidget {
       ),
     );
   }
+}
+
+Color _hostStatusColor(MobileHostConnectionResult? connection) {
+  return switch (connection?.state) {
+    MobileHostLifecycleState.ready => const Color(0xFFDEF2E1),
+    MobileHostLifecycleState.incompatible => const Color(0xFFFFE5CC),
+    MobileHostLifecycleState.failed => const Color(0xFFFFE0DF),
+    _ => const Color(0xFFE5ECF6),
+  };
+}
+
+String _diagnosticsHostTitle(MobileHostConnectionResult? connection) {
+  return switch (connection?.state) {
+    MobileHostLifecycleState.ready => 'Mobile host ready',
+    MobileHostLifecycleState.incompatible => 'Mobile host incompatible',
+    MobileHostLifecycleState.failed => 'Mobile host blocked',
+    _ => 'Connecting to mobile host',
+  };
+}
+
+String _homeWorkflowTitle(MobileHostConnectionResult? connection) {
+  return switch (connection?.state) {
+    MobileHostLifecycleState.ready => 'Workflow ready',
+    MobileHostLifecycleState.incompatible =>
+      'Workflow blocked by host mismatch',
+    MobileHostLifecycleState.failed => 'Workflow blocked by host state',
+    _ => 'Workflow is connecting to the mobile host',
+  };
+}
+
+String _homeTunnelSummary(MobileShellController controller) {
+  final capabilities = controller.platformTunnels;
+  if (capabilities.isEmpty) {
+    return 'No typed platform tunnel modes are reported yet. Device-wide capture still remains fail-closed on this slice.';
+  }
+
+  final available = capabilities.where((item) => item.available).length;
+  final unavailable = capabilities.length - available;
+  final lines = <String>[
+    '$available available · $unavailable unavailable mobile tunnel modes.',
+  ];
+  for (final capability in capabilities.take(2)) {
+    final result = controller.platformTunnelResultFor(capability.mode);
+    final capabilitySummary = capability.available
+        ? '${capability.mode.label}: available'
+        : '${capability.mode.label}: ${capability.missingPrerequisite?.label ?? 'unavailable'}';
+    lines.add(capabilitySummary);
+    if (result != null) {
+      lines.add(_platformTunnelResultSummary(result));
+    }
+  }
+  if (capabilities.length > 2) {
+    lines.add('Open diagnostics to inspect the rest of the reported modes.');
+  }
+  return lines.join(' ');
 }
 
 String _formatSessionTimestamp(DateTime value) {
