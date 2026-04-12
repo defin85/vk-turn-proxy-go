@@ -1,4 +1,4 @@
-import 'package:gui_shell/src/control/control_plane_models.dart';
+import 'package:flutter_shell_core/build_identity.dart';
 import 'package:gui_shell/src/build/version_defaults.g.dart';
 
 class AppBuildIdentity {
@@ -15,9 +15,9 @@ class AppBuildIdentity {
       'VKTP_BUILD_NUMBER',
       defaultValue: kVersionManifestBuildNumber,
     ),
-    revision: String.fromEnvironment('VKTP_REVISION', defaultValue: 'dev'),
-    dirty: bool.fromEnvironment('VKTP_DIRTY', defaultValue: true),
-    builtAt: String.fromEnvironment('VKTP_BUILT_AT'),
+    revision: BuildIdentityEnvironment.revision,
+    dirty: BuildIdentityEnvironment.dirty,
+    builtAt: BuildIdentityEnvironment.builtAt,
     role: String.fromEnvironment(
       'VKTP_ARTIFACT_ROLE',
       defaultValue: 'gui_shell',

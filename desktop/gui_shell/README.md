@@ -19,6 +19,7 @@ It is a GUI over the local client control plane, not a second runtime implementa
 From the repository root:
 
 ```bash
+dart pub get
 cd desktop/gui_shell
 flutter analyze
 flutter test
@@ -28,6 +29,7 @@ flutter build linux
 
 The current shell is verified on Linux.
 The project also includes generated `macos/` and `windows/` runners so packaging and sidecar placement can follow the same control-plane contract there.
+The repository-root Dart workspace owns dependency resolution for this shell: keep using the root `pubspec.lock`, and rerun `dart pub get` from the repo root after dependency changes or a fresh checkout.
 
 The pinned Flutter SDK version for this project is stored in `desktop/gui_shell/.flutter-version`.
 The canonical product version source for supported builds is `version.json` at the repository root.

@@ -102,6 +102,8 @@ make build-gui-windows
 The full build workflow contract lives in `docs/build-workflows.md`.
 Supported artifact builds derive their human-facing product version from the repo root `version.json`.
 Use `./scripts/sync-version-assets.py` when that manifest changes so Flutter dev/runtime defaults stay in sync across desktop and mobile Flutter workspaces.
+Flutter shell dependency resolution now runs through the repository-root Dart workspace: run `dart pub get` from the repo root before shell-local `flutter analyze`, `flutter test`, `flutter run`, or `flutter build` commands.
+The authoritative resolution artifacts are the root `pubspec.lock` and root `.dart_tool/package_config.json`; per-app lockfiles are no longer part of the workflow.
 
 Run the server baseline:
 
@@ -182,6 +184,7 @@ invite and continues through browser `Join` before the runtime may report
 Run the shell locally on Linux with:
 
 ```bash
+dart pub get
 cd desktop/gui_shell
 flutter run -d linux
 ```
@@ -221,6 +224,7 @@ It keeps the same profile, session, challenge, and diagnostics semantics as `pkg
 Run the mobile shell checks with:
 
 ```bash
+dart pub get
 cd mobile/gui_shell
 flutter analyze
 flutter test

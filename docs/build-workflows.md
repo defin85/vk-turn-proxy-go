@@ -4,6 +4,28 @@ Use repo-owned scripts for reproducible local and CI builds instead of ad-hoc co
 The canonical human-facing product version source for supported artifacts is `version.json` at the repository root.
 Run `./scripts/sync-version-assets.py` when `version.json` changes so Flutter-facing defaults stay aligned during local development across desktop and mobile Flutter workspaces.
 
+## Flutter workspace resolution
+
+Flutter shell development now uses an explicit repository-root Dart workspace with these members:
+- `desktop/gui_shell`
+- `mobile/gui_shell`
+- `packages/flutter_shell_core`
+
+Run the public resolution step from the repository root before shell-local `flutter analyze`, `flutter test`, `flutter run`, or `flutter build` commands:
+
+```bash
+dart pub get
+```
+
+Use this follow-up command when you need to inspect the active workspace membership:
+
+```bash
+dart pub workspace list
+```
+
+The authoritative resolution artifacts are the root `pubspec.lock` and root `.dart_tool/package_config.json`.
+Do not rely on `flutter pub get` inside individual shell app directories as the primary workflow.
+
 ## Go artifacts from WSL
 
 Build the default Go matrix from the canonical WSL checkout:
@@ -91,6 +113,7 @@ Prerequisites:
 Use the local verification path from the mobile workspace:
 
 ```bash
+dart pub get
 cd mobile/gui_shell
 flutter analyze
 flutter test
@@ -165,8 +188,9 @@ The native script fails closed if:
 For ad-hoc native Android packaging smoke on Windows when the mirror exists at `E:\Projects\vk-turn-proxy-go`:
 
 ```powershell
-cd E:\Projects\vk-turn-proxy-go\mobile\gui_shell
-flutter pub get
+cd E:\Projects\vk-turn-proxy-go
+dart pub get
+cd .\mobile\gui_shell
 flutter build apk --debug
 ```
 

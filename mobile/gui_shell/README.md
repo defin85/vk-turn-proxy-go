@@ -30,6 +30,7 @@ From the repository root:
 
 ```bash
 ./scripts/sync-version-assets.py
+dart pub get
 cd mobile/gui_shell
 flutter analyze
 flutter test
@@ -38,6 +39,7 @@ flutter run -d android
 
 The pinned Flutter SDK version for this project is stored in `mobile/gui_shell/.flutter-version`.
 The canonical product version source remains `version.json` at the repository root.
+The repository-root Dart workspace owns dependency resolution for this shell: keep using the root `pubspec.lock`, and rerun `dart pub get` from the repo root after dependency changes or a fresh checkout.
 
 ## Host bridge contract
 

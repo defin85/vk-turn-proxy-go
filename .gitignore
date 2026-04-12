@@ -21,6 +21,7 @@ coverage.out
 **/ios/Runner/GeneratedPluginRegistrant.m
 /desktop/gui_shell/build/
 /mobile/gui_shell/build/
+/packages/flutter_shell_core/build/
 
 # Local operator/runtime artifacts and captures.
 /artifacts/device/

@@ -6,9 +6,12 @@ version: 0.1.0+1
 environment:
   sdk: ^3.11.4
 
+resolution: workspace
+
 dependencies:
   flutter:
     sdk: flutter
+  flutter_shell_core: ^0.1.0
   cupertino_icons: ^1.0.8
   flutter_secure_storage: ^9.2.4
   path_provider: ^2.1.5

@@ -196,6 +196,17 @@ function Invoke-FlutterChecked {
     }
 }
 
+function Invoke-DartChecked {
+    param(
+        [string[]]$Arguments
+    )
+
+    & dart @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "dart $($Arguments -join ' ') failed with exit code $LASTEXITCODE"
+    }
+}
+
 function Normalize-ConsoleText {
     param(
         [AllowNull()]
@@ -314,9 +325,11 @@ try {
         throw "flutter doctor -v did not confirm the required Visual Studio Windows desktop toolchain."
     }
 
+    Invoke-DartChecked -Arguments @("pub", "get")
+    Invoke-DartChecked -Arguments @("pub", "workspace", "list")
+
     Push-Location $guiRoot
     try {
-        Invoke-FlutterChecked -Arguments @("pub", "get")
         Invoke-FlutterChecked -Arguments @(
             "build",
             "windows",

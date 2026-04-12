@@ -1,0 +1,10 @@
+name: vk_turn_proxy_go_workspace
+publish_to: 'none'
+
+environment:
+  sdk: ^3.11.4
+
+workspace:
+  - desktop/gui_shell
+  - mobile/gui_shell
+  - packages/flutter_shell_core

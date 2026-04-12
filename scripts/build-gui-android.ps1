@@ -180,6 +180,17 @@ function Invoke-FlutterChecked {
     }
 }
 
+function Invoke-DartChecked {
+    param(
+        [string[]]$Arguments
+    )
+
+    & dart @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "dart $($Arguments -join ' ') failed with exit code $LASTEXITCODE"
+    }
+}
+
 function Write-AndroidLocalProperties {
     param(
         [string]$AndroidRoot,
@@ -309,6 +320,9 @@ try {
         throw "flutter doctor -v did not confirm the required Android toolchain."
     }
 
+    Invoke-DartChecked -Arguments @("pub", "get")
+    Invoke-DartChecked -Arguments @("pub", "workspace", "list")
+
     $flutterSdkRoot = Get-FlutterSdkRoot
     Write-AndroidLocalProperties -AndroidRoot $androidRoot -AndroidSdkRoot $androidSdkRoot -FlutterSdkRoot $flutterSdkRoot
 
@@ -327,7 +341,6 @@ try {
 
     Push-Location $guiRoot
     try {
-        Invoke-FlutterChecked -Arguments @("pub", "get")
         Invoke-FlutterChecked -Arguments @(
             "build",
             "apk",

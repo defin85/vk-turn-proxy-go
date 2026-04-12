@@ -1,7 +1,8 @@
-name: gui_shell
-description: "Desktop GUI shell for vk-turn-proxy-go."
+name: flutter_shell_core
+description: "Shared platform-neutral Flutter shell core for vk-turn-proxy-go."
 publish_to: 'none'
 version: 0.1.0+1
+
 environment:
   sdk: ^3.11.4
 
@@ -10,12 +11,8 @@ resolution: workspace
 dependencies:
   flutter:
     sdk: flutter
-  flutter_shell_core: ^0.1.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
-
-flutter:
-  uses-material-design: true
