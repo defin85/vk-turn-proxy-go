@@ -561,6 +561,7 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
   Future<ResolutionRecord> startResolution({
     required String provider,
     required ProviderInputEnvelope input,
+    Map<String, dynamic> providerSettings = const <String, dynamic>{},
   }) {
     throw UnimplementedError();
   }

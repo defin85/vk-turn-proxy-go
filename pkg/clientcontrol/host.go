@@ -302,7 +302,20 @@ func (h *Host) Info() HostInfo {
 }
 
 func (h *Host) Providers() []ProviderDescriptor {
-	return providerDescriptorsFromInternal(h.registry.Descriptors())
+	internalDescriptors := h.registry.Descriptors()
+	out := make([]ProviderDescriptor, 0, len(internalDescriptors))
+	for _, descriptor := range internalDescriptors {
+		converted, err := providerDescriptorFromInternal(descriptor)
+		if err != nil {
+			h.logger.Warn(
+				"provider advertised invalid provider_settings_schema; omitting schema",
+				"provider", descriptor.ID,
+				"error", err,
+			)
+		}
+		out = append(out, converted)
+	}
+	return out
 }
 
 func (h *Host) Negotiate(req NegotiateRequest) (HostInfo, error) {
@@ -360,7 +373,7 @@ func (h *Host) StartPlatformTunnel(ctx context.Context, req PlatformTunnelStartR
 }
 
 func (h *Host) UpsertProfile(profile Profile) (Profile, error) {
-	spec, err := normalizeProfileSpec(profile.Spec)
+	spec, err := h.normalizeProfileSpec(profile.Spec, providerSettingsModePersistedProfile)
 	if err != nil {
 		return Profile{}, err
 	}
@@ -420,12 +433,13 @@ func (h *Host) startSessionFromSpec(ctx context.Context, profileID string, profi
 	if err != nil {
 		return Session{}, err
 	}
+	snapshotProfile := h.redactProfileSpecForOrdinaryRead(spec)
 	snapshot := Session{
 		ID:                 sessionID,
 		ProfileID:          profileID,
 		ProfileName:        profileName,
 		SourceResolutionID: sourceResolutionID,
-		Profile:            spec,
+		Profile:            snapshotProfile,
 		State:              SessionStateStarting,
 		StartedAt:          startedAt,
 		UpdatedAt:          startedAt,
@@ -612,7 +626,7 @@ func (h *Host) Subscribe(buffer int) (<-chan Event, func()) {
 
 func (h *Host) resolveStartSpec(req StartSessionRequest) (string, string, ProfileSpec, error) {
 	if req.Spec != nil {
-		spec, err := normalizeProfileSpec(*req.Spec)
+		spec, err := h.normalizeProfileSpec(*req.Spec, providerSettingsModeImmediate)
 		return "", "", spec, err
 	}
 	if strings.TrimSpace(req.ProfileID) == "" {
@@ -624,7 +638,7 @@ func (h *Host) resolveStartSpec(req StartSessionRequest) (string, string, Profil
 	if !ok {
 		return "", "", ProfileSpec{}, ErrProfileNotFound
 	}
-	spec, err := normalizeProfileSpec(profile.Spec)
+	spec, err := h.normalizeProfileSpec(profile.Spec, providerSettingsModeImmediate)
 	if err != nil {
 		return "", "", ProfileSpec{}, err
 	}
@@ -1100,9 +1114,13 @@ func (b *challengeBroker) Continue(ctx context.Context, challenge provider.Inter
 	return result, nil
 }
 
-func normalizeProfileSpec(spec ProfileSpec) (ProfileSpec, error) {
+func (h *Host) normalizeProfileSpec(
+	spec ProfileSpec,
+	mode providerSettingsValidationMode,
+) (ProfileSpec, error) {
 	spec.Provider = strings.TrimSpace(spec.Provider)
 	spec.Link = strings.TrimSpace(spec.Link)
+	spec.ProviderSettings = cloneProviderSettings(spec.ProviderSettings)
 	spec.ListenAddr = strings.TrimSpace(spec.ListenAddr)
 	spec.PeerAddr = strings.TrimSpace(spec.PeerAddr)
 	spec.Ingress = normalizeAdapterKind(spec.Ingress)
@@ -1121,6 +1139,32 @@ func normalizeProfileSpec(spec ProfileSpec) (ProfileSpec, error) {
 		spec.UseDTLS = &useDTLS
 	}
 
+	if spec.Provider != "" {
+		descriptor, err := h.providerDescriptor(spec.Provider)
+		if err != nil {
+			return ProfileSpec{}, err
+		}
+		settings, err := normalizeProviderSettingsForDescriptor(
+			descriptor,
+			spec.ProviderSettings,
+			mode,
+		)
+		if err != nil {
+			return ProfileSpec{}, err
+		}
+		spec.ProviderSettings = settings
+	} else if len(spec.ProviderSettings) > 0 {
+		return ProfileSpec{}, providerSettingsValidationError(
+			firstProviderSettingsKey(spec.ProviderSettings),
+			providerSettingsViolationUnknown,
+			"provider_settings require a provider",
+		)
+	}
+
+	return normalizeRuntimeProfileSpec(spec)
+}
+
+func normalizeRuntimeProfileSpec(spec ProfileSpec) (ProfileSpec, error) {
 	cfg := translateProfileSpec(spec)
 	if err := session.ValidatePolicy(cfg); err != nil {
 		return ProfileSpec{}, err
@@ -1139,18 +1183,37 @@ func translateProfileSpec(spec ProfileSpec) config.ClientConfig {
 		mode = config.TransportModeAuto
 	}
 	return config.ClientConfig{
-		Provider:      spec.Provider,
-		Link:          spec.Link,
-		ListenAddr:    spec.ListenAddr,
-		PeerAddr:      spec.PeerAddr,
-		Ingress:       config.AdapterKind(spec.Ingress),
-		Connections:   spec.Connections,
-		TURNServer:    spec.TURNServer,
-		TURNPort:      spec.TURNPort,
-		BindInterface: spec.BindInterface,
-		Mode:          mode,
-		UseDTLS:       useDTLS,
+		Provider:         spec.Provider,
+		Link:             spec.Link,
+		ProviderSettings: cloneProviderSettings(spec.ProviderSettings),
+		ListenAddr:       spec.ListenAddr,
+		PeerAddr:         spec.PeerAddr,
+		Ingress:          config.AdapterKind(spec.Ingress),
+		Connections:      spec.Connections,
+		TURNServer:       spec.TURNServer,
+		TURNPort:         spec.TURNPort,
+		BindInterface:    spec.BindInterface,
+		Mode:             mode,
+		UseDTLS:          useDTLS,
 	}
+}
+
+func (h *Host) redactProfileSpecForOrdinaryRead(spec ProfileSpec) ProfileSpec {
+	settings := cloneProviderSettings(spec.ProviderSettings)
+	spec.ProviderSettings = nil
+	if strings.TrimSpace(spec.Provider) == "" {
+		return spec
+	}
+
+	descriptor, err := h.providerDescriptor(spec.Provider)
+	if err != nil {
+		return spec
+	}
+	spec.ProviderSettings = redactProviderSettingsForOrdinaryRead(
+		descriptor,
+		settings,
+	)
+	return spec
 }
 
 func normalizeAdapterKind(kind AdapterKind) AdapterKind {

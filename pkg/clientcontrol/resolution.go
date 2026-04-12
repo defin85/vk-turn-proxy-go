@@ -313,6 +313,12 @@ func (h *Host) runResolution(ctx context.Context, resolutionID string) {
 			runCtx = provider.WithBrowserContinuationHandler(runCtx, broker)
 		}
 	}
+	if len(req.ProviderSettings) > 0 {
+		runCtx = provider.WithSettings(
+			runCtx,
+			provider.ProviderSettings(req.ProviderSettings),
+		)
+	}
 
 	resolution, err := adapter.Resolve(runCtx, req.Link)
 	if err != nil {
@@ -615,12 +621,21 @@ func (h *Host) providerDescriptor(providerID string) (ProviderDescriptor, error)
 	if err != nil {
 		return ProviderDescriptor{}, err
 	}
-	return providerDescriptorFromInternal(internalDescriptor), nil
+	descriptor, schemaErr := providerDescriptorFromInternal(internalDescriptor)
+	if schemaErr != nil {
+		h.logger.Warn(
+			"provider advertised invalid provider_settings_schema; omitting schema",
+			"provider", internalDescriptor.ID,
+			"error", schemaErr,
+		)
+	}
+	return descriptor, nil
 }
 
 func normalizeStartResolutionRequest(req StartResolutionRequest, descriptor ProviderDescriptor) (StartResolutionRequest, error) {
 	req.Provider = strings.TrimSpace(req.Provider)
 	req.InteractiveProvider = providerMayRequireInteractiveSupport(descriptor)
+	req.ProviderSettings = cloneProviderSettings(req.ProviderSettings)
 
 	if req.Input == nil {
 		return StartResolutionRequest{}, errors.New("input is required")
@@ -638,8 +653,17 @@ func normalizeStartResolutionRequest(req StartResolutionRequest, descriptor Prov
 		if normalizedInput.Link == "" {
 			return StartResolutionRequest{}, errors.New("input.link is required")
 		}
+		settings, err := normalizeProviderSettingsForDescriptor(
+			descriptor,
+			req.ProviderSettings,
+			providerSettingsModeImmediate,
+		)
+		if err != nil {
+			return StartResolutionRequest{}, err
+		}
 		req.Input = &normalizedInput
 		req.Link = normalizedInput.Link
+		req.ProviderSettings = settings
 		return req, nil
 	default:
 		return StartResolutionRequest{}, fmt.Errorf("provider input kind %q is not supported by this host", normalizedInput.Kind)
@@ -670,7 +694,7 @@ func buildMaterializedProfileSpec(credentials provider.Credentials, defaults Run
 		UseDTLS:       defaults.UseDTLS,
 		LogLevel:      defaults.LogLevel,
 	}
-	return normalizeProfileSpec(spec)
+	return normalizeRuntimeProfileSpec(spec)
 }
 
 func failureInfoFromResolutionError(err error) *FailureInfo {

@@ -59,7 +59,7 @@ func Handler(host *Host) http.Handler {
 			}
 			saved, err := host.UpsertProfile(profile)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, "profile_invalid", err)
+				writeError(w, http.StatusBadRequest, errorCodeForBadRequest(err, "profile_invalid"), err)
 				return
 			}
 			writeJSON(w, http.StatusOK, saved)
@@ -103,7 +103,7 @@ func Handler(host *Host) http.Handler {
 			}
 			resolution, err := host.StartResolution(context.WithoutCancel(r.Context()), req)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, "start_resolution_failed", err)
+				writeError(w, http.StatusBadRequest, errorCodeForBadRequest(err, "start_resolution_failed"), err)
 				return
 			}
 			writeJSON(w, http.StatusAccepted, resolution)
@@ -124,7 +124,7 @@ func Handler(host *Host) http.Handler {
 			// Session lifetime must outlive the HTTP request that created it.
 			session, err := host.StartSession(context.WithoutCancel(r.Context()), req)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, "start_session_failed", err)
+				writeError(w, http.StatusBadRequest, errorCodeForBadRequest(err, "start_session_failed"), err)
 				return
 			}
 			writeJSON(w, http.StatusAccepted, session)
@@ -372,6 +372,8 @@ type errorResponse struct {
 	Code           string `json:"code"`
 	Message        string `json:"message"`
 	Action         string `json:"action,omitempty"`
+	Field          string `json:"field,omitempty"`
+	Violation      string `json:"violation,omitempty"`
 	Stage          string `json:"stage,omitempty"`
 	NotImplemented bool   `json:"not_implemented,omitempty"`
 }
@@ -392,6 +394,11 @@ func writeError(w http.ResponseWriter, status int, code string, err error) {
 	if errors.As(err, &actionErr) {
 		response.Action = string(actionErr.Action)
 	}
+	var settingsErr *ProviderSettingsValidationError
+	if errors.As(err, &settingsErr) {
+		response.Field = settingsErr.Field
+		response.Violation = settingsErr.Violation
+	}
 	if err != nil {
 		info := failureInfoFromResolutionError(err)
 		response.Stage = info.Stage
@@ -406,4 +413,12 @@ func writeMethodNotAllowed(w http.ResponseWriter, method string) {
 
 func writeNotFound(w http.ResponseWriter, err error) {
 	writeError(w, http.StatusNotFound, "not_found", err)
+}
+
+func errorCodeForBadRequest(err error, fallback string) string {
+	var settingsErr *ProviderSettingsValidationError
+	if errors.As(err, &settingsErr) {
+		return "provider_settings_invalid"
+	}
+	return fallback
 }

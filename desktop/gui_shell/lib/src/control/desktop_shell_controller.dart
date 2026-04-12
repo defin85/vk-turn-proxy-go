@@ -280,7 +280,26 @@ class DesktopShellController extends ChangeNotifier {
 
   Future<void> saveDraft() async {
     await _runMutation(() async {
-      final saved = await api.upsertProfile(draft.toProfile());
+      final descriptor = activeProviderDescriptor;
+      if (descriptor == null) {
+        notice =
+            'The selected provider is not advertised by the connected host.';
+        return;
+      }
+      final blockReason = _providerSettingsBlockReason(descriptor);
+      if (blockReason != null) {
+        notice = blockReason;
+        return;
+      }
+      final saved = await api.upsertProfile(
+        draft.toProfile().copyWith(
+          spec: draft.spec.copyWith(
+            providerSettings: descriptor.profileRetainedProviderSettings(
+              draft.spec.providerSettings,
+            ),
+          ),
+        ),
+      );
       notice = 'Saved profile ${saved.name.isEmpty ? saved.id : saved.name}.';
       await refresh();
       selectProfile(saved.id);
@@ -326,11 +345,20 @@ class DesktopShellController extends ChangeNotifier {
             '${descriptor.displayName} expects ${descriptor.inputKind.value} input. This desktop shell currently supports link entry only.';
         return;
       }
+      final blockReason = _providerSettingsBlockReason(descriptor);
+      if (blockReason != null) {
+        notice = blockReason;
+        return;
+      }
       final resolution = await api.startResolution(
         provider: descriptor.id,
         input: ProviderInputEnvelope(
           kind: descriptor.inputKind,
           link: draft.spec.link,
+        ),
+        providerSettings: descriptor.normalizeProviderSettings(
+          draft.spec.providerSettings,
+          applyDefaults: false,
         ),
       );
       selectedResolutionId = resolution.id;
@@ -799,12 +827,13 @@ class DesktopShellController extends ChangeNotifier {
       draft: draft,
       runtimeDefaults: materializeDefaults,
     );
-    final signature = next.signature();
+    final sanitized = next.sanitizedForPersistence(providerDescriptors);
+    final signature = sanitized.signature();
     if (signature == _persistedStateSignature) {
       return;
     }
     try {
-      await _stateStore.save(next);
+      await _stateStore.save(sanitized);
       _persistedStateSignature = signature;
     } catch (error) {
       notice = 'Failed to persist desktop shell state: $error';
@@ -876,18 +905,39 @@ class DesktopShellController extends ChangeNotifier {
     final descriptor =
         descriptorForProvider(candidate.spec.provider) ??
         providerDescriptors.first;
-    final link =
+    final sameProvider =
         descriptor.id.trim().toLowerCase() ==
-            candidate.spec.provider.trim().toLowerCase()
-        ? candidate.spec.link
-        : '';
+        candidate.spec.provider.trim().toLowerCase();
+    final link = sameProvider ? candidate.spec.link : '';
+    final providerSettings = switch (descriptor.settingsSchema) {
+      null => const <String, dynamic>{},
+      _ when descriptor.supportsProviderSettings =>
+        descriptor.normalizeProviderSettings(
+          sameProvider
+              ? candidate.spec.providerSettings
+              : const <String, dynamic>{},
+        ),
+      _ =>
+        sameProvider
+            ? candidate.spec.providerSettings
+            : const <String, dynamic>{},
+    };
     return candidate.copyWith(
       spec: candidate.spec.copyWith(
         provider: descriptor.id,
         link: link,
+        providerSettings: providerSettings,
         interactiveProvider: descriptor.mayRequireBrowserContinuation,
       ),
     );
+  }
+
+  String? _providerSettingsBlockReason(ProviderDescriptor descriptor) {
+    final reason = descriptor.providerSettingsSupportError;
+    if (reason == null) {
+      return null;
+    }
+    return 'The connected desktop shell cannot render provider settings for ${descriptor.displayName}: $reason';
   }
 
   void _notify() {

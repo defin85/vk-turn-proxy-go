@@ -49,6 +49,8 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   late final TextEditingController _turnPortController;
   late final TextEditingController _bindInterfaceController;
   late final TextEditingController _logLevelController;
+  final Map<String, TextEditingController> _providerSettingControllers =
+      <String, TextEditingController>{};
 
   @override
   void initState() {
@@ -86,6 +88,9 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     _turnPortController.dispose();
     _bindInterfaceController.dispose();
     _logLevelController.dispose();
+    for (final controller in _providerSettingControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -139,6 +144,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                     ),
                   ),
                   _providerFlowCard(theme, descriptor),
+                  ..._providerSettingsSection(theme, descriptor),
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 12,
@@ -435,17 +441,155 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     required String label,
     required ValueChanged<String> onChanged,
     int maxLines = 1,
+    bool obscureText = false,
+    TextInputType? keyboardType,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: TextField(
         controller: controller,
         maxLines: maxLines,
+        obscureText: obscureText,
+        keyboardType: keyboardType,
         enabled: !widget.busy,
         decoration: InputDecoration(labelText: label),
         onChanged: onChanged,
       ),
     );
+  }
+
+  List<Widget> _providerSettingsSection(
+    ThemeData theme,
+    ProviderDescriptor? descriptor,
+  ) {
+    final schema = descriptor?.settingsSchema;
+    if (schema == null) {
+      return const <Widget>[];
+    }
+
+    final section = <Widget>[
+      const SizedBox(height: 8),
+      Text(
+        'Provider settings',
+        style: theme.textTheme.titleMedium?.copyWith(
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      const SizedBox(height: 6),
+    ];
+
+    final supportError = descriptor?.providerSettingsSupportError;
+    if (supportError != null) {
+      section.add(
+        Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFE2DE),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Text(
+            'This desktop shell cannot render the provider settings schema for ${descriptor!.displayName}: $supportError. Save and resolve stay blocked until the host advertises a supported schema subset.',
+            style: theme.textTheme.bodyMedium,
+          ),
+        ),
+      );
+      return section;
+    }
+
+    section.add(
+      Text(
+        'Profile-retained settings stay with the saved profile. Prompt-only values remain only in the in-memory draft used for immediate resolution starts.',
+        style: theme.textTheme.bodyMedium?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+    section.add(const SizedBox(height: 8));
+    section.addAll(
+      descriptor!.providerSettingsFields.map(
+        (ProviderSettingsField field) => _providerSettingsField(field),
+      ),
+    );
+    return section;
+  }
+
+  Widget _providerSettingsField(ProviderSettingsField field) {
+    final property = field.property;
+    final label = property.title.isEmpty ? field.key : property.title;
+
+    switch (property.control) {
+      case ProviderSettingControl.select:
+        final items = property.enumValues
+            .map(
+              (dynamic value) => DropdownMenuItem<dynamic>(
+                value: value,
+                child: Text('$value'),
+              ),
+            )
+            .toList(growable: false);
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: DropdownButtonFormField<dynamic>(
+            initialValue: widget.draft.spec.providerSettings[field.key],
+            decoration: InputDecoration(
+              labelText: label,
+              helperText: property.description.isEmpty
+                  ? null
+                  : property.description,
+            ),
+            items: items,
+            onChanged: widget.busy
+                ? null
+                : (dynamic value) => _updateProviderSetting(field.key, value),
+          ),
+        );
+      case ProviderSettingControl.checkbox:
+        return SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          value:
+              widget.draft.spec.providerSettings[field.key] as bool? ?? false,
+          onChanged: widget.busy
+              ? null
+              : (bool value) => _updateProviderSetting(field.key, value),
+          title: Text(label),
+          subtitle: property.description.isEmpty
+              ? null
+              : Text(property.description),
+        );
+      case ProviderSettingControl.text:
+      case ProviderSettingControl.textarea:
+      case ProviderSettingControl.password:
+        return _field(
+          controller: _providerSettingController(field.key),
+          label: label,
+          maxLines: property.control == ProviderSettingControl.textarea ? 3 : 1,
+          obscureText: property.control == ProviderSettingControl.password,
+          keyboardType: switch (property.type) {
+            ProviderSettingType.integer => TextInputType.number,
+            ProviderSettingType.number => const TextInputType.numberWithOptions(
+              decimal: true,
+            ),
+            _ => TextInputType.text,
+          },
+          onChanged: (String value) {
+            final trimmed = value.trim();
+            if (trimmed.isEmpty) {
+              _removeProviderSetting(field.key);
+              return;
+            }
+            final nextValue = switch (property.type) {
+              ProviderSettingType.integer => int.tryParse(trimmed) ?? trimmed,
+              ProviderSettingType.number => double.tryParse(trimmed) ?? trimmed,
+              ProviderSettingType.boolean => trimmed.toLowerCase() == 'true',
+              _ => value,
+            };
+            _updateProviderSetting(field.key, nextValue);
+          },
+        );
+      case null:
+        return const SizedBox.shrink();
+    }
   }
 
   List<Widget> _runtimeDefaultsFields() {
@@ -589,5 +733,70 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     _turnPortController.text = widget.draft.spec.turnPort ?? '';
     _bindInterfaceController.text = widget.draft.spec.bindInterface ?? '';
     _logLevelController.text = widget.draft.spec.logLevel;
+    _syncProviderSettingControllers(_selectedDescriptor());
+  }
+
+  TextEditingController _providerSettingController(String key) {
+    return _providerSettingControllers.putIfAbsent(
+      key,
+      () => TextEditingController(),
+    );
+  }
+
+  void _updateProviderSetting(String key, dynamic value) {
+    final nextSettings = Map<String, dynamic>.from(
+      widget.draft.spec.providerSettings,
+    );
+    if (value == null) {
+      nextSettings.remove(key);
+    } else {
+      nextSettings[key] = value;
+    }
+    _pushDraft(
+      spec: widget.draft.spec.copyWith(providerSettings: nextSettings),
+    );
+  }
+
+  void _removeProviderSetting(String key) {
+    final nextSettings = Map<String, dynamic>.from(
+      widget.draft.spec.providerSettings,
+    );
+    if (nextSettings.remove(key) != null) {
+      _pushDraft(
+        spec: widget.draft.spec.copyWith(providerSettings: nextSettings),
+      );
+    }
+  }
+
+  void _syncProviderSettingControllers(ProviderDescriptor? descriptor) {
+    final activeKeys =
+        descriptor?.providerSettingsFields
+            .where((ProviderSettingsField field) {
+              return field.property.control == ProviderSettingControl.text ||
+                  field.property.control == ProviderSettingControl.textarea ||
+                  field.property.control == ProviderSettingControl.password;
+            })
+            .map((ProviderSettingsField field) => field.key)
+            .toSet() ??
+        <String>{};
+    final removable = _providerSettingControllers.keys
+        .where((String key) => !activeKeys.contains(key))
+        .toList(growable: false);
+    for (final key in removable) {
+      _providerSettingControllers.remove(key)?.dispose();
+    }
+    for (final key in activeKeys) {
+      final controller = _providerSettingController(key);
+      final value = widget.draft.spec.providerSettings[key];
+      final text = value == null ? '' : '$value';
+      if (controller.text == text) {
+        continue;
+      }
+      controller.value = controller.value.copyWith(
+        text: text,
+        selection: TextSelection.collapsed(offset: text.length),
+        composing: TextRange.empty,
+      );
+    }
   }
 }

@@ -21,6 +21,7 @@ abstract class ControlPlaneApi {
   Future<ResolutionRecord> startResolution({
     required String provider,
     required ProviderInputEnvelope input,
+    Map<String, dynamic> providerSettings = const <String, dynamic>{},
   });
   Future<ResolutionRecord> cancelResolution(String resolutionId);
   Future<ResolutionExportResult> exportResolution(String resolutionId);
@@ -131,11 +132,16 @@ class ControlPlaneClient implements ControlPlaneApi {
   Future<ResolutionRecord> startResolution({
     required String provider,
     required ProviderInputEnvelope input,
+    Map<String, dynamic> providerSettings = const <String, dynamic>{},
   }) async {
     final payload = await _jsonRequest(
       'POST',
       '/v1/resolutions',
-      body: <String, dynamic>{'provider': provider, 'input': input.toJson()},
+      body: <String, dynamic>{
+        'provider': provider,
+        'input': input.toJson(),
+        if (providerSettings.isNotEmpty) 'provider_settings': providerSettings,
+      },
     );
     return ResolutionRecord.fromJson(payload);
   }
@@ -349,6 +355,8 @@ class ControlPlaneClient implements ControlPlaneApi {
             code: decoded['code'] as String? ?? 'request_failed',
             message: decoded['message'] as String? ?? body,
             action: decoded['action'] as String?,
+            field: decoded['field'] as String?,
+            violation: decoded['violation'] as String?,
             stage: decoded['stage'] as String?,
             notImplemented: decoded['not_implemented'] as bool? ?? false,
           );

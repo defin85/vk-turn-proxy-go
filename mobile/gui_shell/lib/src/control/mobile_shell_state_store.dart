@@ -52,6 +52,30 @@ class MobileShellState {
   }
 
   String signature() => jsonEncode(toJson());
+
+  MobileShellState sanitizedForPersistence(
+    Iterable<ProviderDescriptor> providerDescriptors,
+  ) {
+    final descriptorById = <String, ProviderDescriptor>{
+      for (final descriptor in providerDescriptors)
+        descriptor.id.trim().toLowerCase(): descriptor,
+    };
+    return MobileShellState(
+      profiles: profiles
+          .map(
+            (ProfileRecord profile) => _sanitizeProfile(
+              profile,
+              descriptorById[profile.spec.provider.trim().toLowerCase()],
+            ),
+          )
+          .toList(growable: false),
+      selectedProfileId: selectedProfileId,
+      draft: _sanitizeDraft(
+        draft,
+        descriptorById[draft.spec.provider.trim().toLowerCase()],
+      ),
+    );
+  }
 }
 
 abstract class StringBlobStore {
@@ -186,17 +210,7 @@ class SecureMobileShellStateStore implements MobileShellStateStore {
   @override
   Future<void> save(MobileShellState state) async {
     final secretManifest = _SecretManifest.fromState(state);
-    final sanitized = MobileShellState(
-      profiles: state.profiles
-          .map(
-            (ProfileRecord profile) =>
-                ProfileRecord.fromJson(_sanitizeProfile(profile.toJson())),
-          )
-          .toList(growable: false),
-      selectedProfileId: state.selectedProfileId,
-      draft: ProfileDraft.fromJson(_sanitizeDraft(state.draft.toJson())),
-    );
-    final sanitizedJson = sanitized.toJson()
+    final sanitizedJson = state.toJson()
       ..['secret_manifest'] = secretManifest.toJson();
 
     final encoder = const JsonEncoder.withIndent('  ');
@@ -256,24 +270,28 @@ bool _draftRequiresSecretState(ProfileDraft draft) {
   return draft.spec.link.trim().isNotEmpty;
 }
 
-Map<String, dynamic> _sanitizeProfile(Map<String, dynamic> json) {
-  final sanitized = Map<String, dynamic>.from(json);
-  final spec = Map<String, dynamic>.from(
-    sanitized['spec'] as Map<String, dynamic>? ?? const <String, dynamic>{},
-  );
-  spec['link'] = '';
-  sanitized['spec'] = spec;
-  return sanitized;
+ProfileRecord _sanitizeProfile(
+  ProfileRecord profile,
+  ProviderDescriptor? descriptor,
+) {
+  return profile.copyWith(spec: _sanitizeProfileSpec(profile.spec, descriptor));
 }
 
-Map<String, dynamic> _sanitizeDraft(Map<String, dynamic> json) {
-  final sanitized = Map<String, dynamic>.from(json);
-  final spec = Map<String, dynamic>.from(
-    sanitized['spec'] as Map<String, dynamic>? ?? const <String, dynamic>{},
-  );
-  spec['link'] = '';
-  sanitized['spec'] = spec;
-  return sanitized;
+ProfileDraft _sanitizeDraft(
+  ProfileDraft draft,
+  ProviderDescriptor? descriptor,
+) {
+  return draft.copyWith(spec: _sanitizeProfileSpec(draft.spec, descriptor));
+}
+
+ProfileSpec _sanitizeProfileSpec(
+  ProfileSpec spec,
+  ProviderDescriptor? descriptor,
+) {
+  final sanitizedProviderSettings =
+      descriptor?.profileRetainedProviderSettings(spec.providerSettings) ??
+      const <String, dynamic>{};
+  return spec.copyWith(link: '', providerSettings: sanitizedProviderSettings);
 }
 
 ProfileRecord _profileFromSanitized(

@@ -199,6 +199,251 @@ func TestHostProvidersExposeSortedDescriptorCatalog(t *testing.T) {
 	}
 }
 
+func TestHostProvidersExposeProviderSettingsSchema(t *testing.T) {
+	host := New(
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name:       "schema-provider",
+			descriptor: providerSettingsTestDescriptor("schema-provider"),
+		})),
+	)
+
+	descriptors := host.Providers()
+	if len(descriptors) != 1 {
+		t.Fatalf("Providers() len = %d, want 1", len(descriptors))
+	}
+	if descriptors[0].SettingsSchema == nil {
+		t.Fatal("provider settings schema missing from provider catalog")
+	}
+	if descriptors[0].SettingsSchema.Type != "object" {
+		t.Fatalf("provider settings schema type = %q, want object", descriptors[0].SettingsSchema.Type)
+	}
+	if got := descriptors[0].SettingsSchema.Properties["region"].Title; got != "Region" {
+		t.Fatalf("provider settings schema region title = %q, want Region", got)
+	}
+
+	descriptors[0].SettingsSchema.Properties["region"] = ProviderSettingProperty{
+		Type:  ProviderSettingTypeString,
+		Title: "Mutated",
+	}
+	again := host.Providers()
+	if got := again[0].SettingsSchema.Properties["region"].Title; got != "Region" {
+		t.Fatalf("provider settings schema clone mutated unexpectedly: %q", got)
+	}
+}
+
+func TestHostProvidersOmitInvalidProviderSettingsSchema(t *testing.T) {
+	host := New(
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name:       "invalid-schema-provider",
+			descriptor: invalidProviderSettingsTestDescriptor("invalid-schema-provider"),
+		})),
+	)
+
+	descriptors := host.Providers()
+	if len(descriptors) != 1 {
+		t.Fatalf("Providers() len = %d, want 1", len(descriptors))
+	}
+	if descriptors[0].SettingsSchema != nil {
+		t.Fatalf("provider settings schema = %#v, want nil for invalid descriptor schema", descriptors[0].SettingsSchema)
+	}
+}
+
+func TestHostUpsertProfileRejectsPromptOnlyProviderSettings(t *testing.T) {
+	host := New(
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name:       "schema-provider",
+			descriptor: providerSettingsTestDescriptor("schema-provider"),
+		})),
+	)
+
+	_, err := host.UpsertProfile(Profile{
+		ID:   "profile-1",
+		Name: "provider settings",
+		Spec: ProfileSpec{
+			Provider:         "schema-provider",
+			Link:             "https://example.test/invite/abc",
+			ProviderSettings: ProviderSettings{"region": "eu-west", "device_pin": "123456"},
+			ListenAddr:       reserveUDPAddr(t),
+			PeerAddr:         "127.0.0.1:56000",
+			Connections:      1,
+			Mode:             TransportModeAuto,
+			UseDTLS:          boolRef(true),
+		},
+	})
+	if err == nil {
+		t.Fatal("UpsertProfile() expected provider settings persistence error")
+	}
+
+	var validationErr *ProviderSettingsValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("UpsertProfile() error = %v, want ProviderSettingsValidationError", err)
+	}
+	if validationErr.Field != "device_pin" {
+		t.Fatalf("validation field = %q, want device_pin", validationErr.Field)
+	}
+	if validationErr.Violation != providerSettingsViolationPersistence {
+		t.Fatalf("validation violation = %q, want %q", validationErr.Violation, providerSettingsViolationPersistence)
+	}
+}
+
+func TestHostStartResolutionPassesValidatedProviderSettingsThroughContext(t *testing.T) {
+	settingsCh := make(chan provider.ProviderSettings, 1)
+	host := New(
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name:       "schema-provider",
+			descriptor: providerSettingsTestDescriptor("schema-provider"),
+			resolve: func(ctx context.Context, link string) (provider.Resolution, error) {
+				settingsCh <- provider.SettingsFromContext(ctx)
+				return provider.Resolution{
+					Credentials: provider.Credentials{
+						Username: "turn-user",
+						Password: "turn-pass",
+						Address:  "turn.example.test:3478",
+					},
+					Metadata: map[string]string{
+						"provider":          "schema-provider",
+						"resolution_method": "settings_test",
+					},
+				}, nil
+			},
+		})),
+	)
+
+	resolutionState, err := host.StartResolution(context.Background(), StartResolutionRequest{
+		Provider: "schema-provider",
+		Input: &ProviderInputEnvelope{
+			Kind: ProviderInputKindLink,
+			Link: "https://example.test/invite/abc",
+		},
+		ProviderSettings: ProviderSettings{
+			"region":       "eu-west",
+			"device_pin":   "123456",
+			"device_index": float64(3),
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartResolution() error = %v", err)
+	}
+	waitForResolutionState(t, host, resolutionState.ID, ResolutionStateResolved)
+
+	select {
+	case settings := <-settingsCh:
+		if settings["region"] != "eu-west" {
+			t.Fatalf("provider settings region = %#v, want eu-west", settings["region"])
+		}
+		if settings["device_pin"] != "123456" {
+			t.Fatalf("provider settings device_pin = %#v, want 123456", settings["device_pin"])
+		}
+		index, ok := settings["device_index"].(int64)
+		if !ok || index != 3 {
+			t.Fatalf("provider settings device_index = %#v, want int64(3)", settings["device_index"])
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for provider settings context")
+	}
+}
+
+func TestHostStartResolutionRejectsProviderSettingsWhenDescriptorSchemaIsInvalid(t *testing.T) {
+	host := New(
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name:       "invalid-schema-provider",
+			descriptor: invalidProviderSettingsTestDescriptor("invalid-schema-provider"),
+			resolve: func(ctx context.Context, link string) (provider.Resolution, error) {
+				return provider.Resolution{}, nil
+			},
+		})),
+	)
+
+	_, err := host.StartResolution(context.Background(), StartResolutionRequest{
+		Provider: "invalid-schema-provider",
+		Input: &ProviderInputEnvelope{
+			Kind: ProviderInputKindLink,
+			Link: "https://example.test/invite/abc",
+		},
+		ProviderSettings: ProviderSettings{
+			"device_pin": "123456",
+		},
+	})
+	if err == nil {
+		t.Fatal("StartResolution() expected provider settings validation error")
+	}
+
+	var validationErr *ProviderSettingsValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("StartResolution() error = %v, want ProviderSettingsValidationError", err)
+	}
+	if validationErr.Field != "device_pin" {
+		t.Fatalf("validation field = %q, want device_pin", validationErr.Field)
+	}
+	if validationErr.Violation != providerSettingsViolationUnknown {
+		t.Fatalf("validation violation = %q, want %q", validationErr.Violation, providerSettingsViolationUnknown)
+	}
+}
+
+func TestHostStartSessionRedactsPromptOnlyProviderSettingsFromSnapshot(t *testing.T) {
+	releaseCh := make(chan struct{})
+	host := New(
+		WithSessionIDSource(func() string { return "session-provider-settings" }),
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name:       "schema-provider",
+			descriptor: providerSettingsTestDescriptor("schema-provider"),
+			resolve: func(ctx context.Context, link string) (provider.Resolution, error) {
+				return provider.Resolution{
+					Credentials: provider.Credentials{
+						Username: "turn-user",
+						Password: "turn-pass",
+						Address:  "turn.example.test:3478",
+					},
+					Metadata: map[string]string{
+						"provider":          "schema-provider",
+						"resolution_method": "settings_test",
+					},
+				}, nil
+			},
+		})),
+		withRunnerFactory(func(cfg transport.ClientConfig) transport.Runner {
+			return fakeRunner{run: func(ctx context.Context) error {
+				<-releaseCh
+				return ctx.Err()
+			}}
+		}),
+	)
+
+	sessionState, err := host.StartSession(context.Background(), StartSessionRequest{
+		Spec: &ProfileSpec{
+			Provider: "schema-provider",
+			Link:     "https://example.test/invite/abc",
+			ProviderSettings: ProviderSettings{
+				"region":       "eu-west",
+				"device_pin":   "123456",
+				"device_index": float64(3),
+			},
+			ListenAddr:  reserveUDPAddr(t),
+			PeerAddr:    "127.0.0.1:56000",
+			Connections: 1,
+			Mode:        TransportModeAuto,
+			UseDTLS:     boolRef(true),
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartSession() error = %v", err)
+	}
+	defer close(releaseCh)
+
+	if sessionState.Profile.ProviderSettings == nil {
+		t.Fatal("session snapshot provider settings missing")
+	}
+	if _, ok := sessionState.Profile.ProviderSettings["device_pin"]; ok {
+		t.Fatalf("session snapshot leaked prompt-only provider setting: %+v", sessionState.Profile.ProviderSettings)
+	}
+	if got := sessionState.Profile.ProviderSettings["region"]; got != "eu-west" {
+		t.Fatalf("session snapshot region = %#v, want eu-west", got)
+	}
+	if got := sessionState.Profile.ProviderSettings["device_index"]; got != int64(3) {
+		t.Fatalf("session snapshot device_index = %#v, want int64(3)", got)
+	}
+}
+
 func TestHostStartPlatformTunnelFailsClosedByDefault(t *testing.T) {
 	host := New(WithBuildIdentity(testBuildIdentity()))
 
@@ -1510,6 +1755,92 @@ func waitForResolutionState(t *testing.T, host *Host, resolutionID string, want 
 			t.Fatalf("timed out waiting for resolution %s state %s; got %s", resolutionID, want, resolutionState.State)
 		case <-time.After(10 * time.Millisecond):
 		}
+	}
+}
+
+func providerSettingsTestDescriptor(providerID string) provider.ProviderDescriptor {
+	minLength := 4
+	maxLength := 12
+	minimum := 1.0
+	maximum := 4.0
+
+	return provider.ProviderDescriptor{
+		ID:            providerID,
+		DisplayName:   "Schema provider",
+		InputKind:     provider.ProviderInputKindLink,
+		AuthPosture:   provider.ProviderAuthPostureAccount,
+		BrowserPolicy: provider.ProviderBrowserPolicyNotRequired,
+		SettingsSchema: &provider.ProviderSettingsSchema{
+			Type:                 "object",
+			AdditionalProperties: false,
+			Required:             []string{"region", "device_pin"},
+			Order:                []string{"region", "device_index", "device_pin"},
+			Properties: map[string]provider.ProviderSettingProperty{
+				"region": {
+					Type:        provider.ProviderSettingTypeString,
+					Title:       "Region",
+					Enum:        []any{"ru-central", "eu-west"},
+					Control:     provider.ProviderSettingControlSelect,
+					Persistence: provider.ProviderSettingPersistenceProfile,
+				},
+				"device_index": {
+					Type:        provider.ProviderSettingTypeInteger,
+					Title:       "Device index",
+					Minimum:     &minimum,
+					Maximum:     &maximum,
+					Control:     provider.ProviderSettingControlText,
+					Persistence: provider.ProviderSettingPersistenceProfile,
+				},
+				"device_pin": {
+					Type:        provider.ProviderSettingTypeString,
+					Title:       "Device PIN",
+					WriteOnly:   true,
+					MinLength:   &minLength,
+					MaxLength:   &maxLength,
+					Control:     provider.ProviderSettingControlPassword,
+					Persistence: provider.ProviderSettingPersistenceEphemeral,
+				},
+			},
+		},
+		ArtifactFamilies: []provider.ArtifactFamily{
+			provider.ArtifactFamilyGenericTURN,
+		},
+		CapabilityHints: provider.ProviderCapabilityHints{
+			PotentialActions: []provider.ArtifactAction{
+				provider.ArtifactActionStartOnThisDevice,
+				provider.ArtifactActionExportHandoff,
+			},
+			RedactionPolicy: provider.SummaryOnlyArtifactRedactionPolicy(),
+		},
+	}
+}
+
+func invalidProviderSettingsTestDescriptor(providerID string) provider.ProviderDescriptor {
+	return provider.ProviderDescriptor{
+		ID:            providerID,
+		DisplayName:   "Invalid schema provider",
+		InputKind:     provider.ProviderInputKindLink,
+		AuthPosture:   provider.ProviderAuthPostureAccount,
+		BrowserPolicy: provider.ProviderBrowserPolicyNotRequired,
+		SettingsSchema: &provider.ProviderSettingsSchema{
+			Type:                 "object",
+			AdditionalProperties: false,
+			Properties: map[string]provider.ProviderSettingProperty{
+				"device_pin": {
+					Type:        provider.ProviderSettingTypeString,
+					Title:       "Device PIN",
+					WriteOnly:   true,
+					Control:     provider.ProviderSettingControlPassword,
+					Persistence: provider.ProviderSettingPersistenceProfile,
+				},
+			},
+		},
+		ArtifactFamilies: []provider.ArtifactFamily{
+			provider.ArtifactFamilyGenericTURN,
+		},
+		CapabilityHints: provider.ProviderCapabilityHints{
+			RedactionPolicy: provider.SummaryOnlyArtifactRedactionPolicy(),
+		},
 	}
 }
 

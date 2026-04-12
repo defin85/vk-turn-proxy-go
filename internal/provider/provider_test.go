@@ -58,6 +58,7 @@ func TestRegistryNamesAreSorted(t *testing.T) {
 }
 
 func TestRegistryDescriptorsAreSortedAndCloned(t *testing.T) {
+	minLength := 4
 	registry := NewRegistry(
 		fakeAdapter{
 			name: "zeta",
@@ -67,6 +68,20 @@ func TestRegistryDescriptorsAreSortedAndCloned(t *testing.T) {
 				InputKind:     ProviderInputKindLink,
 				AuthPosture:   ProviderAuthPostureAccount,
 				BrowserPolicy: ProviderBrowserPolicyExternalRequired,
+				SettingsSchema: &ProviderSettingsSchema{
+					Type:                 "object",
+					AdditionalProperties: false,
+					Properties: map[string]ProviderSettingProperty{
+						"device_pin": {
+							Type:        ProviderSettingTypeString,
+							Title:       "PIN",
+							WriteOnly:   true,
+							MinLength:   &minLength,
+							Control:     ProviderSettingControlPassword,
+							Persistence: ProviderSettingPersistenceEphemeral,
+						},
+					},
+				},
 				ChallengeModes: []ProviderChallengeMode{
 					ProviderChallengeModeBrowser,
 				},
@@ -103,6 +118,10 @@ func TestRegistryDescriptorsAreSortedAndCloned(t *testing.T) {
 	}
 
 	descriptors[0].ArtifactFamilies[0] = ArtifactFamilyCameraStream
+	descriptors[1].SettingsSchema.Properties["device_pin"] = ProviderSettingProperty{
+		Type:  ProviderSettingTypeString,
+		Title: "Mutated",
+	}
 
 	descriptor, err := registry.Descriptor("alpha")
 	if err != nil {
@@ -110,5 +129,12 @@ func TestRegistryDescriptorsAreSortedAndCloned(t *testing.T) {
 	}
 	if len(descriptor.ArtifactFamilies) != 1 || descriptor.ArtifactFamilies[0] != ArtifactFamilyGenericTURN {
 		t.Fatalf("registry descriptor mutated unexpectedly: %+v", descriptor)
+	}
+	zeta, err := registry.Descriptor("zeta")
+	if err != nil {
+		t.Fatalf("Descriptor(zeta) error = %v", err)
+	}
+	if got := zeta.SettingsSchema.Properties["device_pin"].Title; got != "PIN" {
+		t.Fatalf("registry settings schema mutated unexpectedly: %q", got)
 	}
 }

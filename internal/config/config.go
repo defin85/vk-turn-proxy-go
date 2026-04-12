@@ -35,6 +35,7 @@ type ServerConfig struct {
 type ClientConfig struct {
 	Provider         string
 	Link             string
+	ProviderSettings map[string]any
 	ListenAddr       string
 	PeerAddr         string
 	Ingress          AdapterKind

@@ -437,4 +437,71 @@ void main() {
       );
     },
   );
+
+  test(
+    'control plane client sends provider settings and parses field-aware validation failures',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(server.close);
+
+      server.listen((HttpRequest request) async {
+        expect(request.uri.path, '/v1/resolutions');
+        final payload =
+            jsonDecode(await utf8.decoder.bind(request).join())
+                as Map<String, dynamic>;
+        expect(payload['provider'], 'wb-stream');
+        expect(payload['provider_settings'], <String, dynamic>{
+          'region': 'eu-west',
+          'device_pin': '123456',
+        });
+        request.response.statusCode = HttpStatus.badRequest;
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(
+          jsonEncode(<String, dynamic>{
+            'code': 'provider_settings_invalid',
+            'message': 'provider_settings.region is required',
+            'field': 'region',
+            'violation': 'required',
+          }),
+        );
+        await request.response.close();
+      });
+
+      final client = ControlPlaneClient(
+        baseUri: Uri.parse('http://${server.address.address}:${server.port}'),
+      );
+
+      await expectLater(
+        client.startResolution(
+          provider: 'wb-stream',
+          input: const ProviderInputEnvelope(
+            kind: ProviderInputKind.link,
+            link: 'https://wb.example.test/invite/abc',
+          ),
+          providerSettings: const <String, dynamic>{
+            'region': 'eu-west',
+            'device_pin': '123456',
+          },
+        ),
+        throwsA(
+          isA<ControlPlaneError>()
+              .having(
+                (ControlPlaneError error) => error.code,
+                'code',
+                'provider_settings_invalid',
+              )
+              .having(
+                (ControlPlaneError error) => error.field,
+                'field',
+                'region',
+              )
+              .having(
+                (ControlPlaneError error) => error.violation,
+                'violation',
+                'required',
+              ),
+        ),
+      );
+    },
+  );
 }

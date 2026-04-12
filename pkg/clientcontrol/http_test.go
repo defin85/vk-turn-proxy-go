@@ -120,6 +120,161 @@ func TestHandlerHostAndNegotiate(t *testing.T) {
 	}
 }
 
+func TestHandlerProvidersExposeProviderSettingsSchema(t *testing.T) {
+	host := New(
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name:       "schema-provider",
+			descriptor: providerSettingsTestDescriptor("schema-provider"),
+			resolve: func(ctx context.Context, link string) (provider.Resolution, error) {
+				return provider.Resolution{}, nil
+			},
+		})),
+	)
+	handler := Handler(host)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/providers", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /v1/providers code = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var providers []ProviderDescriptor
+	if err := json.Unmarshal(rec.Body.Bytes(), &providers); err != nil {
+		t.Fatalf("decode providers: %v", err)
+	}
+	if len(providers) != 1 {
+		t.Fatalf("providers len = %d, want 1", len(providers))
+	}
+	if providers[0].SettingsSchema == nil {
+		t.Fatal("provider settings schema missing from /v1/providers response")
+	}
+	if got := providers[0].SettingsSchema.Properties["region"].Title; got != "Region" {
+		t.Fatalf("provider settings schema region title = %q, want Region", got)
+	}
+}
+
+func TestHandlerProvidersOmitInvalidProviderSettingsSchema(t *testing.T) {
+	host := New(
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name:       "invalid-schema-provider",
+			descriptor: invalidProviderSettingsTestDescriptor("invalid-schema-provider"),
+			resolve: func(ctx context.Context, link string) (provider.Resolution, error) {
+				return provider.Resolution{}, nil
+			},
+		})),
+	)
+	handler := Handler(host)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/providers", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /v1/providers code = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var providers []ProviderDescriptor
+	if err := json.Unmarshal(rec.Body.Bytes(), &providers); err != nil {
+		t.Fatalf("decode providers: %v", err)
+	}
+	if len(providers) != 1 {
+		t.Fatalf("providers len = %d, want 1", len(providers))
+	}
+	if providers[0].SettingsSchema != nil {
+		t.Fatalf("provider settings schema = %#v, want nil for invalid descriptor schema", providers[0].SettingsSchema)
+	}
+}
+
+func TestHandlerProfileUpsertReturnsFieldAwareProviderSettingsFailure(t *testing.T) {
+	host := New(
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name:       "schema-provider",
+			descriptor: providerSettingsTestDescriptor("schema-provider"),
+			resolve: func(ctx context.Context, link string) (provider.Resolution, error) {
+				return provider.Resolution{}, nil
+			},
+		})),
+	)
+	handler := Handler(host)
+
+	payload, _ := json.Marshal(Profile{
+		ID:   "profile-1",
+		Name: "settings",
+		Spec: ProfileSpec{
+			Provider:         "schema-provider",
+			Link:             "https://example.test/invite/abc",
+			ProviderSettings: ProviderSettings{"region": "eu-west", "device_pin": "123456"},
+			ListenAddr:       reserveUDPAddr(t),
+			PeerAddr:         "127.0.0.1:56000",
+			Connections:      1,
+			Mode:             TransportModeAuto,
+			UseDTLS:          boolRef(true),
+		},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/profiles", bytes.NewReader(payload))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("POST /v1/profiles code = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var errPayload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &errPayload); err != nil {
+		t.Fatalf("decode error payload: %v", err)
+	}
+	if got := errPayload["code"]; got != "provider_settings_invalid" {
+		t.Fatalf("error code = %v, want provider_settings_invalid", got)
+	}
+	if got := errPayload["field"]; got != "device_pin" {
+		t.Fatalf("error field = %v, want device_pin", got)
+	}
+	if got := errPayload["violation"]; got != providerSettingsViolationPersistence {
+		t.Fatalf("error violation = %v, want %s", got, providerSettingsViolationPersistence)
+	}
+}
+
+func TestHandlerStartResolutionReturnsFieldAwareProviderSettingsFailure(t *testing.T) {
+	host := New(
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name:       "schema-provider",
+			descriptor: providerSettingsTestDescriptor("schema-provider"),
+			resolve: func(ctx context.Context, link string) (provider.Resolution, error) {
+				return provider.Resolution{}, nil
+			},
+		})),
+	)
+	handler := Handler(host)
+
+	payload, _ := json.Marshal(StartResolutionRequest{
+		Provider: "schema-provider",
+		Input: &ProviderInputEnvelope{
+			Kind: ProviderInputKindLink,
+			Link: "https://example.test/invite/abc",
+		},
+		ProviderSettings: ProviderSettings{"device_pin": "123456"},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/resolutions", bytes.NewReader(payload))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("POST /v1/resolutions code = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var errPayload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &errPayload); err != nil {
+		t.Fatalf("decode error payload: %v", err)
+	}
+	if got := errPayload["code"]; got != "provider_settings_invalid" {
+		t.Fatalf("error code = %v, want provider_settings_invalid", got)
+	}
+	if got := errPayload["field"]; got != "region" {
+		t.Fatalf("error field = %v, want region", got)
+	}
+	if got := errPayload["violation"]; got != providerSettingsViolationRequired {
+		t.Fatalf("error violation = %v, want %s", got, providerSettingsViolationRequired)
+	}
+}
+
 func TestHandlerResolutionLifecycle(t *testing.T) {
 	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
 	host := New(

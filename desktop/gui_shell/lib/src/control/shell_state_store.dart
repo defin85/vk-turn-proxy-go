@@ -65,13 +65,27 @@ class DesktopShellState {
     return jsonEncode(toJson());
   }
 
-  DesktopShellState sanitizedForPersistence() {
+  DesktopShellState sanitizedForPersistence(
+    Iterable<ProviderDescriptor> providerDescriptors,
+  ) {
+    final descriptorById = <String, ProviderDescriptor>{
+      for (final descriptor in providerDescriptors)
+        descriptor.id.trim().toLowerCase(): descriptor,
+    };
     return DesktopShellState(
       profiles: profiles
-          .map((ProfileRecord profile) => _sanitizeProfile(profile))
+          .map(
+            (ProfileRecord profile) => _sanitizeProfile(
+              profile,
+              descriptorById[profile.spec.provider.trim().toLowerCase()],
+            ),
+          )
           .toList(growable: false),
       selectedProfileId: selectedProfileId,
-      draft: _sanitizeDraft(draft),
+      draft: _sanitizeDraft(
+        draft,
+        descriptorById[draft.spec.provider.trim().toLowerCase()],
+      ),
       runtimeDefaults: runtimeDefaults,
     );
   }
@@ -108,25 +122,32 @@ class FileDesktopShellStateStore implements DesktopShellStateStore {
     final file = await _fileProvider();
     await file.parent.create(recursive: true);
     final encoder = const JsonEncoder.withIndent('  ');
-    await file.writeAsString(
-      '${encoder.convert(state.sanitizedForPersistence().toJson())}\n',
-    );
+    await file.writeAsString('${encoder.convert(state.toJson())}\n');
   }
 }
 
-ProfileRecord _sanitizeProfile(ProfileRecord profile) {
-  return profile.copyWith(spec: _sanitizeProfileSpec(profile.spec));
+ProfileRecord _sanitizeProfile(
+  ProfileRecord profile,
+  ProviderDescriptor? descriptor,
+) {
+  return profile.copyWith(spec: _sanitizeProfileSpec(profile.spec, descriptor));
 }
 
-ProfileDraft _sanitizeDraft(ProfileDraft draft) {
-  return draft.copyWith(spec: _sanitizeProfileSpec(draft.spec));
+ProfileDraft _sanitizeDraft(
+  ProfileDraft draft,
+  ProviderDescriptor? descriptor,
+) {
+  return draft.copyWith(spec: _sanitizeProfileSpec(draft.spec, descriptor));
 }
 
-ProfileSpec _sanitizeProfileSpec(ProfileSpec spec) {
-  if (spec.link.trim().isEmpty) {
-    return spec;
-  }
-  return spec.copyWith(link: '');
+ProfileSpec _sanitizeProfileSpec(
+  ProfileSpec spec,
+  ProviderDescriptor? descriptor,
+) {
+  final sanitizedProviderSettings =
+      descriptor?.profileRetainedProviderSettings(spec.providerSettings) ??
+      const <String, dynamic>{};
+  return spec.copyWith(link: '', providerSettings: sanitizedProviderSettings);
 }
 
 Future<File> defaultDesktopShellStateFile() async {

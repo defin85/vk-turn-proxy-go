@@ -226,8 +226,13 @@ class HttpMobileHostBridge implements MobileHostBridge {
   Future<ResolutionRecord> startResolution({
     required String provider,
     required ProviderInputEnvelope input,
+    Map<String, dynamic> providerSettings = const <String, dynamic>{},
   }) {
-    return _client.startResolution(provider: provider, input: input);
+    return _client.startResolution(
+      provider: provider,
+      input: input,
+      providerSettings: providerSettings,
+    );
   }
 
   @override
@@ -435,6 +440,7 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
   Future<ResolutionRecord> startResolution({
     required String provider,
     required ProviderInputEnvelope input,
+    Map<String, dynamic> providerSettings = const <String, dynamic>{},
   }) => _fail();
 
   @override

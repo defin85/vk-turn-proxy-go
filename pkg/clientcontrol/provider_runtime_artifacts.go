@@ -75,6 +75,7 @@ type ProviderDescriptor struct {
 	InputKind        ProviderInputKind       `json:"input_kind"`
 	AuthPosture      ProviderAuthPosture     `json:"auth_posture"`
 	BrowserPolicy    ProviderBrowserPolicy   `json:"browser_policy"`
+	SettingsSchema   *ProviderSettingsSchema `json:"provider_settings_schema,omitempty"`
 	ChallengeModes   []ProviderChallengeMode `json:"challenge_modes,omitempty"`
 	ArtifactFamilies []ArtifactFamily        `json:"artifact_families,omitempty"`
 	CapabilityHints  ProviderCapabilityHints `json:"capability_hints,omitempty"`
@@ -122,19 +123,24 @@ const (
 func providerDescriptorsFromInternal(descriptors []internalprovider.ProviderDescriptor) []ProviderDescriptor {
 	out := make([]ProviderDescriptor, 0, len(descriptors))
 	for _, descriptor := range descriptors {
-		out = append(out, providerDescriptorFromInternal(descriptor))
+		converted, _ := providerDescriptorFromInternal(descriptor)
+		out = append(out, converted)
 	}
 	return out
 }
 
-func providerDescriptorFromInternal(descriptor internalprovider.ProviderDescriptor) ProviderDescriptor {
+func providerDescriptorFromInternal(descriptor internalprovider.ProviderDescriptor) (ProviderDescriptor, error) {
+	settingsSchema, schemaErr := providerSettingsSchemaFromInternal(
+		descriptor.SettingsSchema,
+	)
 	out := ProviderDescriptor{
-		ID:            descriptor.ID,
-		DisplayName:   descriptor.DisplayName,
-		Description:   descriptor.Description,
-		InputKind:     ProviderInputKind(descriptor.InputKind),
-		AuthPosture:   ProviderAuthPosture(descriptor.AuthPosture),
-		BrowserPolicy: ProviderBrowserPolicy(descriptor.BrowserPolicy),
+		ID:             descriptor.ID,
+		DisplayName:    descriptor.DisplayName,
+		Description:    descriptor.Description,
+		InputKind:      ProviderInputKind(descriptor.InputKind),
+		AuthPosture:    ProviderAuthPosture(descriptor.AuthPosture),
+		BrowserPolicy:  ProviderBrowserPolicy(descriptor.BrowserPolicy),
+		SettingsSchema: settingsSchema,
 		CapabilityHints: ProviderCapabilityHints{
 			RedactionPolicy: ArtifactRedactionPolicy{
 				OrdinaryReads:  ArtifactRedactionMode(descriptor.CapabilityHints.RedactionPolicy.OrdinaryReads),
@@ -162,7 +168,47 @@ func providerDescriptorFromInternal(descriptor internalprovider.ProviderDescript
 			out.CapabilityHints.PotentialActions = append(out.CapabilityHints.PotentialActions, ArtifactAction(action))
 		}
 	}
-	return out
+	return out, schemaErr
+}
+
+func providerSettingsSchemaFromInternal(
+	schema *internalprovider.ProviderSettingsSchema,
+) (*ProviderSettingsSchema, error) {
+	if schema == nil {
+		return nil, nil
+	}
+
+	out := &ProviderSettingsSchema{
+		Type:                 schema.Type,
+		Required:             append([]string(nil), schema.Required...),
+		AdditionalProperties: schema.AdditionalProperties,
+		Order:                append([]string(nil), schema.Order...),
+	}
+	if len(schema.Properties) > 0 {
+		out.Properties = make(map[string]ProviderSettingProperty, len(schema.Properties))
+		for key, property := range schema.Properties {
+			out.Properties[key] = ProviderSettingProperty{
+				Type:        ProviderSettingType(property.Type),
+				Title:       property.Title,
+				Description: property.Description,
+				Enum:        append([]any(nil), property.Enum...),
+				Default:     property.Default,
+				Examples:    append([]any(nil), property.Examples...),
+				WriteOnly:   property.WriteOnly,
+				MinLength:   cloneIntPointer(property.MinLength),
+				MaxLength:   cloneIntPointer(property.MaxLength),
+				Pattern:     property.Pattern,
+				Minimum:     cloneFloat64Pointer(property.Minimum),
+				Maximum:     cloneFloat64Pointer(property.Maximum),
+				Control:     ProviderSettingControl(property.Control),
+				Persistence: ProviderSettingPersistence(property.Persistence),
+			}
+		}
+	}
+	if err := validateProviderSettingsSchema(out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func providerMayRequireInteractiveSupport(descriptor ProviderDescriptor) bool {

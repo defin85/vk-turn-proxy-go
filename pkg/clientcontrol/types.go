@@ -149,19 +149,20 @@ type NegotiateRequest struct {
 }
 
 type ProfileSpec struct {
-	Provider            string        `json:"provider"`
-	Link                string        `json:"link"`
-	ListenAddr          string        `json:"listen_addr"`
-	PeerAddr            string        `json:"peer_addr"`
-	Ingress             AdapterKind   `json:"ingress,omitempty"`
-	Connections         int           `json:"connections,omitempty"`
-	TURNServer          string        `json:"turn_server,omitempty"`
-	TURNPort            string        `json:"turn_port,omitempty"`
-	BindInterface       string        `json:"bind_interface,omitempty"`
-	Mode                TransportMode `json:"mode,omitempty"`
-	UseDTLS             *bool         `json:"use_dtls,omitempty"`
-	InteractiveProvider bool          `json:"interactive_provider,omitempty"`
-	LogLevel            string        `json:"log_level,omitempty"`
+	Provider            string           `json:"provider"`
+	Link                string           `json:"link"`
+	ProviderSettings    ProviderSettings `json:"provider_settings,omitempty"`
+	ListenAddr          string           `json:"listen_addr"`
+	PeerAddr            string           `json:"peer_addr"`
+	Ingress             AdapterKind      `json:"ingress,omitempty"`
+	Connections         int              `json:"connections,omitempty"`
+	TURNServer          string           `json:"turn_server,omitempty"`
+	TURNPort            string           `json:"turn_port,omitempty"`
+	BindInterface       string           `json:"bind_interface,omitempty"`
+	Mode                TransportMode    `json:"mode,omitempty"`
+	UseDTLS             *bool            `json:"use_dtls,omitempty"`
+	InteractiveProvider bool             `json:"interactive_provider,omitempty"`
+	LogLevel            string           `json:"log_level,omitempty"`
 }
 
 type Profile struct {
@@ -276,6 +277,7 @@ type StartSessionRequest struct {
 type StartResolutionRequest struct {
 	Provider            string                 `json:"provider"`
 	Input               *ProviderInputEnvelope `json:"input,omitempty"`
+	ProviderSettings    ProviderSettings       `json:"provider_settings,omitempty"`
 	Link                string                 `json:"-"`
 	InteractiveProvider bool                   `json:"-"`
 }

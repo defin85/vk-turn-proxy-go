@@ -242,6 +242,258 @@ class ProviderCapabilityHints {
   final ArtifactRedactionPolicy redactionPolicy;
 }
 
+enum ProviderSettingType {
+  string('string'),
+  integer('integer'),
+  number('number'),
+  boolean('boolean');
+
+  const ProviderSettingType(this.value);
+
+  final String value;
+
+  static ProviderSettingType? fromJson(String? raw) {
+    for (final type in values) {
+      if (type.value == raw) {
+        return type;
+      }
+    }
+    return null;
+  }
+}
+
+enum ProviderSettingControl {
+  text('text'),
+  textarea('textarea'),
+  select('select'),
+  checkbox('checkbox'),
+  password('password');
+
+  const ProviderSettingControl(this.value);
+
+  final String value;
+
+  static ProviderSettingControl? fromJson(String? raw) {
+    for (final control in values) {
+      if (control.value == raw) {
+        return control;
+      }
+    }
+    return null;
+  }
+}
+
+enum ProviderSettingPersistence {
+  profile('profile'),
+  ephemeral('ephemeral');
+
+  const ProviderSettingPersistence(this.value);
+
+  final String value;
+
+  static ProviderSettingPersistence? fromJson(String? raw) {
+    for (final persistence in values) {
+      if (persistence.value == raw) {
+        return persistence;
+      }
+    }
+    return null;
+  }
+}
+
+class ProviderSettingProperty {
+  const ProviderSettingProperty({
+    required this.type,
+    this.title = '',
+    this.description = '',
+    this.enumValues = const <dynamic>[],
+    this.defaultValue,
+    this.examples = const <dynamic>[],
+    this.writeOnly = false,
+    this.minLength,
+    this.maxLength,
+    this.pattern,
+    this.minimum,
+    this.maximum,
+    this.control,
+    this.persistence,
+  });
+
+  factory ProviderSettingProperty.fromJson(Map<String, dynamic> json) {
+    return ProviderSettingProperty(
+      type: ProviderSettingType.fromJson(json['type'] as String?),
+      title: json['title'] as String? ?? '',
+      description: json['description'] as String? ?? '',
+      enumValues: _readScalarList(json['enum']),
+      defaultValue: _scalarJsonValueOrNull(json['default']),
+      examples: _readScalarList(json['examples']),
+      writeOnly: json['writeOnly'] as bool? ?? false,
+      minLength: json['minLength'] as int?,
+      maxLength: json['maxLength'] as int?,
+      pattern: json['pattern'] as String?,
+      minimum: (json['minimum'] as num?)?.toDouble(),
+      maximum: (json['maximum'] as num?)?.toDouble(),
+      control: ProviderSettingControl.fromJson(
+        json['x-vkturn-control'] as String?,
+      ),
+      persistence: ProviderSettingPersistence.fromJson(
+        json['x-vkturn-persistence'] as String?,
+      ),
+    );
+  }
+
+  final ProviderSettingType? type;
+  final String title;
+  final String description;
+  final List<dynamic> enumValues;
+  final dynamic defaultValue;
+  final List<dynamic> examples;
+  final bool writeOnly;
+  final int? minLength;
+  final int? maxLength;
+  final String? pattern;
+  final double? minimum;
+  final double? maximum;
+  final ProviderSettingControl? control;
+  final ProviderSettingPersistence? persistence;
+}
+
+class ProviderSettingsField {
+  const ProviderSettingsField({required this.key, required this.property});
+
+  final String key;
+  final ProviderSettingProperty property;
+}
+
+class ProviderSettingsSchema {
+  const ProviderSettingsSchema({
+    required this.type,
+    required this.additionalProperties,
+    this.properties = const <String, ProviderSettingProperty>{},
+    this.requiredKeys = const <String>[],
+    this.order = const <String>[],
+  });
+
+  factory ProviderSettingsSchema.fromJson(Map<String, dynamic> json) {
+    return ProviderSettingsSchema(
+      type: json['type'] as String? ?? '',
+      additionalProperties: json['additionalProperties'] as bool? ?? true,
+      properties: _readProviderSettingProperties(json['properties']),
+      requiredKeys: (json['required'] as List<dynamic>? ?? const <dynamic>[])
+          .map((dynamic raw) => (raw as String? ?? '').trim())
+          .where((String key) => key.isNotEmpty)
+          .toList(growable: false),
+      order: (json['x-vkturn-order'] as List<dynamic>? ?? const <dynamic>[])
+          .map((dynamic raw) => (raw as String? ?? '').trim())
+          .where((String key) => key.isNotEmpty)
+          .toList(growable: false),
+    );
+  }
+
+  final String type;
+  final bool additionalProperties;
+  final Map<String, ProviderSettingProperty> properties;
+  final List<String> requiredKeys;
+  final List<String> order;
+
+  String? get unsupportedReason {
+    if (type != 'object') {
+      return 'schema root must be type=object';
+    }
+    if (additionalProperties) {
+      return 'schema root must set additionalProperties=false';
+    }
+    for (final key in requiredKeys) {
+      if (!properties.containsKey(key)) {
+        return 'required field $key is not declared in properties';
+      }
+    }
+    for (final key in order) {
+      if (!properties.containsKey(key)) {
+        return 'x-vkturn-order references unknown field $key';
+      }
+    }
+    for (final entry in properties.entries) {
+      final reason = _unsupportedPropertyReason(entry.key, entry.value);
+      if (reason != null) {
+        return reason;
+      }
+    }
+    return null;
+  }
+
+  List<ProviderSettingsField> get orderedFields {
+    if (unsupportedReason != null) {
+      return const <ProviderSettingsField>[];
+    }
+    final keys = <String>[];
+    final seen = <String>{};
+    for (final key in order) {
+      if (seen.add(key)) {
+        keys.add(key);
+      }
+    }
+    final remaining =
+        properties.keys
+            .where((String key) => !seen.contains(key))
+            .toList(growable: false)
+          ..sort();
+    keys.addAll(remaining);
+    return keys
+        .map(
+          (String key) =>
+              ProviderSettingsField(key: key, property: properties[key]!),
+        )
+        .toList(growable: false);
+  }
+
+  Map<String, dynamic> normalizeValues(
+    Map<String, dynamic> values, {
+    bool applyDefaults = true,
+  }) {
+    if (unsupportedReason != null) {
+      return const <String, dynamic>{};
+    }
+    final normalized = <String, dynamic>{};
+    for (final field in orderedFields) {
+      if (values.containsKey(field.key) &&
+          _canShellRepresentProviderSettingValue(
+            field.property,
+            values[field.key],
+          )) {
+        normalized[field.key] = values[field.key];
+        continue;
+      }
+      if (applyDefaults &&
+          _canShellRepresentProviderSettingValue(
+            field.property,
+            field.property.defaultValue,
+          )) {
+        normalized[field.key] = field.property.defaultValue;
+      }
+    }
+    return normalized;
+  }
+
+  Map<String, dynamic> profileRetainedValues(Map<String, dynamic> values) {
+    final normalized = normalizeValues(values, applyDefaults: false);
+    final retained = <String, dynamic>{};
+    for (final field in orderedFields) {
+      if (!normalized.containsKey(field.key)) {
+        continue;
+      }
+      if (field.property.writeOnly) {
+        continue;
+      }
+      if (field.property.persistence != ProviderSettingPersistence.profile) {
+        continue;
+      }
+      retained[field.key] = normalized[field.key];
+    }
+    return retained;
+  }
+}
+
 class ProviderDescriptor {
   const ProviderDescriptor({
     required this.id,
@@ -250,6 +502,7 @@ class ProviderDescriptor {
     required this.authPosture,
     required this.browserPolicy,
     this.description = '',
+    this.settingsSchema,
     this.challengeModes = const <ProviderChallengeMode>[],
     this.artifactFamilies = const <ArtifactFamily>[],
     this.capabilityHints = const ProviderCapabilityHints(),
@@ -267,6 +520,11 @@ class ProviderDescriptor {
       browserPolicy: ProviderBrowserPolicy.fromJson(
         json['browser_policy'] as String?,
       ),
+      settingsSchema: json['provider_settings_schema'] is Map<String, dynamic>
+          ? ProviderSettingsSchema.fromJson(
+              json['provider_settings_schema'] as Map<String, dynamic>,
+            )
+          : null,
       challengeModes:
           (json['challenge_modes'] as List<dynamic>? ?? const <dynamic>[])
               .map(
@@ -293,12 +551,39 @@ class ProviderDescriptor {
   final ProviderInputKind inputKind;
   final ProviderAuthPosture authPosture;
   final ProviderBrowserPolicy browserPolicy;
+  final ProviderSettingsSchema? settingsSchema;
   final List<ProviderChallengeMode> challengeModes;
   final List<ArtifactFamily> artifactFamilies;
   final ProviderCapabilityHints capabilityHints;
 
   bool get mayRequireBrowserContinuation =>
       challengeModes.contains(ProviderChallengeMode.browser);
+
+  bool get supportsProviderSettings =>
+      settingsSchema?.unsupportedReason == null;
+
+  String? get providerSettingsSupportError => settingsSchema?.unsupportedReason;
+
+  List<ProviderSettingsField> get providerSettingsFields =>
+      settingsSchema?.orderedFields ?? const <ProviderSettingsField>[];
+
+  Map<String, dynamic> normalizeProviderSettings(
+    Map<String, dynamic> values, {
+    bool applyDefaults = true,
+  }) {
+    return settingsSchema?.normalizeValues(
+          values,
+          applyDefaults: applyDefaults,
+        ) ??
+        const <String, dynamic>{};
+  }
+
+  Map<String, dynamic> profileRetainedProviderSettings(
+    Map<String, dynamic> values,
+  ) {
+    return settingsSchema?.profileRetainedValues(values) ??
+        const <String, dynamic>{};
+  }
 }
 
 class ProviderInputEnvelope {
@@ -804,6 +1089,7 @@ class ProfileSpec {
     required this.link,
     required this.listenAddress,
     required this.peerAddress,
+    this.providerSettings = const <String, dynamic>{},
     this.connections = 1,
     this.turnServer,
     this.turnPort,
@@ -818,6 +1104,7 @@ class ProfileSpec {
     return ProfileSpec(
       provider: json['provider'] as String? ?? '',
       link: json['link'] as String? ?? '',
+      providerSettings: _readJsonObject(json['provider_settings']),
       listenAddress: json['listen_addr'] as String? ?? '',
       peerAddress: json['peer_addr'] as String? ?? '',
       connections: json['connections'] as int? ?? 1,
@@ -833,6 +1120,7 @@ class ProfileSpec {
 
   final String provider;
   final String link;
+  final Map<String, dynamic> providerSettings;
   final String listenAddress;
   final String peerAddress;
   final int connections;
@@ -847,6 +1135,7 @@ class ProfileSpec {
   ProfileSpec copyWith({
     String? provider,
     String? link,
+    Map<String, dynamic>? providerSettings,
     String? listenAddress,
     String? peerAddress,
     int? connections,
@@ -861,6 +1150,7 @@ class ProfileSpec {
     return ProfileSpec(
       provider: provider ?? this.provider,
       link: link ?? this.link,
+      providerSettings: providerSettings ?? this.providerSettings,
       listenAddress: listenAddress ?? this.listenAddress,
       peerAddress: peerAddress ?? this.peerAddress,
       connections: connections ?? this.connections,
@@ -878,6 +1168,7 @@ class ProfileSpec {
     return _compact(<String, dynamic>{
       'provider': provider,
       'link': link,
+      'provider_settings': providerSettings.isEmpty ? null : providerSettings,
       'listen_addr': listenAddress,
       'peer_addr': peerAddress,
       'connections': connections,
@@ -1754,6 +2045,8 @@ class ControlPlaneError implements Exception {
     required this.code,
     required this.message,
     this.action,
+    this.field,
+    this.violation,
     this.stage,
     this.notImplemented = false,
   });
@@ -1762,6 +2055,8 @@ class ControlPlaneError implements Exception {
   final String code;
   final String message;
   final String? action;
+  final String? field;
+  final String? violation;
   final String? stage;
   final bool notImplemented;
 
@@ -1769,7 +2064,7 @@ class ControlPlaneError implements Exception {
 
   @override
   String toString() {
-    return 'ControlPlaneError(status=$statusCode, code=$code, message=$message, action=$action, stage=$stage, notImplemented=$notImplemented)';
+    return 'ControlPlaneError(status=$statusCode, code=$code, message=$message, action=$action, field=$field, violation=$violation, stage=$stage, notImplemented=$notImplemented)';
   }
 }
 
@@ -1783,6 +2078,212 @@ DateTime _readTimestamp(dynamic raw) {
 Map<String, dynamic> _compact(Map<String, dynamic> values) {
   values.removeWhere((String _, dynamic value) => value == null);
   return values;
+}
+
+Map<String, ProviderSettingProperty> _readProviderSettingProperties(
+  dynamic raw,
+) {
+  if (raw is! Map) {
+    return const <String, ProviderSettingProperty>{};
+  }
+  final values = <String, ProviderSettingProperty>{};
+  raw.forEach((dynamic key, dynamic value) {
+    if (value is! Map<String, dynamic>) {
+      return;
+    }
+    final normalizedKey = (key as String? ?? '').trim();
+    if (normalizedKey.isEmpty) {
+      return;
+    }
+    values[normalizedKey] = ProviderSettingProperty.fromJson(value);
+  });
+  return values;
+}
+
+Map<String, dynamic> _readJsonObject(dynamic raw) {
+  if (raw is! Map) {
+    return const <String, dynamic>{};
+  }
+  final values = <String, dynamic>{};
+  raw.forEach((dynamic key, dynamic value) {
+    final normalizedKey = (key as String? ?? '').trim();
+    if (normalizedKey.isEmpty) {
+      return;
+    }
+    values[normalizedKey] = value;
+  });
+  return values;
+}
+
+List<dynamic> _readScalarList(dynamic raw) {
+  return (raw as List<dynamic>? ?? const <dynamic>[])
+      .where(_isScalarJsonValue)
+      .toList(growable: false);
+}
+
+dynamic _scalarJsonValueOrNull(dynamic raw) {
+  return _isScalarJsonValue(raw) ? raw : null;
+}
+
+bool _isScalarJsonValue(dynamic value) {
+  return value is String || value is num || value is bool;
+}
+
+String? _unsupportedPropertyReason(
+  String key,
+  ProviderSettingProperty property,
+) {
+  if (property.type == null) {
+    return 'provider setting $key is missing a supported scalar type';
+  }
+  if (property.control == null) {
+    return 'provider setting $key is missing x-vkturn-control';
+  }
+  if (property.persistence == null) {
+    return 'provider setting $key is missing x-vkturn-persistence';
+  }
+  if (property.writeOnly &&
+      property.persistence != ProviderSettingPersistence.ephemeral) {
+    return 'provider setting $key declares writeOnly ${property.persistence!.value} persistence which is unsupported';
+  }
+  if (property.control == ProviderSettingControl.select &&
+      property.enumValues.isEmpty) {
+    return 'provider setting $key uses select without enum values';
+  }
+  if (property.control == ProviderSettingControl.checkbox &&
+      property.type != ProviderSettingType.boolean) {
+    return 'provider setting $key uses checkbox but is not boolean';
+  }
+  if ((property.minLength != null ||
+          property.maxLength != null ||
+          (property.pattern ?? '').isNotEmpty) &&
+      property.type != ProviderSettingType.string) {
+    return 'provider setting $key uses string validation keywords but is not string';
+  }
+  if (property.minLength != null &&
+      property.maxLength != null &&
+      property.minLength! > property.maxLength!) {
+    return 'provider setting $key declares minLength greater than maxLength';
+  }
+  if ((property.minimum != null || property.maximum != null) &&
+      property.type != ProviderSettingType.integer &&
+      property.type != ProviderSettingType.number) {
+    return 'provider setting $key uses numeric range keywords but is not numeric';
+  }
+  if (property.minimum != null &&
+      property.maximum != null &&
+      property.minimum! > property.maximum!) {
+    return 'provider setting $key declares minimum greater than maximum';
+  }
+  if ((property.pattern ?? '').isNotEmpty) {
+    try {
+      RegExp(property.pattern!);
+    } on FormatException {
+      return 'provider setting $key declares an invalid pattern';
+    }
+  }
+  if (property.defaultValue != null &&
+      !_matchesProviderSettingType(property.defaultValue, property.type!)) {
+    return 'provider setting $key has a default that does not match ${property.type!.value}';
+  }
+  if (property.control == ProviderSettingControl.select &&
+      property.defaultValue != null &&
+      !property.enumValues.contains(property.defaultValue)) {
+    return 'provider setting $key declares a default that is not one of the enum values';
+  }
+  for (final candidate in property.enumValues) {
+    if (!_matchesProviderSettingType(candidate, property.type!)) {
+      return 'provider setting $key has an enum value that does not match ${property.type!.value}';
+    }
+  }
+  for (final candidate in property.examples) {
+    if (!_matchesProviderSettingType(candidate, property.type!)) {
+      return 'provider setting $key has an example that does not match ${property.type!.value}';
+    }
+  }
+  return null;
+}
+
+bool _matchesProviderSettingType(dynamic value, ProviderSettingType type) {
+  return switch (type) {
+    ProviderSettingType.string => value is String,
+    ProviderSettingType.integer => value is int,
+    ProviderSettingType.number => value is num,
+    ProviderSettingType.boolean => value is bool,
+  };
+}
+
+bool _canShellRepresentProviderSettingValue(
+  ProviderSettingProperty property,
+  dynamic value,
+) {
+  if (value == null || property.type == null) {
+    return false;
+  }
+  switch (property.control) {
+    case ProviderSettingControl.select:
+      return property.enumValues.contains(value) &&
+          _matchesProviderSettingConstraints(property, value);
+    case ProviderSettingControl.checkbox:
+      return value is bool &&
+          _matchesProviderSettingConstraints(property, value);
+    case ProviderSettingControl.text:
+    case ProviderSettingControl.textarea:
+    case ProviderSettingControl.password:
+      return _isScalarJsonValue(value) &&
+          _matchesProviderSettingConstraints(property, value);
+    case null:
+      return false;
+  }
+}
+
+bool _matchesProviderSettingConstraints(
+  ProviderSettingProperty property,
+  dynamic value,
+) {
+  if (property.type == null ||
+      !_matchesProviderSettingType(value, property.type!)) {
+    return false;
+  }
+  switch (property.type!) {
+    case ProviderSettingType.string:
+      final text = value as String;
+      if (property.minLength != null &&
+          text.runes.length < property.minLength!) {
+        return false;
+      }
+      if (property.maxLength != null &&
+          text.runes.length > property.maxLength!) {
+        return false;
+      }
+      final pattern = property.pattern;
+      if (pattern != null &&
+          pattern.isNotEmpty &&
+          !RegExp(pattern).hasMatch(text)) {
+        return false;
+      }
+      return true;
+    case ProviderSettingType.integer:
+      final number = (value as int).toDouble();
+      if (property.minimum != null && number < property.minimum!) {
+        return false;
+      }
+      if (property.maximum != null && number > property.maximum!) {
+        return false;
+      }
+      return true;
+    case ProviderSettingType.number:
+      final number = (value as num).toDouble();
+      if (property.minimum != null && number < property.minimum!) {
+        return false;
+      }
+      if (property.maximum != null && number > property.maximum!) {
+        return false;
+      }
+      return true;
+    case ProviderSettingType.boolean:
+      return true;
+  }
 }
 
 List<PlatformTunnelCapability> _readPlatformTunnels(

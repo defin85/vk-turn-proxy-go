@@ -73,6 +73,7 @@ type ProviderDescriptor struct {
 	InputKind        ProviderInputKind       `json:"input_kind"`
 	AuthPosture      ProviderAuthPosture     `json:"auth_posture"`
 	BrowserPolicy    ProviderBrowserPolicy   `json:"browser_policy"`
+	SettingsSchema   *ProviderSettingsSchema `json:"provider_settings_schema,omitempty"`
 	ChallengeModes   []ProviderChallengeMode `json:"challenge_modes,omitempty"`
 	ArtifactFamilies []ArtifactFamily        `json:"artifact_families,omitempty"`
 	CapabilityHints  ProviderCapabilityHints `json:"capability_hints,omitempty"`
@@ -88,6 +89,7 @@ func SummaryOnlyArtifactRedactionPolicy() ArtifactRedactionPolicy {
 }
 
 func cloneProviderDescriptor(descriptor ProviderDescriptor) ProviderDescriptor {
+	descriptor.SettingsSchema = cloneProviderSettingsSchema(descriptor.SettingsSchema)
 	descriptor.ChallengeModes = append([]ProviderChallengeMode(nil), descriptor.ChallengeModes...)
 	descriptor.ArtifactFamilies = append([]ArtifactFamily(nil), descriptor.ArtifactFamilies...)
 	descriptor.CapabilityHints.PotentialActions = append([]ArtifactAction(nil), descriptor.CapabilityHints.PotentialActions...)

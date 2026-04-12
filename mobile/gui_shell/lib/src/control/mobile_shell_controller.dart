@@ -258,7 +258,24 @@ class MobileShellController extends ChangeNotifier {
     busy = true;
     _notify();
     try {
-      var profile = draft.toProfile();
+      final descriptor = activeProviderDescriptor;
+      if (descriptor == null) {
+        notice =
+            'The selected provider is not advertised by the connected mobile host.';
+        return;
+      }
+      final blockReason = _providerSettingsBlockReason(descriptor);
+      if (blockReason != null) {
+        notice = blockReason;
+        return;
+      }
+      var profile = draft.toProfile().copyWith(
+        spec: draft.spec.copyWith(
+          providerSettings: descriptor.profileRetainedProviderSettings(
+            draft.spec.providerSettings,
+          ),
+        ),
+      );
       if (profile.id.isEmpty) {
         profile = profile.copyWith(id: _idFactory());
       }
@@ -364,11 +381,20 @@ class MobileShellController extends ChangeNotifier {
             '${descriptor.displayName} expects ${descriptor.inputKind.value} input. This mobile shell currently supports link entry only.';
         return;
       }
+      final blockReason = _providerSettingsBlockReason(descriptor);
+      if (blockReason != null) {
+        notice = blockReason;
+        return;
+      }
       final resolution = await bridge.startResolution(
         provider: descriptor.id,
         input: ProviderInputEnvelope(
           kind: descriptor.inputKind,
           link: draft.spec.link,
+        ),
+        providerSettings: descriptor.normalizeProviderSettings(
+          draft.spec.providerSettings,
+          applyDefaults: false,
         ),
       );
       selectedResolutionId = resolution.id;
@@ -988,12 +1014,13 @@ class MobileShellController extends ChangeNotifier {
       selectedProfileId: selectedProfileId,
       draft: draft,
     );
-    final signature = next.signature();
+    final sanitized = next.sanitizedForPersistence(providerDescriptors);
+    final signature = sanitized.signature();
     if (signature == _persistedStateSignature) {
       return;
     }
     try {
-      await stateStore.save(next);
+      await stateStore.save(sanitized);
       _persistedStateSignature = signature;
     } catch (error) {
       notice = 'Failed to persist mobile shell state: $error';
@@ -1051,18 +1078,39 @@ class MobileShellController extends ChangeNotifier {
     final descriptor =
         descriptorForProvider(candidate.spec.provider) ??
         providerDescriptors.first;
-    final link =
+    final sameProvider =
         descriptor.id.trim().toLowerCase() ==
-            candidate.spec.provider.trim().toLowerCase()
-        ? candidate.spec.link
-        : '';
+        candidate.spec.provider.trim().toLowerCase();
+    final link = sameProvider ? candidate.spec.link : '';
+    final providerSettings = switch (descriptor.settingsSchema) {
+      null => const <String, dynamic>{},
+      _ when descriptor.supportsProviderSettings =>
+        descriptor.normalizeProviderSettings(
+          sameProvider
+              ? candidate.spec.providerSettings
+              : const <String, dynamic>{},
+        ),
+      _ =>
+        sameProvider
+            ? candidate.spec.providerSettings
+            : const <String, dynamic>{},
+    };
     return candidate.copyWith(
       spec: candidate.spec.copyWith(
         provider: descriptor.id,
         link: link,
+        providerSettings: providerSettings,
         interactiveProvider: descriptor.mayRequireBrowserContinuation,
       ),
     );
+  }
+
+  String? _providerSettingsBlockReason(ProviderDescriptor descriptor) {
+    final reason = descriptor.providerSettingsSupportError;
+    if (reason == null) {
+      return null;
+    }
+    return 'The connected mobile shell cannot render provider settings for ${descriptor.displayName}: $reason';
   }
 
   void _notify() {

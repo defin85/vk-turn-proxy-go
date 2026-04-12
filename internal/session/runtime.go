@@ -95,6 +95,9 @@ func Run(ctx context.Context, cfg config.ClientConfig, deps Dependencies) error 
 		"connections", cfg.Connections,
 	)
 
+	if len(cfg.ProviderSettings) > 0 {
+		ctx = provider.WithSettings(ctx, provider.ProviderSettings(cfg.ProviderSettings))
+	}
 	resolution, err := adapter.Resolve(ctx, cfg.Link)
 	if err != nil {
 		observer.RecordSessionFailure(string(runstage.ProviderResolve), true)

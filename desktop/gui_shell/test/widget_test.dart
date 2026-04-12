@@ -363,6 +363,7 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   Future<ResolutionRecord> startResolution({
     required String provider,
     required ProviderInputEnvelope input,
+    Map<String, dynamic> providerSettings = const <String, dynamic>{},
   }) async {
     return ResolutionRecord(
       id: 'resolution-1',

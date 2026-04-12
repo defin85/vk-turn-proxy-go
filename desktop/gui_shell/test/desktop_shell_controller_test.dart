@@ -100,6 +100,63 @@ const List<ProviderDescriptor> _providerDescriptors = <ProviderDescriptor>[
   ),
 ];
 
+const ProviderDescriptor _providerWithSettingsDescriptor = ProviderDescriptor(
+  id: 'wb-stream',
+  displayName: 'WB Stream',
+  description: 'Descriptor-driven provider settings test fixture.',
+  inputKind: ProviderInputKind.link,
+  authPosture: ProviderAuthPosture.account,
+  browserPolicy: ProviderBrowserPolicy.notRequired,
+  artifactFamilies: <ArtifactFamily>[ArtifactFamily.genericTurn],
+  settingsSchema: ProviderSettingsSchema(
+    type: 'object',
+    additionalProperties: false,
+    requiredKeys: <String>['region', 'device_pin'],
+    order: <String>['region', 'device_pin'],
+    properties: <String, ProviderSettingProperty>{
+      'region': ProviderSettingProperty(
+        type: ProviderSettingType.string,
+        title: 'Region',
+        enumValues: <dynamic>['ru-central', 'eu-west'],
+        defaultValue: 'ru-central',
+        control: ProviderSettingControl.select,
+        persistence: ProviderSettingPersistence.profile,
+      ),
+      'device_pin': ProviderSettingProperty(
+        type: ProviderSettingType.string,
+        title: 'Device PIN',
+        writeOnly: true,
+        control: ProviderSettingControl.password,
+        persistence: ProviderSettingPersistence.ephemeral,
+      ),
+    },
+  ),
+);
+
+const ProviderDescriptor _unsupportedProviderSettingsDescriptor =
+    ProviderDescriptor(
+      id: 'unsupported-provider',
+      displayName: 'Unsupported provider',
+      description: 'Schema with unsupported persistent secret settings.',
+      inputKind: ProviderInputKind.link,
+      authPosture: ProviderAuthPosture.account,
+      browserPolicy: ProviderBrowserPolicy.notRequired,
+      artifactFamilies: <ArtifactFamily>[ArtifactFamily.genericTurn],
+      settingsSchema: ProviderSettingsSchema(
+        type: 'object',
+        additionalProperties: false,
+        properties: <String, ProviderSettingProperty>{
+          'device_pin': ProviderSettingProperty(
+            type: ProviderSettingType.string,
+            title: 'Device PIN',
+            writeOnly: true,
+            control: ProviderSettingControl.password,
+            persistence: ProviderSettingPersistence.profile,
+          ),
+        },
+      ),
+    );
+
 void main() {
   test('controller restores active challenge details during refresh', () async {
     final api = _FakeControlPlaneApi(
@@ -460,7 +517,7 @@ void main() {
       expect(saved.profiles, hasLength(1));
       expect(saved.selectedProfileId, 'profile-1');
       expect(saved.draft.name, 'edited alpha');
-      expect(saved.draft.spec.link, 'generic-turn://edited');
+      expect(saved.draft.spec.link, '');
       expect(saved.runtimeDefaults.listenAddress, '127.0.0.1:9201');
       expect(saved.runtimeDefaults.peerAddress, '127.0.0.1:56100');
       expect(saved.runtimeDefaults.turnServer, 'override.example.test');
@@ -516,6 +573,98 @@ void main() {
         'https://vk.com/call/join/fresh',
       );
       expect(controller.notice, contains('external browser steps'));
+    },
+  );
+
+  test(
+    'controller sends provider settings for resolution and stores only profile-retained values',
+    () async {
+      final api = _FakeControlPlaneApi(
+        profiles: const <ProfileRecord>[],
+        providers: const <ProviderDescriptor>[_providerWithSettingsDescriptor],
+        resolutions: const <ResolutionRecord>[],
+        sessions: const <SessionRecord>[],
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(const <HostConnectionResult>[
+          HostConnectionResult(
+            state: HostLifecycleState.ready,
+            message: 'ready',
+            info: _readyHostInfo,
+          ),
+        ]),
+        stateStore: _FakeShellStateStore(),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      controller.updateDraft(
+        controller.draft.copyWith(
+          spec: controller.draft.spec.copyWith(
+            provider: 'wb-stream',
+            link: 'https://wb.example.test/invite/abc',
+            providerSettings: <String, dynamic>{
+              'region': 'eu-west',
+              'device_pin': '123456',
+            },
+          ),
+        ),
+      );
+
+      await controller.startResolutionFromDraft();
+      expect(api.startResolutionCalls, hasLength(1));
+      expect(
+        api.startResolutionCalls.single.providerSettings,
+        <String, dynamic>{'region': 'eu-west', 'device_pin': '123456'},
+      );
+
+      await controller.saveDraft();
+      expect(api.upsertedProfiles, hasLength(1));
+      expect(
+        api.upsertedProfiles.single.spec.providerSettings,
+        <String, dynamic>{'region': 'eu-west'},
+      );
+    },
+  );
+
+  test(
+    'controller fails closed on unsupported provider settings schema',
+    () async {
+      final api = _FakeControlPlaneApi(
+        profiles: const <ProfileRecord>[],
+        providers: const <ProviderDescriptor>[
+          _unsupportedProviderSettingsDescriptor,
+        ],
+        resolutions: const <ResolutionRecord>[],
+        sessions: const <SessionRecord>[],
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(const <HostConnectionResult>[
+          HostConnectionResult(
+            state: HostLifecycleState.ready,
+            message: 'ready',
+            info: _readyHostInfo,
+          ),
+        ]),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      controller.updateDraft(
+        controller.draft.copyWith(
+          spec: controller.draft.spec.copyWith(
+            provider: 'unsupported-provider',
+            link: 'https://example.test/invite/abc',
+          ),
+        ),
+      );
+
+      await controller.startResolutionFromDraft();
+
+      expect(api.startResolutionCalls, isEmpty);
+      expect(controller.notice, contains('cannot render provider settings'));
     },
   );
 
@@ -1033,9 +1182,14 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   Future<ResolutionRecord> startResolution({
     required String provider,
     required ProviderInputEnvelope input,
+    Map<String, dynamic> providerSettings = const <String, dynamic>{},
   }) async {
     startResolutionCalls.add(
-      _StartResolutionCall(provider: provider, input: input),
+      _StartResolutionCall(
+        provider: provider,
+        input: input,
+        providerSettings: providerSettings,
+      ),
     );
     final resolution = _resolutionRecord(
       id: 'resolution-${startResolutionCalls.length}',
@@ -1245,8 +1399,13 @@ ResolutionRecord _conferenceRoomResolutionRecord({
 }
 
 class _StartResolutionCall {
-  const _StartResolutionCall({required this.provider, required this.input});
+  const _StartResolutionCall({
+    required this.provider,
+    required this.input,
+    required this.providerSettings,
+  });
 
   final String provider;
   final ProviderInputEnvelope input;
+  final Map<String, dynamic> providerSettings;
 }

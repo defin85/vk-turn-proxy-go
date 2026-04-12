@@ -7,6 +7,40 @@ import 'package:gui_shell/src/control/profile_draft.dart';
 import 'package:gui_shell/src/control/shell_state_store.dart';
 
 void main() {
+  const providerDescriptors = <ProviderDescriptor>[
+    ProviderDescriptor(
+      id: 'wb-stream',
+      displayName: 'WB Stream',
+      inputKind: ProviderInputKind.link,
+      authPosture: ProviderAuthPosture.account,
+      browserPolicy: ProviderBrowserPolicy.notRequired,
+      settingsSchema: ProviderSettingsSchema(
+        type: 'object',
+        additionalProperties: false,
+        properties: <String, ProviderSettingProperty>{
+          'region': ProviderSettingProperty(
+            type: ProviderSettingType.string,
+            control: ProviderSettingControl.select,
+            persistence: ProviderSettingPersistence.profile,
+            enumValues: <dynamic>['ru-central', 'eu-west'],
+          ),
+          'device_alias': ProviderSettingProperty(
+            type: ProviderSettingType.string,
+            control: ProviderSettingControl.text,
+            persistence: ProviderSettingPersistence.profile,
+            pattern: r'^[a-z]+$',
+          ),
+          'device_pin': ProviderSettingProperty(
+            type: ProviderSettingType.string,
+            writeOnly: true,
+            control: ProviderSettingControl.password,
+            persistence: ProviderSettingPersistence.ephemeral,
+          ),
+        },
+      ),
+    ),
+  ];
+
   test(
     'desktop state store redacts provider links from persisted plaintext state',
     () async {
@@ -23,8 +57,13 @@ void main() {
             id: 'profile-1',
             name: 'vk invite',
             spec: const ProfileSpec(
-              provider: 'vk',
+              provider: 'wb-stream',
               link: 'https://vk.com/call/join/test-token',
+              providerSettings: <String, dynamic>{
+                'region': 'eu-west',
+                'device_alias': '123-invalid',
+                'device_pin': '123456',
+              },
               listenAddress: '127.0.0.1:9001',
               peerAddress: '127.0.0.1:56000',
             ),
@@ -45,8 +84,13 @@ void main() {
           id: 'draft-1',
           name: 'draft',
           spec: ProfileSpec(
-            provider: 'generic-turn',
+            provider: 'wb-stream',
             link: 'generic-turn://draft-user:draft-pass@turn.example.test:3478',
+            providerSettings: <String, dynamic>{
+              'region': 'ru-central',
+              'device_alias': '456-invalid',
+              'device_pin': '654321',
+            },
             listenAddress: '127.0.0.1:9001',
             peerAddress: '127.0.0.1:56000',
           ),
@@ -63,7 +107,7 @@ void main() {
         ),
       );
 
-      await store.save(state);
+      await store.save(state.sanitizedForPersistence(providerDescriptors));
 
       final payload = await file.readAsString();
       expect(payload, isNot(contains('https://vk.com/call/join/test-token')));
@@ -87,8 +131,16 @@ void main() {
       final runtimeDefaults =
           decoded['runtime_defaults'] as Map<String, dynamic>;
       expect((profiles[0] as Map<String, dynamic>)['spec']['link'], '');
+      expect(
+        (profiles[0] as Map<String, dynamic>)['spec']['provider_settings'],
+        <String, dynamic>{'region': 'eu-west'},
+      );
       expect((profiles[1] as Map<String, dynamic>)['spec']['link'], '');
       expect((decoded['draft'] as Map<String, dynamic>)['spec']['link'], '');
+      expect(
+        (decoded['draft'] as Map<String, dynamic>)['spec']['provider_settings'],
+        <String, dynamic>{'region': 'ru-central'},
+      );
       expect(runtimeDefaults['listen_addr'], '127.0.0.1:9101');
       expect(runtimeDefaults['peer_addr'], '127.0.0.1:56100');
       expect(runtimeDefaults['turn_server'], 'override.example.test');
