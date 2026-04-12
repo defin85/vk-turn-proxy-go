@@ -233,6 +233,41 @@ func TestHandlerProfileUpsertReturnsFieldAwareProviderSettingsFailure(t *testing
 	}
 }
 
+func TestHandlerProfileUpsertAcceptsPersistedProfileWithoutSecretLink(t *testing.T) {
+	host := New(WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))))
+	handler := Handler(host)
+
+	payload, _ := json.Marshal(Profile{
+		ID:   "profile-1",
+		Name: "saved-vk-profile",
+		Spec: ProfileSpec{
+			Provider:            "vk",
+			Link:                "",
+			ListenAddr:          reserveUDPAddr(t),
+			PeerAddr:            "127.0.0.1:56000",
+			Connections:         4,
+			Mode:                TransportModeUDP,
+			UseDTLS:             boolRef(true),
+			InteractiveProvider: true,
+			LogLevel:            "info",
+		},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/profiles", bytes.NewReader(payload))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /v1/profiles code = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var profile Profile
+	if err := json.Unmarshal(rec.Body.Bytes(), &profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	if profile.Spec.Link != "" {
+		t.Fatalf("persisted profile link = %q, want empty redacted value", profile.Spec.Link)
+	}
+}
+
 func TestHandlerStartResolutionReturnsFieldAwareProviderSettingsFailure(t *testing.T) {
 	host := New(
 		withRegistry(provider.NewRegistry(fakeAdapter{

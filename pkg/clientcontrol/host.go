@@ -1161,7 +1161,25 @@ func (h *Host) normalizeProfileSpec(
 		)
 	}
 
+	if mode == providerSettingsModePersistedProfile {
+		return normalizePersistedProfileSpec(spec)
+	}
+
 	return normalizeRuntimeProfileSpec(spec)
+}
+
+func normalizePersistedProfileSpec(spec ProfileSpec) (ProfileSpec, error) {
+	cfg := translateProfileSpec(spec)
+	if strings.TrimSpace(cfg.Link) == "" {
+		// Persisted GUI state intentionally strips secret-bearing links. Keep
+		// validating the rest of the transport policy without requiring the
+		// redacted secret to be present in local plaintext storage.
+		cfg.Link = "persisted-profile://redacted"
+	}
+	if err := session.ValidatePolicy(cfg); err != nil {
+		return ProfileSpec{}, err
+	}
+	return spec, nil
 }
 
 func normalizeRuntimeProfileSpec(spec ProfileSpec) (ProfileSpec, error) {

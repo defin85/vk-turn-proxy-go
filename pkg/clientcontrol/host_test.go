@@ -286,6 +286,49 @@ func TestHostUpsertProfileRejectsPromptOnlyProviderSettings(t *testing.T) {
 	}
 }
 
+func TestHostUpsertProfileAllowsPersistedProfileWithoutSecretLink(t *testing.T) {
+	host := New(WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))))
+
+	profile, err := host.UpsertProfile(Profile{
+		ID:   "profile-1",
+		Name: "saved-vk-profile",
+		Spec: ProfileSpec{
+			Provider:            "vk",
+			Link:                "",
+			ListenAddr:          reserveUDPAddr(t),
+			PeerAddr:            "127.0.0.1:56000",
+			Connections:         4,
+			Mode:                TransportModeUDP,
+			UseDTLS:             boolRef(true),
+			InteractiveProvider: true,
+			LogLevel:            "info",
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpsertProfile() error = %v", err)
+	}
+	if profile.Spec.Link != "" {
+		t.Fatalf("persisted profile link = %q, want empty redacted value", profile.Spec.Link)
+	}
+
+	stored, err := host.Profile(profile.ID)
+	if err != nil {
+		t.Fatalf("Profile() error = %v", err)
+	}
+	if stored.Spec.Link != "" {
+		t.Fatalf("stored profile link = %q, want empty redacted value", stored.Spec.Link)
+	}
+
+	if _, err := host.StartSession(context.Background(), StartSessionRequest{
+		ProfileID: profile.ID,
+	}); err == nil || !strings.Contains(err.Error(), "link is required") {
+		t.Fatalf("StartSession(profile_id) error = %v, want link is required", err)
+	}
+	if sessions := host.Sessions(); len(sessions) != 0 {
+		t.Fatalf("Sessions() = %d, want 0 after rejected runtime start", len(sessions))
+	}
+}
+
 func TestHostStartResolutionPassesValidatedProviderSettingsThroughContext(t *testing.T) {
 	settingsCh := make(chan provider.ProviderSettings, 1)
 	host := New(
