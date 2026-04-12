@@ -93,7 +93,8 @@ external `WireGuard for Windows` client and uses the desktop shell only as the
 local transport ingress, follow `docs/windows-desktop-wg-poc.md`.
 That workflow also includes the repo-owned sidecar launch helper
 `scripts/run-windows-gui-shell.ps1` and the packaged-session helper
-`scripts/windows-desktop-generic-turn.ps1`.
+`scripts/windows-desktop-generic-turn.ps1`. The sidecar helper keeps ownership
+of the bundled `clientd.exe` and stops it after `gui_shell.exe` exits.
 
 For the packaged Windows desktop workflow that starts from a real VK invite in
 the GUI, moves through typed resolution and browser continuation when needed,

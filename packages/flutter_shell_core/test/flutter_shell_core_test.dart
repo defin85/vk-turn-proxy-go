@@ -9,4 +9,109 @@ void main() {
     expect(BuildIdentityEnvironment.revision, 'dev');
     expect(BuildIdentityEnvironment.dirty, isTrue);
   });
+
+  test('profile draft round-trips through profile records', () {
+    const profile = ProfileRecord(
+      id: 'profile-1',
+      name: '  VK Main  ',
+      spec: ProfileSpec(
+        provider: 'vk',
+        link: 'https://vk.com/call/join/test',
+        listenAddress: '127.0.0.1:9001',
+        peerAddress: '127.0.0.1:56000',
+        mode: TransportMode.udp,
+        useDtls: true,
+        interactiveProvider: true,
+        providerSettings: <String, dynamic>{'region': 'eu-west'},
+      ),
+    );
+
+    final draft = ProfileDraft.fromProfile(profile);
+    final restored = ProfileDraft.fromJson(draft.toJson());
+    final persistedProfile = restored.toProfile();
+
+    expect(restored.id, 'profile-1');
+    expect(restored.name, '  VK Main  ');
+    expect(restored.spec.provider, 'vk');
+    expect(restored.spec.providerSettings, <String, dynamic>{
+      'region': 'eu-west',
+    });
+    expect(persistedProfile.id, 'profile-1');
+    expect(persistedProfile.name, 'VK Main');
+    expect(persistedProfile.spec.interactiveProvider, isTrue);
+  });
+
+  test(
+    'provider descriptor normalizes defaults and keeps only profile-retained settings',
+    () {
+      const descriptor = ProviderDescriptor(
+        id: 'wb-stream',
+        displayName: 'Wideband stream',
+        inputKind: ProviderInputKind.link,
+        authPosture: ProviderAuthPosture.staticSecret,
+        browserPolicy: ProviderBrowserPolicy.notRequired,
+        settingsSchema: ProviderSettingsSchema(
+          type: 'object',
+          additionalProperties: false,
+          properties: <String, ProviderSettingProperty>{
+            'region': ProviderSettingProperty(
+              type: ProviderSettingType.string,
+              control: ProviderSettingControl.text,
+              defaultValue: 'us-east',
+              persistence: ProviderSettingPersistence.profile,
+            ),
+            'device_pin': ProviderSettingProperty(
+              type: ProviderSettingType.string,
+              control: ProviderSettingControl.password,
+              writeOnly: true,
+              persistence: ProviderSettingPersistence.ephemeral,
+            ),
+            'max_peers': ProviderSettingProperty(
+              type: ProviderSettingType.integer,
+              control: ProviderSettingControl.text,
+              defaultValue: 2,
+              persistence: ProviderSettingPersistence.ephemeral,
+            ),
+          },
+          order: <String>['region', 'device_pin', 'max_peers'],
+        ),
+      );
+
+      final normalized = descriptor.normalizeProviderSettings(
+        const <String, dynamic>{'region': 'eu-west', 'device_pin': '123456'},
+      );
+
+      expect(normalized, <String, dynamic>{
+        'region': 'eu-west',
+        'device_pin': '123456',
+        'max_peers': 2,
+      });
+      expect(
+        descriptor.profileRetainedProviderSettings(normalized),
+        <String, dynamic>{'region': 'eu-west'},
+      );
+    },
+  );
+
+  test('build identity keeps shared labels and round-trips through json', () {
+    const build = BuildIdentity(
+      product: 'vk-turn-proxy-go',
+      version: '0.1.0',
+      buildNumber: '7',
+      revision: 'deadbeef',
+      dirty: true,
+      builtAt: '2026-04-12T09:30:00Z',
+      role: 'clientd',
+      target: 'linux/amd64',
+    );
+
+    final restored = BuildIdentity.fromJson(build.toJson());
+
+    expect(build.versionLabel, '0.1.0+7');
+    expect(build.shortLabel, '0.1.0+7 @deadbeef*');
+    expect(restored.product, 'vk-turn-proxy-go');
+    expect(restored.role, 'clientd');
+    expect(restored.target, 'linux/amd64');
+    expect(restored.builtAt, '2026-04-12T09:30:00Z');
+  });
 }

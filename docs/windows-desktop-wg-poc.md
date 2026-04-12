@@ -98,6 +98,7 @@ The helper:
 - starts the bundled `clientd.exe`
 - waits until `/v1/host` is reachable
 - starts `gui_shell.exe`
+- waits for `gui_shell.exe` to exit and then stops the owned `clientd.exe`
 
 Use the companion session helper to upsert and start the packaged
 `generic-turn` desktop profile without manual form editing:

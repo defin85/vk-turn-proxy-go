@@ -95,18 +95,36 @@ if ($null -ne $listener) {
     Start-Sleep -Seconds 1
 }
 
-$clientdProcess = Start-Process `
-    -FilePath $clientdPath `
-    -ArgumentList @("-listen", $ListenAddress) `
-    -WorkingDirectory $resolvedBundleRoot `
-    -PassThru
+$clientdProcess = $null
+$guiProcess = $null
 
-Wait-HostReady -HostUrl $hostUrl -TimeoutSeconds $StartupTimeoutSeconds
+try {
+    $clientdProcess = Start-Process `
+        -FilePath $clientdPath `
+        -ArgumentList @("-listen", $ListenAddress) `
+        -WorkingDirectory $resolvedBundleRoot `
+        -PassThru
 
-$guiProcess = Start-Process `
-    -FilePath $guiPath `
-    -WorkingDirectory $resolvedBundleRoot `
-    -PassThru
+    Wait-HostReady -HostUrl $hostUrl -TimeoutSeconds $StartupTimeoutSeconds
 
-Write-Host "clientd pid=$($clientdProcess.Id) ready on $ListenAddress"
-Write-Host "gui_shell pid=$($guiProcess.Id) started from $guiPath"
+    $guiProcess = Start-Process `
+        -FilePath $guiPath `
+        -WorkingDirectory $resolvedBundleRoot `
+        -PassThru
+
+    Write-Host "clientd pid=$($clientdProcess.Id) ready on $ListenAddress"
+    Write-Host "gui_shell pid=$($guiProcess.Id) started from $guiPath"
+    Write-Host "Waiting for gui_shell to exit before stopping owned clientd.exe"
+
+    Wait-Process -Id $guiProcess.Id -ErrorAction Stop
+}
+finally {
+    if ($null -ne $clientdProcess) {
+        $ownedClientd = Get-Process -Id $clientdProcess.Id -ErrorAction SilentlyContinue
+        if ($null -ne $ownedClientd -and $ownedClientd.ProcessName -eq "clientd") {
+            Write-Host "Stopping owned clientd pid=$($ownedClientd.Id)"
+            Stop-Process -Id $ownedClientd.Id -Force -ErrorAction SilentlyContinue
+            Wait-Process -Id $ownedClientd.Id -Timeout 5 -ErrorAction SilentlyContinue
+        }
+    }
+}

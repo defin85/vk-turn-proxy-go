@@ -58,8 +58,8 @@ Launch the repo-owned Windows helper from the mirrored checkout:
 powershell -NoProfile -ExecutionPolicy Bypass -File E:\Projects\vk-turn-proxy-go\scripts\run-windows-gui-shell.ps1
 ```
 
-That starts a fresh bundled `clientd.exe`, waits for `/v1/host`, and then
-launches `gui_shell.exe`.
+That starts a fresh bundled `clientd.exe`, waits for `/v1/host`, launches
+`gui_shell.exe`, and stops the owned sidecar after the GUI exits.
 
 ## Step 2: Resolve the live VK invite in the GUI
 

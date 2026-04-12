@@ -53,7 +53,8 @@ bundle directly from `E:\Projects\vk-turn-proxy-go\dist\windows-gui` and follow
 `docs/windows-desktop-wg-poc.md`.
 That document captures the required host route, the `WireGuard` profile shape,
 the repo-owned `scripts/run-windows-gui-shell.ps1` helper that starts a fresh
-bundled `clientd.exe` before `gui_shell.exe`, and the companion
+bundled `clientd.exe` before `gui_shell.exe`, waits for the GUI to exit, and
+then stops the owned sidecar, and the companion
 `scripts/windows-desktop-generic-turn.ps1` helper that seeds and starts the
 desktop `generic-turn` session through the local control plane.
 
