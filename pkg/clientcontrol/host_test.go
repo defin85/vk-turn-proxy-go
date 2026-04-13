@@ -66,6 +66,7 @@ type fakeChallenge struct {
 	kind     string
 	prompt   string
 	openURL  string
+	metadata provider.InteractiveChallengeMetadata
 }
 
 func (f fakeChallenge) ProviderName() string { return f.provider }
@@ -74,6 +75,9 @@ func (f fakeChallenge) Kind() string         { return f.kind }
 func (f fakeChallenge) Prompt() string       { return f.prompt }
 func (f fakeChallenge) OpenURL() string      { return f.openURL }
 func (f fakeChallenge) CookieURLs() []string { return []string{"https://api.vk.ru/"} }
+func (f fakeChallenge) ChallengeMetadata() provider.InteractiveChallengeMetadata {
+	return f.metadata
+}
 
 type fakeContinuation struct {
 	result *provider.BrowserContinuation
@@ -956,6 +960,12 @@ func TestHostSurfacesChallengeAndContinuesToReady(t *testing.T) {
 	if challengeEvent.Challenge.SessionID != sessionState.ID {
 		t.Fatalf("challenge session_id = %q, want %q", challengeEvent.Challenge.SessionID, sessionState.ID)
 	}
+	if challengeEvent.Challenge.CompletionMode != ChallengeCompletionModeManualConfirm {
+		t.Fatalf("challenge completion_mode = %q, want %q", challengeEvent.Challenge.CompletionMode, ChallengeCompletionModeManualConfirm)
+	}
+	if challengeEvent.Challenge.BrowserReturn != nil {
+		t.Fatalf("challenge browser_return = %#v, want nil", challengeEvent.Challenge.BrowserReturn)
+	}
 
 	challenge, err := host.ContinueChallenge(challengeEvent.Challenge.ID)
 	if err != nil {
@@ -1274,6 +1284,12 @@ func TestHostResolutionChallengeContinuation(t *testing.T) {
 	if challengeEvent.Challenge.ResolutionID != resolutionState.ID {
 		t.Fatalf("challenge resolution_id = %q, want %q", challengeEvent.Challenge.ResolutionID, resolutionState.ID)
 	}
+	if challengeEvent.Challenge.CompletionMode != ChallengeCompletionModeManualConfirm {
+		t.Fatalf("challenge completion_mode = %q, want %q", challengeEvent.Challenge.CompletionMode, ChallengeCompletionModeManualConfirm)
+	}
+	if challengeEvent.Challenge.BrowserReturn != nil {
+		t.Fatalf("challenge browser_return = %#v, want nil", challengeEvent.Challenge.BrowserReturn)
+	}
 
 	challenge, err := host.ContinueChallenge(challengeEvent.Challenge.ID)
 	if err != nil {
@@ -1292,6 +1308,101 @@ func TestHostResolutionChallengeContinuation(t *testing.T) {
 	if !resolved.Input.InteractiveProvider {
 		t.Fatalf("resolution input interactive_provider = false, want true")
 	}
+}
+
+func TestHostResolutionChallengeExposesAppReturnMetadata(t *testing.T) {
+	host := New(
+		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name: "vk",
+			descriptor: provider.ProviderDescriptor{
+				ID:             "vk",
+				DisplayName:    "VK Calls",
+				InputKind:      provider.ProviderInputKindLink,
+				AuthPosture:    provider.ProviderAuthPostureGuestOrAccount,
+				BrowserPolicy:  provider.ProviderBrowserPolicyExternalRequired,
+				ChallengeModes: []provider.ProviderChallengeMode{provider.ProviderChallengeModeBrowser},
+			},
+			resolve: func(ctx context.Context, link string) (provider.Resolution, error) {
+				handler := provider.BrowserContinuationHandlerFromContext(ctx)
+				if handler == nil {
+					return provider.Resolution{}, io.ErrUnexpectedEOF
+				}
+				if _, err := handler.Continue(ctx, fakeChallenge{
+					provider: "vk",
+					stage:    "provider_resolve",
+					kind:     "browser",
+					prompt:   "return after browser",
+					openURL:  "https://example.test/challenge",
+					metadata: provider.InteractiveChallengeMetadata{
+						CompletionMode: provider.ChallengeCompletionModeAppReturnCallback,
+						BrowserReturn: &provider.BrowserReturnMetadata{
+							SignalKinds: []provider.BrowserReturnSignalKind{
+								provider.BrowserReturnSignalKindForegroundResume,
+								provider.BrowserReturnSignalKindForegroundResume,
+								provider.BrowserReturnSignalKindAppLink,
+							},
+							AllowAutoContinue: true,
+							ExpectedReturnURI: "  https://app.example.test/mobile-return  ",
+						},
+					},
+				}); err != nil {
+					return provider.Resolution{}, err
+				}
+				return provider.Resolution{
+					Credentials: provider.Credentials{
+						Username: "turn-user",
+						Password: "turn-pass",
+						Address:  "turn.example.test:3478",
+					},
+				}, nil
+			},
+		})),
+		withContinuationStarter(func(ctx context.Context, challenge provider.InteractiveChallenge) (browserContinuation, error) {
+			return fakeContinuation{result: &provider.BrowserContinuation{}}, nil
+		}),
+	)
+
+	events, cancel := host.Subscribe(16)
+	defer cancel()
+
+	resolutionState, err := host.StartResolution(context.Background(), StartResolutionRequest{
+		Provider: "vk",
+		Input: &ProviderInputEnvelope{
+			Kind: ProviderInputKindLink,
+			Link: "https://vk.com/call/join/test-token",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartResolution() error = %v", err)
+	}
+
+	challengeEvent := waitForEvent(t, events, EventChallengeRequired)
+	if challengeEvent.Challenge == nil {
+		t.Fatal("challenge event missing payload")
+	}
+	if challengeEvent.Challenge.CompletionMode != ChallengeCompletionModeAppReturnCallback {
+		t.Fatalf("challenge completion_mode = %q, want %q", challengeEvent.Challenge.CompletionMode, ChallengeCompletionModeAppReturnCallback)
+	}
+	if challengeEvent.Challenge.BrowserReturn == nil {
+		t.Fatal("challenge browser_return = nil, want metadata")
+	}
+	if !challengeEvent.Challenge.BrowserReturn.AllowAutoContinue {
+		t.Fatal("challenge browser_return.allow_auto_continue = false, want true")
+	}
+	if got := challengeEvent.Challenge.BrowserReturn.ExpectedReturnURI; got != "https://app.example.test/mobile-return" {
+		t.Fatalf("challenge browser_return.expected_return_uri = %q, want https://app.example.test/mobile-return", got)
+	}
+	if got := challengeEvent.Challenge.BrowserReturn.SignalKinds; len(got) != 2 ||
+		got[0] != BrowserReturnSignalKindForegroundResume ||
+		got[1] != BrowserReturnSignalKindAppLink {
+		t.Fatalf("challenge browser_return.signal_kinds = %#v, want foreground_resume,app_link", got)
+	}
+
+	if _, err := host.ContinueChallenge(challengeEvent.Challenge.ID); err != nil {
+		t.Fatalf("ContinueChallenge() error = %v", err)
+	}
+	waitForResolutionState(t, host, resolutionState.ID, ResolutionStateResolved)
 }
 
 func TestResolutionArtifactFromNonTURNFamilyKeepsSummaryRedacted(t *testing.T) {

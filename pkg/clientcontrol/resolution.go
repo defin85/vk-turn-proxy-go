@@ -512,18 +512,13 @@ func (b *resolutionChallengeBroker) Handle(ctx context.Context, challenge provid
 		return errors.New("interactive provider challenge is required")
 	}
 
-	record := Challenge{
-		ID:           b.host.newID(),
-		ResolutionID: b.resolutionID,
-		Provider:     challenge.ProviderName(),
-		Stage:        challenge.StageName(),
-		Kind:         challenge.Kind(),
-		Prompt:       providerprompt.ContinuationPrompt(challenge),
-		OpenURL:      providerprompt.ContinuationOpenURL(challenge),
-		Status:       ChallengeStatusPending,
-		CreatedAt:    b.host.now().UTC(),
-		UpdatedAt:    b.host.now().UTC(),
-	}
+	record := newChallengeRecord(
+		b.host.newID(),
+		"",
+		b.resolutionID,
+		challenge,
+		b.host.now().UTC(),
+	)
 	b.host.recordResolutionChallenge(b.resolutionID, record)
 
 	action, err := b.host.waitChallengeAction(ctx, record.ID)
@@ -553,18 +548,13 @@ func (b *resolutionChallengeBroker) Continue(ctx context.Context, challenge prov
 		_ = continuation.Close()
 	}()
 
-	record := Challenge{
-		ID:           b.host.newID(),
-		ResolutionID: b.resolutionID,
-		Provider:     challenge.ProviderName(),
-		Stage:        challenge.StageName(),
-		Kind:         challenge.Kind(),
-		Prompt:       providerprompt.ContinuationPrompt(challenge),
-		OpenURL:      providerprompt.ContinuationOpenURL(challenge),
-		Status:       ChallengeStatusPending,
-		CreatedAt:    b.host.now().UTC(),
-		UpdatedAt:    b.host.now().UTC(),
-	}
+	record := newChallengeRecord(
+		b.host.newID(),
+		"",
+		b.resolutionID,
+		challenge,
+		b.host.now().UTC(),
+	)
 	b.host.recordResolutionChallenge(b.resolutionID, record)
 
 	action, err := b.host.waitChallengeAction(ctx, record.ID)

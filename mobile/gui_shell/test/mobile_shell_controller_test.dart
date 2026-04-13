@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_models.dart';
 import 'package:mobile_gui_shell/src/control/mobile_handoff_adapter.dart';
@@ -477,6 +478,248 @@ void main() {
       expect(controller.notice, contains('Opened mobile browser handoff'));
 
       await controller.continueChallenge(challenge.id);
+      expect(bridge.continueChallengeCalls, <String>[challenge.id]);
+    },
+  );
+
+  test(
+    'controller auto-continues an eligible challenge once on app resume',
+    () async {
+      final challenge = ChallengeRecord(
+        id: 'challenge-auto',
+        sessionId: 'session-1',
+        provider: 'vk',
+        stage: 'provider_resolve',
+        kind: 'browser',
+        prompt: 'Return after browser.',
+        openUrl: 'https://vk.com/call/join/test',
+        status: ChallengeStatus.pending,
+        completionMode: ChallengeCompletionMode.appReturnCallback,
+        browserReturn: const ChallengeBrowserReturnMetadata(
+          signalKinds: <BrowserReturnSignalKind>[
+            BrowserReturnSignalKind.foregroundResume,
+          ],
+          allowAutoContinue: true,
+        ),
+        createdAt: DateTime.utc(2026, 4, 7, 13, 0),
+        updatedAt: DateTime.utc(2026, 4, 7, 13, 1),
+      );
+      final bridge = _FakeMobileHostBridge(
+        sessionsList: <SessionRecord>[
+          SessionRecord(
+            id: 'session-1',
+            profileId: 'profile-1',
+            profileName: 'vk live',
+            profile: _profileSpec(),
+            state: SessionState.challengeRequired,
+            activeChallengeId: challenge.id,
+            startedAt: DateTime.utc(2026, 4, 7, 13, 0),
+            updatedAt: DateTime.utc(2026, 4, 7, 13, 1),
+          ),
+        ],
+        challengeMap: <String, ChallengeRecord>{challenge.id: challenge},
+      );
+      final browser = _FakeBrowserLauncher();
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: 'profile-1',
+            draft: ProfileDraft.fromProfile(
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ),
+          ),
+        ),
+        browserLauncher: browser,
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.openChallengeInBrowser(challenge);
+
+      controller.onAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(bridge.continueChallengeCalls, <String>[challenge.id]);
+      expect(controller.notice, contains('browser return on app resume'));
+
+      controller.onAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      expect(bridge.continueChallengeCalls, <String>[challenge.id]);
+    },
+  );
+
+  test(
+    'controller keeps manual fallback for manual-confirm challenges on app resume',
+    () async {
+      final challenge = ChallengeRecord(
+        id: 'challenge-manual',
+        sessionId: 'session-1',
+        provider: 'vk',
+        stage: 'provider_resolve',
+        kind: 'browser',
+        prompt: 'Return after browser.',
+        openUrl: 'https://vk.com/call/join/test',
+        status: ChallengeStatus.pending,
+        createdAt: DateTime.utc(2026, 4, 7, 13, 0),
+        updatedAt: DateTime.utc(2026, 4, 7, 13, 1),
+      );
+      final bridge = _FakeMobileHostBridge(
+        sessionsList: <SessionRecord>[
+          SessionRecord(
+            id: 'session-1',
+            profileId: 'profile-1',
+            profileName: 'vk live',
+            profile: _profileSpec(),
+            state: SessionState.challengeRequired,
+            activeChallengeId: challenge.id,
+            startedAt: DateTime.utc(2026, 4, 7, 13, 0),
+            updatedAt: DateTime.utc(2026, 4, 7, 13, 1),
+          ),
+        ],
+        challengeMap: <String, ChallengeRecord>{challenge.id: challenge},
+      );
+      final browser = _FakeBrowserLauncher();
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: 'profile-1',
+            draft: ProfileDraft.fromProfile(
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ),
+          ),
+        ),
+        browserLauncher: browser,
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.openChallengeInBrowser(challenge);
+
+      controller.onAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(bridge.continueChallengeCalls, isEmpty);
+    },
+  );
+
+  test(
+    'controller auto-continues only on matching native browser-return callback',
+    () async {
+      final challenge = ChallengeRecord(
+        id: 'challenge-link',
+        sessionId: 'session-1',
+        provider: 'vk',
+        stage: 'provider_resolve',
+        kind: 'browser',
+        prompt: 'Return after browser.',
+        openUrl: 'https://vk.com/call/join/test',
+        status: ChallengeStatus.pending,
+        completionMode: ChallengeCompletionMode.appReturnCallback,
+        browserReturn: const ChallengeBrowserReturnMetadata(
+          signalKinds: <BrowserReturnSignalKind>[
+            BrowserReturnSignalKind.appLink,
+          ],
+          allowAutoContinue: true,
+          expectedReturnUri: 'https://app.example.test/mobile-return',
+        ),
+        createdAt: DateTime.utc(2026, 4, 7, 13, 0),
+        updatedAt: DateTime.utc(2026, 4, 7, 13, 1),
+      );
+      final bridge = _FakeMobileHostBridge(
+        sessionsList: <SessionRecord>[
+          SessionRecord(
+            id: 'session-1',
+            profileId: 'profile-1',
+            profileName: 'vk live',
+            profile: _profileSpec(),
+            state: SessionState.challengeRequired,
+            activeChallengeId: challenge.id,
+            startedAt: DateTime.utc(2026, 4, 7, 13, 0),
+            updatedAt: DateTime.utc(2026, 4, 7, 13, 1),
+          ),
+        ],
+        challengeMap: <String, ChallengeRecord>{challenge.id: challenge},
+      );
+      final browser = _FakeBrowserLauncher();
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: 'profile-1',
+            draft: ProfileDraft.fromProfile(
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ),
+          ),
+        ),
+        browserLauncher: browser,
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.openChallengeInBrowser(challenge);
+
+      bridge.emitBrowserReturnSignal(
+        const MobileBrowserReturnSignal(
+          kind: BrowserReturnSignalKind.appLink,
+          uri: 'https://app.example.test/other-return',
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      expect(bridge.continueChallengeCalls, isEmpty);
+
+      bridge.emitBrowserReturnSignal(
+        const MobileBrowserReturnSignal(
+          kind: BrowserReturnSignalKind.appLink,
+          uri: 'https://app.example.test/mobile-return?code=1',
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
       expect(bridge.continueChallengeCalls, <String>[challenge.id]);
     },
   );
@@ -1208,6 +1451,12 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   int startSessionCalls = 0;
   final StreamController<EventRecord> _events =
       StreamController<EventRecord>.broadcast();
+  final StreamController<MobileBrowserReturnSignal> _browserReturnSignals =
+      StreamController<MobileBrowserReturnSignal>.broadcast();
+
+  @override
+  Stream<MobileBrowserReturnSignal> get browserReturnSignals =>
+      _browserReturnSignals.stream;
 
   @override
   Future<ChallengeRecord> cancelChallenge(String challengeId) async {
@@ -1250,7 +1499,12 @@ class _FakeMobileHostBridge implements MobileHostBridge {
 
   @override
   Future<void> dispose() async {
+    await _browserReturnSignals.close();
     await _events.close();
+  }
+
+  void emitBrowserReturnSignal(MobileBrowserReturnSignal signal) {
+    _browserReturnSignals.add(signal);
   }
 
   @override

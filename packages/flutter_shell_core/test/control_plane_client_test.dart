@@ -104,6 +104,17 @@ void main() {
                 'prompt': 'continue in browser',
                 'open_url': 'https://vk.com/call/join/test',
                 'status': 'pending',
+                'completion_mode': 'app_return_callback',
+                'browser_return': <String, dynamic>{
+                  'signal_kinds': <String>[
+                    'foreground_resume',
+                    'app_link',
+                    'foreground_resume',
+                  ],
+                  'allow_auto_continue': true,
+                  'expected_return_uri':
+                      'https://app.example.test/mobile-return',
+                },
                 'created_at': DateTime.utc(2026, 4, 5, 14, 0).toIso8601String(),
                 'updated_at': DateTime.utc(2026, 4, 5, 14, 0).toIso8601String(),
               }),
@@ -218,6 +229,20 @@ void main() {
 
       final challenge = await client.challenge('challenge-1');
       expect(challenge.id, 'challenge-1');
+      expect(
+        challenge.completionMode,
+        ChallengeCompletionMode.appReturnCallback,
+      );
+      expect(challenge.browserReturn, isNotNull);
+      expect(challenge.browserReturn?.signalKinds, <BrowserReturnSignalKind>[
+        BrowserReturnSignalKind.foregroundResume,
+        BrowserReturnSignalKind.appLink,
+      ]);
+      expect(challenge.browserReturn?.allowAutoContinue, isTrue);
+      expect(
+        challenge.browserReturn?.expectedReturnUri,
+        'https://app.example.test/mobile-return',
+      );
       expect(challenge.openUrl, 'https://vk.com/call/join/test');
 
       final resolutions = await client.resolutions();

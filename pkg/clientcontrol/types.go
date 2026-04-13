@@ -67,6 +67,22 @@ const (
 	ChallengeStatusFailed     ChallengeStatus = "failed"
 )
 
+type ChallengeCompletionMode string
+
+const (
+	ChallengeCompletionModeManualConfirm        ChallengeCompletionMode = "manual_confirm"
+	ChallengeCompletionModeAppReturnCallback    ChallengeCompletionMode = "app_return_callback"
+	ChallengeCompletionModeOwnedBrowserObserved ChallengeCompletionMode = "owned_browser_observed"
+)
+
+type BrowserReturnSignalKind string
+
+const (
+	BrowserReturnSignalKindAppLink          BrowserReturnSignalKind = "app_link"
+	BrowserReturnSignalKindUniversalLink    BrowserReturnSignalKind = "universal_link"
+	BrowserReturnSignalKindForegroundResume BrowserReturnSignalKind = "foreground_resume"
+)
+
 type EventType string
 
 const (
@@ -255,17 +271,25 @@ type Session struct {
 }
 
 type Challenge struct {
-	ID           string          `json:"id"`
-	SessionID    string          `json:"session_id"`
-	ResolutionID string          `json:"resolution_id,omitempty"`
-	Provider     string          `json:"provider"`
-	Stage        string          `json:"stage"`
-	Kind         string          `json:"kind"`
-	Prompt       string          `json:"prompt,omitempty"`
-	OpenURL      string          `json:"open_url,omitempty"`
-	Status       ChallengeStatus `json:"status"`
-	CreatedAt    time.Time       `json:"created_at"`
-	UpdatedAt    time.Time       `json:"updated_at"`
+	ID             string                          `json:"id"`
+	SessionID      string                          `json:"session_id"`
+	ResolutionID   string                          `json:"resolution_id,omitempty"`
+	Provider       string                          `json:"provider"`
+	Stage          string                          `json:"stage"`
+	Kind           string                          `json:"kind"`
+	Prompt         string                          `json:"prompt,omitempty"`
+	OpenURL        string                          `json:"open_url,omitempty"`
+	Status         ChallengeStatus                 `json:"status"`
+	CompletionMode ChallengeCompletionMode         `json:"completion_mode"`
+	BrowserReturn  *ChallengeBrowserReturnMetadata `json:"browser_return,omitempty"`
+	CreatedAt      time.Time                       `json:"created_at"`
+	UpdatedAt      time.Time                       `json:"updated_at"`
+}
+
+type ChallengeBrowserReturnMetadata struct {
+	SignalKinds       []BrowserReturnSignalKind `json:"signal_kinds,omitempty"`
+	AllowAutoContinue bool                      `json:"allow_auto_continue"`
+	ExpectedReturnURI string                    `json:"expected_return_uri,omitempty"`
 }
 
 type Event struct {

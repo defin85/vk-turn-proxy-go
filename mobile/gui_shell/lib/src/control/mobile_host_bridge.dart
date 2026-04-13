@@ -6,6 +6,8 @@ import 'package:mobile_gui_shell/src/control/control_plane_models.dart';
 
 const String _bridgeChannelName =
     'com.defin85.vk_turn_proxy_go/mobile_host_bridge';
+const String _browserReturnSignalChannelName =
+    'com.defin85.vk_turn_proxy_go/mobile_host_bridge/browser_return_signals';
 
 enum MobileHostLifecycleState { ready, unavailable, incompatible, failed }
 
@@ -42,6 +44,64 @@ class MobileHostConfigResolutionError implements Exception {
 
   @override
   String toString() => message;
+}
+
+class MobileBrowserReturnSignal {
+  const MobileBrowserReturnSignal({required this.kind, this.uri});
+
+  static MobileBrowserReturnSignal? tryParse(dynamic payload) {
+    if (payload is! Map<Object?, Object?>) {
+      return null;
+    }
+    final rawKind = payload['kind'];
+    final kind = BrowserReturnSignalKind.fromJson(rawKind as String?);
+    if (kind == null) {
+      return null;
+    }
+    final rawUri = payload['uri'];
+    final uri = rawUri is String ? rawUri.trim() : '';
+    return MobileBrowserReturnSignal(kind: kind, uri: uri.isEmpty ? null : uri);
+  }
+
+  final BrowserReturnSignalKind kind;
+  final String? uri;
+}
+
+abstract class MobileBrowserReturnSignalSource {
+  Stream<MobileBrowserReturnSignal> get signals;
+  Future<void> dispose();
+}
+
+class PlatformMobileBrowserReturnSignalSource
+    implements MobileBrowserReturnSignalSource {
+  PlatformMobileBrowserReturnSignalSource({EventChannel? eventChannel})
+    : _eventChannel =
+          eventChannel ?? const EventChannel(_browserReturnSignalChannelName);
+
+  final EventChannel _eventChannel;
+  Stream<MobileBrowserReturnSignal>? _signals;
+
+  @override
+  Stream<MobileBrowserReturnSignal> get signals => _signals ??= _eventChannel
+      .receiveBroadcastStream()
+      .map((dynamic payload) => MobileBrowserReturnSignal.tryParse(payload))
+      .where((MobileBrowserReturnSignal? signal) => signal != null)
+      .cast<MobileBrowserReturnSignal>();
+
+  @override
+  Future<void> dispose() async {}
+}
+
+class _EmptyMobileBrowserReturnSignalSource
+    implements MobileBrowserReturnSignalSource {
+  const _EmptyMobileBrowserReturnSignalSource();
+
+  @override
+  Stream<MobileBrowserReturnSignal> get signals =>
+      const Stream<MobileBrowserReturnSignal>.empty();
+
+  @override
+  Future<void> dispose() async {}
 }
 
 abstract class MobileHostConfigResolver {
@@ -104,6 +164,7 @@ class PlatformMobileHostConfigResolver implements MobileHostConfigResolver {
 }
 
 abstract class MobileHostBridge implements ControlPlaneApi {
+  Stream<MobileBrowserReturnSignal> get browserReturnSignals;
   Future<MobileHostConnectionResult> ensureReady();
   Future<void> dispose();
 }
@@ -112,6 +173,7 @@ class MobileHostBridgeFactory {
   static Future<MobileHostBridge> fromEnvironment({
     String? configuredBaseUrl,
     MobileHostConfigResolver? resolver,
+    MobileBrowserReturnSignalSource? browserReturnSignalSource,
     ControlPlaneApi Function(Uri baseUri)? clientFactory,
   }) async {
     final override =
@@ -131,6 +193,9 @@ class MobileHostBridgeFactory {
         baseUri: uri,
         client: clientFactory?.call(uri),
         description: 'VKTP_MOBILE_HOST_URL',
+        browserReturnSignalSource:
+            browserReturnSignalSource ??
+            PlatformMobileBrowserReturnSignalSource(),
       );
     }
 
@@ -161,6 +226,9 @@ class MobileHostBridgeFactory {
       baseUri: resolved.baseUri,
       client: clientFactory?.call(resolved.baseUri),
       description: resolved.description,
+      browserReturnSignalSource:
+          browserReturnSignalSource ??
+          PlatformMobileBrowserReturnSignalSource(),
     );
   }
 }
@@ -169,6 +237,7 @@ class HttpMobileHostBridge implements MobileHostBridge {
   HttpMobileHostBridge({
     required this.baseUri,
     ControlPlaneApi? client,
+    MobileBrowserReturnSignalSource? browserReturnSignalSource,
     this.description = '',
     this.supportedVersions = const <String>[ControlPlaneClient.contractVersion],
     this.requiredCapabilities = const <Capability>[
@@ -182,16 +251,24 @@ class HttpMobileHostBridge implements MobileHostBridge {
       Capability.diagnostics,
       Capability.eventStream,
     ],
-  }) : _client = client ?? ControlPlaneClient(baseUri: baseUri);
+  }) : _client = client ?? ControlPlaneClient(baseUri: baseUri),
+       _browserReturnSignalSource =
+           browserReturnSignalSource ??
+           const _EmptyMobileBrowserReturnSignalSource();
 
   final Uri baseUri;
   final ControlPlaneApi _client;
+  final MobileBrowserReturnSignalSource _browserReturnSignalSource;
   final String description;
   final List<String> supportedVersions;
   final List<Capability> requiredCapabilities;
 
   String get _descriptionLabel =>
       description.isEmpty ? baseUri.toString() : description;
+
+  @override
+  Stream<MobileBrowserReturnSignal> get browserReturnSignals =>
+      _browserReturnSignalSource.signals;
 
   @override
   Future<ChallengeRecord> cancelChallenge(String challengeId) {
@@ -280,7 +357,9 @@ class HttpMobileHostBridge implements MobileHostBridge {
   }
 
   @override
-  Future<void> dispose() async {}
+  Future<void> dispose() async {
+    await _browserReturnSignalSource.dispose();
+  }
 
   @override
   Future<MobileHostConnectionResult> ensureReady() async {
@@ -397,6 +476,10 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
 
   final String message;
   final String description;
+
+  @override
+  Stream<MobileBrowserReturnSignal> get browserReturnSignals =>
+      const Stream<MobileBrowserReturnSignal>.empty();
 
   @override
   Future<ChallengeRecord> cancelChallenge(String challengeId) => _fail();

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -17,6 +18,39 @@ void main() {
   tearDown(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, null);
+  });
+
+  test('http mobile host bridge forwards browser-return signals', () async {
+    final signalController =
+        StreamController<MobileBrowserReturnSignal>.broadcast();
+    addTearDown(signalController.close);
+
+    final bridge = HttpMobileHostBridge(
+      baseUri: Uri.parse('http://127.0.0.1:7777'),
+      client: _ReadyControlPlaneApi(),
+      browserReturnSignalSource: _FakeBrowserReturnSignalSource(
+        signalController.stream,
+      ),
+    );
+
+    final observed = <MobileBrowserReturnSignal>[];
+    final subscription = bridge.browserReturnSignals.listen(observed.add);
+    addTearDown(subscription.cancel);
+
+    signalController.add(
+      const MobileBrowserReturnSignal(
+        kind: BrowserReturnSignalKind.appLink,
+        uri: 'https://app.example.test/mobile-return?code=1',
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(observed, hasLength(1));
+    expect(observed.single.kind, BrowserReturnSignalKind.appLink);
+    expect(
+      observed.single.uri,
+      'https://app.example.test/mobile-return?code=1',
+    );
   });
 
   test('platform host resolver reads native host configuration', () async {
@@ -425,6 +459,17 @@ class _FakeResolver implements MobileHostConfigResolver {
 
   @override
   Future<ResolvedMobileHostConfig?> resolve() async => resolved;
+}
+
+class _FakeBrowserReturnSignalSource
+    implements MobileBrowserReturnSignalSource {
+  const _FakeBrowserReturnSignalSource(this.signals);
+
+  @override
+  final Stream<MobileBrowserReturnSignal> signals;
+
+  @override
+  Future<void> dispose() async {}
 }
 
 class _ReadyControlPlaneApi implements ControlPlaneApi {

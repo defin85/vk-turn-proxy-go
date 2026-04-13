@@ -1043,18 +1043,13 @@ func (b *challengeBroker) Handle(ctx context.Context, challenge provider.Interac
 		return errors.New("interactive provider challenge is required")
 	}
 
-	record := Challenge{
-		ID:        b.host.newID(),
-		SessionID: b.sessionID,
-		Provider:  challenge.ProviderName(),
-		Stage:     challenge.StageName(),
-		Kind:      challenge.Kind(),
-		Prompt:    providerprompt.ContinuationPrompt(challenge),
-		OpenURL:   providerprompt.ContinuationOpenURL(challenge),
-		Status:    ChallengeStatusPending,
-		CreatedAt: b.host.now().UTC(),
-		UpdatedAt: b.host.now().UTC(),
-	}
+	record := newChallengeRecord(
+		b.host.newID(),
+		b.sessionID,
+		"",
+		challenge,
+		b.host.now().UTC(),
+	)
 	b.host.recordChallenge(b.sessionID, record)
 
 	action, err := b.host.waitChallengeAction(ctx, record.ID)
@@ -1084,18 +1079,13 @@ func (b *challengeBroker) Continue(ctx context.Context, challenge provider.Inter
 		_ = continuation.Close()
 	}()
 
-	record := Challenge{
-		ID:        b.host.newID(),
-		SessionID: b.sessionID,
-		Provider:  challenge.ProviderName(),
-		Stage:     challenge.StageName(),
-		Kind:      challenge.Kind(),
-		Prompt:    providerprompt.ContinuationPrompt(challenge),
-		OpenURL:   providerprompt.ContinuationOpenURL(challenge),
-		Status:    ChallengeStatusPending,
-		CreatedAt: b.host.now().UTC(),
-		UpdatedAt: b.host.now().UTC(),
-	}
+	record := newChallengeRecord(
+		b.host.newID(),
+		b.sessionID,
+		"",
+		challenge,
+		b.host.now().UTC(),
+	)
 	b.host.recordChallenge(b.sessionID, record)
 
 	action, err := b.host.waitChallengeAction(ctx, record.ID)

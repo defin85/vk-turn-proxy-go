@@ -686,6 +686,87 @@ enum ChallengeStatus {
   }
 }
 
+enum ChallengeCompletionMode {
+  manualConfirm('manual_confirm'),
+  appReturnCallback('app_return_callback'),
+  ownedBrowserObserved('owned_browser_observed');
+
+  const ChallengeCompletionMode(this.value);
+
+  final String value;
+
+  static ChallengeCompletionMode? fromJson(String? raw) {
+    for (final mode in values) {
+      if (mode.value == raw) {
+        return mode;
+      }
+    }
+    return null;
+  }
+}
+
+enum BrowserReturnSignalKind {
+  appLink('app_link'),
+  universalLink('universal_link'),
+  foregroundResume('foreground_resume');
+
+  const BrowserReturnSignalKind(this.value);
+
+  final String value;
+
+  static BrowserReturnSignalKind? fromJson(String? raw) {
+    for (final kind in values) {
+      if (kind.value == raw) {
+        return kind;
+      }
+    }
+    return null;
+  }
+}
+
+class ChallengeBrowserReturnMetadata {
+  const ChallengeBrowserReturnMetadata({
+    required this.signalKinds,
+    required this.allowAutoContinue,
+    this.expectedReturnUri,
+  });
+
+  factory ChallengeBrowserReturnMetadata.fromJson(Map<String, dynamic> json) {
+    final seen = <BrowserReturnSignalKind>{};
+    final signalKinds = <BrowserReturnSignalKind>[];
+    for (final raw
+        in json['signal_kinds'] as List<dynamic>? ?? const <dynamic>[]) {
+      final kind = BrowserReturnSignalKind.fromJson(raw as String?);
+      if (kind == null || !seen.add(kind)) {
+        continue;
+      }
+      signalKinds.add(kind);
+    }
+    final expectedReturnUri = (json['expected_return_uri'] as String?)?.trim();
+    return ChallengeBrowserReturnMetadata(
+      signalKinds: signalKinds,
+      allowAutoContinue: json['allow_auto_continue'] as bool? ?? false,
+      expectedReturnUri: expectedReturnUri == null || expectedReturnUri.isEmpty
+          ? null
+          : expectedReturnUri,
+    );
+  }
+
+  final List<BrowserReturnSignalKind> signalKinds;
+  final bool allowAutoContinue;
+  final String? expectedReturnUri;
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{
+      'signal_kinds': signalKinds
+          .map((BrowserReturnSignalKind kind) => kind.value)
+          .toList(growable: false),
+      'allow_auto_continue': allowAutoContinue,
+      'expected_return_uri': expectedReturnUri,
+    });
+  }
+}
+
 enum EventType {
   sessionStarting('session_starting'),
   sessionReady('session_ready'),
@@ -1927,9 +2008,23 @@ class ChallengeRecord {
     required this.updatedAt,
     this.prompt,
     this.openUrl,
+    this.completionMode = ChallengeCompletionMode.manualConfirm,
+    this.browserReturn,
   });
 
   factory ChallengeRecord.fromJson(Map<String, dynamic> json) {
+    final browserReturn = json['browser_return'] is Map<String, dynamic>
+        ? ChallengeBrowserReturnMetadata.fromJson(
+            json['browser_return'] as Map<String, dynamic>,
+          )
+        : null;
+    final completionMode =
+        ChallengeCompletionMode.fromJson(json['completion_mode'] as String?) ??
+        ChallengeCompletionMode.manualConfirm;
+    final normalized = _normalizeChallengeCompletion(
+      completionMode: completionMode,
+      browserReturn: browserReturn,
+    );
     return ChallengeRecord(
       id: json['id'] as String? ?? '',
       sessionId: json['session_id'] as String? ?? '',
@@ -1942,6 +2037,8 @@ class ChallengeRecord {
       status:
           ChallengeStatus.fromJson(json['status'] as String?) ??
           ChallengeStatus.pending,
+      completionMode: normalized.completionMode,
+      browserReturn: normalized.browserReturn,
       createdAt: _readTimestamp(json['created_at']),
       updatedAt: _readTimestamp(json['updated_at']),
     );
@@ -1956,19 +2053,29 @@ class ChallengeRecord {
   final String? prompt;
   final String? openUrl;
   final ChallengeStatus status;
+  final ChallengeCompletionMode completionMode;
+  final ChallengeBrowserReturnMetadata? browserReturn;
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  ChallengeRecord copyWith({ChallengeStatus? status, DateTime? updatedAt}) {
+  ChallengeRecord copyWith({
+    ChallengeStatus? status,
+    ChallengeCompletionMode? completionMode,
+    ChallengeBrowserReturnMetadata? browserReturn,
+    DateTime? updatedAt,
+  }) {
     return ChallengeRecord(
       id: id,
       sessionId: sessionId,
+      resolutionId: resolutionId,
       provider: provider,
       stage: stage,
       kind: kind,
       prompt: prompt,
       openUrl: openUrl,
       status: status ?? this.status,
+      completionMode: completionMode ?? this.completionMode,
+      browserReturn: browserReturn ?? this.browserReturn,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -1985,9 +2092,52 @@ class ChallengeRecord {
       'prompt': prompt,
       'open_url': openUrl,
       'status': status.value,
+      'completion_mode': completionMode.value,
+      'browser_return': browserReturn?.toJson(),
       'created_at': createdAt.toUtc().toIso8601String(),
       'updated_at': updatedAt.toUtc().toIso8601String(),
     });
+  }
+}
+
+class _NormalizedChallengeCompletion {
+  const _NormalizedChallengeCompletion({
+    required this.completionMode,
+    required this.browserReturn,
+  });
+
+  final ChallengeCompletionMode completionMode;
+  final ChallengeBrowserReturnMetadata? browserReturn;
+}
+
+_NormalizedChallengeCompletion _normalizeChallengeCompletion({
+  required ChallengeCompletionMode completionMode,
+  required ChallengeBrowserReturnMetadata? browserReturn,
+}) {
+  switch (completionMode) {
+    case ChallengeCompletionMode.manualConfirm:
+      return const _NormalizedChallengeCompletion(
+        completionMode: ChallengeCompletionMode.manualConfirm,
+        browserReturn: null,
+      );
+    case ChallengeCompletionMode.ownedBrowserObserved:
+      return const _NormalizedChallengeCompletion(
+        completionMode: ChallengeCompletionMode.ownedBrowserObserved,
+        browserReturn: null,
+      );
+    case ChallengeCompletionMode.appReturnCallback:
+      if (browserReturn == null ||
+          !browserReturn.allowAutoContinue ||
+          browserReturn.signalKinds.isEmpty) {
+        return const _NormalizedChallengeCompletion(
+          completionMode: ChallengeCompletionMode.manualConfirm,
+          browserReturn: null,
+        );
+      }
+      return _NormalizedChallengeCompletion(
+        completionMode: ChallengeCompletionMode.appReturnCallback,
+        browserReturn: browserReturn,
+      );
   }
 }
 

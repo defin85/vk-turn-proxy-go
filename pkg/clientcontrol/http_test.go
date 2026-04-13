@@ -189,6 +189,59 @@ func TestHandlerProvidersOmitInvalidProviderSettingsSchema(t *testing.T) {
 	}
 }
 
+func TestHandlerChallengeIncludesCompletionMetadata(t *testing.T) {
+	host := New()
+	challenge := Challenge{
+		ID:             "challenge-1",
+		SessionID:      "session-1",
+		Provider:       "vk",
+		Stage:          "provider_resolve",
+		Kind:           "browser",
+		Prompt:         "return after browser",
+		OpenURL:        "https://vk.com/call/join/test",
+		Status:         ChallengeStatusPending,
+		CompletionMode: ChallengeCompletionModeAppReturnCallback,
+		BrowserReturn: &ChallengeBrowserReturnMetadata{
+			SignalKinds: []BrowserReturnSignalKind{
+				BrowserReturnSignalKindAppLink,
+				BrowserReturnSignalKindForegroundResume,
+			},
+			AllowAutoContinue: true,
+			ExpectedReturnURI: "https://app.example.test/mobile-return",
+		},
+		CreatedAt: time.Date(2026, 4, 12, 9, 0, 0, 0, time.UTC),
+		UpdatedAt: time.Date(2026, 4, 12, 9, 1, 0, 0, time.UTC),
+	}
+	host.challenges[challenge.ID] = &managedChallenge{snapshot: challenge, actionCh: make(chan challengeAction, 1)}
+	handler := Handler(host)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/challenges/challenge-1", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /v1/challenges/challenge-1 code = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var decoded Challenge
+	if err := json.Unmarshal(rec.Body.Bytes(), &decoded); err != nil {
+		t.Fatalf("decode challenge: %v", err)
+	}
+	if decoded.CompletionMode != ChallengeCompletionModeAppReturnCallback {
+		t.Fatalf("completion_mode = %q, want %q", decoded.CompletionMode, ChallengeCompletionModeAppReturnCallback)
+	}
+	if decoded.BrowserReturn == nil {
+		t.Fatal("browser_return = nil, want metadata")
+	}
+	if !decoded.BrowserReturn.AllowAutoContinue {
+		t.Fatal("browser_return.allow_auto_continue = false, want true")
+	}
+	if got := decoded.BrowserReturn.SignalKinds; len(got) != 2 ||
+		got[0] != BrowserReturnSignalKindAppLink ||
+		got[1] != BrowserReturnSignalKindForegroundResume {
+		t.Fatalf("browser_return.signal_kinds = %#v, want app_link,foreground_resume", got)
+	}
+}
+
 func TestHandlerProfileUpsertReturnsFieldAwareProviderSettingsFailure(t *testing.T) {
 	host := New(
 		withRegistry(provider.NewRegistry(fakeAdapter{

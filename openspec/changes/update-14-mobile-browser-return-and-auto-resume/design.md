@@ -37,8 +37,9 @@ At minimum, the challenge shape should distinguish:
 - `owned_browser_observed`: the host owns the browser session and can observe the continuation state directly
 
 Optional metadata may include:
-- whether one automatic continue attempt is allowed
-- whether a deep-link or universal-link return URI is expected
+- whether one automatic continue attempt is allowed for the current challenge
+- the supported browser-return signal kinds for that challenge, such as `app_link`, `universal_link`, or `foreground_resume`
+- whether a specific deep-link or universal-link return URI is expected
 - whether the fallback manual action should remain visible after auto-resume
 
 ### Decision: Treat browser return as a continuation hint, not as proof of success
@@ -47,14 +48,16 @@ App return signals must be interpreted as "the user may be ready for continuatio
 
 The shell may trigger one automatic continue attempt when:
 - the challenge advertises an app-return-compatible mode
-- the app receives a documented return signal for that session
+- the challenge metadata reports the matching return-signal kind for that session
+- the app receives that documented return signal while the same challenge is still active
 
 If the host remains in `challenge_required` or fails at `provider_resolve`, the shell must keep or restore explicit manual completion controls.
 
 ### Decision: Keep one-shot auto-resume best-effort
 
 Automatic continue should be limited to one attempt per eligible return event sequence.
-The shell must not loop on repeated foreground transitions or bounce between browser and app indefinitely.
+The shell must not loop on repeated foreground transitions, duplicate callbacks, or bounce between browser and app indefinitely.
+The simplest safe guard is to key the auto-resume allowance to the active challenge identifier and clear that allowance only when the host emits a new eligible challenge or leaves the challenge state.
 
 That keeps mobile UX responsive while avoiding false repeated continuations triggered by lifecycle noise.
 

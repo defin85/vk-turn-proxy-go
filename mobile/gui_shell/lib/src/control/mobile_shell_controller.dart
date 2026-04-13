@@ -92,11 +92,14 @@ class MobileShellController extends ChangeNotifier {
   final Map<String, ChallengeRecord> _challengeCache =
       <String, ChallengeRecord>{};
   StreamSubscription<EventRecord>? _eventSubscription;
+  StreamSubscription<MobileBrowserReturnSignal>? _browserReturnSubscription;
   Timer? _pollTimer;
   Timer? _debounceTimer;
   Timer? _persistTimer;
   bool _disposed = false;
   String? _persistedStateSignature;
+  String? _browserHandoffChallengeId;
+  final Set<String> _autoContinuedChallengeIds = <String>{};
 
   static const List<Capability> requiredCapabilities = <Capability>[
     Capability.mobileHostBridge,
@@ -153,6 +156,7 @@ class MobileShellController extends ChangeNotifier {
   }
 
   Future<void> initialize() async {
+    _startBrowserReturnSignals();
     await _restorePersistedState();
     if (_requiresLocalStateReset) {
       hostConnection = MobileHostConnectionResult(
@@ -187,11 +191,7 @@ class MobileShellController extends ChangeNotifier {
       return;
     }
     if (state == AppLifecycleState.resumed) {
-      if (hostConnection?.isReady == true) {
-        unawaited(refresh());
-      } else if (!busy) {
-        unawaited(reconnect());
-      }
+      unawaited(_handleAppResumed());
     }
   }
 
@@ -689,6 +689,9 @@ class MobileShellController extends ChangeNotifier {
       return;
     }
     final opened = await _browserLauncher.open(url);
+    if (opened) {
+      _browserHandoffChallengeId = challenge.id;
+    }
     notice = opened
         ? 'Opened mobile browser handoff for ${challenge.kind}. Return here after the browser step.'
         : 'Failed to open the mobile browser handoff URL.';
@@ -697,10 +700,7 @@ class MobileShellController extends ChangeNotifier {
 
   Future<void> continueChallenge(String challengeId) async {
     await _runBridgeMutation(() async {
-      final challenge = await bridge.continueChallenge(challengeId);
-      _challengeCache[challenge.id] = challenge;
-      notice = 'Continued challenge $challengeId.';
-      await refresh();
+      await _continueChallengeThroughBridge(challengeId);
     });
   }
 
@@ -840,8 +840,38 @@ class MobileShellController extends ChangeNotifier {
     _persistTimer?.cancel();
     _pollTimer?.cancel();
     _eventSubscription?.cancel();
+    _browserReturnSubscription?.cancel();
     unawaited(bridge.dispose());
     super.dispose();
+  }
+
+  Future<void> _handleAppResumed() async {
+    final autoContinued = await _handleBrowserReturnSignal(
+      const MobileBrowserReturnSignal(
+        kind: BrowserReturnSignalKind.foregroundResume,
+      ),
+    );
+    if (_disposed) {
+      return;
+    }
+    if (hostConnection?.isReady == true) {
+      if (!autoContinued) {
+        await refresh();
+      }
+    } else if (!busy) {
+      await reconnect();
+    }
+  }
+
+  void _startBrowserReturnSignals() {
+    if (_browserReturnSubscription != null) {
+      return;
+    }
+    _browserReturnSubscription = bridge.browserReturnSignals.listen((
+      MobileBrowserReturnSignal signal,
+    ) {
+      unawaited(_handleBrowserReturnSignal(signal));
+    }, onError: (_, __) {});
   }
 
   Future<void> _connectBridge() async {
@@ -1127,9 +1157,103 @@ class MobileShellController extends ChangeNotifier {
     _challengeCache.removeWhere(
       (String id, ChallengeRecord _) => !activeIDs.contains(id),
     );
+    if (_browserHandoffChallengeId != null &&
+        !activeIDs.contains(_browserHandoffChallengeId)) {
+      _browserHandoffChallengeId = null;
+    }
+    _autoContinuedChallengeIds.removeWhere(
+      (String id) => !activeIDs.contains(id),
+    );
     for (final challenge in challenges) {
       _challengeCache[challenge.id] = challenge;
     }
+  }
+
+  Future<bool> _handleBrowserReturnSignal(
+    MobileBrowserReturnSignal signal,
+  ) async {
+    if (_disposed || busy) {
+      return false;
+    }
+    final challenge = _autoContinuableChallengeForSignal(signal);
+    if (challenge == null ||
+        _autoContinuedChallengeIds.contains(challenge.id)) {
+      return false;
+    }
+    _autoContinuedChallengeIds.add(challenge.id);
+    await _runBridgeMutation(() async {
+      await _continueChallengeThroughBridge(
+        challenge.id,
+        automatic: true,
+        signalKind: signal.kind,
+      );
+    });
+    return true;
+  }
+
+  ChallengeRecord? _autoContinuableChallengeForSignal(
+    MobileBrowserReturnSignal signal,
+  ) {
+    if (hostConnection?.isReady != true) {
+      return null;
+    }
+    final challengeId = _browserHandoffChallengeId?.trim() ?? '';
+    if (challengeId.isEmpty) {
+      return null;
+    }
+    final challenge = _activeChallengeById(challengeId);
+    if (challenge == null ||
+        challenge.completionMode != ChallengeCompletionMode.appReturnCallback) {
+      return null;
+    }
+    final browserReturn = challenge.browserReturn;
+    if (browserReturn == null ||
+        !browserReturn.allowAutoContinue ||
+        !browserReturn.signalKinds.contains(signal.kind)) {
+      return null;
+    }
+    final expectedReturnUri = browserReturn.expectedReturnUri?.trim() ?? '';
+    if ((signal.kind == BrowserReturnSignalKind.appLink ||
+            signal.kind == BrowserReturnSignalKind.universalLink) &&
+        expectedReturnUri.isNotEmpty &&
+        !_matchesExpectedReturnUri(signal.uri, expectedReturnUri)) {
+      return null;
+    }
+    return challenge;
+  }
+
+  bool _matchesExpectedReturnUri(String? actual, String expected) {
+    final candidate = actual?.trim() ?? '';
+    if (candidate.isEmpty) {
+      return false;
+    }
+    return candidate == expected ||
+        candidate.startsWith('$expected?') ||
+        candidate.startsWith('$expected#');
+  }
+
+  Future<void> _continueChallengeThroughBridge(
+    String challengeId, {
+    bool automatic = false,
+    BrowserReturnSignalKind? signalKind,
+  }) async {
+    _browserHandoffChallengeId = null;
+    final challenge = await bridge.continueChallenge(challengeId);
+    _challengeCache[challenge.id] = challenge;
+    notice = automatic
+        ? 'Detected ${_browserReturnSignalLabel(signalKind)} and continued challenge $challengeId.'
+        : 'Continued challenge $challengeId.';
+    await refresh();
+  }
+
+  String _browserReturnSignalLabel(BrowserReturnSignalKind? signalKind) {
+    return switch (signalKind) {
+      BrowserReturnSignalKind.appLink => 'app-link browser return',
+      BrowserReturnSignalKind.universalLink => 'universal-link browser return',
+      BrowserReturnSignalKind.foregroundResume =>
+        'browser return on app resume',
+      null => 'browser return',
+    };
   }
 
   void _scheduleRefresh() {

@@ -13,6 +13,37 @@ type InteractiveChallenge interface {
 	OpenURL() string
 }
 
+type ChallengeCompletionMode string
+
+const (
+	ChallengeCompletionModeManualConfirm        ChallengeCompletionMode = "manual_confirm"
+	ChallengeCompletionModeAppReturnCallback    ChallengeCompletionMode = "app_return_callback"
+	ChallengeCompletionModeOwnedBrowserObserved ChallengeCompletionMode = "owned_browser_observed"
+)
+
+type BrowserReturnSignalKind string
+
+const (
+	BrowserReturnSignalKindAppLink          BrowserReturnSignalKind = "app_link"
+	BrowserReturnSignalKindUniversalLink    BrowserReturnSignalKind = "universal_link"
+	BrowserReturnSignalKindForegroundResume BrowserReturnSignalKind = "foreground_resume"
+)
+
+type BrowserReturnMetadata struct {
+	SignalKinds       []BrowserReturnSignalKind
+	AllowAutoContinue bool
+	ExpectedReturnURI string
+}
+
+type InteractiveChallengeMetadata struct {
+	CompletionMode ChallengeCompletionMode
+	BrowserReturn  *BrowserReturnMetadata
+}
+
+type InteractiveChallengeMetadataProvider interface {
+	ChallengeMetadata() InteractiveChallengeMetadata
+}
+
 type InteractionHandler interface {
 	Handle(context.Context, InteractiveChallenge) error
 }
