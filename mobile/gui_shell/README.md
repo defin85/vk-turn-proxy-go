@@ -136,9 +136,16 @@ The shell is app-owned and mobile-aware:
 
 - app resume triggers a reconnect or refresh attempt
 - browser challenges are opened through the platform browser handoff path
-- the operator explicitly confirms completion with `I've completed it`
+- app-return-compatible challenges may auto-continue once when the app receives
+  the documented foreground-resume or native browser-return signal for that
+  active challenge
+- the operator can still explicitly confirm completion with `I've completed it`
+  when automatic continuation is unavailable, ambiguous, or insufficient
 
-That explicit confirmation keeps the current mobile slice honest: returning from the browser is a hint, not proof that the provider challenge completed successfully.
+Current repo-owned VK challenge metadata advertises the documented
+foreground-resume path for that one-shot auto-continue policy.
+Returning from the browser remains a continuation hint rather than proof that
+provider resolution succeeded, so the manual fallback action stays available.
 
 ## Diagnostics
 

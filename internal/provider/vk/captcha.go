@@ -20,6 +20,18 @@ type CaptchaChallenge struct {
 	stageObservations []provider.BrowserStageObservation
 }
 
+func (c *CaptchaChallenge) ChallengeMetadata() provider.InteractiveChallengeMetadata {
+	return provider.InteractiveChallengeMetadata{
+		CompletionMode: provider.ChallengeCompletionModeAppReturnCallback,
+		BrowserReturn: &provider.BrowserReturnMetadata{
+			SignalKinds: []provider.BrowserReturnSignalKind{
+				provider.BrowserReturnSignalKindForegroundResume,
+			},
+			AllowAutoContinue: true,
+		},
+	}
+}
+
 func (c *CaptchaChallenge) ProviderName() string {
 	return "vk"
 }

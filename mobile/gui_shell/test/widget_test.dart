@@ -1057,6 +1057,10 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       <PlatformTunnelMode>[];
 
   @override
+  Stream<MobileBrowserReturnSignal> get browserReturnSignals =>
+      const Stream<MobileBrowserReturnSignal>.empty();
+
+  @override
   Future<ChallengeRecord> cancelChallenge(String challengeId) async {
     return challengeMap[challengeId]!;
   }

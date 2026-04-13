@@ -871,7 +871,7 @@ class MobileShellController extends ChangeNotifier {
       MobileBrowserReturnSignal signal,
     ) {
       unawaited(_handleBrowserReturnSignal(signal));
-    }, onError: (_, __) {});
+    }, onError: (Object error, StackTrace stackTrace) {});
   }
 
   Future<void> _connectBridge() async {
