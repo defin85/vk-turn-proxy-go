@@ -814,6 +814,79 @@ void main() {
   });
 
   test(
+    'controller allows fail-closed cancel notices for owned-browser paths',
+    () async {
+      final challenge = ChallengeRecord(
+        id: 'challenge-owned',
+        sessionId: 'session-1',
+        provider: 'vk',
+        stage: 'provider_resolve',
+        kind: 'browser',
+        prompt: 'Continue in the app-owned browser.',
+        openUrl: 'https://vk.com/call/join/test',
+        status: ChallengeStatus.pending,
+        completionMode: ChallengeCompletionMode.ownedBrowserObserved,
+        ownedBrowser: const ChallengeOwnedBrowserMetadata(
+          cookieUrls: <String>['https://login.vk.ru/'],
+        ),
+        createdAt: DateTime.utc(2026, 4, 7, 13, 0),
+        updatedAt: DateTime.utc(2026, 4, 7, 13, 1),
+      );
+      final bridge = _FakeMobileHostBridge(
+        sessionsList: <SessionRecord>[
+          SessionRecord(
+            id: 'session-1',
+            profileId: 'profile-1',
+            profileName: 'vk live',
+            profile: _profileSpec(),
+            state: SessionState.challengeRequired,
+            activeChallengeId: challenge.id,
+            startedAt: DateTime.utc(2026, 4, 7, 13, 0),
+            updatedAt: DateTime.utc(2026, 4, 7, 13, 1),
+          ),
+        ],
+        challengeMap: <String, ChallengeRecord>{challenge.id: challenge},
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: 'profile-1',
+            draft: ProfileDraft.fromProfile(
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.cancelChallenge(
+        challenge.id,
+        noticeOverride:
+            'In-app browser continuation failed: embedded cookies missing. Marked challenge ${challenge.id} as cancelled.',
+      );
+
+      expect(bridge.cancelChallengeCalls, <String>[challenge.id]);
+      expect(controller.notice, contains('In-app browser continuation failed'));
+      expect(controller.notice, contains('Marked challenge ${challenge.id} as cancelled.'));
+    },
+  );
+
+  test(
     'controller sorts sessions newest first and auto-selects the latest active session',
     () async {
       final bridge = _FakeMobileHostBridge(
@@ -1529,6 +1602,7 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   final List<ProviderConfigRecord> restoredProviderConfigs =
       <ProviderConfigRecord>[];
   final List<String> continueChallengeCalls = <String>[];
+  final List<String> cancelChallengeCalls = <String>[];
   final List<ChallengeContinuationSubmission?> continueChallengePayloads =
       <ChallengeContinuationSubmission?>[];
   final List<_StartResolutionCall> startResolutionCalls =
@@ -1551,7 +1625,12 @@ class _FakeMobileHostBridge implements MobileHostBridge {
 
   @override
   Future<ChallengeRecord> cancelChallenge(String challengeId) async {
-    return challengeMap[challengeId]!;
+    cancelChallengeCalls.add(challengeId);
+    final challenge = challengeMap[challengeId]!;
+    return challenge.copyWith(
+      status: ChallengeStatus.cancelled,
+      updatedAt: challenge.updatedAt.add(const Duration(seconds: 1)),
+    );
   }
 
   @override

@@ -44,8 +44,10 @@ class _DashboardPageState extends State<DashboardPage> {
         challenge,
       );
       if (browserContinuation == null) {
-        widget.controller.publishNotice(
-          'Cancelled the in-app browser continuation for challenge ${challenge.id}.',
+        await widget.controller.cancelChallenge(
+          challenge.id,
+          noticeOverride:
+              'Cancelled the in-app browser continuation for challenge ${challenge.id} and marked the challenge cancelled.',
         );
         return;
       }
@@ -54,8 +56,10 @@ class _DashboardPageState extends State<DashboardPage> {
         browserContinuation,
       );
     } catch (error) {
-      widget.controller.publishNotice(
-        'In-app browser continuation failed: $error',
+      await widget.controller.cancelChallenge(
+        challenge.id,
+        noticeOverride:
+            'In-app browser continuation failed: $error. Marked challenge ${challenge.id} as cancelled.',
       );
     }
   }

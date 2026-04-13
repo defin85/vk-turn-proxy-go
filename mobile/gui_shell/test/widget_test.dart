@@ -144,7 +144,7 @@ void main() {
       addTearDown(tester.view.reset);
 
       final runner = _FakeOwnedBrowserChallengeRunner(
-        ChallengeContinuationSubmission(
+        result: ChallengeContinuationSubmission(
           cookies: const <BrowserCookieRecord>[
             BrowserCookieRecord(
               name: 'session',
@@ -238,6 +238,184 @@ void main() {
         bridge.continueChallengePayloads.single?.cookies.single.value,
         'owned-session',
       );
+    },
+  );
+
+  testWidgets(
+    'mobile shell cancels owned-browser challenges when the in-app flow is dismissed',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final runner = _FakeOwnedBrowserChallengeRunner();
+      final bridge = _FakeMobileHostBridge(
+        sessionsList: <SessionRecord>[
+          SessionRecord(
+            id: 'session-1',
+            profileId: 'profile-1',
+            profileName: 'vk live',
+            profile: _profileSpec(),
+            state: SessionState.challengeRequired,
+            activeChallengeId: 'challenge-1',
+            startedAt: DateTime.utc(2026, 4, 7, 12, 0),
+            updatedAt: DateTime.utc(2026, 4, 7, 12, 1),
+          ),
+        ],
+        challengeMap: <String, ChallengeRecord>{
+          'challenge-1': ChallengeRecord(
+            id: 'challenge-1',
+            sessionId: 'session-1',
+            provider: 'vk',
+            stage: 'provider_resolve',
+            kind: 'browser',
+            prompt: 'Continue inside the in-app browser.',
+            openUrl: 'https://vk.com/call/join/test',
+            status: ChallengeStatus.pending,
+            completionMode: ChallengeCompletionMode.ownedBrowserObserved,
+            ownedBrowser: const ChallengeOwnedBrowserMetadata(
+              cookieUrls: <String>['https://login.vk.ru/'],
+            ),
+            createdAt: DateTime.utc(2026, 4, 7, 12, 0),
+            updatedAt: DateTime.utc(2026, 4, 7, 12, 1),
+          ),
+        },
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: 'profile-1',
+            draft: ProfileDraft.fromProfile(
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ),
+          ),
+        ),
+      );
+      await controller.initialize();
+      await tester.pumpWidget(
+        MobileShellApp(
+          controller: controller,
+          ownedBrowserChallengeRunner: runner,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Activity'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sessions (1)'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue in app', skipOffstage: false));
+      await tester.pumpAndSettle();
+
+      expect(runner.challengeIds, <String>['challenge-1']);
+      expect(bridge.continueChallengeCalls, isEmpty);
+      expect(bridge.cancelChallengeCalls, <String>['challenge-1']);
+      expect(
+        controller.notice,
+        contains('Cancelled the in-app browser continuation'),
+      );
+    },
+  );
+
+  testWidgets(
+    'mobile shell fail-closes owned-browser challenges when the in-app flow throws',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final runner = _FakeOwnedBrowserChallengeRunner(
+        error: StateError('embedded cookies missing'),
+      );
+      final bridge = _FakeMobileHostBridge(
+        sessionsList: <SessionRecord>[
+          SessionRecord(
+            id: 'session-1',
+            profileId: 'profile-1',
+            profileName: 'vk live',
+            profile: _profileSpec(),
+            state: SessionState.challengeRequired,
+            activeChallengeId: 'challenge-1',
+            startedAt: DateTime.utc(2026, 4, 7, 12, 0),
+            updatedAt: DateTime.utc(2026, 4, 7, 12, 1),
+          ),
+        ],
+        challengeMap: <String, ChallengeRecord>{
+          'challenge-1': ChallengeRecord(
+            id: 'challenge-1',
+            sessionId: 'session-1',
+            provider: 'vk',
+            stage: 'provider_resolve',
+            kind: 'browser',
+            prompt: 'Continue inside the in-app browser.',
+            openUrl: 'https://vk.com/call/join/test',
+            status: ChallengeStatus.pending,
+            completionMode: ChallengeCompletionMode.ownedBrowserObserved,
+            ownedBrowser: const ChallengeOwnedBrowserMetadata(
+              cookieUrls: <String>['https://login.vk.ru/'],
+            ),
+            createdAt: DateTime.utc(2026, 4, 7, 12, 0),
+            updatedAt: DateTime.utc(2026, 4, 7, 12, 1),
+          ),
+        },
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: 'profile-1',
+            draft: ProfileDraft.fromProfile(
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ),
+          ),
+        ),
+      );
+      await controller.initialize();
+      await tester.pumpWidget(
+        MobileShellApp(
+          controller: controller,
+          ownedBrowserChallengeRunner: runner,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Activity'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sessions (1)'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue in app', skipOffstage: false));
+      await tester.pumpAndSettle();
+
+      expect(runner.challengeIds, <String>['challenge-1']);
+      expect(bridge.continueChallengeCalls, isEmpty);
+      expect(bridge.cancelChallengeCalls, <String>['challenge-1']);
+      expect(controller.notice, contains('In-app browser continuation failed'));
+      expect(controller.notice, contains('challenge-1'));
     },
   );
 
@@ -1122,9 +1300,10 @@ class _FakeBrowserLauncher implements BrowserLauncher {
 }
 
 class _FakeOwnedBrowserChallengeRunner implements OwnedBrowserChallengeRunner {
-  _FakeOwnedBrowserChallengeRunner(this.result);
+  _FakeOwnedBrowserChallengeRunner({this.result, this.error});
 
   final ChallengeContinuationSubmission? result;
+  final Object? error;
   final List<String> challengeIds = <String>[];
 
   @override
@@ -1133,6 +1312,9 @@ class _FakeOwnedBrowserChallengeRunner implements OwnedBrowserChallengeRunner {
     ChallengeRecord challenge,
   ) async {
     challengeIds.add(challenge.id);
+    if (error != null) {
+      throw error!;
+    }
     return result;
   }
 }
@@ -1177,6 +1359,7 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   final List<ResolutionRecord> _resolutions;
   final List<PlatformTunnelMode> startedPlatformTunnels =
       <PlatformTunnelMode>[];
+  final List<String> cancelChallengeCalls = <String>[];
   final List<String> continueChallengeCalls = <String>[];
   final List<ChallengeContinuationSubmission?> continueChallengePayloads =
       <ChallengeContinuationSubmission?>[];
@@ -1187,7 +1370,12 @@ class _FakeMobileHostBridge implements MobileHostBridge {
 
   @override
   Future<ChallengeRecord> cancelChallenge(String challengeId) async {
-    return challengeMap[challengeId]!;
+    cancelChallengeCalls.add(challengeId);
+    final challenge = challengeMap[challengeId]!;
+    return challenge.copyWith(
+      status: ChallengeStatus.cancelled,
+      updatedAt: challenge.updatedAt.add(const Duration(seconds: 1)),
+    );
   }
 
   @override

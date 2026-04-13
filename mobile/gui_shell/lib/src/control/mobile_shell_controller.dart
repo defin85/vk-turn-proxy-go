@@ -721,11 +721,15 @@ class MobileShellController extends ChangeNotifier {
     });
   }
 
-  Future<void> cancelChallenge(String challengeId) async {
+  Future<void> cancelChallenge(
+    String challengeId, {
+    String? noticeOverride,
+  }) async {
     await _runBridgeMutation(() async {
+      _browserHandoffChallengeId = null;
       final challenge = await bridge.cancelChallenge(challengeId);
       _challengeCache[challenge.id] = challenge;
-      notice = 'Cancelled challenge $challengeId.';
+      notice = noticeOverride ?? 'Cancelled challenge $challengeId.';
       await refresh();
     });
   }

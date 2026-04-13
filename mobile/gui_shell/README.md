@@ -153,8 +153,8 @@ provider resolution succeeded, so the manual fallback action stays available.
 Owned browser continuation is fail-closed.
 If the host does not advertise `owned_browser_observed`, if the challenge omits
 the documented cookie domains, or if the embedded WebView session cannot return
-cookies for those domains, the shell does not silently claim success or invent a
-fallback path.
+cookies for those domains, the shell cancels that active challenge through the
+host bridge instead of silently claiming success or inventing a fallback path.
 
 The current repo-owned approval gate is narrow by design:
 
