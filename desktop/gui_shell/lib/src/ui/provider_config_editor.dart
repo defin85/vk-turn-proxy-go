@@ -74,6 +74,9 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
     final selectedSavedConfig = widget.selectedProviderConfigId != null;
     final blockedByAvailability =
         selectedSavedConfig && !widget.draft.availability.isAvailable;
+    final blockedBySchemaSupport =
+        descriptor == null || descriptor.providerSettingsSupportError != null;
+    final blockedActions = blockedByAvailability || blockedBySchemaSupport;
 
     return Card(
       child: Padding(
@@ -192,7 +195,7 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
               runSpacing: 12,
               children: <Widget>[
                 FilledButton(
-                  onPressed: widget.busy || blockedByAvailability
+                  onPressed: widget.busy || blockedActions
                       ? null
                       : () => unawaited(widget.onSave()),
                   child: const Text('Save config'),
@@ -201,7 +204,7 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                   onPressed:
                       widget.busy ||
                           widget.selectedProviderConfigId == null ||
-                          blockedByAvailability
+                          blockedActions
                       ? null
                       : () => widget.onApplyToProfileDraft(
                           widget.selectedProviderConfigId!,

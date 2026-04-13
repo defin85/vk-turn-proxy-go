@@ -10,6 +10,30 @@ import 'package:mobile_gui_shell/src/control/mobile_shell_controller.dart';
 import 'package:mobile_gui_shell/src/control/mobile_shell_state_store.dart';
 import 'package:mobile_gui_shell/src/control/profile_draft.dart';
 
+const ProviderDescriptor _unsupportedProviderSettingsDescriptor =
+    ProviderDescriptor(
+      id: 'unsupported-provider',
+      displayName: 'Unsupported provider',
+      description: 'Descriptor-driven schema that this shell cannot render.',
+      inputKind: ProviderInputKind.link,
+      authPosture: ProviderAuthPosture.account,
+      browserPolicy: ProviderBrowserPolicy.notRequired,
+      artifactFamilies: <ArtifactFamily>[ArtifactFamily.genericTurn],
+      settingsSchema: ProviderSettingsSchema(
+        type: 'object',
+        additionalProperties: false,
+        properties: <String, ProviderSettingProperty>{
+          'device_pin': ProviderSettingProperty(
+            type: ProviderSettingType.string,
+            title: 'Device PIN',
+            writeOnly: true,
+            control: ProviderSettingControl.password,
+            persistence: ProviderSettingPersistence.profile,
+          ),
+        },
+      ),
+    );
+
 void main() {
   testWidgets('mobile shell uses workflow-first navigation', (
     WidgetTester tester,
@@ -707,6 +731,66 @@ void main() {
       isNull,
     );
   });
+
+  testWidgets(
+    'mobile shell disables provider-config mutations when the schema is unsupported',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 2200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(
+          providersList: const <ProviderDescriptor>[
+            _unsupportedProviderSettingsDescriptor,
+          ],
+          providerConfigsList: <ProviderConfigRecord>[
+            _providerConfigRecord(
+              id: 'provider-config-1',
+              provider: 'unsupported-provider',
+              name: 'Legacy config',
+              providerSettings: const <String, dynamic>{},
+            ),
+          ],
+        ),
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: const <ProfileRecord>[],
+            providerConfigs: const <ProviderConfigRecord>[],
+            draft: ProfileDraft.defaults(),
+          ),
+        ),
+      );
+
+      await controller.initialize();
+      controller.selectProviderConfig('provider-config-1');
+      await tester.pumpWidget(MobileShellApp(controller: controller));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('cannot render the provider settings schema'),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.byKey(const ValueKey<String>('provider-config-save-button')),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.byKey(
+                const ValueKey<String>('provider-config-apply-button'),
+              ),
+            )
+            .onPressed,
+        isNull,
+      );
+    },
+  );
 
   testWidgets(
     'mobile shell applies provider configs as saved-profile snapshots',

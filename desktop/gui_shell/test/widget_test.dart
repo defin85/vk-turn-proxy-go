@@ -100,6 +100,30 @@ const ProviderDescriptor _providerWithSettingsDescriptor = ProviderDescriptor(
   ),
 );
 
+const ProviderDescriptor _unsupportedProviderSettingsDescriptor =
+    ProviderDescriptor(
+      id: 'unsupported-provider',
+      displayName: 'Unsupported provider',
+      description: 'Descriptor-driven schema that this shell cannot render.',
+      inputKind: ProviderInputKind.link,
+      authPosture: ProviderAuthPosture.account,
+      browserPolicy: ProviderBrowserPolicy.notRequired,
+      artifactFamilies: <ArtifactFamily>[ArtifactFamily.genericTurn],
+      settingsSchema: ProviderSettingsSchema(
+        type: 'object',
+        additionalProperties: false,
+        properties: <String, ProviderSettingProperty>{
+          'device_pin': ProviderSettingProperty(
+            type: ProviderSettingType.string,
+            title: 'Device PIN',
+            writeOnly: true,
+            control: ProviderSettingControl.password,
+            persistence: ProviderSettingPersistence.profile,
+          ),
+        },
+      ),
+    );
+
 void main() {
   testWidgets(
     'desktop shell shows connecting state before host negotiation completes',
@@ -595,6 +619,67 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     unawaited(api.dispose());
   });
+
+  testWidgets(
+    'desktop shell disables provider-config mutations when the schema is unsupported',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1600, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final api = _FakeControlPlaneApi(
+        providers: const <ProviderDescriptor>[
+          _unsupportedProviderSettingsDescriptor,
+        ],
+        providerConfigs: <ProviderConfigRecord>[
+          _providerConfigRecord(
+            id: 'provider-config-1',
+            provider: 'unsupported-provider',
+            name: 'Legacy config',
+            providerSettings: const <String, dynamic>{},
+          ),
+        ],
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _FakeHostSupervisor(),
+        stateStore: const _InMemoryShellStateStore(),
+        appBuild: _testGuiBuild,
+      );
+
+      await controller.initialize();
+      controller.selectProviderConfig('provider-config-1');
+      await tester.pumpWidget(
+        MaterialApp(home: DashboardPage(controller: controller)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('cannot render the provider settings schema'),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Save config'),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Apply to profile draft'),
+            )
+            .onPressed,
+        isNull,
+      );
+
+      controller.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+      unawaited(api.dispose());
+    },
+  );
 
   testWidgets(
     'desktop shell applies provider configs as saved-profile snapshots',
