@@ -134,7 +134,6 @@ class DesktopHostSupervisor implements HostSupervisor {
       Capability.desktopSidecar,
       Capability.platformTunnels,
       Capability.profiles,
-      Capability.providerConfigs,
       Capability.providerRuntimeArtifacts,
       Capability.sessions,
       Capability.challenges,

@@ -6,6 +6,7 @@ import 'package:gui_shell/src/control/control_plane_client.dart';
 import 'package:gui_shell/src/control/control_plane_models.dart';
 import 'package:gui_shell/src/control/desktop_host_supervisor.dart';
 import 'package:gui_shell/src/control/desktop_shell_controller.dart';
+import 'package:gui_shell/src/control/profile_draft.dart';
 import 'package:gui_shell/src/control/shell_state_store.dart';
 import 'package:gui_shell/src/ui/dashboard_page.dart';
 
@@ -75,39 +76,41 @@ const List<ProviderDescriptor> _providerDescriptors = <ProviderDescriptor>[
   ),
 ];
 
-const ProviderDescriptor _providerWithSettingsDescriptor = ProviderDescriptor(
-  id: 'wb-stream',
-  displayName: 'WB Stream',
-  description: 'Descriptor-driven provider settings test fixture.',
-  inputKind: ProviderInputKind.link,
-  authPosture: ProviderAuthPosture.account,
-  browserPolicy: ProviderBrowserPolicy.notRequired,
-  artifactFamilies: <ArtifactFamily>[ArtifactFamily.genericTurn],
-  settingsSchema: ProviderSettingsSchema(
-    type: 'object',
-    additionalProperties: false,
-    requiredKeys: <String>['region'],
-    properties: <String, ProviderSettingProperty>{
-      'region': ProviderSettingProperty(
-        type: ProviderSettingType.string,
-        title: 'Region',
-        enumValues: <dynamic>['ru-central', 'eu-west'],
-        defaultValue: 'ru-central',
-        control: ProviderSettingControl.select,
-        persistence: ProviderSettingPersistence.profile,
-      ),
-    },
-  ),
-);
-
-const ProviderDescriptor _unsupportedProviderSettingsDescriptor =
+const ProviderDescriptor _supportedProviderWithSettingsDescriptor =
     ProviderDescriptor(
-      id: 'unsupported-provider',
-      displayName: 'Unsupported provider',
-      description: 'Descriptor-driven schema that this shell cannot render.',
+      id: 'vk',
+      displayName: 'VK Calls',
+      description: 'Managed provider settings fixture for a shipped provider.',
       inputKind: ProviderInputKind.link,
-      authPosture: ProviderAuthPosture.account,
-      browserPolicy: ProviderBrowserPolicy.notRequired,
+      authPosture: ProviderAuthPosture.guestOrAccount,
+      browserPolicy: ProviderBrowserPolicy.externalRequired,
+      artifactFamilies: <ArtifactFamily>[ArtifactFamily.genericTurn],
+      settingsSchema: ProviderSettingsSchema(
+        type: 'object',
+        additionalProperties: false,
+        requiredKeys: <String>['region'],
+        properties: <String, ProviderSettingProperty>{
+          'region': ProviderSettingProperty(
+            type: ProviderSettingType.string,
+            title: 'Region',
+            enumValues: <dynamic>['ru-central', 'eu-west'],
+            defaultValue: 'ru-central',
+            control: ProviderSettingControl.select,
+            persistence: ProviderSettingPersistence.profile,
+          ),
+        },
+      ),
+    );
+
+const ProviderDescriptor _supportedProviderWithUnsupportedSettingsDescriptor =
+    ProviderDescriptor(
+      id: 'vk',
+      displayName: 'VK Calls',
+      description:
+          'Unsupported reusable settings fixture for a shipped provider.',
+      inputKind: ProviderInputKind.link,
+      authPosture: ProviderAuthPosture.guestOrAccount,
+      browserPolicy: ProviderBrowserPolicy.externalRequired,
       artifactFamilies: <ArtifactFamily>[ArtifactFamily.genericTurn],
       settingsSchema: ProviderSettingsSchema(
         type: 'object',
@@ -398,10 +401,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     final api = _FakeControlPlaneApi(
-      providers: <ProviderDescriptor>[
-        ..._providerDescriptors,
-        _providerWithSettingsDescriptor,
-      ],
+      providers: <ProviderDescriptor>[_providerDescriptors.first],
     );
     final controller = DesktopShellController(
       api: api,
@@ -418,7 +418,7 @@ void main() {
 
     final libraryScrollable = _libraryScrollable();
     await tester.scrollUntilVisible(
-      find.byKey(const ValueKey<String>('preset-card-smarthome-default')),
+      find.byKey(const ValueKey<String>('preset-card-generic-turn-default')),
       180,
       scrollable: libraryScrollable,
     );
@@ -426,7 +426,7 @@ void main() {
 
     expect(
       find.textContaining(
-        'does not advertise the RTK Smarthome provider family yet',
+        'does not advertise the Generic TURN provider family yet',
       ),
       findsOneWidget,
     );
@@ -443,12 +443,7 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    final api = _FakeControlPlaneApi(
-      providers: <ProviderDescriptor>[
-        ..._providerDescriptors,
-        _providerWithSettingsDescriptor,
-      ],
-    );
+    final api = _FakeControlPlaneApi(providers: _providerDescriptors);
     final controller = DesktopShellController(
       api: api,
       supervisor: _FakeHostSupervisor(),
@@ -464,14 +459,14 @@ void main() {
 
     final libraryScrollable = _libraryScrollable();
     await tester.scrollUntilVisible(
-      find.byKey(const ValueKey<String>('preset-card-wb-stream-default')),
+      find.byKey(const ValueKey<String>('preset-card-generic-turn-default')),
       180,
       scrollable: libraryScrollable,
     );
     await tester.pumpAndSettle();
 
     final wbPresetButton = find.byKey(
-      const ValueKey<String>('preset-use-wb-stream-default'),
+      const ValueKey<String>('preset-use-generic-turn-default'),
     );
     await tester.scrollUntilVisible(
       wbPresetButton,
@@ -482,10 +477,10 @@ void main() {
     await tester.tap(wbPresetButton);
     await tester.pumpAndSettle();
 
-    expect(controller.selectedProfileId, isNull);
-    expect(controller.workspaceSurface, DesktopWorkspaceSurface.profile);
-    expect(controller.draft.name, 'WB Stream');
-    expect(controller.draft.spec.provider, 'wb-stream');
+    expect(controller.workspaceSurface, DesktopWorkspaceSurface.providerConfig);
+    expect(controller.managedProviderDraft.name, 'Generic TURN');
+    expect(controller.managedProviderDraft.provider, 'generic-turn');
+    expect(controller.selectedManagedProviderId, isNull);
 
     controller.dispose();
     await tester.pumpWidget(const SizedBox.shrink());
@@ -499,12 +494,7 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    final api = _FakeControlPlaneApi(
-      providers: <ProviderDescriptor>[
-        ..._providerDescriptors,
-        _providerWithSettingsDescriptor,
-      ],
-    );
+    final api = _FakeControlPlaneApi(providers: _providerDescriptors);
     final controller = DesktopShellController(
       api: api,
       supervisor: _FakeHostSupervisor(),
@@ -520,7 +510,7 @@ void main() {
 
     final libraryScrollable = _libraryScrollable();
     await tester.scrollUntilVisible(
-      find.text('Provider configs'),
+      find.byKey(const ValueKey<String>('provider-config-create-button')),
       180,
       scrollable: libraryScrollable,
     );
@@ -532,11 +522,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(controller.workspaceSurface, DesktopWorkspaceSurface.providerConfig);
-    expect(find.text('Provider config workspace'), findsOneWidget);
+    expect(find.text('Providers workspace'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField).first, 'WB Central');
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Save config'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save provider'));
     await tester.pumpAndSettle();
 
     expect(controller.providerConfigs, hasLength(1));
@@ -544,7 +534,7 @@ void main() {
 
     await tester.enterText(find.byType(TextField).first, 'WB Central Updated');
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Save config'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save provider'));
     await tester.pumpAndSettle();
 
     expect(controller.providerConfigs, hasLength(1));
@@ -561,7 +551,7 @@ void main() {
     unawaited(api.dispose());
   });
 
-  testWidgets('desktop shell blocks unavailable provider configs explicitly', (
+  testWidgets('desktop shell keeps unavailable managed providers explicit', (
     WidgetTester tester,
   ) async {
     tester.view.physicalSize = const Size(1600, 1200);
@@ -569,24 +559,27 @@ void main() {
     addTearDown(tester.view.reset);
 
     final api = _FakeControlPlaneApi(
-      providerConfigs: <ProviderConfigRecord>[
-        _providerConfigRecord(
-          id: 'provider-config-1',
-          provider: 'wb-stream',
-          name: 'WB Central',
-          providerSettings: const <String, dynamic>{'region': 'eu-west'},
-          availability: const ProviderConfigAvailability(
-            state: ProviderConfigAvailabilityState.providerUnavailable,
-            message:
-                'The connected host no longer advertises WB Stream provider settings.',
-          ),
-        ),
-      ],
+      providers: <ProviderDescriptor>[_providerDescriptors.first],
     );
     final controller = DesktopShellController(
       api: api,
       supervisor: _FakeHostSupervisor(),
-      stateStore: const _InMemoryShellStateStore(),
+      stateStore: _InMemoryShellStateStore(
+        DesktopShellState(
+          profiles: const <ProfileRecord>[],
+          managedProviders: <ManagedProviderRecord>[
+            ManagedProviderRecord(
+              id: 'provider-config-1',
+              provider: 'generic-turn',
+              name: 'Generic TURN Provider',
+              providerSettings: const <String, dynamic>{},
+              createdAt: DateTime.utc(2026, 4, 12, 18, 0),
+              updatedAt: DateTime.utc(2026, 4, 12, 18, 1),
+            ),
+          ],
+          draft: ProfileDraft.defaults(),
+        ),
+      ),
       appBuild: _testGuiBuild,
     );
 
@@ -603,7 +596,9 @@ void main() {
 
     expect(controller.workspaceSurface, DesktopWorkspaceSurface.providerConfig);
     expect(
-      find.textContaining('no longer advertises WB Stream'),
+      find.textContaining(
+        'does not advertise the Generic TURN provider family',
+      ),
       findsOneWidget,
     );
     expect(
@@ -612,7 +607,7 @@ void main() {
             find.widgetWithText(FilledButton, 'Apply to profile draft'),
           )
           .onPressed,
-      isNull,
+      isNotNull,
     );
 
     controller.dispose();
@@ -621,7 +616,7 @@ void main() {
   });
 
   testWidgets(
-    'desktop shell disables provider-config mutations when the schema is unsupported',
+    'desktop shell disables provider saves when reusable settings are unsupported',
     (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1600, 1200);
       tester.view.devicePixelRatio = 1.0;
@@ -629,21 +624,30 @@ void main() {
 
       final api = _FakeControlPlaneApi(
         providers: const <ProviderDescriptor>[
-          _unsupportedProviderSettingsDescriptor,
-        ],
-        providerConfigs: <ProviderConfigRecord>[
-          _providerConfigRecord(
-            id: 'provider-config-1',
-            provider: 'unsupported-provider',
-            name: 'Legacy config',
-            providerSettings: const <String, dynamic>{},
-          ),
+          _supportedProviderWithUnsupportedSettingsDescriptor,
         ],
       );
       final controller = DesktopShellController(
         api: api,
         supervisor: _FakeHostSupervisor(),
-        stateStore: const _InMemoryShellStateStore(),
+        stateStore: _InMemoryShellStateStore(
+          DesktopShellState(
+            profiles: const <ProfileRecord>[],
+            managedProviders: <ManagedProviderRecord>[
+              ManagedProviderRecord(
+                id: 'provider-config-1',
+                provider: 'vk',
+                name: 'Legacy managed provider',
+                providerSettings: const <String, dynamic>{
+                  'device_pin': '123456',
+                },
+                createdAt: DateTime.utc(2026, 4, 12, 18, 0),
+                updatedAt: DateTime.utc(2026, 4, 12, 18, 1),
+              ),
+            ],
+            draft: ProfileDraft.defaults(),
+          ),
+        ),
         appBuild: _testGuiBuild,
       );
 
@@ -661,7 +665,7 @@ void main() {
       expect(
         tester
             .widget<FilledButton>(
-              find.widgetWithText(FilledButton, 'Save config'),
+              find.widgetWithText(FilledButton, 'Save provider'),
             )
             .onPressed,
         isNull,
@@ -672,7 +676,7 @@ void main() {
               find.widgetWithText(FilledButton, 'Apply to profile draft'),
             )
             .onPressed,
-        isNull,
+        isNotNull,
       );
 
       controller.dispose();
@@ -682,30 +686,59 @@ void main() {
   );
 
   testWidgets(
-    'desktop shell applies provider configs as saved-profile snapshots',
+    'desktop shell applies managed providers as saved-profile snapshots',
     (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1600, 1200);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
       final api = _FakeControlPlaneApi(
-        providers: <ProviderDescriptor>[
-          ..._providerDescriptors,
-          _providerWithSettingsDescriptor,
-        ],
-        providerConfigs: <ProviderConfigRecord>[
-          _providerConfigRecord(
-            id: 'provider-config-1',
-            provider: 'wb-stream',
-            name: 'WB Central',
-            providerSettings: const <String, dynamic>{'region': 'eu-west'},
-          ),
+        providers: const <ProviderDescriptor>[
+          _supportedProviderWithSettingsDescriptor,
         ],
       );
       final controller = DesktopShellController(
         api: api,
         supervisor: _FakeHostSupervisor(),
-        stateStore: const _InMemoryShellStateStore(),
+        stateStore: _InMemoryShellStateStore(
+          DesktopShellState(
+            profiles: <ProfileRecord>[
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'alpha',
+                spec: const ProfileSpec(
+                  provider: 'vk',
+                  link: 'https://vk.com/call/join/test',
+                  listenAddress: '127.0.0.1:9001',
+                  peerAddress: '127.0.0.1:56000',
+                ),
+              ),
+            ],
+            managedProviders: <ManagedProviderRecord>[
+              ManagedProviderRecord(
+                id: 'provider-config-1',
+                provider: 'vk',
+                name: 'VK Europe',
+                providerSettings: const <String, dynamic>{'region': 'eu-west'},
+                createdAt: DateTime.utc(2026, 4, 12, 18, 0),
+                updatedAt: DateTime.utc(2026, 4, 12, 18, 1),
+              ),
+            ],
+            selectedProfileId: 'profile-1',
+            draft: ProfileDraft.fromProfile(
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'alpha',
+                spec: const ProfileSpec(
+                  provider: 'vk',
+                  link: 'https://vk.com/call/join/test',
+                  listenAddress: '127.0.0.1:9001',
+                  peerAddress: '127.0.0.1:56000',
+                ),
+              ),
+            ),
+          ),
+        ),
         appBuild: _testGuiBuild,
       );
 
@@ -724,8 +757,13 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(controller.workspaceSurface, DesktopWorkspaceSurface.profile);
-      expect(controller.draft.spec.provider, 'wb-stream');
+      expect(controller.draft.spec.provider, 'vk');
       expect(controller.draft.spec.providerSettings['region'], 'eu-west');
+      expect(controller.draft.providerBinding.isManaged, isTrue);
+      expect(
+        controller.draft.providerBinding.managedProviderId,
+        'provider-config-1',
+      );
 
       await controller.saveDraft();
       await tester.pumpAndSettle();
@@ -733,18 +771,16 @@ void main() {
       final savedProfile = controller.profiles.firstWhere(
         (ProfileRecord profile) => profile.id == 'profile-1',
       );
-      expect(savedProfile.spec.provider, 'wb-stream');
+      expect(savedProfile.spec.provider, 'vk');
       expect(savedProfile.spec.providerSettings['region'], 'eu-west');
 
-      await api.upsertProviderConfig(
-        _providerConfigRecord(
-          id: 'provider-config-1',
-          provider: 'wb-stream',
-          name: 'WB Central',
+      controller.selectManagedProvider('provider-config-1');
+      controller.updateManagedProviderDraft(
+        controller.managedProviderDraft.copyWith(
           providerSettings: const <String, dynamic>{'region': 'ru-central'},
         ),
       );
-      await controller.refresh();
+      await controller.saveManagedProviderDraft();
       await tester.pumpAndSettle();
 
       final refreshedProfile = controller.profiles.firstWhere(
@@ -768,30 +804,14 @@ Finder _libraryScrollable() {
       .first;
 }
 
-ProviderConfigRecord _providerConfigRecord({
-  required String id,
-  required String provider,
-  required String name,
-  required Map<String, dynamic> providerSettings,
-  ProviderConfigAvailability availability = const ProviderConfigAvailability(),
-}) {
-  return ProviderConfigRecord(
-    id: id,
-    provider: provider,
-    name: name,
-    providerSettings: providerSettings,
-    createdAt: DateTime.utc(2026, 4, 12, 18, 0),
-    updatedAt: DateTime.utc(2026, 4, 12, 18, 1),
-    availability: availability,
-  );
-}
-
 class _InMemoryShellStateStore implements DesktopShellStateStore {
-  const _InMemoryShellStateStore();
+  const _InMemoryShellStateStore([this.state]);
+
+  final DesktopShellState? state;
 
   @override
   Future<DesktopShellState?> load() async {
-    return null;
+    return state;
   }
 
   @override
@@ -853,7 +873,10 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   }
 
   @override
-  Future<ChallengeRecord> continueChallenge(String challengeId) {
+  Future<ChallengeRecord> continueChallenge(
+    String challengeId, {
+    ChallengeContinuationSubmission? browserContinuation,
+  }) {
     throw UnimplementedError();
   }
 

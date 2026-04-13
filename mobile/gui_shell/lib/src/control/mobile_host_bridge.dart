@@ -244,7 +244,6 @@ class HttpMobileHostBridge implements MobileHostBridge {
       Capability.mobileHostBridge,
       Capability.platformTunnels,
       Capability.profiles,
-      Capability.providerConfigs,
       Capability.providerRuntimeArtifacts,
       Capability.sessions,
       Capability.challenges,

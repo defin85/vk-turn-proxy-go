@@ -11,14 +11,41 @@ import 'package:mobile_gui_shell/src/control/mobile_shell_state_store.dart';
 import 'package:mobile_gui_shell/src/control/profile_draft.dart';
 import 'package:mobile_gui_shell/src/ui/owned_browser_challenge.dart';
 
-const ProviderDescriptor _unsupportedProviderSettingsDescriptor =
+const ProviderDescriptor _supportedProviderWithSettingsDescriptor =
     ProviderDescriptor(
-      id: 'unsupported-provider',
-      displayName: 'Unsupported provider',
-      description: 'Descriptor-driven schema that this shell cannot render.',
+      id: 'vk',
+      displayName: 'VK Calls',
+      description: 'Managed provider settings fixture for a shipped provider.',
       inputKind: ProviderInputKind.link,
-      authPosture: ProviderAuthPosture.account,
-      browserPolicy: ProviderBrowserPolicy.notRequired,
+      authPosture: ProviderAuthPosture.guestOrAccount,
+      browserPolicy: ProviderBrowserPolicy.externalRequired,
+      artifactFamilies: <ArtifactFamily>[ArtifactFamily.genericTurn],
+      settingsSchema: ProviderSettingsSchema(
+        type: 'object',
+        additionalProperties: false,
+        requiredKeys: <String>['region'],
+        properties: <String, ProviderSettingProperty>{
+          'region': ProviderSettingProperty(
+            type: ProviderSettingType.string,
+            title: 'Region',
+            enumValues: <dynamic>['ru-central', 'eu-west'],
+            defaultValue: 'ru-central',
+            control: ProviderSettingControl.select,
+            persistence: ProviderSettingPersistence.profile,
+          ),
+        },
+      ),
+    );
+
+const ProviderDescriptor _supportedProviderWithUnsupportedSettingsDescriptor =
+    ProviderDescriptor(
+      id: 'vk',
+      displayName: 'VK Calls',
+      description:
+          'Unsupported reusable settings fixture for a shipped provider.',
+      inputKind: ProviderInputKind.link,
+      authPosture: ProviderAuthPosture.guestOrAccount,
+      browserPolicy: ProviderBrowserPolicy.externalRequired,
       artifactFamilies: <ArtifactFamily>[ArtifactFamily.genericTurn],
       settingsSchema: ProviderSettingsSchema(
         type: 'object',
@@ -807,10 +834,7 @@ void main() {
 
     final controller = MobileShellController(
       bridge: _FakeMobileHostBridge(
-        providersList: <ProviderDescriptor>[
-          ..._providerDescriptors,
-          _providerWithSettingsDescriptor,
-        ],
+        providersList: <ProviderDescriptor>[_providerDescriptors.first],
       ),
       stateStore: _InMemoryStateStore(
         MobileShellState(
@@ -826,7 +850,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.scrollUntilVisible(
-      find.byKey(const ValueKey<String>('preset-card-smarthome-default')),
+      find.byKey(const ValueKey<String>('preset-card-generic-turn-default')),
       240,
       scrollable: _workflowScrollable(),
     );
@@ -834,7 +858,7 @@ void main() {
 
     expect(
       find.textContaining(
-        'does not advertise the RTK Smarthome provider family yet',
+        'does not advertise the Generic TURN provider family yet',
       ),
       findsOneWidget,
     );
@@ -848,12 +872,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     final controller = MobileShellController(
-      bridge: _FakeMobileHostBridge(
-        providersList: <ProviderDescriptor>[
-          ..._providerDescriptors,
-          _providerWithSettingsDescriptor,
-        ],
-      ),
+      bridge: _FakeMobileHostBridge(providersList: _providerDescriptors),
       stateStore: _InMemoryStateStore(
         MobileShellState(
           profiles: <ProfileRecord>[
@@ -882,7 +901,7 @@ void main() {
 
     final workflowScrollable = _workflowScrollable();
     final wbPresetButton = find.byKey(
-      const ValueKey<String>('preset-use-wb-stream-default'),
+      const ValueKey<String>('preset-use-generic-turn-default'),
     );
     await tester.scrollUntilVisible(
       wbPresetButton,
@@ -893,10 +912,10 @@ void main() {
     await tester.tap(wbPresetButton);
     await tester.pumpAndSettle();
 
-    expect(controller.selectedProfileId, isNull);
-    expect(controller.workflowSurface, MobileWorkflowSurface.profile);
-    expect(controller.draft.name, 'WB Stream');
-    expect(controller.draft.spec.provider, 'wb-stream');
+    expect(controller.workflowSurface, MobileWorkflowSurface.providerConfig);
+    expect(controller.managedProviderDraft.name, 'Generic TURN');
+    expect(controller.managedProviderDraft.provider, 'generic-turn');
+    expect(controller.selectedManagedProviderId, isNull);
   });
 
   testWidgets('mobile shell creates edits and deletes provider configs', (
@@ -907,12 +926,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     final controller = MobileShellController(
-      bridge: _FakeMobileHostBridge(
-        providersList: <ProviderDescriptor>[
-          ..._providerDescriptors,
-          _providerWithSettingsDescriptor,
-        ],
-      ),
+      bridge: _FakeMobileHostBridge(providersList: _providerDescriptors),
       stateStore: _InMemoryStateStore(
         MobileShellState(
           profiles: const <ProfileRecord>[],
@@ -939,11 +953,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(controller.workflowSurface, MobileWorkflowSurface.providerConfig);
-    expect(find.text('Save config'), findsOneWidget);
+    expect(find.text('Save provider'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField).first, 'WB Central');
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Save config'));
+    await tester.tap(find.text('Save provider'));
     await tester.pumpAndSettle();
 
     expect(controller.providerConfigs, hasLength(1));
@@ -951,7 +965,7 @@ void main() {
 
     await tester.enterText(find.byType(TextField).first, 'WB Central Updated');
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Save config'));
+    await tester.tap(find.text('Save provider'));
     await tester.pumpAndSettle();
 
     expect(controller.providerConfigs.single.name, 'WB Central Updated');
@@ -967,7 +981,7 @@ void main() {
     expect(controller.workflowSurface, MobileWorkflowSurface.profile);
   });
 
-  testWidgets('mobile shell blocks unavailable provider configs explicitly', (
+  testWidgets('mobile shell keeps unavailable managed providers explicit', (
     WidgetTester tester,
   ) async {
     tester.view.physicalSize = const Size(1200, 2200);
@@ -976,24 +990,21 @@ void main() {
 
     final controller = MobileShellController(
       bridge: _FakeMobileHostBridge(
-        providerConfigsList: <ProviderConfigRecord>[
-          _providerConfigRecord(
-            id: 'provider-config-1',
-            provider: 'wb-stream',
-            name: 'WB Central',
-            providerSettings: const <String, dynamic>{'region': 'eu-west'},
-            availability: const ProviderConfigAvailability(
-              state: ProviderConfigAvailabilityState.providerUnavailable,
-              message:
-                  'The connected mobile host no longer advertises WB Stream provider settings.',
-            ),
-          ),
-        ],
+        providersList: <ProviderDescriptor>[_providerDescriptors.first],
       ),
       stateStore: _InMemoryStateStore(
         MobileShellState(
           profiles: const <ProfileRecord>[],
-          providerConfigs: const <ProviderConfigRecord>[],
+          managedProviders: <ManagedProviderRecord>[
+            ManagedProviderRecord(
+              id: 'provider-config-1',
+              provider: 'generic-turn',
+              name: 'Generic TURN Provider',
+              providerSettings: const <String, dynamic>{},
+              createdAt: DateTime.utc(2026, 4, 12, 18, 0),
+              updatedAt: DateTime.utc(2026, 4, 12, 18, 1),
+            ),
+          ],
           draft: ProfileDraft.defaults(),
         ),
       ),
@@ -1005,19 +1016,24 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(controller.workflowSurface, MobileWorkflowSurface.providerConfig);
-    expect(find.textContaining('no longer advertises WB Stream'), findsWidgets);
+    expect(
+      find.textContaining(
+        'does not advertise the Generic TURN provider family',
+      ),
+      findsWidgets,
+    );
     expect(
       tester
           .widget<FilledButton>(
             find.widgetWithText(FilledButton, 'Apply to profile draft'),
           )
           .onPressed,
-      isNull,
+      isNotNull,
     );
   });
 
   testWidgets(
-    'mobile shell disables provider-config mutations when the schema is unsupported',
+    'mobile shell disables provider saves when reusable settings are unsupported',
     (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1200, 2200);
       tester.view.devicePixelRatio = 1.0;
@@ -1026,21 +1042,24 @@ void main() {
       final controller = MobileShellController(
         bridge: _FakeMobileHostBridge(
           providersList: const <ProviderDescriptor>[
-            _unsupportedProviderSettingsDescriptor,
-          ],
-          providerConfigsList: <ProviderConfigRecord>[
-            _providerConfigRecord(
-              id: 'provider-config-1',
-              provider: 'unsupported-provider',
-              name: 'Legacy config',
-              providerSettings: const <String, dynamic>{},
-            ),
+            _supportedProviderWithUnsupportedSettingsDescriptor,
           ],
         ),
         stateStore: _InMemoryStateStore(
           MobileShellState(
             profiles: const <ProfileRecord>[],
-            providerConfigs: const <ProviderConfigRecord>[],
+            managedProviders: <ManagedProviderRecord>[
+              ManagedProviderRecord(
+                id: 'provider-config-1',
+                provider: 'vk',
+                name: 'Legacy managed provider',
+                providerSettings: const <String, dynamic>{
+                  'device_pin': '123456',
+                },
+                createdAt: DateTime.utc(2026, 4, 12, 18, 0),
+                updatedAt: DateTime.utc(2026, 4, 12, 18, 1),
+              ),
+            ],
             draft: ProfileDraft.defaults(),
           ),
         ),
@@ -1071,30 +1090,21 @@ void main() {
               ),
             )
             .onPressed,
-        isNull,
+        isNotNull,
       );
     },
   );
 
   testWidgets(
-    'mobile shell applies provider configs as saved-profile snapshots',
+    'mobile shell applies managed providers as saved-profile snapshots',
     (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1200, 2200);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
       final bridge = _FakeMobileHostBridge(
-        providersList: <ProviderDescriptor>[
-          ..._providerDescriptors,
-          _providerWithSettingsDescriptor,
-        ],
-        providerConfigsList: <ProviderConfigRecord>[
-          _providerConfigRecord(
-            id: 'provider-config-1',
-            provider: 'wb-stream',
-            name: 'WB Central',
-            providerSettings: const <String, dynamic>{'region': 'eu-west'},
-          ),
+        providersList: const <ProviderDescriptor>[
+          _supportedProviderWithSettingsDescriptor,
         ],
       );
       final controller = MobileShellController(
@@ -1108,7 +1118,16 @@ void main() {
                 spec: _profileSpec(),
               ),
             ],
-            providerConfigs: const <ProviderConfigRecord>[],
+            managedProviders: <ManagedProviderRecord>[
+              ManagedProviderRecord(
+                id: 'provider-config-1',
+                provider: 'vk',
+                name: 'VK Europe',
+                providerSettings: const <String, dynamic>{'region': 'eu-west'},
+                createdAt: DateTime.utc(2026, 4, 12, 18, 0),
+                updatedAt: DateTime.utc(2026, 4, 12, 18, 1),
+              ),
+            ],
             selectedProfileId: 'profile-1',
             draft: ProfileDraft.fromProfile(
               ProfileRecord(
@@ -1134,8 +1153,13 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(controller.workflowSurface, MobileWorkflowSurface.profile);
-      expect(controller.draft.spec.provider, 'wb-stream');
+      expect(controller.draft.spec.provider, 'vk');
       expect(controller.draft.spec.providerSettings['region'], 'eu-west');
+      expect(controller.draft.providerBinding.isManaged, isTrue);
+      expect(
+        controller.draft.providerBinding.managedProviderId,
+        'provider-config-1',
+      );
 
       await controller.saveDraft();
       await tester.pumpAndSettle();
@@ -1145,15 +1169,13 @@ void main() {
       );
       expect(savedProfile.spec.providerSettings['region'], 'eu-west');
 
-      await bridge.upsertProviderConfig(
-        _providerConfigRecord(
-          id: 'provider-config-1',
-          provider: 'wb-stream',
-          name: 'WB Central',
+      controller.selectManagedProvider('provider-config-1');
+      controller.updateManagedProviderDraft(
+        controller.managedProviderDraft.copyWith(
           providerSettings: const <String, dynamic>{'region': 'ru-central'},
         ),
       );
-      await controller.refresh();
+      await controller.saveManagedProviderDraft();
       await tester.pumpAndSettle();
 
       final refreshedProfile = controller.profiles.firstWhere(
@@ -1165,24 +1187,6 @@ void main() {
 }
 
 Finder _workflowScrollable() => find.byType(Scrollable).first;
-
-ProviderConfigRecord _providerConfigRecord({
-  required String id,
-  required String provider,
-  required String name,
-  required Map<String, dynamic> providerSettings,
-  ProviderConfigAvailability availability = const ProviderConfigAvailability(),
-}) {
-  return ProviderConfigRecord(
-    id: id,
-    provider: provider,
-    name: name,
-    providerSettings: providerSettings,
-    createdAt: DateTime.utc(2026, 4, 12, 18, 0),
-    updatedAt: DateTime.utc(2026, 4, 12, 18, 1),
-    availability: availability,
-  );
-}
 
 const HostInfo _readyHostInfo = HostInfo(
   contractVersion: '1',
@@ -1238,31 +1242,6 @@ const List<ProviderDescriptor> _providerDescriptors = <ProviderDescriptor>[
     artifactFamilies: <ArtifactFamily>[ArtifactFamily.genericTurn],
   ),
 ];
-
-const ProviderDescriptor _providerWithSettingsDescriptor = ProviderDescriptor(
-  id: 'wb-stream',
-  displayName: 'WB Stream',
-  description: 'Descriptor-driven provider settings test fixture.',
-  inputKind: ProviderInputKind.link,
-  authPosture: ProviderAuthPosture.account,
-  browserPolicy: ProviderBrowserPolicy.notRequired,
-  artifactFamilies: <ArtifactFamily>[ArtifactFamily.genericTurn],
-  settingsSchema: ProviderSettingsSchema(
-    type: 'object',
-    additionalProperties: false,
-    requiredKeys: <String>['region'],
-    properties: <String, ProviderSettingProperty>{
-      'region': ProviderSettingProperty(
-        type: ProviderSettingType.string,
-        title: 'Region',
-        enumValues: <dynamic>['ru-central', 'eu-west'],
-        defaultValue: 'ru-central',
-        control: ProviderSettingControl.select,
-        persistence: ProviderSettingPersistence.profile,
-      ),
-    },
-  ),
-);
 
 ProfileSpec _profileSpec() {
   return const ProfileSpec(

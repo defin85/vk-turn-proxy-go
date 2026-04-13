@@ -1,7 +1,12 @@
 import 'package:flutter_shell_core/control_plane_models.dart';
 
 class ProfileDraft {
-  const ProfileDraft({this.id, required this.name, required this.spec});
+  const ProfileDraft({
+    this.id,
+    required this.name,
+    required this.spec,
+    this.providerBinding = const ProfileProviderBinding(),
+  });
 
   factory ProfileDraft.defaults() {
     return const ProfileDraft(
@@ -12,6 +17,7 @@ class ProfileDraft {
         listenAddress: '127.0.0.1:9001',
         peerAddress: '127.0.0.1:56000',
       ),
+      providerBinding: ProfileProviderBinding(),
     );
   }
 
@@ -22,22 +28,40 @@ class ProfileDraft {
       spec: ProfileSpec.fromJson(
         json['spec'] as Map<String, dynamic>? ?? const <String, dynamic>{},
       ),
+      providerBinding: ProfileProviderBinding.fromJson(
+        json['provider_binding'] as Map<String, dynamic>?,
+      ),
     );
   }
 
-  factory ProfileDraft.fromProfile(ProfileRecord profile) {
-    return ProfileDraft(id: profile.id, name: profile.name, spec: profile.spec);
+  factory ProfileDraft.fromProfile(
+    ProfileRecord profile, {
+    ProfileProviderBinding providerBinding = const ProfileProviderBinding(),
+  }) {
+    return ProfileDraft(
+      id: profile.id,
+      name: profile.name,
+      spec: profile.spec,
+      providerBinding: providerBinding,
+    );
   }
 
   final String? id;
   final String name;
   final ProfileSpec spec;
+  final ProfileProviderBinding providerBinding;
 
-  ProfileDraft copyWith({String? id, String? name, ProfileSpec? spec}) {
+  ProfileDraft copyWith({
+    String? id,
+    String? name,
+    ProfileSpec? spec,
+    ProfileProviderBinding? providerBinding,
+  }) {
     return ProfileDraft(
       id: id ?? this.id,
       name: name ?? this.name,
       spec: spec ?? this.spec,
+      providerBinding: providerBinding ?? this.providerBinding,
     );
   }
 
@@ -46,7 +70,12 @@ class ProfileDraft {
   }
 
   Map<String, dynamic> toJson() {
-    return <String, dynamic>{'id': id, 'name': name, 'spec': spec.toJson()};
+    return <String, dynamic>{
+      'id': id,
+      'name': name,
+      'spec': spec.toJson(),
+      'provider_binding': providerBinding.toJson(),
+    };
   }
 }
 
@@ -158,6 +187,125 @@ class ProviderConfigDraft {
   }
 }
 
+class ManagedProviderDraft {
+  const ManagedProviderDraft({
+    this.id,
+    required this.provider,
+    required this.name,
+    this.providerSettings = const <String, dynamic>{},
+    this.createdAt,
+    this.updatedAt,
+    this.availability = const ProviderConfigAvailability(),
+  });
+
+  factory ManagedProviderDraft.defaults({String provider = ''}) {
+    return ManagedProviderDraft(provider: provider, name: '');
+  }
+
+  factory ManagedProviderDraft.fromJson(Map<String, dynamic> json) {
+    return ManagedProviderDraft(
+      id: json['id'] as String?,
+      provider: json['provider'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      providerSettings: json['provider_settings'] is Map<String, dynamic>
+          ? Map<String, dynamic>.from(
+              json['provider_settings'] as Map<String, dynamic>,
+            )
+          : const <String, dynamic>{},
+      createdAt:
+          json['created_at'] is String &&
+              (json['created_at'] as String).isNotEmpty
+          ? DateTime.tryParse(json['created_at'] as String)?.toLocal()
+          : null,
+      updatedAt:
+          json['updated_at'] is String &&
+              (json['updated_at'] as String).isNotEmpty
+          ? DateTime.tryParse(json['updated_at'] as String)?.toLocal()
+          : null,
+      availability: json['availability'] is Map<String, dynamic>
+          ? ProviderConfigAvailability.fromJson(
+              json['availability'] as Map<String, dynamic>,
+            )
+          : const ProviderConfigAvailability(),
+    );
+  }
+
+  factory ManagedProviderDraft.fromRecord(ManagedProviderRecord record) {
+    return ManagedProviderDraft(
+      id: record.id,
+      provider: record.provider,
+      name: record.name,
+      providerSettings: record.providerSettings,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+      availability: record.availability,
+    );
+  }
+
+  factory ManagedProviderDraft.fromPreset(
+    ProviderPreset preset, {
+    ProviderDescriptor? descriptor,
+  }) {
+    return ManagedProviderDraft(
+      provider: preset.provider,
+      name: preset.title,
+      providerSettings: preset.normalizedSeedSettings(descriptor),
+    );
+  }
+
+  final String? id;
+  final String provider;
+  final String name;
+  final Map<String, dynamic> providerSettings;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+  final ProviderConfigAvailability availability;
+
+  ManagedProviderDraft copyWith({
+    String? id,
+    String? provider,
+    String? name,
+    Map<String, dynamic>? providerSettings,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    ProviderConfigAvailability? availability,
+  }) {
+    return ManagedProviderDraft(
+      id: id ?? this.id,
+      provider: provider ?? this.provider,
+      name: name ?? this.name,
+      providerSettings: providerSettings ?? this.providerSettings,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      availability: availability ?? this.availability,
+    );
+  }
+
+  ManagedProviderRecord toRecord() {
+    return ManagedProviderRecord(
+      id: id ?? '',
+      provider: provider,
+      name: name.trim(),
+      providerSettings: providerSettings,
+      createdAt: createdAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+      updatedAt: updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+      availability: availability,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'provider': provider,
+      'name': name,
+      'provider_settings': providerSettings,
+      'created_at': createdAt?.toUtc().toIso8601String(),
+      'updated_at': updatedAt?.toUtc().toIso8601String(),
+      'availability': availability.toJson(),
+    };
+  }
+}
+
 extension ProfileDraftProviderBootstrap on ProfileDraft {
   ProfileDraft applyProviderConfig(ProviderConfigRecord config) {
     final sameProvider =
@@ -168,6 +316,48 @@ extension ProfileDraftProviderBootstrap on ProfileDraft {
         provider: config.provider,
         link: sameProvider ? spec.link : '',
         providerSettings: config.providerSettings,
+      ),
+    );
+  }
+
+  ProfileDraft applyManagedProvider(ManagedProviderRecord provider) {
+    final sameProvider =
+        spec.provider.trim().toLowerCase() ==
+        provider.provider.trim().toLowerCase();
+    return copyWith(
+      spec: spec.copyWith(
+        provider: provider.provider,
+        link: sameProvider ? spec.link : '',
+        providerSettings: provider.providerSettings,
+      ),
+      providerBinding: ProfileProviderBinding(
+        mode: ProfileProviderMode.managed,
+        managedProviderId: provider.id,
+      ),
+    );
+  }
+
+  ProfileDraft applyManagedProviderDraft(ManagedProviderDraft provider) {
+    final sameProvider =
+        spec.provider.trim().toLowerCase() ==
+        provider.provider.trim().toLowerCase();
+    return copyWith(
+      spec: spec.copyWith(
+        provider: provider.provider,
+        link: sameProvider ? spec.link : '',
+        providerSettings: provider.providerSettings,
+      ),
+      providerBinding: ProfileProviderBinding(
+        mode: ProfileProviderMode.managed,
+        managedProviderId: provider.id,
+      ),
+    );
+  }
+
+  ProfileDraft asCustomProvider() {
+    return copyWith(
+      providerBinding: const ProfileProviderBinding(
+        mode: ProfileProviderMode.custom,
       ),
     );
   }
@@ -183,6 +373,9 @@ extension ProfileDraftProviderBootstrap on ProfileDraft {
         provider: preset.provider,
         link: '',
         providerSettings: preset.normalizedSeedSettings(descriptor),
+      ),
+      providerBinding: const ProfileProviderBinding(
+        mode: ProfileProviderMode.custom,
       ),
     );
   }

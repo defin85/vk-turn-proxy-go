@@ -205,14 +205,17 @@ class _WorkflowPage extends StatelessWidget {
           ProfileEditorPanel(
             profiles: controller.profiles,
             providerDescriptors: controller.providerDescriptors,
-            availableProviderConfigs:
-                controller.availableProviderConfigsForDraft,
+            managedProviders: controller.managedProviders,
+            initialManagedProviderId:
+                controller.draft.providerBinding.managedProviderId,
             selectedProfileId: controller.selectedProfileId,
             draft: controller.draft,
             busy: controller.busy,
             onSelectProfile: controller.selectProfile,
             onDraftChanged: controller.updateDraft,
-            onApplyProviderConfig: controller.applyProviderConfigToDraft,
+            onActivateManagedProviderMode:
+                controller.activateManagedProviderMode,
+            onUseCustomProvider: controller.useCustomProviderForDraft,
             onSave: controller.saveDraft,
             onDelete: controller.deleteSelectedProfile,
             onReset: controller.resetDraft,
@@ -223,15 +226,16 @@ class _WorkflowPage extends StatelessWidget {
           SizedBox(
             height: 640,
             child: ProviderConfigEditorPanel(
+              supportedProviders: controller.supportedProviderCatalog,
               providerDescriptors: controller.providerDescriptors,
-              selectedProviderConfigId: controller.selectedProviderConfigId,
-              draft: controller.providerConfigDraft,
+              selectedManagedProviderId: controller.selectedManagedProviderId,
+              draft: controller.managedProviderDraft,
               busy: controller.busy,
-              onDraftChanged: controller.updateProviderConfigDraft,
-              onSave: controller.saveProviderConfigDraft,
-              onDelete: controller.deleteSelectedProviderConfig,
-              onReset: controller.resetProviderConfigDraft,
-              onApplyToProfileDraft: controller.applyProviderConfigToDraft,
+              onDraftChanged: controller.updateManagedProviderDraft,
+              onSave: controller.saveManagedProviderDraft,
+              onDelete: controller.deleteSelectedManagedProvider,
+              onReset: controller.resetManagedProviderDraft,
+              onApplyToProfileDraft: controller.useManagedProviderForDraft,
             ),
           ),
       ],
@@ -256,11 +260,9 @@ class _WorkflowSurfacePicker extends StatelessWidget {
           onSelected: (_) => controller.showProfileWorkspace(),
         ),
         ChoiceChip(
-          selected:
-              controller.workflowSurface ==
-              MobileWorkflowSurface.providerConfig,
-          label: const Text('Provider config'),
-          onSelected: (_) => controller.showProviderConfigWorkspace(),
+          selected: controller.workflowSurface != MobileWorkflowSurface.profile,
+          label: const Text('Providers'),
+          onSelected: (_) => controller.showProviderWorkspace(),
         ),
       ],
     );
@@ -383,7 +385,7 @@ class _ProviderConfigLibrarySection extends StatelessWidget {
               children: <Widget>[
                 Expanded(
                   child: Text(
-                    'Provider configs',
+                    'Providers',
                     style: theme.textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -393,35 +395,35 @@ class _ProviderConfigLibrarySection extends StatelessWidget {
                   key: const ValueKey<String>('provider-config-create-button'),
                   onPressed: controller.busy
                       ? null
-                      : controller.resetProviderConfigDraft,
+                      : controller.resetManagedProviderDraft,
                   child: const Text('New'),
                 ),
               ],
             ),
             const SizedBox(height: 6),
             Text(
-              'Reusable non-secret provider settings stay separate from profiles and runtime controls.',
+              'Managed provider records stay separate from profiles and prompt-only runtime input.',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 12),
-            if (controller.providerConfigs.isEmpty)
+            if (controller.managedProviders.isEmpty)
               Text(
-                'No provider configs yet.',
+                'No managed providers yet.',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               )
             else
-              ...controller.providerConfigs.map(
-                (ProviderConfigRecord config) => Padding(
+              ...controller.managedProviders.map(
+                (ManagedProviderRecord config) => Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Material(
                     color:
-                        controller.workflowSurface ==
-                                MobileWorkflowSurface.providerConfig &&
-                            controller.selectedProviderConfigId == config.id
+                        controller.workflowSurface !=
+                                MobileWorkflowSurface.profile &&
+                            controller.selectedManagedProviderId == config.id
                         ? theme.colorScheme.primary.withValues(alpha: 0.1)
                         : theme.colorScheme.surfaceContainerHighest.withValues(
                             alpha: 0.35,
@@ -432,7 +434,7 @@ class _ProviderConfigLibrarySection extends StatelessWidget {
                         'provider-config-item-${config.id}',
                       ),
                       borderRadius: BorderRadius.circular(14),
-                      onTap: () => controller.selectProviderConfig(config.id),
+                      onTap: () => controller.selectManagedProvider(config.id),
                       child: Padding(
                         padding: const EdgeInsets.all(14),
                         child: Column(

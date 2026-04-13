@@ -1542,6 +1542,227 @@ class ProviderConfigRecord {
   }
 }
 
+enum ProfileProviderMode {
+  managed('managed'),
+  custom('custom');
+
+  const ProfileProviderMode(this.value);
+
+  final String value;
+
+  static ProfileProviderMode fromJson(String? raw) {
+    for (final mode in values) {
+      if (mode.value == raw) {
+        return mode;
+      }
+    }
+    return ProfileProviderMode.custom;
+  }
+}
+
+class ProfileProviderBinding {
+  const ProfileProviderBinding({
+    this.mode = ProfileProviderMode.custom,
+    this.managedProviderId,
+  });
+
+  factory ProfileProviderBinding.fromJson(Map<String, dynamic>? json) {
+    if (json == null) {
+      return const ProfileProviderBinding();
+    }
+    final managedProviderId = (json['managed_provider_id'] as String? ?? '')
+        .trim();
+    return ProfileProviderBinding(
+      mode: ProfileProviderMode.fromJson(json['mode'] as String?),
+      managedProviderId: managedProviderId.isEmpty ? null : managedProviderId,
+    );
+  }
+
+  final ProfileProviderMode mode;
+  final String? managedProviderId;
+
+  bool get isManaged => mode == ProfileProviderMode.managed;
+
+  ProfileProviderBinding copyWith({
+    ProfileProviderMode? mode,
+    String? managedProviderId,
+    bool clearManagedProviderId = false,
+  }) {
+    return ProfileProviderBinding(
+      mode: mode ?? this.mode,
+      managedProviderId: clearManagedProviderId
+          ? null
+          : managedProviderId ?? this.managedProviderId,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{
+      'mode': mode.value,
+      'managed_provider_id': managedProviderId,
+    });
+  }
+}
+
+enum SupportedProviderAvailabilityState {
+  available('available'),
+  providerUnavailable('provider_unavailable');
+
+  const SupportedProviderAvailabilityState(this.value);
+
+  final String value;
+}
+
+class SupportedProviderAvailability {
+  const SupportedProviderAvailability({
+    required this.state,
+    required this.message,
+    this.descriptor,
+  });
+
+  final SupportedProviderAvailabilityState state;
+  final String message;
+  final ProviderDescriptor? descriptor;
+
+  bool get isAvailable => state == SupportedProviderAvailabilityState.available;
+}
+
+class SupportedProviderDefinition {
+  const SupportedProviderDefinition({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.suggestedManagedProviderName,
+  });
+
+  final String id;
+  final String title;
+  final String description;
+  final String suggestedManagedProviderName;
+
+  SupportedProviderAvailability availabilityFor(
+    Iterable<ProviderDescriptor> descriptors,
+  ) {
+    final providerId = id.trim().toLowerCase();
+    for (final descriptor in descriptors) {
+      if (descriptor.id.trim().toLowerCase() != providerId) {
+        continue;
+      }
+      return SupportedProviderAvailability(
+        state: SupportedProviderAvailabilityState.available,
+        message: '',
+        descriptor: descriptor,
+      );
+    }
+    return SupportedProviderAvailability(
+      state: SupportedProviderAvailabilityState.providerUnavailable,
+      message:
+          'The connected host does not advertise the $title provider family yet.',
+    );
+  }
+}
+
+SupportedProviderDefinition? supportedProviderDefinitionFor(String providerId) {
+  final normalized = providerId.trim().toLowerCase();
+  if (normalized.isEmpty) {
+    return null;
+  }
+  for (final provider in kSupportedProviderCatalog) {
+    if (provider.id.trim().toLowerCase() == normalized) {
+      return provider;
+    }
+  }
+  return null;
+}
+
+class ManagedProviderRecord {
+  const ManagedProviderRecord({
+    required this.id,
+    required this.provider,
+    required this.name,
+    required this.providerSettings,
+    required this.createdAt,
+    required this.updatedAt,
+    this.availability = const ProviderConfigAvailability(),
+  });
+
+  factory ManagedProviderRecord.fromJson(Map<String, dynamic> json) {
+    return ManagedProviderRecord(
+      id: json['id'] as String? ?? '',
+      provider: json['provider'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      providerSettings: _readJsonObject(json['provider_settings']),
+      createdAt: _readTimestamp(json['created_at']),
+      updatedAt: _readTimestamp(json['updated_at']),
+      availability: json['availability'] is Map<String, dynamic>
+          ? ProviderConfigAvailability.fromJson(
+              json['availability'] as Map<String, dynamic>,
+            )
+          : const ProviderConfigAvailability(),
+    );
+  }
+
+  factory ManagedProviderRecord.fromLegacyProviderConfig(
+    ProviderConfigRecord record,
+  ) {
+    return ManagedProviderRecord(
+      id: record.id,
+      provider: record.provider,
+      name: record.name,
+      providerSettings: record.providerSettings,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+      availability: record.availability,
+    );
+  }
+
+  final String id;
+  final String provider;
+  final String name;
+  final Map<String, dynamic> providerSettings;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final ProviderConfigAvailability availability;
+
+  bool get isAvailable => availability.isAvailable;
+
+  ManagedProviderRecord copyWith({
+    String? id,
+    String? provider,
+    String? name,
+    Map<String, dynamic>? providerSettings,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    ProviderConfigAvailability? availability,
+  }) {
+    return ManagedProviderRecord(
+      id: id ?? this.id,
+      provider: provider ?? this.provider,
+      name: name ?? this.name,
+      providerSettings: providerSettings ?? this.providerSettings,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      availability: availability ?? this.availability,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{
+      'id': id.isEmpty ? null : id,
+      'provider': provider,
+      'name': name,
+      'provider_settings': providerSettings.isEmpty ? null : providerSettings,
+      'availability': availability.toJson(),
+      'created_at': createdAt.millisecondsSinceEpoch == 0
+          ? null
+          : createdAt.toUtc().toIso8601String(),
+      'updated_at': updatedAt.millisecondsSinceEpoch == 0
+          ? null
+          : updatedAt.toUtc().toIso8601String(),
+    });
+  }
+}
+
 enum ProviderPresetAvailabilityState {
   available('available'),
   providerUnavailable('provider_unavailable');
@@ -1615,26 +1836,36 @@ const List<ProviderPreset> kProviderPresetCatalog = <ProviderPreset>[
   ProviderPreset(
     id: 'vk-default',
     provider: 'vk',
-    title: 'VK',
+    title: 'VK Calls',
     description:
-        'Bootstrap a browser-first VK invite workflow with the current host-reported descriptor.',
+        'Seed a managed VK provider entry for browser-first invite workflows.',
     suggestedProfileName: 'VK Calls',
   ),
   ProviderPreset(
-    id: 'wb-stream-default',
-    provider: 'wb-stream',
-    title: 'WB Stream',
+    id: 'generic-turn-default',
+    provider: 'generic-turn',
+    title: 'Generic TURN',
     description:
-        'Bootstrap a reusable WB stream profile family for future room and media-device rollouts.',
-    suggestedProfileName: 'WB Stream',
+        'Seed a managed Generic TURN provider entry for static TURN handoff workflows.',
+    suggestedProfileName: 'Generic TURN',
   ),
-  ProviderPreset(
-    id: 'smarthome-default',
-    provider: 'smarthome',
-    title: 'RTK Smarthome',
+];
+
+const List<SupportedProviderDefinition>
+kSupportedProviderCatalog = <SupportedProviderDefinition>[
+  SupportedProviderDefinition(
+    id: 'vk',
+    title: 'VK Calls',
     description:
-        'Bootstrap an RTK Smarthome profile family for future camera and device portal flows.',
-    suggestedProfileName: 'RTK Smarthome',
+        'Invite-first provider with browser-mediated continuation that resolves into transport-ready TURN credentials.',
+    suggestedManagedProviderName: 'VK Calls',
+  ),
+  SupportedProviderDefinition(
+    id: 'generic-turn',
+    title: 'Generic TURN',
+    description:
+        'Static TURN handoff for deterministic transport testing and operator-driven runtime startup.',
+    suggestedManagedProviderName: 'Generic TURN',
   ),
 ];
 

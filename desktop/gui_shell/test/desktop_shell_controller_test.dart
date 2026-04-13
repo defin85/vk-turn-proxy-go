@@ -471,28 +471,60 @@ void main() {
   );
 
   test(
-    'controller restores persisted provider configs through trusted restore path',
+    'controller restores persisted managed providers locally and preserves managed profile mode',
     () async {
       final restoredAt = DateTime.utc(2026, 4, 13, 10, 15);
       final api = _FakeControlPlaneApi(
         profiles: const <ProfileRecord>[],
-        providerConfigs: const <ProviderConfigRecord>[],
+        providers: const <ProviderDescriptor>[
+          ProviderDescriptor(
+            id: 'vk',
+            displayName: 'VK Calls',
+            inputKind: ProviderInputKind.link,
+            authPosture: ProviderAuthPosture.guestOrAccount,
+            browserPolicy: ProviderBrowserPolicy.externalRequired,
+            artifactFamilies: <ArtifactFamily>[ArtifactFamily.genericTurn],
+          ),
+        ],
         sessions: const <SessionRecord>[],
+      );
+      final profile = ProfileRecord(
+        id: 'profile-1',
+        name: 'legacy managed profile',
+        spec: const ProfileSpec(
+          provider: 'generic-turn',
+          link: '',
+          listenAddress: '127.0.0.1:9001',
+          peerAddress: '127.0.0.1:56000',
+        ),
       );
       final store = _FakeShellStateStore(
         loaded: DesktopShellState(
-          profiles: const <ProfileRecord>[],
+          profiles: <ProfileRecord>[profile],
           providerConfigs: <ProviderConfigRecord>[
             ProviderConfigRecord(
               id: 'cfg-1',
-              provider: 'wb-stream',
-              name: 'Legacy WB config',
-              providerSettings: const <String, dynamic>{'region': 'eu-west'},
+              provider: 'generic-turn',
+              name: 'Legacy managed provider',
+              providerSettings: const <String, dynamic>{},
               createdAt: restoredAt,
               updatedAt: restoredAt,
             ),
           ],
-          draft: ProfileDraft.defaults(),
+          profileBindings: const <String, ProfileProviderBinding>{
+            'profile-1': ProfileProviderBinding(
+              mode: ProfileProviderMode.managed,
+              managedProviderId: 'cfg-1',
+            ),
+          },
+          selectedProfileId: profile.id,
+          draft: ProfileDraft.fromProfile(
+            profile,
+            providerBinding: const ProfileProviderBinding(
+              mode: ProfileProviderMode.managed,
+              managedProviderId: 'cfg-1',
+            ),
+          ),
         ),
       );
       final controller = DesktopShellController(
@@ -510,16 +542,16 @@ void main() {
 
       await controller.initialize();
 
-      expect(
-        api.restoredProviderConfigs.map((ProviderConfigRecord item) => item.id),
-        <String>['cfg-1'],
-      );
+      expect(api.restoredProviderConfigs, isEmpty);
       expect(api.upsertedProviderConfigs, isEmpty);
       expect(controller.providerConfigs, hasLength(1));
       expect(
         controller.providerConfigs.single.availability.state,
         ProviderConfigAvailabilityState.providerUnavailable,
       );
+      controller.selectProfile('profile-1');
+      expect(controller.draft.providerBinding.isManaged, isTrue);
+      expect(controller.draft.providerBinding.managedProviderId, 'cfg-1');
     },
   );
 
@@ -1112,7 +1144,10 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   }
 
   @override
-  Future<ChallengeRecord> continueChallenge(String challengeId) async {
+  Future<ChallengeRecord> continueChallenge(
+    String challengeId, {
+    ChallengeContinuationSubmission? browserContinuation,
+  }) async {
     return _challenges[challengeId]!;
   }
 

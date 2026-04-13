@@ -122,6 +122,41 @@ void main() {
     expect(roundTrip.updatedAt.toUtc(), updatedAt);
   });
 
+  test(
+    'managed provider drafts and profile bindings round-trip through json',
+    () {
+      final createdAt = DateTime.utc(2026, 4, 13, 10, 15);
+      final updatedAt = DateTime.utc(2026, 4, 13, 10, 16);
+      const binding = ProfileProviderBinding(
+        mode: ProfileProviderMode.managed,
+        managedProviderId: 'managed-1',
+      );
+      final record = ManagedProviderRecord(
+        id: 'managed-1',
+        provider: 'vk',
+        name: 'VK Calls',
+        providerSettings: const <String, dynamic>{'region': 'eu-west'},
+        createdAt: createdAt,
+        updatedAt: updatedAt,
+      );
+
+      final restoredRecord = ManagedProviderRecord.fromJson(record.toJson());
+      final restoredDraft = ManagedProviderDraft.fromJson(
+        ManagedProviderDraft.fromRecord(restoredRecord).toJson(),
+      );
+      final restoredBinding = ProfileProviderBinding.fromJson(binding.toJson());
+
+      expect(restoredRecord.id, 'managed-1');
+      expect(restoredRecord.provider, 'vk');
+      expect(restoredRecord.providerSettings['region'], 'eu-west');
+      expect(restoredDraft.id, 'managed-1');
+      expect(restoredDraft.provider, 'vk');
+      expect(restoredDraft.updatedAt?.toUtc(), updatedAt);
+      expect(restoredBinding.isManaged, isTrue);
+      expect(restoredBinding.managedProviderId, 'managed-1');
+    },
+  );
+
   test('profile draft bootstrap applies provider configs snapshot-style', () {
     final draft = ProfileDraft.defaults().copyWith(
       name: 'Current profile',
@@ -163,13 +198,13 @@ void main() {
     final vkPreset = kProviderPresetCatalog.firstWhere(
       (ProviderPreset preset) => preset.id == 'vk-default',
     );
-    final wbPreset = kProviderPresetCatalog.firstWhere(
-      (ProviderPreset preset) => preset.id == 'wb-stream-default',
+    final genericTurnPreset = kProviderPresetCatalog.firstWhere(
+      (ProviderPreset preset) => preset.id == 'generic-turn-default',
     );
 
     final available = vkPreset.availabilityFor(descriptors);
-    final unavailable = wbPreset.availabilityFor(descriptors);
-    final seeded = ProfileDraft.defaults().applyProviderPreset(
+    final unavailable = genericTurnPreset.availabilityFor(descriptors);
+    final seeded = ManagedProviderDraft.fromPreset(
       vkPreset,
       descriptor: descriptors.single,
     );
@@ -177,9 +212,9 @@ void main() {
     expect(available.isAvailable, isTrue);
     expect(available.descriptor?.id, 'vk');
     expect(unavailable.isAvailable, isFalse);
-    expect(unavailable.message, contains('WB Stream'));
+    expect(unavailable.message, contains('Generic TURN'));
     expect(seeded.name, 'VK Calls');
-    expect(seeded.spec.provider, 'vk');
+    expect(seeded.provider, 'vk');
   });
 
   test('build identity keeps shared labels and round-trips through json', () {

@@ -8,8 +8,9 @@ import 'package:gui_shell/src/control/profile_draft.dart';
 class ProviderConfigEditorPanel extends StatefulWidget {
   const ProviderConfigEditorPanel({
     super.key,
+    required this.supportedProviders,
     required this.providerDescriptors,
-    required this.selectedProviderConfigId,
+    required this.selectedManagedProviderId,
     required this.draft,
     required this.busy,
     required this.onDraftChanged,
@@ -19,11 +20,12 @@ class ProviderConfigEditorPanel extends StatefulWidget {
     required this.onApplyToProfileDraft,
   });
 
+  final List<SupportedProviderDefinition> supportedProviders;
   final List<ProviderDescriptor> providerDescriptors;
-  final String? selectedProviderConfigId;
-  final ProviderConfigDraft draft;
+  final String? selectedManagedProviderId;
+  final ManagedProviderDraft draft;
   final bool busy;
-  final ValueChanged<ProviderConfigDraft> onDraftChanged;
+  final ValueChanged<ManagedProviderDraft> onDraftChanged;
   final Future<void> Function() onSave;
   final Future<void> Function() onDelete;
   final VoidCallback onReset;
@@ -65,18 +67,15 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final editableDescriptors = widget.providerDescriptors
-        .where(
-          (ProviderDescriptor descriptor) => descriptor.settingsSchema != null,
-        )
-        .toList(growable: false);
+    final supportedProvider = _selectedSupportedProvider();
     final descriptor = _selectedDescriptor();
-    final selectedSavedConfig = widget.selectedProviderConfigId != null;
-    final blockedByAvailability =
-        selectedSavedConfig && !widget.draft.availability.isAvailable;
+    final selectedSavedProvider = widget.selectedManagedProviderId != null;
     final blockedBySchemaSupport =
-        descriptor == null || descriptor.providerSettingsSupportError != null;
-    final blockedActions = blockedByAvailability || blockedBySchemaSupport;
+        descriptor?.providerSettingsSupportError != null &&
+        widget.draft.providerSettings.isNotEmpty;
+    final hostAvailability = supportedProvider?.availabilityFor(
+      widget.providerDescriptors,
+    );
 
     return Card(
       child: Padding(
@@ -91,16 +90,16 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       Text(
-                        'Provider config workspace',
+                        'Providers workspace',
                         style: theme.textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        selectedSavedConfig
-                            ? 'Editing a reusable provider config'
-                            : 'Creating a new reusable provider config',
+                        selectedSavedProvider
+                            ? 'Editing a managed provider record'
+                            : 'Creating a managed provider record',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -111,7 +110,7 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                 FilledButton.tonalIcon(
                   onPressed: widget.busy ? null : widget.onReset,
                   icon: const Icon(Icons.tune),
-                  label: const Text('Fresh config'),
+                  label: const Text('Fresh provider'),
                 ),
               ],
             ),
@@ -129,37 +128,43 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Text(
-                      'Provider configs keep reusable, non-secret provider settings separate from runtime profiles. Applying a config copies its retained settings into the active draft without creating a hidden live reference.',
+                      'Managed providers are app-owned reusable records for shipped provider families. Applying one copies its current provider snapshot into the profile draft without creating a hidden live reference.',
                       style: theme.textTheme.bodyMedium,
                     ),
                   ),
-                  if (blockedByAvailability)
+                  if (widget.supportedProviders.isEmpty)
                     _unavailableCard(
                       theme,
-                      widget.draft.availability.message.isEmpty
-                          ? 'This provider config is not compatible with the currently advertised provider descriptor.'
-                          : widget.draft.availability.message,
-                    )
-                  else if (editableDescriptors.isEmpty && descriptor == null)
-                    _unavailableCard(
-                      theme,
-                      'The connected host does not currently advertise any provider with reusable provider settings.',
+                      'This build does not advertise any shipped provider families yet.',
                     )
                   else ...<Widget>[
                     _field(
                       controller: _nameController,
-                      label: 'Config name',
+                      label: 'Provider name',
                       onChanged: (String value) => _pushDraft(name: value),
                     ),
-                    _providerField(editableDescriptors),
+                    _providerField(widget.supportedProviders),
+                    if (hostAvailability != null &&
+                        !hostAvailability.isAvailable) ...<Widget>[
+                      _unavailableCard(theme, hostAvailability.message),
+                      const SizedBox(height: 12),
+                    ],
                     if (descriptor != null) ...<Widget>[
                       _descriptorSummary(theme, descriptor),
                       const SizedBox(height: 12),
                     ],
-                    if (descriptor?.providerSettingsSupportError != null)
+                    if (descriptor?.providerSettingsSupportError != null &&
+                        widget.draft.providerSettings.isNotEmpty)
                       _unavailableCard(
                         theme,
-                        'This desktop shell cannot render the provider settings schema for ${descriptor!.displayName}: ${descriptor.providerSettingsSupportError}. Save and apply stay blocked until the host advertises a supported schema subset.',
+                        'This desktop shell cannot render the provider settings schema for ${descriptor!.displayName}: ${descriptor.providerSettingsSupportError}. Save stays blocked until the host advertises a supported schema subset.',
+                      )
+                    else if (descriptor?.settingsSchema == null)
+                      _infoCard(
+                        theme,
+                        supportedProvider == null
+                            ? 'This managed provider currently has no reusable field surface in the shipped shell.'
+                            : '${supportedProvider.title} currently has no reusable managed fields in this shipped shell. The record still stays valid as a named supported provider entry.',
                       )
                     else if (descriptor != null) ...<Widget>[
                       Text(
@@ -195,25 +200,23 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
               runSpacing: 12,
               children: <Widget>[
                 FilledButton(
-                  onPressed: widget.busy || blockedActions
+                  onPressed: widget.busy || blockedBySchemaSupport
                       ? null
                       : () => unawaited(widget.onSave()),
-                  child: const Text('Save config'),
+                  child: const Text('Save provider'),
                 ),
                 FilledButton.tonal(
                   onPressed:
-                      widget.busy ||
-                          widget.selectedProviderConfigId == null ||
-                          blockedActions
+                      widget.busy || widget.selectedManagedProviderId == null
                       ? null
                       : () => widget.onApplyToProfileDraft(
-                          widget.selectedProviderConfigId!,
+                          widget.selectedManagedProviderId!,
                         ),
                   child: const Text('Apply to profile draft'),
                 ),
                 OutlinedButton(
                   onPressed:
-                      widget.busy || widget.selectedProviderConfigId == null
+                      widget.busy || widget.selectedManagedProviderId == null
                       ? null
                       : () => unawaited(widget.onDelete()),
                   child: const Text('Delete'),
@@ -242,23 +245,24 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
     );
   }
 
-  Widget _providerField(List<ProviderDescriptor> descriptors) {
-    if (descriptors.isEmpty) {
+  Widget _providerField(List<SupportedProviderDefinition> providers) {
+    if (providers.isEmpty) {
       return const SizedBox.shrink();
     }
     final selectedProviderId =
-        _selectedDescriptor()?.id ?? descriptors.first.id;
+        _selectedSupportedProvider()?.id ?? providers.first.id;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: DropdownButtonFormField<String>(
         initialValue: selectedProviderId,
         decoration: const InputDecoration(labelText: 'Provider'),
-        items: descriptors
+        items: providers
             .map(
-              (ProviderDescriptor descriptor) => DropdownMenuItem<String>(
-                value: descriptor.id,
-                child: Text(descriptor.displayName),
-              ),
+              (SupportedProviderDefinition provider) =>
+                  DropdownMenuItem<String>(
+                    value: provider.id,
+                    child: Text(provider.title),
+                  ),
             )
             .toList(growable: false),
         onChanged: widget.busy
@@ -314,6 +318,32 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
       ),
       child: Text(message, style: theme.textTheme.bodyMedium),
     );
+  }
+
+  Widget _infoCard(ThemeData theme, String message) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.45,
+        ),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Text(message, style: theme.textTheme.bodyMedium),
+    );
+  }
+
+  SupportedProviderDefinition? _selectedSupportedProvider() {
+    final providerId = widget.draft.provider.trim().toLowerCase();
+    for (final provider in widget.supportedProviders) {
+      if (provider.id.trim().toLowerCase() == providerId) {
+        return provider;
+      }
+    }
+    return widget.supportedProviders.isEmpty
+        ? null
+        : widget.supportedProviders.first;
   }
 
   ProviderDescriptor? _selectedDescriptor() {

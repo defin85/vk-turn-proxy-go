@@ -6,29 +6,45 @@ import 'package:gui_shell/src/control/control_plane_models.dart';
 import 'package:gui_shell/src/control/profile_draft.dart';
 
 class ProfileEditorPanel extends StatefulWidget {
-  const ProfileEditorPanel({
+  ProfileEditorPanel({
     super.key,
     required this.providerDescriptors,
-    required this.availableProviderConfigs,
     required this.selectedProfileId,
     required this.draft,
     required this.busy,
     required this.onDraftChanged,
-    required this.onApplyProviderConfig,
     required this.onSave,
     required this.onDelete,
     required this.onReset,
     required this.onResolve,
     required this.onStart,
-  });
+    List<ManagedProviderRecord>? managedProviders,
+    String? initialManagedProviderId,
+    void Function({String? managedProviderId})? onActivateManagedProviderMode,
+    VoidCallback? onUseCustomProvider,
+    List<ProviderConfigRecord>? availableProviderConfigs,
+    ValueChanged<String>? onApplyProviderConfig,
+  }) : managedProviders =
+           managedProviders ??
+           (availableProviderConfigs ?? const <ProviderConfigRecord>[])
+               .map(ManagedProviderRecord.fromLegacyProviderConfig)
+               .toList(growable: false),
+       selectedManagedProviderId = initialManagedProviderId,
+       onActivateManagedProviderMode =
+           onActivateManagedProviderMode ??
+           _legacyManagedProviderActivator(onApplyProviderConfig),
+       onUseCustomProvider = onUseCustomProvider ?? _noop;
 
   final List<ProviderDescriptor> providerDescriptors;
-  final List<ProviderConfigRecord> availableProviderConfigs;
+  final List<ManagedProviderRecord> managedProviders;
+  final String? selectedManagedProviderId;
   final String? selectedProfileId;
   final ProfileDraft draft;
   final bool busy;
   final ValueChanged<ProfileDraft> onDraftChanged;
-  final ValueChanged<String> onApplyProviderConfig;
+  final void Function({String? managedProviderId})
+  onActivateManagedProviderMode;
+  final VoidCallback onUseCustomProvider;
   final Future<void> Function() onSave;
   final Future<void> Function() onDelete;
   final VoidCallback onReset;
@@ -37,6 +53,18 @@ class ProfileEditorPanel extends StatefulWidget {
 
   @override
   State<ProfileEditorPanel> createState() => _ProfileEditorPanelState();
+}
+
+void _noop() {}
+
+void Function({String? managedProviderId}) _legacyManagedProviderActivator(
+  ValueChanged<String>? onApplyProviderConfig,
+) {
+  return ({String? managedProviderId}) {
+    if (managedProviderId != null && onApplyProviderConfig != null) {
+      onApplyProviderConfig(managedProviderId);
+    }
+  };
 }
 
 class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
@@ -50,7 +78,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   late final TextEditingController _turnPortController;
   late final TextEditingController _bindInterfaceController;
   late final TextEditingController _logLevelController;
-  String? _selectedProviderConfigId;
+  String? _selectedManagedProviderId;
 
   @override
   void initState() {
@@ -95,6 +123,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final descriptor = _selectedDescriptor();
+    final managedMode = widget.draft.providerBinding.isManaged;
     final profileScopeLabel = widget.selectedProfileId == null
         ? 'Editing an unsaved draft'
         : 'Editing a saved profile workspace';
@@ -184,6 +213,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                     label: 'Profile name',
                     onChanged: (String value) => _pushDraft(name: value),
                   ),
+                  _providerModeCard(theme, managedMode),
                   _providerField(),
                   _field(
                     controller: _linkController,
@@ -193,7 +223,6 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                       spec: widget.draft.spec.copyWith(link: value.trim()),
                     ),
                   ),
-                  _providerConfigApplyCard(theme),
                   _providerFlowCard(theme, descriptor),
                   ..._providerSettingsSection(theme, descriptor),
                   const SizedBox(height: 12),
@@ -325,47 +354,21 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   }
 
   Widget _providerField() {
-    if (widget.providerDescriptors.isEmpty) {
-      return _field(
-        controller: _providerController,
-        label: 'Provider',
-        onChanged: (String value) => _pushDraft(
-          spec: widget.draft.spec.copyWith(provider: value.trim()),
+    if (widget.draft.providerBinding.isManaged) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: TextField(
+          controller: _providerController,
+          enabled: false,
+          decoration: const InputDecoration(labelText: 'Provider family'),
         ),
       );
     }
-
-    final providerId =
-        _selectedDescriptor()?.id ?? widget.providerDescriptors.first.id;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: DropdownButtonFormField<String>(
-        initialValue: providerId,
-        decoration: const InputDecoration(labelText: 'Provider'),
-        items: widget.providerDescriptors
-            .map(
-              (ProviderDescriptor descriptor) => DropdownMenuItem<String>(
-                value: descriptor.id,
-                child: Text(descriptor.displayName),
-              ),
-            )
-            .toList(growable: false),
-        onChanged: widget.busy
-            ? null
-            : (String? value) {
-                if (value == null) {
-                  return;
-                }
-                _pushDraft(
-                  spec: widget.draft.spec.copyWith(
-                    provider: value,
-                    link: value == widget.draft.spec.provider
-                        ? widget.draft.spec.link
-                        : '',
-                  ),
-                );
-              },
-      ),
+    return _field(
+      controller: _providerController,
+      label: 'Provider',
+      onChanged: (String value) =>
+          _pushDraft(spec: widget.draft.spec.copyWith(provider: value.trim())),
     );
   }
 
@@ -420,9 +423,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
         return descriptor;
       }
     }
-    return widget.providerDescriptors.isEmpty
-        ? null
-        : widget.providerDescriptors.first;
+    return null;
   }
 
   Widget _workflowTag(String label) {
@@ -664,8 +665,8 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     _logLevelController.text = widget.draft.spec.logLevel;
   }
 
-  Widget _providerConfigApplyCard(ThemeData theme) {
-    if (widget.availableProviderConfigs.isEmpty) {
+  Widget _providerModeCard(ThemeData theme, bool managedMode) {
+    if (widget.managedProviders.isEmpty) {
       return Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(14),
@@ -675,22 +676,45 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
           ),
           borderRadius: BorderRadius.circular(14),
         ),
-        child: Text(
-          'No reusable provider configs are currently available for this provider. Manage configs from the library rail when the connected host advertises descriptor-retained provider settings.',
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              'Provider mode',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'No managed providers are available yet. Use custom mode for direct provider entry or create a provider record from the library rail first.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 10),
+            ChoiceChip(
+              selected: true,
+              label: const Text('Custom provider'),
+              onSelected: widget.busy
+                  ? null
+                  : (_) => widget.onUseCustomProvider(),
+            ),
+          ],
         ),
       );
     }
 
-    _selectedProviderConfigId ??= widget.availableProviderConfigs.first.id;
-    final selectedConfigId = widget.availableProviderConfigs.any(
-          (ProviderConfigRecord config) => config.id == _selectedProviderConfigId,
+    _selectedManagedProviderId ??=
+        widget.selectedManagedProviderId ?? widget.managedProviders.first.id;
+    final selectedManagedProviderId =
+        widget.managedProviders.any(
+          (ManagedProviderRecord provider) =>
+              provider.id == _selectedManagedProviderId,
         )
-        ? _selectedProviderConfigId
-        : widget.availableProviderConfigs.first.id;
-    _selectedProviderConfigId = selectedConfigId;
+        ? _selectedManagedProviderId
+        : widget.managedProviders.first.id;
+    _selectedManagedProviderId = selectedManagedProviderId;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -705,51 +729,74 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
-            'Apply provider config',
+            'Provider mode',
             style: theme.textTheme.titleSmall?.copyWith(
               fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 6),
           Text(
-            'Copy retained provider settings from a reusable config into the active draft. Saved profiles stay snapshot-based until you save this draft again.',
+            managedMode
+                ? 'Managed mode snapshots values from a saved provider record, then keeps further profile edits local to this draft.'
+                : 'Custom mode lets you type a raw provider id and prompt-only inputs without mutating the managed provider catalog.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 10),
-          DropdownButtonFormField<String>(
-            initialValue: selectedConfigId,
-            decoration: const InputDecoration(labelText: 'Provider config'),
-            items: widget.availableProviderConfigs
-                .map(
-                  (ProviderConfigRecord config) => DropdownMenuItem<String>(
-                    value: config.id,
-                    child: Text(config.name.isEmpty ? config.id : config.name),
-                  ),
-                )
-                .toList(growable: false),
-            onChanged: widget.busy
-                ? null
-                : (String? value) {
-                    if (value == null) {
-                      return;
-                    }
-                    setState(() {
-                      _selectedProviderConfigId = value;
-                    });
-                  },
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: <Widget>[
+              ChoiceChip(
+                selected: managedMode,
+                label: const Text('Managed provider'),
+                onSelected: widget.busy
+                    ? null
+                    : (_) => widget.onActivateManagedProviderMode(
+                        managedProviderId: selectedManagedProviderId,
+                      ),
+              ),
+              ChoiceChip(
+                selected: !managedMode,
+                label: const Text('Custom provider'),
+                onSelected: widget.busy
+                    ? null
+                    : (_) => widget.onUseCustomProvider(),
+              ),
+            ],
           ),
-          const SizedBox(height: 10),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: FilledButton.tonal(
-              onPressed: widget.busy
+          if (managedMode) ...<Widget>[
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              initialValue: selectedManagedProviderId,
+              decoration: const InputDecoration(labelText: 'Managed provider'),
+              items: widget.managedProviders
+                  .map(
+                    (ManagedProviderRecord provider) =>
+                        DropdownMenuItem<String>(
+                          value: provider.id,
+                          child: Text(
+                            provider.name.isEmpty ? provider.id : provider.name,
+                          ),
+                        ),
+                  )
+                  .toList(growable: false),
+              onChanged: widget.busy
                   ? null
-                  : () => widget.onApplyProviderConfig(selectedConfigId!),
-              child: const Text('Apply config to draft'),
+                  : (String? value) {
+                      if (value == null) {
+                        return;
+                      }
+                      setState(() {
+                        _selectedManagedProviderId = value;
+                      });
+                      widget.onActivateManagedProviderMode(
+                        managedProviderId: value,
+                      );
+                    },
             ),
-          ),
+          ],
         ],
       ),
     );

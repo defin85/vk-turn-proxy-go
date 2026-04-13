@@ -92,6 +92,12 @@ void main() {
             updatedAt: DateTime.utc(2026, 4, 12, 10, 5),
           ),
         ],
+        profileBindings: const <String, ProfileProviderBinding>{
+          'profile-1': ProfileProviderBinding(
+            mode: ProfileProviderMode.managed,
+            managedProviderId: 'provider-config-1',
+          ),
+        },
         selectedProfileId: 'profile-2',
         draft: const ProfileDraft(
           id: 'draft-1',
@@ -141,7 +147,9 @@ void main() {
 
       final decoded = jsonDecode(payload) as Map<String, dynamic>;
       final profiles = decoded['profiles'] as List<dynamic>;
-      final providerConfigs = decoded['provider_configs'] as List<dynamic>;
+      final managedProviders = decoded['managed_providers'] as List<dynamic>;
+      final profileBindings =
+          decoded['profile_bindings'] as Map<String, dynamic>;
       final runtimeDefaults =
           decoded['runtime_defaults'] as Map<String, dynamic>;
       expect((profiles[0] as Map<String, dynamic>)['spec']['link'], '');
@@ -155,14 +163,18 @@ void main() {
         (decoded['draft'] as Map<String, dynamic>)['spec']['provider_settings'],
         <String, dynamic>{'region': 'ru-central'},
       );
-      expect(providerConfigs, hasLength(1));
+      expect(managedProviders, hasLength(1));
       expect(
-        (providerConfigs.single as Map<String, dynamic>)['provider_settings'],
+        (managedProviders.single as Map<String, dynamic>)['provider_settings'],
         <String, dynamic>{
           'region': 'eu-west',
           'device_alias': 'trusted-device',
         },
       );
+      expect(profileBindings['profile-1'], <String, dynamic>{
+        'mode': 'managed',
+        'managed_provider_id': 'provider-config-1',
+      });
       expect(runtimeDefaults['listen_addr'], '127.0.0.1:9101');
       expect(runtimeDefaults['peer_addr'], '127.0.0.1:56100');
       expect(runtimeDefaults['turn_server'], 'override.example.test');
@@ -171,6 +183,34 @@ void main() {
       expect(runtimeDefaults['mode'], 'tcp');
       expect(runtimeDefaults['use_dtls'], isFalse);
       expect(runtimeDefaults['log_level'], 'debug');
+    },
+  );
+
+  test(
+    'desktop state store migrates legacy provider_configs into managed providers',
+    () {
+      final restored = DesktopShellState.fromJson(<String, dynamic>{
+        'profiles': const <Map<String, dynamic>>[],
+        'provider_configs': <Map<String, dynamic>>[
+          <String, dynamic>{
+            'id': 'provider-config-1',
+            'provider': 'wb-stream',
+            'name': 'WB Central',
+            'provider_settings': const <String, dynamic>{'region': 'eu-west'},
+            'created_at': '2026-04-12T10:00:00Z',
+            'updated_at': '2026-04-12T10:05:00Z',
+          },
+        ],
+        'draft': ProfileDraft.defaults().toJson(),
+      });
+
+      expect(restored.managedProviders, hasLength(1));
+      expect(restored.managedProviders.single.id, 'provider-config-1');
+      expect(restored.managedProviders.single.provider, 'wb-stream');
+      expect(
+        restored.managedProviders.single.providerSettings,
+        <String, dynamic>{'region': 'eu-west'},
+      );
     },
   );
 }

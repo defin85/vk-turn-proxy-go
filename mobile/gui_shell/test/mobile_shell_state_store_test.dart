@@ -84,6 +84,12 @@ void main() {
             updatedAt: DateTime.utc(2026, 4, 12, 10, 5),
           ),
         ],
+        profileBindings: const <String, ProfileProviderBinding>{
+          'profile-1': ProfileProviderBinding(
+            mode: ProfileProviderMode.managed,
+            managedProviderId: 'provider-config-1',
+          ),
+        },
         selectedProfileId: 'profile-1',
         draft: const ProfileDraft(
           id: 'draft-1',
@@ -133,6 +139,11 @@ void main() {
           'device_alias': 'trusted-device',
         },
       );
+      expect(restored.profileBindings['profile-1']?.isManaged, isTrue);
+      expect(
+        restored.profileBindings['profile-1']?.managedProviderId,
+        'provider-config-1',
+      );
       expect(restored.draft.spec.link, '');
       expect(restored.draft.spec.providerSettings, <String, dynamic>{
         'region': 'ru-central',
@@ -145,9 +156,11 @@ void main() {
       final profileJson =
           (sanitizedJson['profiles'] as List<dynamic>).single
               as Map<String, dynamic>;
-      final providerConfigJson =
-          (sanitizedJson['provider_configs'] as List<dynamic>).single
+      final managedProviderJson =
+          (sanitizedJson['managed_providers'] as List<dynamic>).single
               as Map<String, dynamic>;
+      final profileBindings =
+          sanitizedJson['profile_bindings'] as Map<String, dynamic>;
       final draftJson = sanitizedJson['draft'] as Map<String, dynamic>;
       expect((profileJson['spec'] as Map<String, dynamic>)['link'], '');
       expect(
@@ -159,9 +172,13 @@ void main() {
         (draftJson['spec'] as Map<String, dynamic>)['provider_settings'],
         <String, dynamic>{'region': 'ru-central'},
       );
-      expect(providerConfigJson['provider_settings'], <String, dynamic>{
+      expect(managedProviderJson['provider_settings'], <String, dynamic>{
         'region': 'eu-west',
         'device_alias': 'trusted-device',
+      });
+      expect(profileBindings['profile-1'], <String, dynamic>{
+        'mode': 'managed',
+        'managed_provider_id': 'provider-config-1',
       });
     },
   );
@@ -217,6 +234,34 @@ void main() {
             contains('Secure profile secrets are unavailable'),
           ),
         ),
+      );
+    },
+  );
+
+  test(
+    'mobile state store migrates legacy provider_configs into managed providers',
+    () {
+      final restored = MobileShellState.fromJson(<String, dynamic>{
+        'profiles': const <Map<String, dynamic>>[],
+        'provider_configs': <Map<String, dynamic>>[
+          <String, dynamic>{
+            'id': 'provider-config-1',
+            'provider': 'wb-stream',
+            'name': 'WB Central',
+            'provider_settings': const <String, dynamic>{'region': 'eu-west'},
+            'created_at': '2026-04-12T10:00:00Z',
+            'updated_at': '2026-04-12T10:05:00Z',
+          },
+        ],
+        'draft': ProfileDraft.defaults().toJson(),
+      });
+
+      expect(restored.managedProviders, hasLength(1));
+      expect(restored.managedProviders.single.id, 'provider-config-1');
+      expect(restored.managedProviders.single.provider, 'wb-stream');
+      expect(
+        restored.managedProviders.single.providerSettings,
+        <String, dynamic>{'region': 'eu-west'},
       );
     },
   );

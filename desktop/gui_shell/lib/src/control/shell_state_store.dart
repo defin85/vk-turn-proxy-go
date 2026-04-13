@@ -7,21 +7,27 @@ import 'package:gui_shell/src/control/profile_draft.dart';
 typedef StateFileProvider = Future<File> Function();
 
 class DesktopShellState {
-  const DesktopShellState({
+  DesktopShellState({
     required this.profiles,
-    required this.providerConfigs,
+    List<ManagedProviderRecord>? managedProviders,
+    List<ProviderConfigRecord>? providerConfigs,
     required this.draft,
+    this.profileBindings = const <String, ProfileProviderBinding>{},
     this.selectedProfileId,
     this.runtimeDefaults = const RuntimeDefaults(
       listenAddress: '127.0.0.1:9001',
       peerAddress: '127.0.0.1:56000',
     ),
-  });
+  }) : managedProviders =
+           managedProviders ??
+           (providerConfigs ?? const <ProviderConfigRecord>[])
+               .map(ManagedProviderRecord.fromLegacyProviderConfig)
+               .toList(growable: false);
 
   factory DesktopShellState.empty() {
     return DesktopShellState(
       profiles: const <ProfileRecord>[],
-      providerConfigs: const <ProviderConfigRecord>[],
+      managedProviders: const <ManagedProviderRecord>[],
       draft: ProfileDraft.defaults(),
     );
   }
@@ -37,14 +43,8 @@ class DesktopShellState {
                 ProfileRecord.fromJson(raw as Map<String, dynamic>),
           )
           .toList(growable: false),
-      providerConfigs:
-          (json['provider_configs'] as List<dynamic>? ?? const <dynamic>[])
-              .map(
-                (dynamic raw) => ProviderConfigRecord.fromJson(
-                  raw as Map<String, dynamic>,
-                ),
-              )
-              .toList(growable: false),
+      managedProviders: _readManagedProviders(json),
+      profileBindings: _readProfileBindings(json['profile_bindings']),
       selectedProfileId: json['selected_profile_id'] as String?,
       draft: draft,
       runtimeDefaults: json['runtime_defaults'] is Map<String, dynamic>
@@ -56,19 +56,26 @@ class DesktopShellState {
   }
 
   final List<ProfileRecord> profiles;
-  final List<ProviderConfigRecord> providerConfigs;
+  final List<ManagedProviderRecord> managedProviders;
+  final Map<String, ProfileProviderBinding> profileBindings;
   final String? selectedProfileId;
   final ProfileDraft draft;
   final RuntimeDefaults runtimeDefaults;
+
+  List<ManagedProviderRecord> get providerConfigs => managedProviders;
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'profiles': profiles
           .map((ProfileRecord profile) => profile.toJson())
           .toList(growable: false),
-      'provider_configs': providerConfigs
-          .map((ProviderConfigRecord config) => config.toJson())
+      'managed_providers': managedProviders
+          .map((ManagedProviderRecord provider) => provider.toJson())
           .toList(growable: false),
+      'profile_bindings': <String, dynamic>{
+        for (final entry in profileBindings.entries)
+          entry.key: entry.value.toJson(),
+      },
       'selected_profile_id': selectedProfileId,
       'draft': draft.toJson(),
       'runtime_defaults': runtimeDefaults.toJson(),
@@ -95,15 +102,20 @@ class DesktopShellState {
             ),
           )
           .toList(growable: false),
-      providerConfigs: providerConfigs
+      managedProviders: managedProviders
           .map(
-            (ProviderConfigRecord config) => config.copyWith(
+            (ManagedProviderRecord provider) => provider.copyWith(
               providerSettings: Map<String, dynamic>.from(
-                config.providerSettings,
+                provider.providerSettings,
               ),
             ),
           )
           .toList(growable: false),
+      profileBindings: <String, ProfileProviderBinding>{
+        for (final profile in profiles)
+          if (profileBindings.containsKey(profile.id))
+            profile.id: profileBindings[profile.id]!,
+      },
       selectedProfileId: selectedProfileId,
       draft: _sanitizeDraft(
         draft,
@@ -215,4 +227,37 @@ String _join(List<String> parts) {
         '$value${Platform.pathSeparator}${part.replaceFirst(RegExp(r'^[\\/]+'), '')}';
   }
   return value;
+}
+
+List<ManagedProviderRecord> _readManagedProviders(Map<String, dynamic> json) {
+  final managed =
+      (json['managed_providers'] as List<dynamic>? ?? const <dynamic>[])
+          .whereType<Map<String, dynamic>>()
+          .map(ManagedProviderRecord.fromJson)
+          .toList(growable: false);
+  if (managed.isNotEmpty) {
+    return managed;
+  }
+  return (json['provider_configs'] as List<dynamic>? ?? const <dynamic>[])
+      .whereType<Map<String, dynamic>>()
+      .map(ProviderConfigRecord.fromJson)
+      .map(ManagedProviderRecord.fromLegacyProviderConfig)
+      .toList(growable: false);
+}
+
+Map<String, ProfileProviderBinding> _readProfileBindings(dynamic raw) {
+  if (raw is! Map<String, dynamic>) {
+    return const <String, ProfileProviderBinding>{};
+  }
+  final bindings = <String, ProfileProviderBinding>{};
+  raw.forEach((dynamic key, dynamic value) {
+    final profileId = (key as String?)?.trim() ?? '';
+    if (profileId.isEmpty) {
+      return;
+    }
+    bindings[profileId] = ProfileProviderBinding.fromJson(
+      value as Map<String, dynamic>?,
+    );
+  });
+  return bindings;
 }

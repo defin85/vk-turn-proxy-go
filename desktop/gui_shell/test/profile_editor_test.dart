@@ -87,6 +87,14 @@ void main() {
   testWidgets('VK draft renders descriptor-driven browser workflow details', (
     WidgetTester tester,
   ) async {
+    final baseDraft = ProfileDraft.defaults();
+    final draft = baseDraft.copyWith(
+      spec: baseDraft.spec.copyWith(
+        provider: 'vk',
+        link: 'https://vk.com/call/join/test',
+      ),
+    );
+
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -97,7 +105,7 @@ void main() {
               providerDescriptors: _providerDescriptors,
               availableProviderConfigs: const <ProviderConfigRecord>[],
               selectedProfileId: 'profile-1',
-              draft: ProfileDraft.defaults(),
+              draft: draft,
               busy: false,
               onDraftChanged: (_) {},
               onApplyProviderConfig: (_) {},

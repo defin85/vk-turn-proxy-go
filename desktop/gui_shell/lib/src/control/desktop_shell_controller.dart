@@ -14,7 +14,7 @@ typedef DirectoryProvider = Future<Directory> Function();
 
 enum ShellStatus { booting, ready, blocked }
 
-enum DesktopWorkspaceSurface { profile, providerConfig }
+enum DesktopWorkspaceSurface { profile, providerConfig, provider }
 
 abstract class BrowserLauncher {
   Future<bool> open(String url);
@@ -77,22 +77,25 @@ class DesktopShellController extends ChangeNotifier {
   ShellStatus status = ShellStatus.booting;
   HostConnectionResult? hostConnection;
   List<ProviderDescriptor> providerDescriptors = const <ProviderDescriptor>[];
-  List<ProviderConfigRecord> providerConfigs = const <ProviderConfigRecord>[];
+  List<ManagedProviderRecord> managedProviders =
+      const <ManagedProviderRecord>[];
   List<ProfileRecord> profiles = const <ProfileRecord>[];
   List<ResolutionRecord> resolutions = const <ResolutionRecord>[];
   List<SessionRecord> sessions = const <SessionRecord>[];
   List<EventRecord> events = const <EventRecord>[];
   ProfileDraft draft = ProfileDraft.defaults();
-  ProviderConfigDraft providerConfigDraft = ProviderConfigDraft.defaults();
+  ManagedProviderDraft managedProviderDraft = ManagedProviderDraft.defaults();
   DesktopWorkspaceSurface workspaceSurface = DesktopWorkspaceSurface.profile;
   RuntimeDefaults materializeDefaults = const RuntimeDefaults(
     listenAddress: '127.0.0.1:9001',
     peerAddress: '127.0.0.1:56000',
   );
   String? selectedProfileId;
-  String? selectedProviderConfigId;
+  String? selectedManagedProviderId;
   String? selectedResolutionId;
   String? selectedSessionId;
+  Map<String, ProfileProviderBinding> profileBindings =
+      <String, ProfileProviderBinding>{};
   final Map<PlatformTunnelMode, PlatformTunnelStartResult>
   _platformTunnelResults = <PlatformTunnelMode, PlatformTunnelStartResult>{};
   String? notice;
@@ -125,30 +128,40 @@ class DesktopShellController extends ChangeNotifier {
 
   List<ProviderPreset> get presetCatalog => kProviderPresetCatalog;
 
-  List<ProviderDescriptor> get providerConfigDescriptors => providerDescriptors
-      .where(
-        (ProviderDescriptor descriptor) => descriptor.settingsSchema != null,
-      )
-      .toList(growable: false);
+  List<SupportedProviderDefinition> get supportedProviderCatalog =>
+      kSupportedProviderCatalog;
 
-  ProviderDescriptor? get activeProviderConfigDescriptor =>
-      providerConfigDescriptorForProvider(providerConfigDraft.provider);
+  ProviderDescriptor? get activeManagedProviderDescriptor =>
+      descriptorForProvider(managedProviderDraft.provider);
 
-  List<ProviderConfigRecord> get availableProviderConfigsForDraft {
+  List<ManagedProviderRecord> get availableManagedProvidersForDraft {
     final providerId = draft.spec.provider.trim().toLowerCase();
     if (providerId.isEmpty) {
-      return providerConfigs
-          .where((ProviderConfigRecord config) => config.isAvailable)
+      return managedProviders
+          .where((ManagedProviderRecord provider) => provider.isAvailable)
           .toList(growable: false);
     }
-    return providerConfigs
+    return managedProviders
         .where(
-          (ProviderConfigRecord config) =>
-              config.isAvailable &&
-              config.provider.trim().toLowerCase() == providerId,
+          (ManagedProviderRecord provider) =>
+              provider.isAvailable &&
+              provider.provider.trim().toLowerCase() == providerId,
         )
         .toList(growable: false);
   }
+
+  List<ManagedProviderRecord> get providerConfigs => managedProviders;
+
+  List<ManagedProviderRecord> get availableProviderConfigsForDraft =>
+      availableManagedProvidersForDraft;
+
+  ProviderConfigDraft get providerConfigDraft =>
+      ProviderConfigDraft.fromJson(managedProviderDraft.toJson());
+
+  String? get selectedProviderConfigId => selectedManagedProviderId;
+
+  ProviderDescriptor? get activeProviderConfigDescriptor =>
+      activeManagedProviderDescriptor;
 
   Future<void> initialize() async {
     await _restorePersistedState();
@@ -180,7 +193,6 @@ class DesktopShellController extends ChangeNotifier {
       await _stopRuntimeMonitoring();
       _challengeCache.clear();
       providerDescriptors = const <ProviderDescriptor>[];
-      providerConfigs = const <ProviderConfigRecord>[];
       resolutions = const <ResolutionRecord>[];
       sessions = const <SessionRecord>[];
       selectedResolutionId = null;
@@ -195,7 +207,6 @@ class DesktopShellController extends ChangeNotifier {
     status = ShellStatus.ready;
     notice = hostConnection?.message;
     try {
-      await _rehydrateProviderConfigs();
       await _rehydrateProfiles();
     } catch (error) {
       await _handleHostFailure(error);
@@ -220,7 +231,6 @@ class DesktopShellController extends ChangeNotifier {
     }
     try {
       final nextProviders = await api.providers();
-      final nextProviderConfigs = await api.providerConfigs();
       final nextProfiles = await api.profiles();
       final nextResolutions = await api.resolutions();
       final nextSessions = await api.sessions();
@@ -230,14 +240,16 @@ class DesktopShellController extends ChangeNotifier {
       );
 
       providerDescriptors = nextProviders;
-      providerConfigs = nextProviderConfigs;
+      managedProviders = _overlayManagedProviders(managedProviders);
       profiles = nextProfiles;
       resolutions = nextResolutions;
       sessions = nextSessions;
       _mergeChallenges(nextChallenges);
 
       draft = _normalizeDraft(draft);
-      providerConfigDraft = _normalizeProviderConfigDraft(providerConfigDraft);
+      managedProviderDraft = _normalizeManagedProviderDraft(
+        managedProviderDraft,
+      );
 
       if (!_restoredState && selectedProfileId == null && profiles.isNotEmpty) {
         selectProfile(profiles.first.id);
@@ -251,14 +263,14 @@ class DesktopShellController extends ChangeNotifier {
         materializeDefaults = RuntimeDefaults.fromProfileSpec(draft.spec);
       }
 
-      if (selectedProviderConfigId != null &&
-          !providerConfigs.any(
-            (ProviderConfigRecord config) =>
-                config.id == selectedProviderConfigId,
+      if (selectedManagedProviderId != null &&
+          !managedProviders.any(
+            (ManagedProviderRecord provider) =>
+                provider.id == selectedManagedProviderId,
           )) {
-        selectedProviderConfigId = null;
-        providerConfigDraft = _defaultProviderConfigDraft();
-        if (workspaceSurface == DesktopWorkspaceSurface.providerConfig) {
+        selectedManagedProviderId = null;
+        managedProviderDraft = _defaultManagedProviderDraft();
+        if (workspaceSurface != DesktopWorkspaceSurface.profile) {
           workspaceSurface = DesktopWorkspaceSurface.profile;
         }
       }
@@ -296,7 +308,13 @@ class DesktopShellController extends ChangeNotifier {
       (ProfileRecord profile) => profile.id == profileId,
       orElse: () => ProfileDraft.defaults().toProfile(),
     );
-    draft = _normalizeDraft(ProfileDraft.fromProfile(selected));
+    draft = _normalizeDraft(
+      ProfileDraft.fromProfile(
+        selected,
+        providerBinding:
+            profileBindings[profileId] ?? const ProfileProviderBinding(),
+      ),
+    );
     materializeDefaults = RuntimeDefaults.fromProfileSpec(selected.spec);
     _scheduleStatePersist();
     notifyListeners();
@@ -321,6 +339,32 @@ class DesktopShellController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void useCustomProviderForDraft() {
+    _restoredState = true;
+    workspaceSurface = DesktopWorkspaceSurface.profile;
+    draft = _normalizeDraft(draft.asCustomProvider());
+    selectedManagedProviderId = null;
+    materializeDefaults = RuntimeDefaults.fromProfileSpec(draft.spec);
+    _scheduleStatePersist();
+    notifyListeners();
+  }
+
+  void activateManagedProviderMode({String? managedProviderId}) {
+    final preferred =
+        managedProviderId ??
+        draft.providerBinding.managedProviderId ??
+        selectedManagedProviderId ??
+        (availableManagedProvidersForDraft.isEmpty
+            ? (managedProviders.isEmpty ? null : managedProviders.first.id)
+            : availableManagedProvidersForDraft.first.id);
+    if (preferred == null || preferred.trim().isEmpty) {
+      notice = 'No managed providers are available yet.';
+      _notify();
+      return;
+    }
+    useManagedProviderForDraft(preferred);
+  }
+
   void resetDraft() {
     _restoredState = true;
     workspaceSurface = DesktopWorkspaceSurface.profile;
@@ -331,32 +375,53 @@ class DesktopShellController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void selectProviderConfig(String configId) {
+  void selectManagedProvider(String providerId) {
     workspaceSurface = DesktopWorkspaceSurface.providerConfig;
-    selectedProviderConfigId = configId;
-    final selected = providerConfigs.firstWhere(
-      (ProviderConfigRecord config) => config.id == configId,
-      orElse: () => _defaultProviderConfigDraft().toRecord(),
+    selectedManagedProviderId = providerId;
+    final selected =
+        managedProviderById(providerId) ??
+        _defaultManagedProviderDraft().toRecord();
+    managedProviderDraft = _normalizeManagedProviderDraft(
+      ManagedProviderDraft.fromRecord(selected),
     );
-    providerConfigDraft = _normalizeProviderConfigDraft(
-      ProviderConfigDraft.fromRecord(selected),
-    );
+    notifyListeners();
+  }
+
+  void selectProviderConfig(String configId) {
+    selectManagedProvider(configId);
+  }
+
+  void updateManagedProviderDraft(ManagedProviderDraft nextDraft) {
+    workspaceSurface = DesktopWorkspaceSurface.providerConfig;
+    managedProviderDraft = _normalizeManagedProviderDraft(nextDraft);
     notifyListeners();
   }
 
   void updateProviderConfigDraft(ProviderConfigDraft nextDraft) {
+    updateManagedProviderDraft(
+      ManagedProviderDraft.fromJson(nextDraft.toJson()),
+    );
+  }
+
+  void resetManagedProviderDraft({
+    String? preferredProvider,
+    ProviderPreset? preset,
+  }) {
     workspaceSurface = DesktopWorkspaceSurface.providerConfig;
-    providerConfigDraft = _normalizeProviderConfigDraft(nextDraft);
+    selectedManagedProviderId = null;
+    managedProviderDraft = preset == null
+        ? _defaultManagedProviderDraft(preferredProvider: preferredProvider)
+        : _normalizeManagedProviderDraft(
+            ManagedProviderDraft.fromPreset(
+              preset,
+              descriptor: descriptorForProvider(preset.provider),
+            ),
+          );
     notifyListeners();
   }
 
   void resetProviderConfigDraft({String? preferredProvider}) {
-    workspaceSurface = DesktopWorkspaceSurface.providerConfig;
-    selectedProviderConfigId = null;
-    providerConfigDraft = _defaultProviderConfigDraft(
-      preferredProvider: preferredProvider,
-    );
-    notifyListeners();
+    resetManagedProviderDraft(preferredProvider: preferredProvider);
   }
 
   Future<void> saveDraft() async {
@@ -381,38 +446,60 @@ class DesktopShellController extends ChangeNotifier {
           ),
         ),
       );
+      profileBindings = <String, ProfileProviderBinding>{
+        ...profileBindings,
+        saved.id: draft.providerBinding,
+      };
       notice = 'Saved profile ${saved.name.isEmpty ? saved.id : saved.name}.';
       await refresh();
       selectProfile(saved.id);
     });
   }
 
-  Future<void> saveProviderConfigDraft() async {
+  Future<void> saveManagedProviderDraft() async {
     await _runMutation(() async {
-      final descriptor = activeProviderConfigDescriptor;
-      if (descriptor == null) {
+      final supported = supportedProviderDefinitionFor(
+        managedProviderDraft.provider,
+      );
+      if (supported == null) {
         notice =
-            'The selected provider config target is not advertised by the connected host.';
+            'The selected managed provider family is not part of the supported app catalog.';
         return;
       }
-      final blockReason = _providerSettingsBlockReason(descriptor);
+      final draftToSave = _normalizeManagedProviderDraft(managedProviderDraft);
+      final blockReason = _managedProviderDraftBlockReason(draftToSave);
       if (blockReason != null) {
         notice = blockReason;
         return;
       }
-      if (descriptor.settingsSchema == null) {
-        notice =
-            '${descriptor.displayName} does not advertise reusable provider settings.';
-        return;
-      }
-      final saved = await api.upsertProviderConfig(
-        providerConfigDraft.toRecord(),
-      );
+      final now = _clock();
+      final id = (draftToSave.id ?? '').trim().isEmpty
+          ? 'managed-provider-${now.microsecondsSinceEpoch.toRadixString(16)}'
+          : draftToSave.id!.trim();
+      final existing = managedProviderById(id);
+      final saved = draftToSave
+          .copyWith(
+            id: id,
+            createdAt: existing?.createdAt ?? draftToSave.createdAt ?? now,
+            updatedAt: now,
+          )
+          .toRecord();
+      final next = <ManagedProviderRecord>[
+        for (final provider in managedProviders)
+          if (provider.id != id) provider,
+        saved,
+      ]..sort(_managedProviderNameSort);
+      managedProviders = _overlayManagedProviders(next);
       notice =
-          'Saved provider config ${saved.name.isEmpty ? saved.id : saved.name}.';
-      await refresh();
-      selectProviderConfig(saved.id);
+          'Saved managed provider ${saved.name.isEmpty ? saved.id : saved.name}.';
+      selectedManagedProviderId = saved.id;
+      managedProviderDraft = ManagedProviderDraft.fromRecord(saved);
+      _scheduleStatePersist();
     });
+  }
+
+  Future<void> saveProviderConfigDraft() async {
+    await saveManagedProviderDraft();
   }
 
   Future<void> deleteSelectedProfile() async {
@@ -422,25 +509,42 @@ class DesktopShellController extends ChangeNotifier {
     }
     await _runMutation(() async {
       await api.deleteProfile(profileId);
+      profileBindings = <String, ProfileProviderBinding>{
+        for (final entry in profileBindings.entries)
+          if (entry.key != profileId) entry.key: entry.value,
+      };
       notice = 'Deleted profile $profileId.';
       resetDraft();
       await refresh();
     });
   }
 
-  Future<void> deleteSelectedProviderConfig() async {
-    final configId = selectedProviderConfigId;
-    if (configId == null) {
+  Future<void> deleteSelectedManagedProvider() async {
+    final providerId = selectedManagedProviderId;
+    if (providerId == null) {
       return;
     }
     await _runMutation(() async {
-      await api.deleteProviderConfig(configId);
-      notice = 'Deleted provider config $configId.';
-      selectedProviderConfigId = null;
-      providerConfigDraft = _defaultProviderConfigDraft();
+      managedProviders = managedProviders
+          .where((ManagedProviderRecord provider) => provider.id != providerId)
+          .toList(growable: false);
+      profileBindings = _dropManagedProviderBindings(
+        providerId,
+        profileBindings,
+      );
+      if (draft.providerBinding.managedProviderId == providerId) {
+        draft = draft.asCustomProvider();
+      }
+      notice = 'Deleted managed provider $providerId.';
+      selectedManagedProviderId = null;
+      managedProviderDraft = _defaultManagedProviderDraft();
       workspaceSurface = DesktopWorkspaceSurface.profile;
-      await refresh();
+      _scheduleStatePersist();
     });
+  }
+
+  Future<void> deleteSelectedProviderConfig() async {
+    await deleteSelectedManagedProvider();
   }
 
   Future<void> startSelectedProfile() async {
@@ -456,43 +560,31 @@ class DesktopShellController extends ChangeNotifier {
     });
   }
 
-  void applyProviderConfigToDraft(String configId) {
-    final config = providerConfigById(configId);
-    if (config == null) {
-      notice = 'Provider config $configId is no longer available.';
-      _notify();
-      return;
-    }
-    if (!config.isAvailable) {
-      notice = _providerConfigBlockReason(config);
+  void useManagedProviderForDraft(String managedProviderId) {
+    final provider = managedProviderById(managedProviderId);
+    if (provider == null) {
+      notice = 'Managed provider $managedProviderId is no longer available.';
       _notify();
       return;
     }
     workspaceSurface = DesktopWorkspaceSurface.profile;
-    draft = _normalizeDraft(draft.applyProviderConfig(config));
-    selectedProviderConfigId = configId;
+    draft = _normalizeDraft(draft.applyManagedProvider(provider));
+    selectedManagedProviderId = managedProviderId;
     materializeDefaults = RuntimeDefaults.fromProfileSpec(draft.spec);
     notice =
-        'Applied provider config ${config.name.isEmpty ? config.id : config.name} to the active profile draft.';
+        'Applied managed provider ${provider.name.isEmpty ? provider.id : provider.name} to the active profile draft.';
     _scheduleStatePersist();
     _notify();
   }
 
+  void applyProviderConfigToDraft(String configId) {
+    useManagedProviderForDraft(configId);
+  }
+
   void applyPreset(ProviderPreset preset) {
-    final availability = preset.availabilityFor(providerDescriptors);
-    if (!availability.isAvailable) {
-      notice = availability.message;
-      _notify();
-      return;
-    }
-    workspaceSurface = DesktopWorkspaceSurface.profile;
-    selectedProfileId = null;
-    draft = _normalizeDraft(
-      draft.applyProviderPreset(preset, descriptor: availability.descriptor),
-    );
-    materializeDefaults = RuntimeDefaults.fromProfileSpec(draft.spec);
-    notice = 'Bootstrapped a new draft from the ${preset.title} preset.';
-    _scheduleStatePersist();
+    resetManagedProviderDraft(preset: preset);
+    notice =
+        'Seeded a new managed provider draft from the ${preset.title} preset.';
     _notify();
   }
 
@@ -714,30 +806,17 @@ class DesktopShellController extends ChangeNotifier {
     return null;
   }
 
-  ProviderDescriptor? providerConfigDescriptorForProvider(String providerId) {
-    final normalized = providerId.trim().toLowerCase();
-    if (normalized.isEmpty) {
-      return null;
-    }
-    for (final descriptor in providerConfigDescriptors) {
-      if (descriptor.id.trim().toLowerCase() == normalized) {
-        return descriptor;
-      }
-    }
-    return null;
-  }
-
   ProviderDescriptor? get activeProviderDescriptor =>
       descriptorForProvider(draft.spec.provider);
 
-  ProviderConfigRecord? providerConfigById(String configId) {
-    final normalized = configId.trim();
+  ManagedProviderRecord? managedProviderById(String managedProviderId) {
+    final normalized = managedProviderId.trim();
     if (normalized.isEmpty) {
       return null;
     }
-    for (final config in providerConfigs) {
-      if (config.id == normalized) {
-        return config;
+    for (final provider in managedProviders) {
+      if (provider.id == normalized) {
+        return provider;
       }
     }
     return null;
@@ -981,28 +1060,17 @@ class DesktopShellController extends ChangeNotifier {
         return;
       }
       profiles = state.profiles;
-      providerConfigs = state.providerConfigs;
+      managedProviders = state.managedProviders;
+      profileBindings = state.profileBindings;
       selectedProfileId = state.selectedProfileId;
       draft = state.draft;
       materializeDefaults = state.runtimeDefaults;
-      providerConfigDraft = _defaultProviderConfigDraft();
+      managedProviderDraft = _defaultManagedProviderDraft();
       _persistedStateSignature = state.signature();
       _restoredState = true;
     } catch (error) {
       notice = 'Failed to restore desktop shell state: $error';
     }
-  }
-
-  Future<void> _rehydrateProviderConfigs() async {
-    if (providerConfigs.isEmpty) {
-      return;
-    }
-    final restored = <ProviderConfigRecord>[];
-    for (final config in providerConfigs) {
-      restored.add(await api.restoreProviderConfig(config));
-    }
-    providerConfigs = restored;
-    _scheduleStatePersist();
   }
 
   Future<void> _rehydrateProfiles() async {
@@ -1027,7 +1095,8 @@ class DesktopShellController extends ChangeNotifier {
   Future<void> _persistState() async {
     final next = DesktopShellState(
       profiles: profiles,
-      providerConfigs: providerConfigs,
+      managedProviders: managedProviders,
+      profileBindings: profileBindings,
       selectedProfileId: selectedProfileId,
       draft: draft,
       runtimeDefaults: materializeDefaults,
@@ -1103,27 +1172,47 @@ class DesktopShellController extends ChangeNotifier {
     return _normalizeDraft(base.copyWith(spec: base.spec.copyWith(link: '')));
   }
 
-  ProviderConfigDraft _defaultProviderConfigDraft({String? preferredProvider}) {
+  ManagedProviderDraft _defaultManagedProviderDraft({
+    String? preferredProvider,
+  }) {
+    final boundManagedProviderId =
+        draft.providerBinding.managedProviderId?.trim() ?? '';
+    final boundProvider = boundManagedProviderId.isEmpty
+        ? null
+        : managedProviderById(boundManagedProviderId)?.provider;
     final providerId =
         preferredProvider ??
+        boundProvider ??
         activeProviderDescriptor?.id ??
-        _firstProviderConfigDescriptor()?.id ??
+        (supportedProviderCatalog.isEmpty
+            ? null
+            : supportedProviderCatalog.first.id) ??
         '';
-    return _normalizeProviderConfigDraft(
-      ProviderConfigDraft.defaults(provider: providerId),
+    return _normalizeManagedProviderDraft(
+      ManagedProviderDraft.defaults(provider: providerId),
     );
   }
 
   ProfileDraft _normalizeDraft(ProfileDraft candidate) {
+    final rawProvider = candidate.spec.provider.trim();
     if (providerDescriptors.isEmpty) {
       return candidate;
     }
-    final descriptor =
-        descriptorForProvider(candidate.spec.provider) ??
-        providerDescriptors.first;
+    final descriptor = descriptorForProvider(rawProvider);
+    if (descriptor == null) {
+      if (rawProvider.isEmpty) {
+        final fallback = providerDescriptors.first;
+        return candidate.copyWith(
+          spec: candidate.spec.copyWith(
+            provider: fallback.id,
+            interactiveProvider: fallback.mayRequireBrowserContinuation,
+          ),
+        );
+      }
+      return candidate;
+    }
     final sameProvider =
-        descriptor.id.trim().toLowerCase() ==
-        candidate.spec.provider.trim().toLowerCase();
+        descriptor.id.trim().toLowerCase() == rawProvider.toLowerCase();
     final link = sameProvider ? candidate.spec.link : '';
     final providerSettings = switch (descriptor.settingsSchema) {
       null => const <String, dynamic>{},
@@ -1148,35 +1237,32 @@ class DesktopShellController extends ChangeNotifier {
     );
   }
 
-  ProviderConfigDraft _normalizeProviderConfigDraft(
-    ProviderConfigDraft candidate,
+  ManagedProviderDraft _normalizeManagedProviderDraft(
+    ManagedProviderDraft candidate,
   ) {
-    final descriptors = providerConfigDescriptors;
-    if (descriptors.isEmpty) {
-      return candidate;
-    }
-    final descriptor =
-        providerConfigDescriptorForProvider(candidate.provider) ??
-        ((candidate.id != null || !candidate.availability.isAvailable)
+    final supported =
+        supportedProviderDefinitionFor(candidate.provider) ??
+        (supportedProviderCatalog.isEmpty
             ? null
-            : descriptors.first);
-    if (descriptor == null) {
+            : supportedProviderCatalog.first);
+    if (supported == null) {
       return candidate;
     }
+    final descriptor = descriptorForProvider(candidate.provider);
     final sameProvider =
-        descriptor.id.trim().toLowerCase() ==
+        supported.id.trim().toLowerCase() ==
         candidate.provider.trim().toLowerCase();
-    final providerSettings = switch (descriptor.settingsSchema) {
-      null => const <String, dynamic>{},
-      _ when descriptor.supportsProviderSettings =>
-        descriptor.normalizeProviderSettings(
-          sameProvider ? candidate.providerSettings : const <String, dynamic>{},
-        ),
-      _ =>
-        sameProvider ? candidate.providerSettings : const <String, dynamic>{},
+    final seedValues = sameProvider
+        ? candidate.providerSettings
+        : const <String, dynamic>{};
+    final providerSettings = switch (descriptor?.settingsSchema) {
+      null => seedValues,
+      _ when descriptor != null && descriptor.supportsProviderSettings =>
+        descriptor.normalizeProviderSettings(seedValues),
+      _ => seedValues,
     };
     return candidate.copyWith(
-      provider: descriptor.id,
+      provider: supported.id,
       providerSettings: providerSettings,
     );
   }
@@ -1189,20 +1275,62 @@ class DesktopShellController extends ChangeNotifier {
     return 'The connected desktop shell cannot render provider settings for ${descriptor.displayName}: $reason';
   }
 
-  String _providerConfigBlockReason(ProviderConfigRecord config) {
-    final availability = config.availability;
-    if (availability.message.isNotEmpty) {
-      return availability.message;
+  String? _managedProviderDraftBlockReason(ManagedProviderDraft provider) {
+    final supported = supportedProviderDefinitionFor(provider.provider);
+    if (supported == null) {
+      return 'The selected managed provider is not part of the supported app catalog.';
     }
-    return 'Provider config ${config.name.isEmpty ? config.id : config.name} is ${availability.state.label.toLowerCase()}.';
-  }
-
-  ProviderDescriptor? _firstProviderConfigDescriptor() {
-    final descriptors = providerConfigDescriptors;
-    if (descriptors.isEmpty) {
+    final descriptor = descriptorForProvider(provider.provider);
+    if (descriptor == null) {
       return null;
     }
-    return descriptors.first;
+    final schemaReason = descriptor.providerSettingsSupportError;
+    if (schemaReason != null && provider.providerSettings.isNotEmpty) {
+      return 'The connected desktop shell cannot render reusable settings for ${descriptor.displayName}: $schemaReason';
+    }
+    return null;
+  }
+
+  List<ManagedProviderRecord> _overlayManagedProviders(
+    List<ManagedProviderRecord> providers,
+  ) {
+    return providers
+        .map((ManagedProviderRecord provider) {
+          final supported = supportedProviderDefinitionFor(provider.provider);
+          if (supported == null) {
+            return provider.copyWith(
+              availability: const ProviderConfigAvailability(
+                state: ProviderConfigAvailabilityState.providerUnavailable,
+                message:
+                    'This managed provider is not part of the supported app catalog.',
+              ),
+            );
+          }
+          final descriptor = descriptorForProvider(provider.provider);
+          if (descriptor == null) {
+            return provider.copyWith(
+              availability: ProviderConfigAvailability(
+                state: ProviderConfigAvailabilityState.providerUnavailable,
+                message:
+                    'The connected host does not advertise the ${supported.title} provider family yet.',
+              ),
+            );
+          }
+          final schemaReason = descriptor.providerSettingsSupportError;
+          if (schemaReason != null && provider.providerSettings.isNotEmpty) {
+            return provider.copyWith(
+              availability: ProviderConfigAvailability(
+                state: ProviderConfigAvailabilityState.schemaUnsupported,
+                message:
+                    'The connected desktop shell cannot render reusable settings for ${descriptor.displayName}: $schemaReason',
+              ),
+            );
+          }
+          return provider.copyWith(
+            availability: const ProviderConfigAvailability(),
+          );
+        })
+        .toList(growable: false);
   }
 
   void _notify() {
@@ -1211,6 +1339,33 @@ class DesktopShellController extends ChangeNotifier {
     }
     notifyListeners();
   }
+}
+
+int _managedProviderNameSort(
+  ManagedProviderRecord left,
+  ManagedProviderRecord right,
+) {
+  final leftLabel = left.name.isEmpty ? left.id : left.name;
+  final rightLabel = right.name.isEmpty ? right.id : right.name;
+  return leftLabel.toLowerCase().compareTo(rightLabel.toLowerCase());
+}
+
+Map<String, ProfileProviderBinding> _dropManagedProviderBindings(
+  String managedProviderId,
+  Map<String, ProfileProviderBinding> bindings,
+) {
+  final next = <String, ProfileProviderBinding>{};
+  for (final entry in bindings.entries) {
+    final binding = entry.value;
+    if (binding.managedProviderId == managedProviderId) {
+      next[entry.key] = const ProfileProviderBinding(
+        mode: ProfileProviderMode.custom,
+      );
+      continue;
+    }
+    next[entry.key] = binding;
+  }
+  return next;
 }
 
 Future<Directory> _defaultDiagnosticsDirectory() async {

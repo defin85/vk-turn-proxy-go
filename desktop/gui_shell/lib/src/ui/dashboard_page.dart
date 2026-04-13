@@ -23,15 +23,15 @@ class DashboardPage extends StatelessWidget {
         final profileLibrary = ProfileLibraryPanel(
           presets: controller.presetCatalog,
           providerDescriptors: controller.providerDescriptors,
-          providerConfigs: controller.providerConfigs,
+          managedProviders: controller.managedProviders,
           profiles: controller.profiles,
-          selectedProviderConfigId: controller.selectedProviderConfigId,
+          selectedManagedProviderId: controller.selectedManagedProviderId,
           activeSurface: controller.workspaceSurface,
           selectedProfileId: controller.selectedProfileId,
           busy: busy,
           onApplyPreset: controller.applyPreset,
-          onSelectProviderConfig: controller.selectProviderConfig,
-          onCreateProviderConfig: controller.resetProviderConfigDraft,
+          onSelectManagedProvider: controller.selectManagedProvider,
+          onCreateManagedProvider: controller.resetManagedProviderDraft,
           onSelectProfile: controller.selectProfile,
           onCreateDraft: controller.resetDraft,
         );
@@ -39,13 +39,16 @@ class DashboardPage extends StatelessWidget {
             controller.workspaceSurface == DesktopWorkspaceSurface.profile
             ? ProfileEditorPanel(
                 providerDescriptors: controller.providerDescriptors,
-                availableProviderConfigs:
-                    controller.availableProviderConfigsForDraft,
+                managedProviders: controller.managedProviders,
+                initialManagedProviderId:
+                    controller.draft.providerBinding.managedProviderId,
                 selectedProfileId: controller.selectedProfileId,
                 draft: controller.draft,
                 busy: busy,
                 onDraftChanged: controller.updateDraft,
-                onApplyProviderConfig: controller.applyProviderConfigToDraft,
+                onActivateManagedProviderMode:
+                    controller.activateManagedProviderMode,
+                onUseCustomProvider: controller.useCustomProviderForDraft,
                 onSave: controller.saveDraft,
                 onDelete: controller.deleteSelectedProfile,
                 onReset: controller.resetDraft,
@@ -53,15 +56,16 @@ class DashboardPage extends StatelessWidget {
                 onStart: controller.startSelectedProfile,
               )
             : ProviderConfigEditorPanel(
+                supportedProviders: controller.supportedProviderCatalog,
                 providerDescriptors: controller.providerDescriptors,
-                selectedProviderConfigId: controller.selectedProviderConfigId,
-                draft: controller.providerConfigDraft,
+                selectedManagedProviderId: controller.selectedManagedProviderId,
+                draft: controller.managedProviderDraft,
                 busy: busy,
-                onDraftChanged: controller.updateProviderConfigDraft,
-                onSave: controller.saveProviderConfigDraft,
-                onDelete: controller.deleteSelectedProviderConfig,
-                onReset: controller.resetProviderConfigDraft,
-                onApplyToProfileDraft: controller.applyProviderConfigToDraft,
+                onDraftChanged: controller.updateManagedProviderDraft,
+                onSave: controller.saveManagedProviderDraft,
+                onDelete: controller.deleteSelectedManagedProvider,
+                onReset: controller.resetManagedProviderDraft,
+                onApplyToProfileDraft: controller.useManagedProviderForDraft,
               );
         final hasLiveWork =
             controller.resolutions.isNotEmpty || controller.sessions.isNotEmpty;
@@ -124,9 +128,7 @@ class DashboardPage extends StatelessWidget {
                                           crossAxisAlignment:
                                               CrossAxisAlignment.stretch,
                                           children: <Widget>[
-                                            Expanded(
-                                              child: profileWorkspace,
-                                            ),
+                                            Expanded(child: profileWorkspace),
                                             if (hasLiveWork) ...<Widget>[
                                               const SizedBox(height: 20),
                                               SizedBox(
@@ -165,9 +167,7 @@ class DashboardPage extends StatelessWidget {
                                           crossAxisAlignment:
                                               CrossAxisAlignment.stretch,
                                           children: <Widget>[
-                                            Expanded(
-                                              child: profileWorkspace,
-                                            ),
+                                            Expanded(child: profileWorkspace),
                                             if (hasLiveWork) ...<Widget>[
                                               const SizedBox(height: 20),
                                               SizedBox(
@@ -353,9 +353,7 @@ class _OperationalHeader extends StatelessWidget {
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
-                  alignment: stacked
-                      ? WrapAlignment.start
-                      : WrapAlignment.end,
+                  alignment: stacked ? WrapAlignment.start : WrapAlignment.end,
                   children: <Widget>[
                     FilledButton.tonal(
                       onPressed: controller.busy
@@ -418,7 +416,8 @@ class _ActivityWorkspace extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final initialIndex = controller.sessions.isNotEmpty &&
+    final initialIndex =
+        controller.sessions.isNotEmpty &&
             (controller.selectedSessionId != null ||
                 controller.resolutions.isEmpty)
         ? 1
@@ -552,79 +551,82 @@ class _PlatformTunnelPanel extends StatelessWidget {
           (PlatformTunnelCapability capability) =>
               controller.platformTunnelResultFor(capability.mode) == null,
         );
-    final body = switch ((platformTunnels.isEmpty, compact, showCompactUnavailableSummary)) {
+    final body = switch ((
+      platformTunnels.isEmpty,
+      compact,
+      showCompactUnavailableSummary,
+    )) {
       (true, _, _) => <Widget>[
-          Text(
-            'The connected host did not report any desktop platform tunnel modes.',
-            style: theme.textTheme.bodyMedium,
-          ),
-        ],
+        Text(
+          'The connected host did not report any desktop platform tunnel modes.',
+          style: theme.textTheme.bodyMedium,
+        ),
+      ],
       (false, true, true) => <Widget>[
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: platformTunnels.map((PlatformTunnelCapability capability) {
-              return Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.72),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: <Widget>[
-                    Text(
-                      _compactPlatformTunnelStatusLabel(capability),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: platformTunnels.map((PlatformTunnelCapability capability) {
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.72),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: <Widget>[
+                  Text(
+                    _compactPlatformTunnelStatusLabel(capability),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w700,
                     ),
-                    FilledButton.tonal(
-                      onPressed:
-                          controller.busy ||
-                              controller.hostConnection?.isReady != true
-                          ? null
-                          : () => unawaited(
-                              controller.startPlatformTunnel(capability.mode),
-                            ),
-                      child: const Text('Request startup'),
-                    ),
-                  ],
-                ),
-              );
-            }).toList(),
+                  ),
+                  FilledButton.tonal(
+                    onPressed:
+                        controller.busy ||
+                            controller.hostConnection?.isReady != true
+                        ? null
+                        : () => unawaited(
+                            controller.startPlatformTunnel(capability.mode),
+                          ),
+                    child: const Text('Request startup'),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+      (_, _, true) => platformTunnels.map((
+        PlatformTunnelCapability capability,
+      ) {
+        return Padding(
+          padding: EdgeInsets.only(bottom: compact ? 8 : 12),
+          child: _CompactPlatformTunnelCard(
+            capability: capability,
+            busy: controller.busy,
+            ready: controller.hostConnection?.isReady == true,
+            compact: compact,
+            onStart: () => controller.startPlatformTunnel(capability.mode),
           ),
-        ],
-      (_, _, true) => platformTunnels.map((PlatformTunnelCapability capability) {
-          return Padding(
-            padding: EdgeInsets.only(bottom: compact ? 8 : 12),
-            child: _CompactPlatformTunnelCard(
-              capability: capability,
-              busy: controller.busy,
-              ready: controller.hostConnection?.isReady == true,
-              compact: compact,
-              onStart: () => controller.startPlatformTunnel(capability.mode),
-            ),
-          );
-        }).toList(),
+        );
+      }).toList(),
       _ => platformTunnels.map((PlatformTunnelCapability capability) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: _PlatformTunnelCard(
-              capability: capability,
-              result: controller.platformTunnelResultFor(capability.mode),
-              busy: controller.busy,
-              ready: controller.hostConnection?.isReady == true,
-              onStart: () => controller.startPlatformTunnel(capability.mode),
-            ),
-          );
-        }).toList(),
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: _PlatformTunnelCard(
+            capability: capability,
+            result: controller.platformTunnelResultFor(capability.mode),
+            busy: controller.busy,
+            ready: controller.hostConnection?.isReady == true,
+            onStart: () => controller.startPlatformTunnel(capability.mode),
+          ),
+        );
+      }).toList(),
     };
 
     return Card(
@@ -903,24 +905,19 @@ class _ResolutionsPanel extends StatelessWidget {
                               resolution.supportsAction(
                                 ArtifactAction.startOnThisDevice,
                               )
-                          ? () => controller.materializeResolution(
-                              resolution.id,
-                            )
+                          ? () =>
+                                controller.materializeResolution(resolution.id)
                           : null,
                       onCopyExport:
                           resolution.state == ResolutionState.resolved &&
                               resolution.supportsAction(
                                 ArtifactAction.exportHandoff,
                               )
-                          ? () => controller.copyResolutionExport(
-                              resolution.id,
-                            )
+                          ? () => controller.copyResolutionExport(resolution.id)
                           : null,
                       onOpenRoom:
                           resolution.state == ResolutionState.resolved &&
-                              resolution.supportsAction(
-                                ArtifactAction.openRoom,
-                              )
+                              resolution.supportsAction(ArtifactAction.openRoom)
                           ? () => controller.openResolutionExternalAction(
                               resolution.id,
                               ArtifactAction.openRoom,
@@ -1015,8 +1012,7 @@ class _SessionsPanel extends StatelessWidget {
                       selected: controller.selectedSessionId == session.id,
                       onSelect: () => controller.selectSession(session.id),
                       onStop: () => controller.stopSession(session.id),
-                      onExport: () =>
-                          controller.exportDiagnostics(session.id),
+                      onExport: () => controller.exportDiagnostics(session.id),
                       onContinueChallenge: challenge == null
                           ? null
                           : () => controller.continueChallenge(challenge.id),

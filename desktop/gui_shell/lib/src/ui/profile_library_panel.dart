@@ -7,30 +7,30 @@ class ProfileLibraryPanel extends StatelessWidget {
     super.key,
     required this.presets,
     required this.providerDescriptors,
-    required this.providerConfigs,
+    required this.managedProviders,
     required this.profiles,
     required this.selectedProfileId,
-    required this.selectedProviderConfigId,
+    required this.selectedManagedProviderId,
     required this.activeSurface,
     required this.busy,
     required this.onApplyPreset,
-    required this.onSelectProviderConfig,
-    required this.onCreateProviderConfig,
+    required this.onSelectManagedProvider,
+    required this.onCreateManagedProvider,
     required this.onSelectProfile,
     required this.onCreateDraft,
   });
 
   final List<ProviderPreset> presets;
   final List<ProviderDescriptor> providerDescriptors;
-  final List<ProviderConfigRecord> providerConfigs;
+  final List<ManagedProviderRecord> managedProviders;
   final List<ProfileRecord> profiles;
   final String? selectedProfileId;
-  final String? selectedProviderConfigId;
+  final String? selectedManagedProviderId;
   final DesktopWorkspaceSurface activeSurface;
   final bool busy;
   final ValueChanged<ProviderPreset> onApplyPreset;
-  final ValueChanged<String> onSelectProviderConfig;
-  final VoidCallback onCreateProviderConfig;
+  final ValueChanged<String> onSelectManagedProvider;
+  final VoidCallback onCreateManagedProvider;
   final ValueChanged<String> onSelectProfile;
   final VoidCallback onCreateDraft;
 
@@ -52,7 +52,7 @@ class ProfileLibraryPanel extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Presets, reusable provider configs, and saved profiles stay distinct so the active workspace can focus on one operator task at a time.',
+              'Presets, managed providers, and saved profiles stay distinct so the active workspace can focus on one operator task at a time.',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -86,29 +86,29 @@ class ProfileLibraryPanel extends StatelessWidget {
                       Expanded(
                         child: _sectionHeader(
                           theme,
-                          title: 'Provider configs',
+                          title: 'Providers',
                           subtitle:
-                              'Reusable non-secret provider settings keyed to one provider.',
+                              'App-owned managed provider records for shipped provider families.',
                         ),
                       ),
                       FilledButton.tonal(
                         key: const ValueKey<String>(
                           'provider-config-create-button',
                         ),
-                        onPressed: busy ? null : onCreateProviderConfig,
+                        onPressed: busy ? null : onCreateManagedProvider,
                         child: const Text('New'),
                       ),
                     ],
                   ),
                   const SizedBox(height: 10),
-                  if (providerConfigs.isEmpty)
+                  if (managedProviders.isEmpty)
                     _emptyCard(
                       theme,
-                      'No provider configs yet. Create them when the connected host advertises descriptor-driven provider settings.',
+                      'No managed providers yet. Create one from a shipped provider family and keep runtime-only inputs in profile drafts.',
                     )
                   else
-                    ...providerConfigs.map(
-                      (ProviderConfigRecord config) => Padding(
+                    ...managedProviders.map(
+                      (ManagedProviderRecord config) => Padding(
                         padding: const EdgeInsets.only(bottom: 10),
                         child: _providerConfigCard(theme, config),
                       ),
@@ -199,7 +199,7 @@ class ProfileLibraryPanel extends StatelessWidget {
                 Text(
                   isProfile
                       ? 'Profile workspace active'
-                      : 'Provider config workspace active',
+                      : 'Providers workspace active',
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
@@ -208,7 +208,7 @@ class ProfileLibraryPanel extends StatelessWidget {
                 Text(
                   isProfile
                       ? 'Resolve, start, and save runtime snapshots from the active draft.'
-                      : 'Edit reusable provider-only settings separately from runtime defaults.',
+                      : 'Edit managed provider records separately from runtime defaults and prompt-only profile input.',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -280,10 +280,10 @@ class ProfileLibraryPanel extends StatelessWidget {
     );
   }
 
-  Widget _providerConfigCard(ThemeData theme, ProviderConfigRecord config) {
+  Widget _providerConfigCard(ThemeData theme, ManagedProviderRecord config) {
     final selected =
-        activeSurface == DesktopWorkspaceSurface.providerConfig &&
-        selectedProviderConfigId == config.id;
+        activeSurface != DesktopWorkspaceSurface.profile &&
+        selectedManagedProviderId == config.id;
     final accent = config.isAvailable;
     return Material(
       color: selected
@@ -293,7 +293,7 @@ class ProfileLibraryPanel extends StatelessWidget {
       child: InkWell(
         key: ValueKey<String>('provider-config-item-${config.id}'),
         borderRadius: BorderRadius.circular(16),
-        onTap: () => onSelectProviderConfig(config.id),
+        onTap: () => onSelectManagedProvider(config.id),
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
