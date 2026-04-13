@@ -18,6 +18,9 @@ abstract class ControlPlaneApi {
   Future<ProviderConfigRecord> upsertProviderConfig(
     ProviderConfigRecord config,
   );
+  Future<ProviderConfigRecord> restoreProviderConfig(
+    ProviderConfigRecord config,
+  );
   Future<void> deleteProviderConfig(String configId);
   Future<List<ProfileRecord>> profiles();
   Future<ProfileRecord> upsertProfile(ProfileRecord profile);
@@ -119,6 +122,18 @@ class ControlPlaneClient implements ControlPlaneApi {
     final payload = await _jsonRequest(
       'POST',
       '/v1/provider-configs',
+      body: config.toJson(),
+    );
+    return ProviderConfigRecord.fromJson(payload);
+  }
+
+  @override
+  Future<ProviderConfigRecord> restoreProviderConfig(
+    ProviderConfigRecord config,
+  ) async {
+    final payload = await _jsonRequest(
+      'POST',
+      '/v1/provider-configs:restore',
       body: config.toJson(),
     );
     return ProviderConfigRecord.fromJson(payload);

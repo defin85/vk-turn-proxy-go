@@ -65,6 +65,9 @@ class _ProviderSettingsFormState extends State<ProviderSettingsForm> {
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: DropdownButtonFormField<dynamic>(
+            key: ValueKey<String>(
+              'provider-setting-select-${field.key}-${widget.values[field.key]}',
+            ),
             initialValue: widget.values[field.key],
             decoration: InputDecoration(
               labelText: label,

@@ -8,11 +8,22 @@ import (
 )
 
 func (h *Host) UpsertProviderConfig(config ProviderConfig) (ProviderConfig, error) {
-	normalized, err := h.normalizeProviderConfig(config)
+	normalized, err := h.normalizeProviderConfig(config, false)
 	if err != nil {
 		return ProviderConfig{}, err
 	}
+	return h.storeProviderConfig(normalized), nil
+}
 
+func (h *Host) RestoreProviderConfig(config ProviderConfig) (ProviderConfig, error) {
+	normalized, err := h.normalizeProviderConfig(config, true)
+	if err != nil {
+		return ProviderConfig{}, err
+	}
+	return h.storeProviderConfig(normalized), nil
+}
+
+func (h *Host) storeProviderConfig(normalized ProviderConfig) ProviderConfig {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -36,7 +47,7 @@ func (h *Host) UpsertProviderConfig(config ProviderConfig) (ProviderConfig, erro
 	normalized.ProviderSettings = cloneProviderSettings(normalized.ProviderSettings)
 	normalized.Availability = ProviderConfigAvailability{}
 	h.providerConfigs[normalized.ID] = normalized
-	return h.decorateProviderConfig(normalized), nil
+	return h.decorateProviderConfig(normalized)
 }
 
 func (h *Host) DeleteProviderConfig(configID string) error {
@@ -87,7 +98,7 @@ func (h *Host) ProviderConfigs() []ProviderConfig {
 	return out
 }
 
-func (h *Host) normalizeProviderConfig(config ProviderConfig) (ProviderConfig, error) {
+func (h *Host) normalizeProviderConfig(config ProviderConfig, allowRestore bool) (ProviderConfig, error) {
 	config.ID = strings.TrimSpace(config.ID)
 	config.Provider = strings.TrimSpace(config.Provider)
 	config.Name = strings.TrimSpace(config.Name)
@@ -100,7 +111,10 @@ func (h *Host) normalizeProviderConfig(config ProviderConfig) (ProviderConfig, e
 		return ProviderConfig{}, errors.New("name is required")
 	}
 
-	restoreCandidate := !config.CreatedAt.IsZero() && !config.UpdatedAt.IsZero()
+	restoreCandidate := allowRestore &&
+		config.ID != "" &&
+		!config.CreatedAt.IsZero() &&
+		!config.UpdatedAt.IsZero()
 	descriptor, err := h.providerDescriptor(config.Provider)
 	if err != nil {
 		if restoreCandidate && config.ID != "" {

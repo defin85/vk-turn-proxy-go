@@ -340,7 +340,7 @@ func TestHandlerProviderConfigReturnsFieldAwareProviderSettingsFailure(t *testin
 	}
 }
 
-func TestHandlerProviderConfigRestoreKeepsUnavailableRecordExplicit(t *testing.T) {
+func TestHandlerProviderConfigRejectsRestoreBypassOnOrdinaryCRUD(t *testing.T) {
 	host := New(WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))))
 	handler := Handler(host)
 
@@ -358,8 +358,31 @@ func TestHandlerProviderConfigRestoreKeepsUnavailableRecordExplicit(t *testing.T
 	req := httptest.NewRequest(http.MethodPost, "/v1/provider-configs", bytes.NewReader(payload))
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("POST /v1/provider-configs code = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandlerProviderConfigRestoreKeepsUnavailableRecordExplicit(t *testing.T) {
+	host := New(WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))))
+	handler := Handler(host)
+
+	restoredAt := time.Date(2026, 4, 13, 10, 15, 0, 0, time.UTC)
+	payload, _ := json.Marshal(ProviderConfig{
+		ID:       "cfg-1",
+		Name:     "Legacy WB config",
+		Provider: "wb-stream",
+		ProviderSettings: ProviderSettings{
+			"region": "eu-west",
+		},
+		CreatedAt: restoredAt,
+		UpdatedAt: restoredAt,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/provider-configs:restore", bytes.NewReader(payload))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("POST /v1/provider-configs restore code = %d body=%s", rec.Code, rec.Body.String())
+		t.Fatalf("POST /v1/provider-configs:restore code = %d body=%s", rec.Code, rec.Body.String())
 	}
 
 	var saved ProviderConfig

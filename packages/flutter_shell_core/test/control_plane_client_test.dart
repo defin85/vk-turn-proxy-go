@@ -495,6 +495,31 @@ void main() {
           request.response.statusCode = HttpStatus.noContent;
           await request.response.close();
           return;
+        case '/v1/provider-configs:restore':
+          expect(request.method, 'POST');
+          final payload =
+              jsonDecode(await utf8.decoder.bind(request).join())
+                  as Map<String, dynamic>;
+          expect(payload['id'], 'cfg-restore');
+          expect(payload['provider'], 'wb-stream');
+          request.response.headers.contentType = ContentType.json;
+          request.response.write(
+            jsonEncode(<String, dynamic>{
+              'id': 'cfg-restore',
+              'provider': 'wb-stream',
+              'name': 'Legacy WB guest',
+              'provider_settings': <String, dynamic>{'region': 'eu-west'},
+              'availability': <String, dynamic>{
+                'state': 'provider_unavailable',
+                'message':
+                    'provider "wb-stream" is not advertised by the current host',
+              },
+              'created_at': DateTime.utc(2026, 4, 13, 10, 15).toIso8601String(),
+              'updated_at': DateTime.utc(2026, 4, 13, 10, 16).toIso8601String(),
+            }),
+          );
+          await request.response.close();
+          return;
       }
 
       request.response.statusCode = HttpStatus.notFound;
@@ -533,5 +558,18 @@ void main() {
     });
 
     await client.deleteProviderConfig('cfg-1');
+
+    final restored = await client.restoreProviderConfig(
+      ProviderConfigRecord(
+        id: 'cfg-restore',
+        provider: 'wb-stream',
+        name: 'Legacy WB guest',
+        providerSettings: const <String, dynamic>{'region': 'eu-west'},
+        createdAt: DateTime.utc(2026, 4, 13, 10, 15),
+        updatedAt: DateTime.utc(2026, 4, 13, 10, 16),
+      ),
+    );
+    expect(restored.id, 'cfg-restore');
+    expect(restored.availability.isAvailable, isFalse);
   });
 }

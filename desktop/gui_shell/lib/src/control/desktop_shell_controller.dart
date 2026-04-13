@@ -999,7 +999,7 @@ class DesktopShellController extends ChangeNotifier {
     }
     final restored = <ProviderConfigRecord>[];
     for (final config in providerConfigs) {
-      restored.add(await api.upsertProviderConfig(config));
+      restored.add(await api.restoreProviderConfig(config));
     }
     providerConfigs = restored;
     _scheduleStatePersist();

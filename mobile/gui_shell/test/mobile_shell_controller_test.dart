@@ -193,6 +193,50 @@ void main() {
   );
 
   test(
+    'controller rehydrates persisted provider configs through trusted restore path',
+    () async {
+      final restoredAt = DateTime.utc(2026, 4, 13, 10, 15);
+      final bridge = _FakeMobileHostBridge();
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: const <ProfileRecord>[],
+            providerConfigs: <ProviderConfigRecord>[
+              ProviderConfigRecord(
+                id: 'cfg-1',
+                provider: 'wb-stream',
+                name: 'Legacy WB config',
+                providerSettings: const <String, dynamic>{'region': 'eu-west'},
+                createdAt: restoredAt,
+                updatedAt: restoredAt,
+              ),
+            ],
+            draft: ProfileDraft.defaults(),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(
+        bridge.restoredProviderConfigs.map(
+          (ProviderConfigRecord item) => item.id,
+        ),
+        <String>['cfg-1'],
+      );
+      expect(bridge.upsertedProviderConfigs, isEmpty);
+      expect(controller.providerConfigs, hasLength(1));
+      expect(
+        controller.providerConfigs.single.availability.state,
+        ProviderConfigAvailabilityState.providerUnavailable,
+      );
+    },
+  );
+
+  test(
     'controller fails closed when secure local state restore is unavailable',
     () async {
       final bridge = _FakeMobileHostBridge();
@@ -1148,6 +1192,10 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   final List<ResolutionRecord> _resolutions;
 
   final List<ProfileRecord> upsertedProfiles = <ProfileRecord>[];
+  final List<ProviderConfigRecord> upsertedProviderConfigs =
+      <ProviderConfigRecord>[];
+  final List<ProviderConfigRecord> restoredProviderConfigs =
+      <ProviderConfigRecord>[];
   final List<String> continueChallengeCalls = <String>[];
   final List<_StartResolutionCall> startResolutionCalls =
       <_StartResolutionCall>[];
@@ -1334,6 +1382,13 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   Future<ProviderConfigRecord> upsertProviderConfig(
     ProviderConfigRecord config,
   ) async {
+    if (!_providerAdvertised(config.provider)) {
+      throw const ControlPlaneError(
+        statusCode: 400,
+        code: 'provider_config_invalid',
+        message: 'provider is not advertised by the connected host',
+      );
+    }
     final next = config.copyWith(
       id: config.id.isEmpty
           ? 'provider-config-${_providerConfigs.length + 1}'
@@ -1346,7 +1401,36 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     _providerConfigs
       ..removeWhere((ProviderConfigRecord current) => current.id == next.id)
       ..add(next);
+    upsertedProviderConfigs.add(next);
     return next;
+  }
+
+  @override
+  Future<ProviderConfigRecord> restoreProviderConfig(
+    ProviderConfigRecord config,
+  ) async {
+    final next = config.copyWith(
+      availability: _providerAdvertised(config.provider)
+          ? const ProviderConfigAvailability()
+          : ProviderConfigAvailability(
+              state: ProviderConfigAvailabilityState.providerUnavailable,
+              message:
+                  'provider "${config.provider}" is not advertised by the current host',
+            ),
+    );
+    _providerConfigs
+      ..removeWhere((ProviderConfigRecord current) => current.id == next.id)
+      ..add(next);
+    restoredProviderConfigs.add(next);
+    return next;
+  }
+
+  bool _providerAdvertised(String providerId) {
+    final normalized = providerId.trim().toLowerCase();
+    return _providers.any(
+      (ProviderDescriptor descriptor) =>
+          descriptor.id.trim().toLowerCase() == normalized,
+    );
   }
 }
 

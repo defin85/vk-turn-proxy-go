@@ -229,6 +229,13 @@ class HttpMobileHostBridge implements MobileHostBridge {
   }
 
   @override
+  Future<ProviderConfigRecord> restoreProviderConfig(
+    ProviderConfigRecord config,
+  ) {
+    return _client.restoreProviderConfig(config);
+  }
+
+  @override
   Future<List<ResolutionRecord>> resolutions() {
     return _client.resolutions();
   }
@@ -453,6 +460,11 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
 
   @override
   Future<List<ProviderDescriptor>> providers() => _fail();
+
+  @override
+  Future<ProviderConfigRecord> restoreProviderConfig(
+    ProviderConfigRecord config,
+  ) => _fail();
 
   @override
   Future<List<ResolutionRecord>> resolutions() => _fail();

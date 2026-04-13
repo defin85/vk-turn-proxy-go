@@ -412,62 +412,61 @@ void main() {
     unawaited(api.dispose());
   });
 
-  testWidgets(
-    'desktop shell bootstraps an available preset into a new draft',
-    (WidgetTester tester) async {
-      tester.view.physicalSize = const Size(1600, 1200);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
+  testWidgets('desktop shell bootstraps an available preset into a new draft', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
 
-      final api = _FakeControlPlaneApi(
-        providers: <ProviderDescriptor>[
-          ..._providerDescriptors,
-          _providerWithSettingsDescriptor,
-        ],
-      );
-      final controller = DesktopShellController(
-        api: api,
-        supervisor: _FakeHostSupervisor(),
-        stateStore: const _InMemoryShellStateStore(),
-        appBuild: _testGuiBuild,
-      );
+    final api = _FakeControlPlaneApi(
+      providers: <ProviderDescriptor>[
+        ..._providerDescriptors,
+        _providerWithSettingsDescriptor,
+      ],
+    );
+    final controller = DesktopShellController(
+      api: api,
+      supervisor: _FakeHostSupervisor(),
+      stateStore: const _InMemoryShellStateStore(),
+      appBuild: _testGuiBuild,
+    );
 
-      await controller.initialize();
-      await tester.pumpWidget(
-        MaterialApp(home: DashboardPage(controller: controller)),
-      );
-      await tester.pumpAndSettle();
+    await controller.initialize();
+    await tester.pumpWidget(
+      MaterialApp(home: DashboardPage(controller: controller)),
+    );
+    await tester.pumpAndSettle();
 
-      final libraryScrollable = _libraryScrollable();
-      await tester.scrollUntilVisible(
-        find.byKey(const ValueKey<String>('preset-card-wb-stream-default')),
-        180,
-        scrollable: libraryScrollable,
-      );
-      await tester.pumpAndSettle();
+    final libraryScrollable = _libraryScrollable();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('preset-card-wb-stream-default')),
+      180,
+      scrollable: libraryScrollable,
+    );
+    await tester.pumpAndSettle();
 
-      final wbPresetButton = find.byKey(
-        const ValueKey<String>('preset-use-wb-stream-default'),
-      );
-      await tester.scrollUntilVisible(
-        wbPresetButton,
-        120,
-        scrollable: libraryScrollable,
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(wbPresetButton);
-      await tester.pumpAndSettle();
+    final wbPresetButton = find.byKey(
+      const ValueKey<String>('preset-use-wb-stream-default'),
+    );
+    await tester.scrollUntilVisible(
+      wbPresetButton,
+      120,
+      scrollable: libraryScrollable,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(wbPresetButton);
+    await tester.pumpAndSettle();
 
-      expect(controller.selectedProfileId, isNull);
-      expect(controller.workspaceSurface, DesktopWorkspaceSurface.profile);
-      expect(controller.draft.name, 'WB Stream');
-      expect(controller.draft.spec.provider, 'wb-stream');
+    expect(controller.selectedProfileId, isNull);
+    expect(controller.workspaceSurface, DesktopWorkspaceSurface.profile);
+    expect(controller.draft.name, 'WB Stream');
+    expect(controller.draft.spec.provider, 'wb-stream');
 
-      controller.dispose();
-      await tester.pumpWidget(const SizedBox.shrink());
-      unawaited(api.dispose());
-    },
-  );
+    controller.dispose();
+    await tester.pumpWidget(const SizedBox.shrink());
+    unawaited(api.dispose());
+  });
 
   testWidgets('desktop shell creates, edits, and deletes provider configs', (
     WidgetTester tester,
@@ -952,6 +951,13 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   Future<ProviderConfigRecord> upsertProviderConfig(
     ProviderConfigRecord config,
   ) async {
+    if (!_providerAdvertised(config.provider)) {
+      throw const ControlPlaneError(
+        statusCode: 400,
+        code: 'provider_config_invalid',
+        message: 'provider is not advertised by the connected host',
+      );
+    }
     final next = config.copyWith(
       id: config.id.isEmpty
           ? 'provider-config-${_providerConfigs.length + 1}'
@@ -967,8 +973,35 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
     return next;
   }
 
+  @override
+  Future<ProviderConfigRecord> restoreProviderConfig(
+    ProviderConfigRecord config,
+  ) async {
+    final next = config.copyWith(
+      availability: _providerAdvertised(config.provider)
+          ? const ProviderConfigAvailability()
+          : ProviderConfigAvailability(
+              state: ProviderConfigAvailabilityState.providerUnavailable,
+              message:
+                  'provider "${config.provider}" is not advertised by the current host',
+            ),
+    );
+    _providerConfigs
+      ..removeWhere((ProviderConfigRecord current) => current.id == next.id)
+      ..add(next);
+    return next;
+  }
+
   Future<void> dispose() async {
     await _events.close();
+  }
+
+  bool _providerAdvertised(String providerId) {
+    final normalized = providerId.trim().toLowerCase();
+    return _providers.any(
+      (ProviderDescriptor descriptor) =>
+          descriptor.id.trim().toLowerCase() == normalized,
+    );
   }
 }
 

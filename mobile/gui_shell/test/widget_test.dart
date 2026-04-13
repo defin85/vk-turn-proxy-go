@@ -1134,6 +1134,13 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   Future<ProviderConfigRecord> upsertProviderConfig(
     ProviderConfigRecord config,
   ) async {
+    if (!_providerAdvertised(config.provider)) {
+      throw const ControlPlaneError(
+        statusCode: 400,
+        code: 'provider_config_invalid',
+        message: 'provider is not advertised by the connected host',
+      );
+    }
     final next = config.copyWith(
       id: config.id.isEmpty
           ? 'provider-config-${_providerConfigs.length + 1}'
@@ -1147,6 +1154,33 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       ..removeWhere((ProviderConfigRecord current) => current.id == next.id)
       ..add(next);
     return next;
+  }
+
+  @override
+  Future<ProviderConfigRecord> restoreProviderConfig(
+    ProviderConfigRecord config,
+  ) async {
+    final next = config.copyWith(
+      availability: _providerAdvertised(config.provider)
+          ? const ProviderConfigAvailability()
+          : ProviderConfigAvailability(
+              state: ProviderConfigAvailabilityState.providerUnavailable,
+              message:
+                  'provider "${config.provider}" is not advertised by the current host',
+            ),
+    );
+    _providerConfigs
+      ..removeWhere((ProviderConfigRecord current) => current.id == next.id)
+      ..add(next);
+    return next;
+  }
+
+  bool _providerAdvertised(String providerId) {
+    final normalized = providerId.trim().toLowerCase();
+    return _providers.any(
+      (ProviderDescriptor descriptor) =>
+          descriptor.id.trim().toLowerCase() == normalized,
+    );
   }
 }
 

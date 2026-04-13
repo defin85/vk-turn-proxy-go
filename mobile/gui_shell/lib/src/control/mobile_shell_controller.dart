@@ -1063,7 +1063,7 @@ class MobileShellController extends ChangeNotifier {
     }
     final restored = <ProviderConfigRecord>[];
     for (final config in providerConfigs) {
-      restored.add(await bridge.upsertProviderConfig(config));
+      restored.add(await bridge.restoreProviderConfig(config));
     }
     providerConfigs = restored;
     _scheduleStatePersist();

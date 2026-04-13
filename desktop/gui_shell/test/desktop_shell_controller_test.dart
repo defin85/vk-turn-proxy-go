@@ -471,6 +471,59 @@ void main() {
   );
 
   test(
+    'controller restores persisted provider configs through trusted restore path',
+    () async {
+      final restoredAt = DateTime.utc(2026, 4, 13, 10, 15);
+      final api = _FakeControlPlaneApi(
+        profiles: const <ProfileRecord>[],
+        providerConfigs: const <ProviderConfigRecord>[],
+        sessions: const <SessionRecord>[],
+      );
+      final store = _FakeShellStateStore(
+        loaded: DesktopShellState(
+          profiles: const <ProfileRecord>[],
+          providerConfigs: <ProviderConfigRecord>[
+            ProviderConfigRecord(
+              id: 'cfg-1',
+              provider: 'wb-stream',
+              name: 'Legacy WB config',
+              providerSettings: const <String, dynamic>{'region': 'eu-west'},
+              createdAt: restoredAt,
+              updatedAt: restoredAt,
+            ),
+          ],
+          draft: ProfileDraft.defaults(),
+        ),
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(const <HostConnectionResult>[
+          HostConnectionResult(
+            state: HostLifecycleState.ready,
+            message: 'ready',
+            info: _readyHostInfo,
+          ),
+        ]),
+        stateStore: store,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(
+        api.restoredProviderConfigs.map((ProviderConfigRecord item) => item.id),
+        <String>['cfg-1'],
+      );
+      expect(api.upsertedProviderConfigs, isEmpty);
+      expect(controller.providerConfigs, hasLength(1));
+      expect(
+        controller.providerConfigs.single.availability.state,
+        ProviderConfigAvailabilityState.providerUnavailable,
+      );
+    },
+  );
+
+  test(
     'controller persists profiles, selection, and draft mutations',
     () async {
       final api = _FakeControlPlaneApi(
@@ -1032,6 +1085,10 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   final List<PlatformTunnelMode> startPlatformTunnelCalls =
       <PlatformTunnelMode>[];
   final List<ProfileRecord> upsertedProfiles = <ProfileRecord>[];
+  final List<ProviderConfigRecord> upsertedProviderConfigs =
+      <ProviderConfigRecord>[];
+  final List<ProviderConfigRecord> restoredProviderConfigs =
+      <ProviderConfigRecord>[];
   bool failReads = false;
   int startSessionCalls = 0;
 
@@ -1264,6 +1321,13 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   Future<ProviderConfigRecord> upsertProviderConfig(
     ProviderConfigRecord config,
   ) async {
+    if (!_providerAdvertised(config.provider)) {
+      throw const ControlPlaneError(
+        statusCode: 400,
+        code: 'provider_config_invalid',
+        message: 'provider is not advertised by the connected host',
+      );
+    }
     final next = config.copyWith(
       id: config.id.isEmpty
           ? 'provider-config-${_providerConfigs.length + 1}'
@@ -1281,7 +1345,41 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
     } else {
       _providerConfigs.add(next);
     }
+    upsertedProviderConfigs.add(next);
     return next;
+  }
+
+  @override
+  Future<ProviderConfigRecord> restoreProviderConfig(
+    ProviderConfigRecord config,
+  ) async {
+    final next = config.copyWith(
+      availability: _providerAdvertised(config.provider)
+          ? const ProviderConfigAvailability()
+          : const ProviderConfigAvailability(
+              state: ProviderConfigAvailabilityState.providerUnavailable,
+              message:
+                  'provider "wb-stream" is not advertised by the current host',
+            ),
+    );
+    final index = _providerConfigs.indexWhere(
+      (ProviderConfigRecord existing) => existing.id == next.id,
+    );
+    if (index >= 0) {
+      _providerConfigs[index] = next;
+    } else {
+      _providerConfigs.add(next);
+    }
+    restoredProviderConfigs.add(next);
+    return next;
+  }
+
+  bool _providerAdvertised(String providerId) {
+    final normalized = providerId.trim().toLowerCase();
+    return _providers.any(
+      (ProviderDescriptor descriptor) =>
+          descriptor.id.trim().toLowerCase() == normalized,
+    );
   }
 }
 

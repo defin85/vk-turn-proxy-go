@@ -602,4 +602,9 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
   Future<ProviderConfigRecord> upsertProviderConfig(
     ProviderConfigRecord config,
   ) async => config;
+
+  @override
+  Future<ProviderConfigRecord> restoreProviderConfig(
+    ProviderConfigRecord config,
+  ) async => config;
 }

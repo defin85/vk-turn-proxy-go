@@ -87,6 +87,23 @@ func Handler(host *Host) http.Handler {
 			writeMethodNotAllowed(w, r.Method)
 		}
 	})
+	mux.HandleFunc("/v1/provider-configs:restore", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeMethodNotAllowed(w, r.Method)
+			return
+		}
+		var config ProviderConfig
+		if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_json", err)
+			return
+		}
+		saved, err := host.RestoreProviderConfig(config)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, errorCodeForBadRequest(err, "provider_config_invalid"), err)
+			return
+		}
+		writeJSON(w, http.StatusOK, saved)
+	})
 	mux.HandleFunc("/v1/profiles/", func(w http.ResponseWriter, r *http.Request) {
 		profileID := strings.TrimPrefix(r.URL.Path, "/v1/profiles/")
 		if profileID == "" {

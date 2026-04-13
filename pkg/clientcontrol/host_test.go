@@ -377,11 +377,30 @@ func TestHostProviderConfigRejectsPromptOnlySettings(t *testing.T) {
 	}
 }
 
+func TestHostProviderConfigRejectsRestoreBypassOnOrdinaryUpsert(t *testing.T) {
+	host := New(WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))))
+	restoredAt := time.Date(2026, 4, 13, 10, 15, 0, 0, time.UTC)
+
+	_, err := host.UpsertProviderConfig(ProviderConfig{
+		ID:       "cfg-1",
+		Name:     "Legacy WB config",
+		Provider: "wb-stream",
+		ProviderSettings: ProviderSettings{
+			"region": "eu-west",
+		},
+		CreatedAt: restoredAt,
+		UpdatedAt: restoredAt,
+	})
+	if err == nil {
+		t.Fatal("UpsertProviderConfig() expected provider validation error")
+	}
+}
+
 func TestHostProviderConfigRestoreKeepsUnavailableRecordExplicit(t *testing.T) {
 	host := New(WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))))
 	restoredAt := time.Date(2026, 4, 13, 10, 15, 0, 0, time.UTC)
 
-	saved, err := host.UpsertProviderConfig(ProviderConfig{
+	saved, err := host.RestoreProviderConfig(ProviderConfig{
 		ID:       "cfg-1",
 		Name:     "Legacy WB config",
 		Provider: "wb-stream",
@@ -393,7 +412,7 @@ func TestHostProviderConfigRestoreKeepsUnavailableRecordExplicit(t *testing.T) {
 		UpdatedAt: restoredAt,
 	})
 	if err != nil {
-		t.Fatalf("UpsertProviderConfig() restore error = %v", err)
+		t.Fatalf("RestoreProviderConfig() error = %v", err)
 	}
 	if saved.Availability.State != ProviderConfigAvailabilityProviderUnavailable {
 		t.Fatalf("saved availability = %q, want %q", saved.Availability.State, ProviderConfigAvailabilityProviderUnavailable)
