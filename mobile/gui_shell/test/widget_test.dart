@@ -918,68 +918,114 @@ void main() {
     expect(controller.selectedManagedProviderId, isNull);
   });
 
-  testWidgets('mobile shell creates edits and deletes provider configs', (
-    WidgetTester tester,
-  ) async {
-    tester.view.physicalSize = const Size(1200, 2200);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
+  testWidgets(
+    'mobile shell creates edits and deletes managed provider records',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 2200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
 
-    final controller = MobileShellController(
-      bridge: _FakeMobileHostBridge(providersList: _providerDescriptors),
-      stateStore: _InMemoryStateStore(
-        MobileShellState(
-          profiles: const <ProfileRecord>[],
-          providerConfigs: const <ProviderConfigRecord>[],
-          draft: ProfileDraft.defaults(),
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(providersList: _providerDescriptors),
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: const <ProfileRecord>[],
+            providerConfigs: const <ProviderConfigRecord>[],
+            draft: ProfileDraft.defaults(),
+          ),
         ),
-      ),
-    );
+      );
 
-    await controller.initialize();
-    await tester.pumpWidget(MobileShellApp(controller: controller));
-    await tester.pumpAndSettle();
+      await controller.initialize();
+      await tester.pumpWidget(MobileShellApp(controller: controller));
+      await tester.pumpAndSettle();
 
-    final workflowScrollable = _workflowScrollable();
-    await tester.scrollUntilVisible(
-      find.byKey(const ValueKey<String>('provider-config-create-button')),
-      240,
-      scrollable: workflowScrollable,
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(const ValueKey<String>('provider-config-create-button')),
-    );
-    await tester.pumpAndSettle();
+      final workflowScrollable = _workflowScrollable();
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey<String>('managed-provider-create-button')),
+        240,
+        scrollable: workflowScrollable,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey<String>('managed-provider-create-button')),
+      );
+      await tester.pumpAndSettle();
 
-    expect(controller.workflowSurface, MobileWorkflowSurface.providerConfig);
-    expect(find.text('Save provider'), findsOneWidget);
+      expect(controller.workflowSurface, MobileWorkflowSurface.providerConfig);
+      expect(find.text('App-owned provider catalog'), findsOneWidget);
+      expect(find.text('Supported provider families'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey<String>('supported-provider-card-vk')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(
+          const ValueKey<String>('supported-provider-card-generic-turn'),
+        ),
+        findsOneWidget,
+      );
 
-    await tester.enterText(find.byType(TextField).first, 'WB Central');
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Save provider'));
-    await tester.pumpAndSettle();
+      final providerWorkspaceScrollable = _managedProviderWorkspaceScrollable();
+      await tester.scrollUntilVisible(
+        find.text('Managed record name'),
+        240,
+        scrollable: providerWorkspaceScrollable,
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, 'WB Central');
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Save managed record'),
+        240,
+        scrollable: providerWorkspaceScrollable,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save managed record'));
+      await tester.pumpAndSettle();
 
-    expect(controller.providerConfigs, hasLength(1));
-    expect(controller.providerConfigs.single.name, 'WB Central');
+      expect(controller.providerConfigs, hasLength(1));
+      expect(controller.providerConfigs.single.name, 'WB Central');
 
-    await tester.enterText(find.byType(TextField).first, 'WB Central Updated');
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Save provider'));
-    await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Managed record name'),
+        240,
+        scrollable: providerWorkspaceScrollable,
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextField).first,
+        'WB Central Updated',
+      );
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Save managed record'),
+        240,
+        scrollable: providerWorkspaceScrollable,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save managed record'));
+      await tester.pumpAndSettle();
 
-    expect(controller.providerConfigs.single.name, 'WB Central Updated');
+      expect(controller.providerConfigs.single.name, 'WB Central Updated');
 
-    final deleteButton = tester.widget<OutlinedButton>(
-      find.byKey(const ValueKey<String>('provider-config-delete-button')),
-    );
-    expect(deleteButton.onPressed, isNotNull);
-    deleteButton.onPressed!.call();
-    await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey<String>('managed-provider-delete-button')),
+        240,
+        scrollable: providerWorkspaceScrollable,
+      );
+      await tester.pumpAndSettle();
+      final deleteButton = tester.widget<OutlinedButton>(
+        find.byKey(const ValueKey<String>('managed-provider-delete-button')),
+      );
+      expect(deleteButton.onPressed, isNotNull);
+      deleteButton.onPressed!.call();
+      await tester.pumpAndSettle();
 
-    expect(controller.providerConfigs, isEmpty);
-    expect(controller.workflowSurface, MobileWorkflowSurface.profile);
-  });
+      expect(controller.providerConfigs, isEmpty);
+      expect(controller.workflowSurface, MobileWorkflowSurface.profile);
+    },
+  );
 
   testWidgets('mobile shell keeps unavailable managed providers explicit', (
     WidgetTester tester,
@@ -1025,7 +1071,7 @@ void main() {
     expect(
       tester
           .widget<FilledButton>(
-            find.widgetWithText(FilledButton, 'Apply to profile draft'),
+            find.widgetWithText(FilledButton, 'Apply record to profile draft'),
           )
           .onPressed,
       isNotNull,
@@ -1070,6 +1116,14 @@ void main() {
       await tester.pumpWidget(MobileShellApp(controller: controller));
       await tester.pumpAndSettle();
 
+      final providerWorkspaceScrollable = _managedProviderWorkspaceScrollable();
+      await tester.scrollUntilVisible(
+        find.textContaining('cannot render the provider settings schema'),
+        240,
+        scrollable: providerWorkspaceScrollable,
+      );
+      await tester.pumpAndSettle();
+
       expect(
         find.textContaining('cannot render the provider settings schema'),
         findsOneWidget,
@@ -1077,7 +1131,9 @@ void main() {
       expect(
         tester
             .widget<FilledButton>(
-              find.byKey(const ValueKey<String>('provider-config-save-button')),
+              find.byKey(
+                const ValueKey<String>('managed-provider-save-button'),
+              ),
             )
             .onPressed,
         isNull,
@@ -1086,7 +1142,7 @@ void main() {
         tester
             .widget<FilledButton>(
               find.byKey(
-                const ValueKey<String>('provider-config-apply-button'),
+                const ValueKey<String>('managed-provider-apply-button'),
               ),
             )
             .onPressed,
@@ -1146,7 +1202,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final applyButton = tester.widget<FilledButton>(
-        find.byKey(const ValueKey<String>('provider-config-apply-button')),
+        find.byKey(const ValueKey<String>('managed-provider-apply-button')),
       );
       expect(applyButton.onPressed, isNotNull);
       applyButton.onPressed!.call();
@@ -1184,9 +1240,93 @@ void main() {
       expect(refreshedProfile.spec.providerSettings['region'], 'eu-west');
     },
   );
+
+  testWidgets(
+    'mobile profile editor toggles between managed and custom provider modes',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 2200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(
+          providersList: const <ProviderDescriptor>[
+            _supportedProviderWithSettingsDescriptor,
+          ],
+        ),
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: const <ProfileRecord>[],
+            managedProviders: <ManagedProviderRecord>[
+              ManagedProviderRecord(
+                id: 'provider-config-1',
+                provider: 'vk',
+                name: 'VK Europe',
+                providerSettings: const <String, dynamic>{'region': 'eu-west'},
+                createdAt: DateTime.utc(2026, 4, 12, 18, 0),
+                updatedAt: DateTime.utc(2026, 4, 12, 18, 1),
+              ),
+            ],
+            draft: ProfileDraft.defaults(),
+          ),
+        ),
+      );
+
+      await controller.initialize();
+      await tester.pumpWidget(MobileShellApp(controller: controller));
+      await tester.pumpAndSettle();
+
+      final profileWorkspaceScrollable = _profileWorkspaceScrollable();
+      await tester.scrollUntilVisible(
+        find.widgetWithText(ChoiceChip, 'Managed provider'),
+        240,
+        scrollable: profileWorkspaceScrollable,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Provider mode'), findsOneWidget);
+      expect(
+        find.widgetWithText(ChoiceChip, 'Managed provider'),
+        findsOneWidget,
+      );
+      expect(
+        find.widgetWithText(ChoiceChip, 'Custom provider'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Managed provider'));
+      await tester.pumpAndSettle();
+
+      expect(controller.draft.providerBinding.isManaged, isTrue);
+      expect(
+        controller.draft.providerBinding.managedProviderId,
+        'provider-config-1',
+      );
+
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Custom provider'));
+      await tester.pumpAndSettle();
+
+      expect(controller.draft.providerBinding.isManaged, isFalse);
+    },
+  );
 }
 
 Finder _workflowScrollable() => find.byType(Scrollable).first;
+
+Finder _managedProviderWorkspaceScrollable() {
+  return find
+      .descendant(
+        of: find.byKey(
+          const ValueKey<String>('managed-provider-workspace-scroll'),
+        ),
+        matching: find.byType(Scrollable),
+      )
+      .first;
+}
+
+Finder _profileWorkspaceScrollable() {
+  return _workflowScrollable();
+}
 
 const HostInfo _readyHostInfo = HostInfo(
   contractVersion: '1',

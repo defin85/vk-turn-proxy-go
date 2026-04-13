@@ -392,17 +392,17 @@ class _ProviderConfigLibrarySection extends StatelessWidget {
                   ),
                 ),
                 FilledButton.tonal(
-                  key: const ValueKey<String>('provider-config-create-button'),
+                  key: const ValueKey<String>('managed-provider-create-button'),
                   onPressed: controller.busy
                       ? null
                       : controller.resetManagedProviderDraft,
-                  child: const Text('New'),
+                  child: const Text('New record'),
                 ),
               ],
             ),
             const SizedBox(height: 6),
             Text(
-              'Managed provider records stay separate from profiles and prompt-only runtime input.',
+              'App-owned catalog-backed managed records stay separate from profiles and prompt-only runtime input.',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -410,7 +410,7 @@ class _ProviderConfigLibrarySection extends StatelessWidget {
             const SizedBox(height: 12),
             if (controller.managedProviders.isEmpty)
               Text(
-                'No managed providers yet.',
+                'No managed records yet.',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -431,7 +431,7 @@ class _ProviderConfigLibrarySection extends StatelessWidget {
                     borderRadius: BorderRadius.circular(14),
                     child: InkWell(
                       key: ValueKey<String>(
-                        'provider-config-item-${config.id}',
+                        'managed-provider-item-${config.id}',
                       ),
                       borderRadius: BorderRadius.circular(14),
                       onTap: () => controller.selectManagedProvider(config.id),
@@ -460,11 +460,28 @@ class _ProviderConfigLibrarySection extends StatelessWidget {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              config.provider,
+                              supportedProviderDefinitionFor(
+                                        config.provider,
+                                      )?.title ==
+                                      null
+                                  ? config.provider
+                                  : 'Provider family: ${supportedProviderDefinitionFor(config.provider)!.title}',
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: theme.colorScheme.onSurfaceVariant,
                               ),
                             ),
+                            if (supportedProviderDefinitionFor(
+                                  config.provider,
+                                ) !=
+                                null) ...<Widget>[
+                              const SizedBox(height: 4),
+                              Text(
+                                'App-owned managed record',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
                             if (config
                                 .availability
                                 .message

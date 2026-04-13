@@ -166,6 +166,48 @@ void main() {
     },
   );
 
+  testWidgets(
+    'desktop shell surfaces incompatible host state from the shell bar',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1600, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      const incompatibleMessage =
+          'Host contract 2 is incompatible with GUI contract 1. Update the desktop bundle.';
+      final controller = DesktopShellController(
+        api: _FakeControlPlaneApi(),
+        supervisor: const _FakeHostSupervisor(
+          result: HostConnectionResult(
+            state: HostLifecycleState.incompatible,
+            message: incompatibleMessage,
+          ),
+        ),
+        stateStore: const _InMemoryShellStateStore(),
+        appBuild: _testGuiBuild,
+      );
+
+      await controller.initialize();
+      await tester.pumpWidget(
+        MaterialApp(home: DashboardPage(controller: controller)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(controller.status, ShellStatus.blocked);
+      expect(controller.hostConnection?.state, HostLifecycleState.incompatible);
+      expect(find.text('Local host blocked'), findsOneWidget);
+      expect(find.textContaining('Update the desktop bundle'), findsWidgets);
+      expect(
+        find.byKey(const ValueKey<String>('desktop-open-diagnostics-button')),
+        findsOneWidget,
+      );
+      expect(find.text('Profile workspace'), findsOneWidget);
+
+      controller.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   testWidgets('desktop shell keeps saved-profile navigation separate', (
     WidgetTester tester,
   ) async {
@@ -1453,16 +1495,22 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
 }
 
 class _FakeHostSupervisor implements HostSupervisor {
+  const _FakeHostSupervisor({
+    this.result = const HostConnectionResult(
+      state: HostLifecycleState.ready,
+      message: 'Connected to local host 127.0.0.1:7777',
+      info: _readyHostInfo,
+    ),
+  });
+
+  final HostConnectionResult result;
+
   @override
   Future<void> dispose() async {}
 
   @override
   Future<HostConnectionResult> ensureReady() async {
-    return const HostConnectionResult(
-      state: HostLifecycleState.ready,
-      message: 'Connected to local host 127.0.0.1:7777',
-      info: _readyHostInfo,
-    );
+    return result;
   }
 }
 
