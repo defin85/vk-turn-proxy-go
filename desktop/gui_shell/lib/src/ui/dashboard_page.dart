@@ -8,227 +8,120 @@ import 'package:gui_shell/src/ui/profile_library_panel.dart';
 import 'package:gui_shell/src/ui/provider_config_editor.dart';
 import 'package:gui_shell/src/ui/profile_editor.dart';
 
-class DashboardPage extends StatelessWidget {
+class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key, required this.controller});
 
   final DesktopShellController controller;
 
   @override
+  State<DashboardPage> createState() => _DashboardPageState();
+}
+
+class _DashboardPageState extends State<DashboardPage> {
+  static const double _compactWidth = 1180;
+  static const double _persistentInspectorWidth = 1520;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  DesktopShellController get controller => widget.controller;
+
+  void _openNavigationDrawer() {
+    _scaffoldKey.currentState?.openDrawer();
+  }
+
+  void _openOverlayInspector(DesktopInspectorPane pane) {
+    controller.openInspector(pane: pane);
+    _scaffoldKey.currentState?.openEndDrawer();
+  }
+
+  void _handleInspectorAction({
+    required DesktopInspectorPane pane,
+    required bool persistent,
+  }) {
+    if (persistent) {
+      controller.toggleInspector(pane: pane);
+      return;
+    }
+    _openOverlayInspector(pane);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (BuildContext context, Widget? child) {
-        final theme = Theme.of(context);
-        final busy = controller.busy || controller.status != ShellStatus.ready;
-        final profileLibrary = ProfileLibraryPanel(
-          presets: controller.presetCatalog,
-          providerDescriptors: controller.providerDescriptors,
-          managedProviders: controller.managedProviders,
-          profiles: controller.profiles,
-          selectedManagedProviderId: controller.selectedManagedProviderId,
-          activeSurface: controller.workspaceSurface,
-          selectedProfileId: controller.selectedProfileId,
-          busy: busy,
-          onApplyPreset: controller.applyPreset,
-          onSelectManagedProvider: controller.selectManagedProvider,
-          onCreateManagedProvider: controller.resetManagedProviderDraft,
-          onSelectProfile: controller.selectProfile,
-          onCreateDraft: controller.resetDraft,
-        );
-        final profileWorkspace =
-            controller.workspaceSurface == DesktopWorkspaceSurface.profile
-            ? ProfileEditorPanel(
-                providerDescriptors: controller.providerDescriptors,
-                managedProviders: controller.managedProviders,
-                initialManagedProviderId:
-                    controller.draft.providerBinding.managedProviderId,
-                selectedProfileId: controller.selectedProfileId,
-                draft: controller.draft,
-                busy: busy,
-                onDraftChanged: controller.updateDraft,
-                onActivateManagedProviderMode:
-                    controller.activateManagedProviderMode,
-                onUseCustomProvider: controller.useCustomProviderForDraft,
-                onSave: controller.saveDraft,
-                onDelete: controller.deleteSelectedProfile,
-                onReset: controller.resetDraft,
-                onResolve: controller.startResolutionFromDraft,
-                onStart: controller.startSelectedProfile,
-              )
-            : ProviderConfigEditorPanel(
-                supportedProviders: controller.supportedProviderCatalog,
-                providerDescriptors: controller.providerDescriptors,
-                selectedManagedProviderId: controller.selectedManagedProviderId,
-                draft: controller.managedProviderDraft,
-                busy: busy,
-                onDraftChanged: controller.updateManagedProviderDraft,
-                onSave: controller.saveManagedProviderDraft,
-                onDelete: controller.deleteSelectedManagedProvider,
-                onReset: controller.resetManagedProviderDraft,
-                onApplyToProfileDraft: controller.useManagedProviderForDraft,
-              );
-        final hasLiveWork =
-            controller.resolutions.isNotEmpty || controller.sessions.isNotEmpty;
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final showCompactLayout = constraints.maxWidth < _compactWidth;
+        final showPersistentInspector =
+            constraints.maxWidth >= _persistentInspectorWidth;
+        final shellChromeListenable = Listenable.merge(<Listenable>[
+          controller.shellChromeRevision,
+          controller.workflowRevision,
+        ]);
 
         return Scaffold(
-          body: SafeArea(
-            child: LayoutBuilder(
-              builder: (BuildContext context, BoxConstraints rootConstraints) {
-                final compactHeading = rootConstraints.maxWidth >= 1180;
-
-                return Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        'Desktop control shell',
-                        style:
-                            (compactHeading
-                                    ? theme.textTheme.headlineMedium
-                                    : theme.textTheme.displaySmall)
-                                ?.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                  color: theme.colorScheme.primary,
-                                ),
-                      ),
-                      SizedBox(height: compactHeading ? 4 : 8),
-                      Text(
-                        'Profiles, sidecar supervision, challenge handoff, session states, and diagnostics without terminal-only workflows.',
-                        style:
-                            (compactHeading
-                                    ? theme.textTheme.bodyMedium
-                                    : theme.textTheme.bodyLarge)
-                                ?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                      ),
-                      SizedBox(height: compactHeading ? 14 : 20),
-                      _OperationalHeader(controller: controller),
-                      SizedBox(height: compactHeading ? 16 : 20),
-                      Expanded(
-                        child: LayoutBuilder(
-                          builder:
-                              (
-                                BuildContext context,
-                                BoxConstraints constraints,
-                              ) {
-                                if (constraints.maxWidth >= 1440) {
-                                  return Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: <Widget>[
-                                      SizedBox(
-                                        width: 300,
-                                        child: profileLibrary,
-                                      ),
-                                      const SizedBox(width: 20),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.stretch,
-                                          children: <Widget>[
-                                            Expanded(child: profileWorkspace),
-                                            if (hasLiveWork) ...<Widget>[
-                                              const SizedBox(height: 20),
-                                              SizedBox(
-                                                height: 360,
-                                                child: _ActivityWorkspace(
-                                                  controller: controller,
-                                                ),
-                                              ),
-                                            ],
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(width: 20),
-                                      SizedBox(
-                                        width: 360,
-                                        child: _SecondaryInspector(
-                                          controller: controller,
-                                        ),
-                                      ),
-                                    ],
-                                  );
-                                }
-
-                                if (constraints.maxWidth >= 1120) {
-                                  return Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: <Widget>[
-                                      SizedBox(
-                                        width: 280,
-                                        child: profileLibrary,
-                                      ),
-                                      const SizedBox(width: 20),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.stretch,
-                                          children: <Widget>[
-                                            Expanded(child: profileWorkspace),
-                                            if (hasLiveWork) ...<Widget>[
-                                              const SizedBox(height: 20),
-                                              SizedBox(
-                                                height: 320,
-                                                child: _ActivityWorkspace(
-                                                  controller: controller,
-                                                ),
-                                              ),
-                                            ],
-                                            const SizedBox(height: 20),
-                                            SizedBox(
-                                              height: 340,
-                                              child: _SecondaryInspector(
-                                                controller: controller,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  );
-                                }
-
-                                return SingleChildScrollView(
-                                  child: Column(
-                                    children: <Widget>[
-                                      SizedBox(
-                                        height: 260,
-                                        child: profileLibrary,
-                                      ),
-                                      const SizedBox(height: 20),
-                                      SizedBox(
-                                        height: 760,
-                                        child: profileWorkspace,
-                                      ),
-                                      if (hasLiveWork) ...<Widget>[
-                                        const SizedBox(height: 20),
-                                        SizedBox(
-                                          height: 420,
-                                          child: _ActivityWorkspace(
-                                            controller: controller,
-                                          ),
-                                        ),
-                                      ],
-                                      const SizedBox(height: 20),
-                                      SizedBox(
-                                        height: 420,
-                                        child: _SecondaryInspector(
-                                          controller: controller,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
-                        ),
-                      ),
-                    ],
+          key: _scaffoldKey,
+          drawer: showCompactLayout
+              ? Drawer(
+                  child: SafeArea(
+                    child: _CompactNavigationDrawer(controller: controller),
                   ),
-                );
-              },
+                )
+              : null,
+          endDrawer: showPersistentInspector
+              ? null
+              : SizedBox(
+                  width: 420,
+                  child: Drawer(
+                    child: SafeArea(
+                      child: AnimatedBuilder(
+                        animation: controller.inspectorRevision,
+                        builder: (BuildContext context, Widget? child) {
+                          return _InspectorSurface(
+                            controller: controller,
+                            compact: true,
+                            onClose: () {
+                              controller.closeInspector();
+                              Navigator.of(context).maybePop();
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+          body: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  AnimatedBuilder(
+                    animation: shellChromeListenable,
+                    builder: (BuildContext context, Widget? child) {
+                      return _DesktopShellBar(
+                        controller: controller,
+                        showNavigationButton: showCompactLayout,
+                        showPersistentInspector: showPersistentInspector,
+                        onOpenNavigation: _openNavigationDrawer,
+                        onOpenDiagnostics: () => _handleInspectorAction(
+                          pane: DesktopInspectorPane.diagnostics,
+                          persistent: showPersistentInspector,
+                        ),
+                        onOpenActivity: () => _handleInspectorAction(
+                          pane: DesktopInspectorPane.activity,
+                          persistent: showPersistentInspector,
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: _ShellBody(
+                      controller: controller,
+                      compactLayout: showCompactLayout,
+                      persistentInspector: showPersistentInspector,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -237,231 +130,578 @@ class DashboardPage extends StatelessWidget {
   }
 }
 
-class _OperationalHeader extends StatelessWidget {
-  const _OperationalHeader({required this.controller});
+class _ShellBody extends StatelessWidget {
+  const _ShellBody({
+    required this.controller,
+    required this.compactLayout,
+    required this.persistentInspector,
+  });
 
   final DesktopShellController controller;
+  final bool compactLayout;
+  final bool persistentInspector;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge(<Listenable>[
+        controller.workflowRevision,
+        controller.inspectorLayoutRevision,
+      ]),
+      builder: (BuildContext context, Widget? child) {
+        return LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints constraints) {
+            final workflowPane = AnimatedBuilder(
+              animation: controller.workflowRevision,
+              builder: (BuildContext context, Widget? child) {
+                final busy =
+                    controller.busy || controller.status != ShellStatus.ready;
+                return DesktopWorkflowPane(
+                  section: controller.activeSection,
+                  presets: controller.presetCatalog,
+                  providerDescriptors: controller.providerDescriptors,
+                  managedProviders: controller.managedProviders,
+                  profiles: controller.profiles,
+                  selectedProfileId: controller.selectedProfileId,
+                  selectedManagedProviderId:
+                      controller.selectedManagedProviderId,
+                  busy: busy,
+                  onApplyPreset: controller.applyPreset,
+                  onSelectManagedProvider: controller.selectManagedProvider,
+                  onCreateManagedProvider: controller.resetManagedProviderDraft,
+                  onSelectProfile: controller.selectProfile,
+                  onCreateDraft: controller.resetDraft,
+                );
+              },
+            );
+            final editorPane = AnimatedBuilder(
+              animation: controller.workflowRevision,
+              builder: (BuildContext context, Widget? child) {
+                final busy =
+                    controller.busy || controller.status != ShellStatus.ready;
+                return controller.activeSection ==
+                        DesktopShellSection.profileWorkflow
+                    ? ProfileEditorPanel(
+                        providerDescriptors: controller.providerDescriptors,
+                        managedProviders: controller.managedProviders,
+                        initialManagedProviderId:
+                            controller.draft.providerBinding.managedProviderId,
+                        selectedProfileId: controller.selectedProfileId,
+                        draft: controller.draft,
+                        busy: busy,
+                        onDraftChanged: controller.updateDraft,
+                        onActivateManagedProviderMode:
+                            controller.activateManagedProviderMode,
+                        onUseCustomProvider:
+                            controller.useCustomProviderForDraft,
+                        onSave: controller.saveDraft,
+                        onDelete: controller.deleteSelectedProfile,
+                        onReset: controller.resetDraft,
+                        onResolve: controller.startResolutionFromDraft,
+                        onStart: controller.startSelectedProfile,
+                      )
+                    : ProviderConfigEditorPanel(
+                        supportedProviders: controller.supportedProviderCatalog,
+                        providerDescriptors: controller.providerDescriptors,
+                        selectedManagedProviderId:
+                            controller.selectedManagedProviderId,
+                        draft: controller.managedProviderDraft,
+                        busy: busy,
+                        onDraftChanged: controller.updateManagedProviderDraft,
+                        onSave: controller.saveManagedProviderDraft,
+                        onDelete: controller.deleteSelectedManagedProvider,
+                        onReset: controller.resetManagedProviderDraft,
+                        onApplyToProfileDraft:
+                            controller.useManagedProviderForDraft,
+                      );
+              },
+            );
+
+            if (compactLayout) {
+              final workflowHeight = constraints.maxHeight < 900
+                  ? 300.0
+                  : 340.0;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  SizedBox(height: workflowHeight, child: workflowPane),
+                  const SizedBox(height: 16),
+                  Expanded(child: editorPane),
+                ],
+              );
+            }
+
+            final showExpandedPad = persistentInspector;
+            final showInspectorPane =
+                persistentInspector && controller.isInspectorOpen;
+
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                if (showExpandedPad)
+                  SizedBox(
+                    width: 360,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        AnimatedBuilder(
+                          animation: controller.workflowRevision,
+                          builder: (BuildContext context, Widget? child) {
+                            return _ExpandedNavigationPad(
+                              controller: controller,
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        Expanded(child: workflowPane),
+                      ],
+                    ),
+                  )
+                else ...<Widget>[
+                  AnimatedBuilder(
+                    animation: controller.workflowRevision,
+                    builder: (BuildContext context, Widget? child) {
+                      return _DesktopSectionRail(controller: controller);
+                    },
+                  ),
+                  const SizedBox(width: 16),
+                  SizedBox(width: 320, child: workflowPane),
+                ],
+                const SizedBox(width: 20),
+                Expanded(child: editorPane),
+                if (showInspectorPane) ...<Widget>[
+                  const SizedBox(width: 20),
+                  SizedBox(
+                    width: 380,
+                    child: AnimatedBuilder(
+                      animation: controller.inspectorRevision,
+                      builder: (BuildContext context, Widget? child) {
+                        return _InspectorSurface(
+                          controller: controller,
+                          compact: false,
+                          onClose: controller.closeInspector,
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _DesktopShellBar extends StatelessWidget {
+  const _DesktopShellBar({
+    required this.controller,
+    required this.showNavigationButton,
+    required this.showPersistentInspector,
+    required this.onOpenNavigation,
+    required this.onOpenDiagnostics,
+    required this.onOpenActivity,
+  });
+
+  final DesktopShellController controller;
+  final bool showNavigationButton;
+  final bool showPersistentInspector;
+  final VoidCallback onOpenNavigation;
+  final VoidCallback onOpenDiagnostics;
+  final VoidCallback onOpenActivity;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final connection = controller.hostConnection;
     final hostInfo = connection?.info;
-    final status = controller.status;
-    final title = switch (status) {
+    final statusTitle = switch (controller.status) {
       ShellStatus.booting => 'Connecting to local host',
       ShellStatus.ready => 'Local host ready',
       ShellStatus.blocked => 'Local host blocked',
     };
     final detail =
         connection?.message ??
-        switch (status) {
+        switch (controller.status) {
           ShellStatus.booting =>
             'Starting local host and negotiating capabilities.',
           ShellStatus.ready => 'Connected to local host.',
           ShellStatus.blocked => 'Waiting for local host negotiation.',
         };
-    final color = switch (connection?.state) {
-      HostLifecycleState.ready => const Color(0xFFDEF2E1),
-      HostLifecycleState.incompatible => const Color(0xFFFFE5CC),
-      HostLifecycleState.failed => const Color(0xFFFFE0DF),
-      _ => const Color(0xFFE5ECF6),
+    final tone = switch (connection?.state) {
+      HostLifecycleState.ready => const Color(0xFFEEF7EC),
+      HostLifecycleState.incompatible => const Color(0xFFFFF1D6),
+      HostLifecycleState.failed => const Color(0xFFFFE7E3),
+      _ => const Color(0xFFEAF0F7),
     };
-    final tunnelSummary = _platformTunnelHeaderSummary(controller);
-    final tunnelModes = controller.platformTunnels.length;
     final readyTunnelModes = controller.platformTunnels
         .where((PlatformTunnelCapability capability) => capability.available)
         .length;
+    final tunnelModes = controller.platformTunnels.length;
+    final stacked = MediaQuery.sizeOf(context).width < 1320;
 
-    return Card(
-      color: color,
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: LayoutBuilder(
-          builder: (BuildContext context, BoxConstraints constraints) {
-            final stacked = constraints.maxWidth < 1100;
-            final hostSummary = Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  title,
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(detail),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: <Widget>[
-                    _Tag(
-                      label: 'GUI ${controller.appBuild.shortLabel}',
-                      dense: false,
-                    ),
-                    if (hostInfo != null)
-                      _Tag(label: 'Host ${hostInfo.build.shortLabel}'),
-                    if (hostInfo != null)
-                      _Tag(label: 'Contract ${hostInfo.contractVersion}'),
-                    if (connection?.launched == true) _Tag(label: 'launched'),
-                    if (connection?.launchSpec != null)
-                      _Tag(label: connection!.launchSpec!.description),
-                  ],
-                ),
-              ],
-            );
-            final operationsAside = Column(
-              crossAxisAlignment: stacked
-                  ? CrossAxisAlignment.start
-                  : CrossAxisAlignment.end,
-              children: <Widget>[
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.66),
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: stacked
-                        ? CrossAxisAlignment.start
-                        : CrossAxisAlignment.end,
-                    children: <Widget>[
-                      Text(
-                        readyTunnelModes > 0
-                            ? '$readyTunnelModes/$tunnelModes tunnel modes ready'
-                            : 'Platform tunnel summary',
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        tunnelSummary,
-                        textAlign: stacked ? TextAlign.start : TextAlign.end,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  alignment: stacked ? WrapAlignment.start : WrapAlignment.end,
-                  children: <Widget>[
-                    FilledButton.tonal(
-                      onPressed: controller.busy
-                          ? null
-                          : () => unawaited(controller.reconnect()),
-                      child: const Text('Reconnect'),
-                    ),
-                    FilledButton(
-                      onPressed:
-                          controller.busy ||
-                              controller.status != ShellStatus.ready
-                          ? null
-                          : () => unawaited(controller.refresh()),
-                      child: const Text('Refresh'),
-                    ),
-                  ],
-                ),
-              ],
-            );
+    final summary = Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            readyTunnelModes > 0
+                ? '$readyTunnelModes/$tunnelModes tunnel modes ready'
+                : 'Platform tunnel summary',
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _platformTunnelHeaderSummary(controller),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
 
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                if (stacked)
-                  Column(
+    final actions = Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      alignment: stacked ? WrapAlignment.start : WrapAlignment.end,
+      children: <Widget>[
+        if (showNavigationButton)
+          IconButton.filledTonal(
+            key: const ValueKey<String>('desktop-navigation-drawer-button'),
+            onPressed: onOpenNavigation,
+            icon: const Icon(Icons.menu),
+            tooltip: 'Open workflows',
+          ),
+        FilledButton.tonal(
+          key: const ValueKey<String>('desktop-open-diagnostics-button'),
+          onPressed: onOpenDiagnostics,
+          child: const Text('Diagnostics'),
+        ),
+        FilledButton.tonal(
+          key: const ValueKey<String>('desktop-open-activity-button'),
+          onPressed: controller.hasLiveWork ? onOpenActivity : null,
+          child: Text(
+            controller.hasLiveWork
+                ? 'Live work (${controller.resolutions.length + controller.sessions.length})'
+                : 'Live work',
+          ),
+        ),
+        FilledButton.tonal(
+          onPressed: controller.busy
+              ? null
+              : () => unawaited(controller.reconnect()),
+          child: const Text('Reconnect'),
+        ),
+        FilledButton(
+          onPressed: controller.busy || controller.status != ShellStatus.ready
+              ? null
+              : () => unawaited(controller.refresh()),
+          child: const Text('Refresh'),
+        ),
+      ],
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Card(
+          color: tone,
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: stacked
+                ? Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      hostSummary,
+                      _ShellBarSummary(
+                        controller: controller,
+                        title: statusTitle,
+                        detail: detail,
+                        hostInfo: hostInfo,
+                      ),
                       const SizedBox(height: 14),
-                      operationsAside,
+                      summary,
+                      const SizedBox(height: 12),
+                      actions,
                     ],
                   )
-                else
-                  Row(
+                : Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      Expanded(child: hostSummary),
-                      const SizedBox(width: 18),
-                      SizedBox(width: 320, child: operationsAside),
+                      Expanded(
+                        child: _ShellBarSummary(
+                          controller: controller,
+                          title: statusTitle,
+                          detail: detail,
+                          hostInfo: hostInfo,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      SizedBox(width: 300, child: summary),
+                      const SizedBox(width: 16),
+                      SizedBox(
+                        width: showPersistentInspector ? 328 : 260,
+                        child: Align(
+                          alignment: Alignment.topRight,
+                          child: actions,
+                        ),
+                      ),
                     ],
                   ),
-                if (controller.notice != null) ...<Widget>[
-                  const SizedBox(height: 14),
-                  _NoticeBanner(message: controller.notice!),
-                ],
-              ],
-            );
-          },
+          ),
         ),
-      ),
+        if (controller.notice != null) ...<Widget>[
+          const SizedBox(height: 12),
+          _NoticeBanner(message: controller.notice!),
+        ],
+      ],
     );
   }
 }
 
-class _ActivityWorkspace extends StatelessWidget {
-  const _ActivityWorkspace({required this.controller});
+class _ShellBarSummary extends StatelessWidget {
+  const _ShellBarSummary({
+    required this.controller,
+    required this.title,
+    required this.detail,
+    required this.hostInfo,
+  });
+
+  final DesktopShellController controller;
+  final String title;
+  final String detail;
+  final HostInfo? hostInfo;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          'Desktop control shell',
+          style: theme.textTheme.labelLarge?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          title,
+          style: theme.textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(detail, style: theme.textTheme.bodyMedium),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: <Widget>[
+            _Tag(label: 'GUI ${controller.appBuild.shortLabel}'),
+            if (hostInfo != null)
+              _Tag(label: 'Host ${hostInfo!.build.shortLabel}'),
+            if (hostInfo != null)
+              _Tag(label: 'Contract ${hostInfo!.contractVersion}'),
+            if (controller.hostConnection?.launched == true)
+              const _Tag(label: 'launched'),
+            if (controller.hostConnection?.launchSpec != null)
+              _Tag(label: controller.hostConnection!.launchSpec!.description),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _CompactNavigationDrawer extends StatelessWidget {
+  const _CompactNavigationDrawer({required this.controller});
+
+  final DesktopShellController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return NavigationDrawer(
+      key: const ValueKey<String>('desktop-section-drawer'),
+      selectedIndex: _sectionIndex(controller.activeSection),
+      onDestinationSelected: (int index) {
+        Navigator.of(context).maybePop();
+        if (index == 0) {
+          controller.showProfileWorkflow();
+        } else {
+          controller.showProviderWorkflow();
+        }
+      },
+      children: const <Widget>[
+        Padding(
+          padding: EdgeInsets.fromLTRB(28, 20, 28, 12),
+          child: Text('Workflows'),
+        ),
+        NavigationDrawerDestination(
+          key: ValueKey<String>('desktop-section-profile'),
+          icon: Icon(Icons.fact_check_outlined),
+          label: Text('Profiles'),
+        ),
+        NavigationDrawerDestination(
+          key: ValueKey<String>('desktop-section-provider'),
+          icon: Icon(Icons.tune_outlined),
+          label: Text('Providers'),
+        ),
+      ],
+    );
+  }
+}
+
+class _DesktopSectionRail extends StatelessWidget {
+  const _DesktopSectionRail({required this.controller});
+
+  final DesktopShellController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return NavigationRail(
+      key: const ValueKey<String>('desktop-section-rail'),
+      selectedIndex: _sectionIndex(controller.activeSection),
+      labelType: NavigationRailLabelType.all,
+      onDestinationSelected: (int index) {
+        if (index == 0) {
+          controller.showProfileWorkflow();
+        } else {
+          controller.showProviderWorkflow();
+        }
+      },
+      destinations: const <NavigationRailDestination>[
+        NavigationRailDestination(
+          icon: Icon(Icons.fact_check_outlined),
+          label: Text('Profiles'),
+        ),
+        NavigationRailDestination(
+          icon: Icon(Icons.tune_outlined),
+          label: Text('Providers'),
+        ),
+      ],
+    );
+  }
+}
+
+class _ExpandedNavigationPad extends StatelessWidget {
+  const _ExpandedNavigationPad({required this.controller});
 
   final DesktopShellController controller;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final initialIndex =
-        controller.sessions.isNotEmpty &&
-            (controller.selectedSessionId != null ||
-                controller.resolutions.isEmpty)
-        ? 1
-        : 0;
-
-    return DefaultTabController(
-      key: ValueKey<String>(
-        'activity-${controller.resolutions.length}-${controller.sessions.length}-${controller.selectedResolutionId ?? 'none'}-${controller.selectedSessionId ?? 'none'}',
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              'Workflows',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Switch between the profile task flow and the app-owned managed-provider flow.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _SectionListTile(
+              key: const ValueKey<String>('desktop-section-profile'),
+              icon: Icons.fact_check_outlined,
+              title: 'Profiles',
+              subtitle: 'Saved profiles and active draft work.',
+              selected:
+                  controller.activeSection ==
+                  DesktopShellSection.profileWorkflow,
+              onTap: controller.showProfileWorkflow,
+            ),
+            const SizedBox(height: 8),
+            _SectionListTile(
+              key: const ValueKey<String>('desktop-section-provider'),
+              icon: Icons.tune_outlined,
+              title: 'Providers',
+              subtitle: 'Managed records and preset seeds.',
+              selected:
+                  controller.activeSection ==
+                  DesktopShellSection.providerWorkflow,
+              onTap: controller.showProviderWorkflow,
+            ),
+          ],
+        ),
       ),
-      length: 2,
-      initialIndex: initialIndex,
-      child: Card(
+    );
+  }
+}
+
+class _SectionListTile extends StatelessWidget {
+  const _SectionListTile({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final background = selected
+        ? theme.colorScheme.primary.withValues(alpha: 0.1)
+        : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35);
+    return Material(
+      color: background,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
+          padding: const EdgeInsets.all(14),
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Text(
-                'Live work',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Inspect the currently selected resolution or session without dedicating the full desktop canvas to empty activity panels.',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 16),
-              TabBar(
-                isScrollable: true,
-                tabs: <Widget>[
-                  Tab(text: 'Resolutions (${controller.resolutions.length})'),
-                  Tab(text: 'Sessions (${controller.sessions.length})'),
-                ],
-              ),
-              const SizedBox(height: 16),
+              Icon(icon, size: 20),
+              const SizedBox(width: 12),
               Expanded(
-                child: TabBarView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    _ResolutionsPanel(controller: controller, embedded: true),
-                    _SessionsPanel(controller: controller, embedded: true),
+                    Text(
+                      title,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -473,49 +713,113 @@ class _ActivityWorkspace extends StatelessWidget {
   }
 }
 
-class _SecondaryInspector extends StatelessWidget {
-  const _SecondaryInspector({required this.controller});
+class _InspectorSurface extends StatelessWidget {
+  const _InspectorSurface({
+    required this.controller,
+    required this.compact,
+    required this.onClose,
+  });
+
+  final DesktopShellController controller;
+  final bool compact;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      key: const ValueKey<String>('desktop-inspector-surface'),
+      child: Padding(
+        padding: EdgeInsets.all(compact ? 16 : 18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        'Inspector',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        controller.activeInspectorPane ==
+                                DesktopInspectorPane.diagnostics
+                            ? 'Diagnostics and platform tunnel detail stay secondary to the main task canvas.'
+                            : 'Live resolutions and sessions stay available on demand without reclaiming the full shell.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  key: const ValueKey<String>('desktop-inspector-close-button'),
+                  onPressed: onClose,
+                  icon: const Icon(Icons.close),
+                  tooltip: 'Close inspector',
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SegmentedButton<DesktopInspectorPane>(
+              segments: const <ButtonSegment<DesktopInspectorPane>>[
+                ButtonSegment<DesktopInspectorPane>(
+                  value: DesktopInspectorPane.diagnostics,
+                  label: Text('Diagnostics'),
+                  icon: Icon(Icons.medical_services_outlined),
+                ),
+                ButtonSegment<DesktopInspectorPane>(
+                  value: DesktopInspectorPane.activity,
+                  label: Text('Live work'),
+                  icon: Icon(Icons.stream_outlined),
+                ),
+              ],
+              selected: <DesktopInspectorPane>{controller.activeInspectorPane},
+              onSelectionChanged: (Set<DesktopInspectorPane> selection) {
+                if (selection.isNotEmpty) {
+                  controller.openInspector(pane: selection.first);
+                }
+              },
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child:
+                  controller.activeInspectorPane ==
+                      DesktopInspectorPane.diagnostics
+                  ? _DiagnosticsInspectorBody(controller: controller)
+                  : _ActivityInspectorBody(controller: controller),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DiagnosticsInspectorBody extends StatelessWidget {
+  const _DiagnosticsInspectorBody({required this.controller});
 
   final DesktopShellController controller;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return DefaultTabController(
       length: 2,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    'Diagnostics',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Secondary support surfaces stay here: typed events and detailed platform-tunnel startup evidence.',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const TabBar(
-                    tabs: <Widget>[
-                      Tab(text: 'Events'),
-                      Tab(text: 'Tunnel detail'),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+          const TabBar(
+            tabs: <Widget>[
+              Tab(text: 'Events'),
+              Tab(text: 'Tunnel detail'),
+            ],
           ),
           const SizedBox(height: 12),
           Expanded(
@@ -523,6 +827,50 @@ class _SecondaryInspector extends StatelessWidget {
               children: <Widget>[
                 _EventsPanel(controller: controller),
                 _PlatformTunnelPanel(controller: controller, compact: false),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActivityInspectorBody extends StatelessWidget {
+  const _ActivityInspectorBody({required this.controller});
+
+  final DesktopShellController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final initialIndex =
+        controller.sessions.isNotEmpty &&
+            (controller.selectedSessionId != null ||
+                controller.resolutions.isEmpty)
+        ? 1
+        : 0;
+    return DefaultTabController(
+      key: ValueKey<String>(
+        'activity-${controller.resolutions.length}-${controller.sessions.length}-${controller.selectedResolutionId ?? 'none'}-${controller.selectedSessionId ?? 'none'}',
+      ),
+      length: 2,
+      initialIndex: initialIndex,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          TabBar(
+            isScrollable: true,
+            tabs: <Widget>[
+              Tab(text: 'Resolutions (${controller.resolutions.length})'),
+              Tab(text: 'Sessions (${controller.sessions.length})'),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: TabBarView(
+              children: <Widget>[
+                _ResolutionsPanel(controller: controller, embedded: false),
+                _SessionsPanel(controller: controller, embedded: false),
               ],
             ),
           ),
@@ -1554,26 +1902,19 @@ class _ResolutionStateChip extends StatelessWidget {
 }
 
 class _Tag extends StatelessWidget {
-  const _Tag({required this.label, this.dense = false});
+  const _Tag({required this.label});
 
   final String label;
-  final bool dense;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: dense ? 10 : 12,
-        vertical: dense ? 4 : 6,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.65),
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Text(
-        label,
-        style: dense ? Theme.of(context).textTheme.bodySmall : null,
-      ),
+      child: Text(label),
     );
   }
 }
@@ -1599,6 +1940,13 @@ class _NoticeBanner extends StatelessWidget {
       ),
     );
   }
+}
+
+int _sectionIndex(DesktopShellSection section) {
+  return switch (section) {
+    DesktopShellSection.profileWorkflow => 0,
+    DesktopShellSection.providerWorkflow => 1,
+  };
 }
 
 String _platformTunnelHeaderSummary(DesktopShellController controller) {

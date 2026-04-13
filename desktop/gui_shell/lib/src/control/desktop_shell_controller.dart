@@ -16,6 +16,10 @@ enum ShellStatus { booting, ready, blocked }
 
 enum DesktopWorkspaceSurface { profile, providerConfig, provider }
 
+enum DesktopShellSection { profileWorkflow, providerWorkflow }
+
+enum DesktopInspectorPane { diagnostics, activity }
+
 abstract class BrowserLauncher {
   Future<bool> open(String url);
 }
@@ -73,6 +77,10 @@ class DesktopShellController extends ChangeNotifier {
   final DesktopShellStateStore _stateStore;
   final DateTime Function() _clock;
   final BuildIdentity appBuild;
+  final ValueNotifier<int> shellChromeRevision = ValueNotifier<int>(0);
+  final ValueNotifier<int> workflowRevision = ValueNotifier<int>(0);
+  final ValueNotifier<int> inspectorLayoutRevision = ValueNotifier<int>(0);
+  final ValueNotifier<int> inspectorRevision = ValueNotifier<int>(0);
 
   ShellStatus status = ShellStatus.booting;
   HostConnectionResult? hostConnection;
@@ -85,7 +93,9 @@ class DesktopShellController extends ChangeNotifier {
   List<EventRecord> events = const <EventRecord>[];
   ProfileDraft draft = ProfileDraft.defaults();
   ManagedProviderDraft managedProviderDraft = ManagedProviderDraft.defaults();
-  DesktopWorkspaceSurface workspaceSurface = DesktopWorkspaceSurface.profile;
+  DesktopShellSection activeSection = DesktopShellSection.profileWorkflow;
+  DesktopInspectorPane activeInspectorPane = DesktopInspectorPane.diagnostics;
+  bool isInspectorOpen = false;
   RuntimeDefaults materializeDefaults = const RuntimeDefaults(
     listenAddress: '127.0.0.1:9001',
     peerAddress: '127.0.0.1:56000',
@@ -155,6 +165,13 @@ class DesktopShellController extends ChangeNotifier {
   List<ManagedProviderRecord> get availableProviderConfigsForDraft =>
       availableManagedProvidersForDraft;
 
+  DesktopWorkspaceSurface get workspaceSurface =>
+      activeSection == DesktopShellSection.providerWorkflow
+      ? DesktopWorkspaceSurface.providerConfig
+      : DesktopWorkspaceSurface.profile;
+
+  bool get hasLiveWork => resolutions.isNotEmpty || sessions.isNotEmpty;
+
   ProviderConfigDraft get providerConfigDraft =>
       ProviderConfigDraft.fromJson(managedProviderDraft.toJson());
 
@@ -162,6 +179,43 @@ class DesktopShellController extends ChangeNotifier {
 
   ProviderDescriptor? get activeProviderConfigDescriptor =>
       activeManagedProviderDescriptor;
+
+  void showProfileWorkflow() {
+    activeSection = DesktopShellSection.profileWorkflow;
+    _notifyWorkflow();
+  }
+
+  void showProviderWorkflow() {
+    activeSection = DesktopShellSection.providerWorkflow;
+    _notifyWorkflow();
+  }
+
+  void openInspector({
+    DesktopInspectorPane pane = DesktopInspectorPane.diagnostics,
+  }) {
+    final wasOpen = isInspectorOpen;
+    activeInspectorPane = pane;
+    isInspectorOpen = true;
+    _notifyInspector(layoutChanged: !wasOpen);
+  }
+
+  void closeInspector() {
+    if (!isInspectorOpen) {
+      return;
+    }
+    isInspectorOpen = false;
+    _notifyInspector(layoutChanged: true);
+  }
+
+  void toggleInspector({
+    DesktopInspectorPane pane = DesktopInspectorPane.diagnostics,
+  }) {
+    if (isInspectorOpen && activeInspectorPane == pane) {
+      closeInspector();
+      return;
+    }
+    openInspector(pane: pane);
+  }
 
   Future<void> initialize() async {
     await _restorePersistedState();
@@ -270,9 +324,6 @@ class DesktopShellController extends ChangeNotifier {
           )) {
         selectedManagedProviderId = null;
         managedProviderDraft = _defaultManagedProviderDraft();
-        if (workspaceSurface != DesktopWorkspaceSurface.profile) {
-          workspaceSurface = DesktopWorkspaceSurface.profile;
-        }
       }
 
       if (selectedSessionId == null && sessions.isNotEmpty) {
@@ -302,7 +353,7 @@ class DesktopShellController extends ChangeNotifier {
 
   void selectProfile(String profileId) {
     _restoredState = true;
-    workspaceSurface = DesktopWorkspaceSurface.profile;
+    activeSection = DesktopShellSection.profileWorkflow;
     selectedProfileId = profileId;
     final selected = profiles.firstWhere(
       (ProfileRecord profile) => profile.id == profileId,
@@ -317,36 +368,36 @@ class DesktopShellController extends ChangeNotifier {
     );
     materializeDefaults = RuntimeDefaults.fromProfileSpec(selected.spec);
     _scheduleStatePersist();
-    notifyListeners();
+    _notifyWorkflow();
   }
 
   void selectSession(String sessionId) {
     selectedSessionId = sessionId;
-    notifyListeners();
+    _notifyInspector();
   }
 
   void selectResolution(String resolutionId) {
     selectedResolutionId = resolutionId;
-    notifyListeners();
+    _notifyInspector();
   }
 
   void updateDraft(ProfileDraft nextDraft) {
     _restoredState = true;
-    workspaceSurface = DesktopWorkspaceSurface.profile;
+    activeSection = DesktopShellSection.profileWorkflow;
     draft = _normalizeDraft(nextDraft);
     materializeDefaults = RuntimeDefaults.fromProfileSpec(draft.spec);
     _scheduleStatePersist();
-    notifyListeners();
+    _notifyWorkflow();
   }
 
   void useCustomProviderForDraft() {
     _restoredState = true;
-    workspaceSurface = DesktopWorkspaceSurface.profile;
+    activeSection = DesktopShellSection.profileWorkflow;
     draft = _normalizeDraft(draft.asCustomProvider());
     selectedManagedProviderId = null;
     materializeDefaults = RuntimeDefaults.fromProfileSpec(draft.spec);
     _scheduleStatePersist();
-    notifyListeners();
+    _notifyWorkflow();
   }
 
   void activateManagedProviderMode({String? managedProviderId}) {
@@ -367,16 +418,16 @@ class DesktopShellController extends ChangeNotifier {
 
   void resetDraft() {
     _restoredState = true;
-    workspaceSurface = DesktopWorkspaceSurface.profile;
+    activeSection = DesktopShellSection.profileWorkflow;
     selectedProfileId = null;
     draft = _defaultDraft();
     materializeDefaults = RuntimeDefaults.fromProfileSpec(draft.spec);
     _scheduleStatePersist();
-    notifyListeners();
+    _notifyWorkflow();
   }
 
   void selectManagedProvider(String providerId) {
-    workspaceSurface = DesktopWorkspaceSurface.providerConfig;
+    activeSection = DesktopShellSection.providerWorkflow;
     selectedManagedProviderId = providerId;
     final selected =
         managedProviderById(providerId) ??
@@ -384,7 +435,7 @@ class DesktopShellController extends ChangeNotifier {
     managedProviderDraft = _normalizeManagedProviderDraft(
       ManagedProviderDraft.fromRecord(selected),
     );
-    notifyListeners();
+    _notifyWorkflow();
   }
 
   void selectProviderConfig(String configId) {
@@ -392,9 +443,9 @@ class DesktopShellController extends ChangeNotifier {
   }
 
   void updateManagedProviderDraft(ManagedProviderDraft nextDraft) {
-    workspaceSurface = DesktopWorkspaceSurface.providerConfig;
+    activeSection = DesktopShellSection.providerWorkflow;
     managedProviderDraft = _normalizeManagedProviderDraft(nextDraft);
-    notifyListeners();
+    _notifyWorkflow();
   }
 
   void updateProviderConfigDraft(ProviderConfigDraft nextDraft) {
@@ -407,7 +458,7 @@ class DesktopShellController extends ChangeNotifier {
     String? preferredProvider,
     ProviderPreset? preset,
   }) {
-    workspaceSurface = DesktopWorkspaceSurface.providerConfig;
+    activeSection = DesktopShellSection.providerWorkflow;
     selectedManagedProviderId = null;
     managedProviderDraft = preset == null
         ? _defaultManagedProviderDraft(preferredProvider: preferredProvider)
@@ -417,7 +468,7 @@ class DesktopShellController extends ChangeNotifier {
               descriptor: descriptorForProvider(preset.provider),
             ),
           );
-    notifyListeners();
+    _notifyWorkflow();
   }
 
   void resetProviderConfigDraft({String? preferredProvider}) {
@@ -492,6 +543,7 @@ class DesktopShellController extends ChangeNotifier {
       managedProviders = _overlayManagedProviders(next);
       notice =
           'Saved managed provider ${saved.name.isEmpty ? saved.id : saved.name}.';
+      activeSection = DesktopShellSection.providerWorkflow;
       selectedManagedProviderId = saved.id;
       managedProviderDraft = ManagedProviderDraft.fromRecord(saved);
       _scheduleStatePersist();
@@ -538,7 +590,7 @@ class DesktopShellController extends ChangeNotifier {
       notice = 'Deleted managed provider $providerId.';
       selectedManagedProviderId = null;
       managedProviderDraft = _defaultManagedProviderDraft();
-      workspaceSurface = DesktopWorkspaceSurface.profile;
+      activeSection = DesktopShellSection.providerWorkflow;
       _scheduleStatePersist();
     });
   }
@@ -567,14 +619,14 @@ class DesktopShellController extends ChangeNotifier {
       _notify();
       return;
     }
-    workspaceSurface = DesktopWorkspaceSurface.profile;
+    activeSection = DesktopShellSection.profileWorkflow;
     draft = _normalizeDraft(draft.applyManagedProvider(provider));
     selectedManagedProviderId = managedProviderId;
     materializeDefaults = RuntimeDefaults.fromProfileSpec(draft.spec);
     notice =
         'Applied managed provider ${provider.name.isEmpty ? provider.id : provider.name} to the active profile draft.';
     _scheduleStatePersist();
-    _notify();
+    _notifyWorkflow();
   }
 
   void applyProviderConfigToDraft(String configId) {
@@ -585,7 +637,7 @@ class DesktopShellController extends ChangeNotifier {
     resetManagedProviderDraft(preset: preset);
     notice =
         'Seeded a new managed provider draft from the ${preset.title} preset.';
-    _notify();
+    _notifyWorkflow();
   }
 
   Future<void> startResolutionFromDraft() async {
@@ -829,6 +881,10 @@ class DesktopShellController extends ChangeNotifier {
     _persistTimer?.cancel();
     _pollTimer?.cancel();
     _eventSubscription?.cancel();
+    shellChromeRevision.dispose();
+    workflowRevision.dispose();
+    inspectorLayoutRevision.dispose();
+    inspectorRevision.dispose();
     unawaited(supervisor.dispose());
     super.dispose();
   }
@@ -847,7 +903,7 @@ class DesktopShellController extends ChangeNotifier {
         }
         _applyEvent(event);
         _scheduleRefresh();
-        _notify();
+        _notifyInspector();
       },
       onError: (Object error) {
         if (_suppressEventStreamClosure || _disposed) {
@@ -1337,7 +1393,33 @@ class DesktopShellController extends ChangeNotifier {
     if (_disposed) {
       return;
     }
+    _bump(shellChromeRevision);
+    _bump(workflowRevision);
+    _bump(inspectorRevision);
     notifyListeners();
+  }
+
+  void _notifyWorkflow() {
+    if (_disposed) {
+      return;
+    }
+    _bump(workflowRevision);
+    notifyListeners();
+  }
+
+  void _notifyInspector({bool layoutChanged = false}) {
+    if (_disposed) {
+      return;
+    }
+    if (layoutChanged) {
+      _bump(inspectorLayoutRevision);
+    }
+    _bump(inspectorRevision);
+    notifyListeners();
+  }
+
+  void _bump(ValueNotifier<int> notifier) {
+    notifier.value = notifier.value + 1;
   }
 }
 
