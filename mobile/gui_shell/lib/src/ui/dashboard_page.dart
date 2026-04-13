@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_models.dart';
 import 'package:mobile_gui_shell/src/control/mobile_host_bridge.dart';
 import 'package:mobile_gui_shell/src/control/mobile_shell_controller.dart';
+import 'package:mobile_gui_shell/src/ui/owned_browser_challenge.dart';
 import 'package:mobile_gui_shell/src/ui/profile_editor.dart';
 import 'package:mobile_gui_shell/src/ui/provider_config_editor.dart';
 
@@ -14,9 +15,14 @@ enum _ActivitySurface { resolutions, sessions }
 enum _DiagnosticsSurface { overview, events }
 
 class DashboardPage extends StatefulWidget {
-  const DashboardPage({super.key, required this.controller});
+  const DashboardPage({
+    super.key,
+    required this.controller,
+    required this.ownedBrowserChallengeRunner,
+  });
 
   final MobileShellController controller;
+  final OwnedBrowserChallengeRunner ownedBrowserChallengeRunner;
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -26,6 +32,49 @@ class _DashboardPageState extends State<DashboardPage> {
   _DashboardDestination _destination = _DashboardDestination.workflow;
   _ActivitySurface _activitySurface = _ActivitySurface.resolutions;
   _DiagnosticsSurface _diagnosticsSurface = _DiagnosticsSurface.overview;
+
+  Future<void> _launchChallengeSurface(ChallengeRecord challenge) async {
+    if (!widget.controller.challengeRequiresOwnedBrowser(challenge)) {
+      await widget.controller.openChallengeInBrowser(challenge);
+      return;
+    }
+    try {
+      final browserContinuation = await widget.ownedBrowserChallengeRunner.run(
+        context,
+        challenge,
+      );
+      if (browserContinuation == null) {
+        widget.controller.publishNotice(
+          'Cancelled the in-app browser continuation for challenge ${challenge.id}.',
+        );
+        return;
+      }
+      await widget.controller.continueOwnedBrowserChallenge(
+        challenge.id,
+        browserContinuation,
+      );
+    } catch (error) {
+      widget.controller.publishNotice(
+        'In-app browser continuation failed: $error',
+      );
+    }
+  }
+
+  String _openChallengeLabel(ChallengeRecord? challenge) {
+    if (challenge == null) {
+      return 'Open browser';
+    }
+    return widget.controller.challengeRequiresOwnedBrowser(challenge)
+        ? 'Continue in app'
+        : 'Open browser';
+  }
+
+  bool _showsManualChallengeContinue(ChallengeRecord? challenge) {
+    if (challenge == null) {
+      return false;
+    }
+    return !widget.controller.challengeRequiresOwnedBrowser(challenge);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +102,9 @@ class _DashboardPageState extends State<DashboardPage> {
                 _ActivityPage(
                   controller: widget.controller,
                   surface: _activitySurface,
+                  onLaunchChallengeSurface: _launchChallengeSurface,
+                  openChallengeLabel: _openChallengeLabel,
+                  showsManualChallengeContinue: _showsManualChallengeContinue,
                   onSurfaceChanged: (_ActivitySurface surface) {
                     setState(() {
                       _activitySurface = surface;
@@ -469,11 +521,18 @@ class _ActivityPage extends StatelessWidget {
   const _ActivityPage({
     required this.controller,
     required this.surface,
+    required this.onLaunchChallengeSurface,
+    required this.openChallengeLabel,
+    required this.showsManualChallengeContinue,
     required this.onSurfaceChanged,
   });
 
   final MobileShellController controller;
   final _ActivitySurface surface;
+  final Future<void> Function(ChallengeRecord challenge)
+  onLaunchChallengeSurface;
+  final String Function(ChallengeRecord? challenge) openChallengeLabel;
+  final bool Function(ChallengeRecord? challenge) showsManualChallengeContinue;
   final ValueChanged<_ActivitySurface> onSurfaceChanged;
 
   @override
@@ -518,9 +577,15 @@ class _ActivityPage extends StatelessWidget {
             child: switch (surface) {
               _ActivitySurface.resolutions => _ResolutionsPanel(
                 controller: controller,
+                onLaunchChallengeSurface: onLaunchChallengeSurface,
+                openChallengeLabel: openChallengeLabel,
+                showsManualChallengeContinue: showsManualChallengeContinue,
               ),
               _ActivitySurface.sessions => _SessionsPanel(
                 controller: controller,
+                onLaunchChallengeSurface: onLaunchChallengeSurface,
+                openChallengeLabel: openChallengeLabel,
+                showsManualChallengeContinue: showsManualChallengeContinue,
               ),
             },
           ),
@@ -882,9 +947,18 @@ class _HostBanner extends StatelessWidget {
 }
 
 class _ResolutionsPanel extends StatelessWidget {
-  const _ResolutionsPanel({required this.controller});
+  const _ResolutionsPanel({
+    required this.controller,
+    required this.onLaunchChallengeSurface,
+    required this.openChallengeLabel,
+    required this.showsManualChallengeContinue,
+  });
 
   final MobileShellController controller;
+  final Future<void> Function(ChallengeRecord challenge)
+  onLaunchChallengeSurface;
+  final String Function(ChallengeRecord? challenge) openChallengeLabel;
+  final bool Function(ChallengeRecord? challenge) showsManualChallengeContinue;
 
   @override
   Widget build(BuildContext context) {
@@ -938,10 +1012,11 @@ class _ResolutionsPanel extends StatelessWidget {
                               controller.selectResolution(resolution.id),
                           onOpenChallenge: challenge == null
                               ? null
-                              : () => controller.openChallengeInBrowser(
-                                  challenge,
-                                ),
-                          onContinueChallenge: challenge == null
+                              : () => onLaunchChallengeSurface(challenge),
+                          openChallengeLabel: openChallengeLabel(challenge),
+                          onContinueChallenge:
+                              challenge == null ||
+                                  !showsManualChallengeContinue(challenge)
                               ? null
                               : () =>
                                     controller.continueChallenge(challenge.id),
@@ -1180,6 +1255,7 @@ class _ResolutionCard extends StatelessWidget {
     required this.selected,
     required this.onSelect,
     required this.onOpenChallenge,
+    required this.openChallengeLabel,
     required this.onContinueChallenge,
     required this.onCancelChallenge,
     required this.onMaterialize,
@@ -1197,6 +1273,7 @@ class _ResolutionCard extends StatelessWidget {
   final bool selected;
   final VoidCallback onSelect;
   final Future<void> Function()? onOpenChallenge;
+  final String openChallengeLabel;
   final Future<void> Function()? onContinueChallenge;
   final Future<void> Function()? onCancelChallenge;
   final Future<void> Function()? onMaterialize;
@@ -1316,7 +1393,7 @@ class _ResolutionCard extends StatelessWidget {
                               onPressed: busy
                                   ? null
                                   : () => unawaited(onOpenChallenge!.call()),
-                              child: const Text('Open browser'),
+                              child: Text(openChallengeLabel),
                             ),
                           if (onContinueChallenge != null)
                             FilledButton(
@@ -1450,9 +1527,18 @@ class _ResolutionCard extends StatelessWidget {
 }
 
 class _SessionsPanel extends StatelessWidget {
-  const _SessionsPanel({required this.controller});
+  const _SessionsPanel({
+    required this.controller,
+    required this.onLaunchChallengeSurface,
+    required this.openChallengeLabel,
+    required this.showsManualChallengeContinue,
+  });
 
   final MobileShellController controller;
+  final Future<void> Function(ChallengeRecord challenge)
+  onLaunchChallengeSurface;
+  final String Function(ChallengeRecord? challenge) openChallengeLabel;
+  final bool Function(ChallengeRecord? challenge) showsManualChallengeContinue;
 
   @override
   Widget build(BuildContext context) {
@@ -1501,10 +1587,11 @@ class _SessionsPanel extends StatelessWidget {
                               controller.exportDiagnostics(session.id),
                           onOpenChallenge: challenge == null
                               ? null
-                              : () => controller.openChallengeInBrowser(
-                                  challenge,
-                                ),
-                          onContinueChallenge: challenge == null
+                              : () => onLaunchChallengeSurface(challenge),
+                          openChallengeLabel: openChallengeLabel(challenge),
+                          onContinueChallenge:
+                              challenge == null ||
+                                  !showsManualChallengeContinue(challenge)
                               ? null
                               : () =>
                                     controller.continueChallenge(challenge.id),
@@ -1532,6 +1619,7 @@ class _SessionCard extends StatelessWidget {
     required this.onStop,
     required this.onExport,
     required this.onOpenChallenge,
+    required this.openChallengeLabel,
     required this.onContinueChallenge,
     required this.onCancelChallenge,
   });
@@ -1544,6 +1632,7 @@ class _SessionCard extends StatelessWidget {
   final Future<void> Function() onStop;
   final Future<void> Function() onExport;
   final Future<void> Function()? onOpenChallenge;
+  final String openChallengeLabel;
   final Future<void> Function()? onContinueChallenge;
   final Future<void> Function()? onCancelChallenge;
 
@@ -1634,7 +1723,7 @@ class _SessionCard extends StatelessWidget {
                               onPressed: busy
                                   ? null
                                   : () => unawaited(onOpenChallenge!.call()),
-                              child: const Text('Open browser'),
+                              child: Text(openChallengeLabel),
                             ),
                           if (onContinueChallenge != null)
                             FilledButton(

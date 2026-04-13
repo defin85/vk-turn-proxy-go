@@ -5,9 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 )
+
+type continueChallengeRequest struct {
+	BrowserContinuation *ChallengeContinuation `json:"browser_continuation,omitempty"`
+}
 
 func Handler(host *Host) http.Handler {
 	mux := http.NewServeMux()
@@ -357,9 +362,21 @@ func Handler(host *Host) http.Handler {
 			}
 			challengeID := strings.TrimSuffix(path, "/continue")
 			challengeID = strings.TrimSuffix(challengeID, "/")
-			challenge, err := host.ContinueChallenge(challengeID)
+			req, err := decodeContinueChallengeRequest(r.Body)
 			if err != nil {
-				writeNotFound(w, err)
+				writeError(w, http.StatusBadRequest, "invalid_json", err)
+				return
+			}
+			challenge, err := host.ContinueChallengeWithBrowserContinuation(
+				challengeID,
+				req.BrowserContinuation,
+			)
+			if err != nil {
+				if errors.Is(err, ErrChallengeNotFound) {
+					writeNotFound(w, err)
+					return
+				}
+				writeError(w, http.StatusBadRequest, "challenge_continue_invalid", err)
 				return
 			}
 			writeJSON(w, http.StatusOK, challenge)
@@ -427,6 +444,31 @@ func Handler(host *Host) http.Handler {
 	})
 
 	return mux
+}
+
+func decodeContinueChallengeRequest(
+	body io.ReadCloser,
+) (continueChallengeRequest, error) {
+	if body == nil {
+		return continueChallengeRequest{}, nil
+	}
+	defer body.Close()
+
+	decoder := json.NewDecoder(body)
+	var req continueChallengeRequest
+	if err := decoder.Decode(&req); err != nil {
+		if errors.Is(err, io.EOF) {
+			return continueChallengeRequest{}, nil
+		}
+		return continueChallengeRequest{}, err
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return continueChallengeRequest{}, errors.New("unexpected trailing JSON input")
+		}
+		return continueChallengeRequest{}, err
+	}
+	return req, nil
 }
 
 type errorResponse struct {

@@ -512,12 +512,11 @@ func (b *resolutionChallengeBroker) Handle(ctx context.Context, challenge provid
 		return errors.New("interactive provider challenge is required")
 	}
 
-	record := newChallengeRecord(
+	record := b.host.buildChallengeRecord(
 		b.host.newID(),
 		"",
 		b.resolutionID,
 		challenge,
-		b.host.now().UTC(),
 	)
 	b.host.recordResolutionChallenge(b.resolutionID, record)
 
@@ -526,7 +525,7 @@ func (b *resolutionChallengeBroker) Handle(ctx context.Context, challenge provid
 		b.host.completeChallenge(record.ID, ChallengeStatusFailed, err.Error())
 		return fmt.Errorf("interactive provider challenge aborted: %w", err)
 	}
-	if action == challengeActionCancel {
+	if action.kind == challengeActionCancelKind {
 		b.host.completeChallenge(record.ID, ChallengeStatusCancelled, "cancelled")
 		return errInteractiveChallengeCanceled
 	}
@@ -540,6 +539,43 @@ func (b *resolutionChallengeBroker) Continue(ctx context.Context, challenge prov
 		return nil, errors.New("interactive provider challenge is required")
 	}
 
+	completionMode, _, _ := challengeContractMetadataFromProviderMetadata(
+		challenge,
+		b.host.challengeMetadata(challenge),
+	)
+	if completionMode == ChallengeCompletionModeOwnedBrowserObserved {
+		record := b.host.buildChallengeRecord(
+			b.host.newID(),
+			"",
+			b.resolutionID,
+			challenge,
+		)
+		b.host.recordResolutionChallenge(b.resolutionID, record)
+
+		action, err := b.host.waitChallengeAction(ctx, record.ID)
+		if err != nil {
+			b.host.completeChallenge(record.ID, ChallengeStatusFailed, err.Error())
+			return nil, fmt.Errorf("interactive provider challenge aborted: %w", err)
+		}
+		if action.kind == challengeActionCancelKind {
+			b.host.completeChallenge(record.ID, ChallengeStatusCancelled, "cancelled")
+			return nil, errInteractiveChallengeCanceled
+		}
+
+		result, err := browserContinuationFromChallengeAction(
+			ctx,
+			challenge,
+			action,
+		)
+		if err != nil {
+			b.host.completeChallenge(record.ID, ChallengeStatusFailed, err.Error())
+			return nil, err
+		}
+
+		b.host.completeChallenge(record.ID, ChallengeStatusCompleted, "completed")
+		return result, nil
+	}
+
 	continuation, err := b.host.startContinuation(ctx, challenge)
 	if err != nil {
 		return nil, err
@@ -548,12 +584,11 @@ func (b *resolutionChallengeBroker) Continue(ctx context.Context, challenge prov
 		_ = continuation.Close()
 	}()
 
-	record := newChallengeRecord(
+	record := b.host.buildChallengeRecord(
 		b.host.newID(),
 		"",
 		b.resolutionID,
 		challenge,
-		b.host.now().UTC(),
 	)
 	b.host.recordResolutionChallenge(b.resolutionID, record)
 
@@ -562,7 +597,7 @@ func (b *resolutionChallengeBroker) Continue(ctx context.Context, challenge prov
 		b.host.completeChallenge(record.ID, ChallengeStatusFailed, err.Error())
 		return nil, fmt.Errorf("interactive provider challenge aborted: %w", err)
 	}
-	if action == challengeActionCancel {
+	if action.kind == challengeActionCancelKind {
 		b.host.completeChallenge(record.ID, ChallengeStatusCancelled, "cancelled")
 		return nil, errInteractiveChallengeCanceled
 	}

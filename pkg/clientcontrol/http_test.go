@@ -242,6 +242,141 @@ func TestHandlerChallengeIncludesCompletionMetadata(t *testing.T) {
 	}
 }
 
+func TestHandlerContinueChallengeAcceptsOwnedBrowserPayload(t *testing.T) {
+	host := New()
+	host.challenges["challenge-owned"] = &managedChallenge{
+		snapshot: Challenge{
+			ID:             "challenge-owned",
+			SessionID:      "session-1",
+			Provider:       "vk",
+			Stage:          "provider_resolve",
+			Kind:           "browser",
+			Status:         ChallengeStatusPending,
+			CompletionMode: ChallengeCompletionModeOwnedBrowserObserved,
+			OwnedBrowser: &ChallengeOwnedBrowserMetadata{
+				CookieURLs: []string{"https://login.vk.ru/"},
+			},
+			CreatedAt: time.Date(2026, 4, 13, 11, 0, 0, 0, time.UTC),
+			UpdatedAt: time.Date(2026, 4, 13, 11, 0, 0, 0, time.UTC),
+		},
+		actionCh: make(chan challengeAction, 1),
+	}
+	handler := Handler(host)
+
+	body, _ := json.Marshal(map[string]any{
+		"browser_continuation": map[string]any{
+			"cookies": []map[string]any{
+				{
+					"name":   "session",
+					"value":  "owned-session",
+					"domain": "login.vk.ru",
+					"path":   "/",
+				},
+			},
+		},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/challenges/challenge-owned/continue", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /v1/challenges/{id}/continue code = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var updated Challenge
+	if err := json.Unmarshal(rec.Body.Bytes(), &updated); err != nil {
+		t.Fatalf("decode challenge: %v", err)
+	}
+	if updated.Status != ChallengeStatusContinuing {
+		t.Fatalf("challenge status = %q, want continuing", updated.Status)
+	}
+
+	action := <-host.challenges["challenge-owned"].actionCh
+	if action.kind != challengeActionContinueKind {
+		t.Fatalf("action.kind = %v, want continue", action.kind)
+	}
+	if action.browserContinuation == nil || len(action.browserContinuation.Cookies) != 1 {
+		t.Fatalf("action.browser_continuation = %#v, want one cookie", action.browserContinuation)
+	}
+	if got := action.browserContinuation.Cookies[0].Value; got != "owned-session" {
+		t.Fatalf("browser continuation cookie value = %q, want owned-session", got)
+	}
+}
+
+func TestHandlerContinueChallengeRejectsInvalidBrowserContinuationPayloads(t *testing.T) {
+	host := New()
+	host.challenges["challenge-owned"] = &managedChallenge{
+		snapshot: Challenge{
+			ID:             "challenge-owned",
+			SessionID:      "session-1",
+			Status:         ChallengeStatusPending,
+			CompletionMode: ChallengeCompletionModeOwnedBrowserObserved,
+			OwnedBrowser: &ChallengeOwnedBrowserMetadata{
+				CookieURLs: []string{"https://login.vk.ru/"},
+			},
+			CreatedAt: time.Date(2026, 4, 13, 11, 0, 0, 0, time.UTC),
+			UpdatedAt: time.Date(2026, 4, 13, 11, 0, 0, 0, time.UTC),
+		},
+		actionCh: make(chan challengeAction, 1),
+	}
+	host.challenges["challenge-manual"] = &managedChallenge{
+		snapshot: Challenge{
+			ID:             "challenge-manual",
+			SessionID:      "session-1",
+			Status:         ChallengeStatusPending,
+			CompletionMode: ChallengeCompletionModeManualConfirm,
+			CreatedAt:      time.Date(2026, 4, 13, 11, 0, 0, 0, time.UTC),
+			UpdatedAt:      time.Date(2026, 4, 13, 11, 0, 0, 0, time.UTC),
+		},
+		actionCh: make(chan challengeAction, 1),
+	}
+	handler := Handler(host)
+
+	testCases := []struct {
+		name   string
+		path   string
+		body   string
+		target string
+	}{
+		{
+			name:   "owned browser requires payload",
+			path:   "/v1/challenges/challenge-owned/continue",
+			body:   "",
+			target: "challenge-owned",
+		},
+		{
+			name:   "manual confirm rejects payload",
+			path:   "/v1/challenges/challenge-manual/continue",
+			body:   `{"browser_continuation":{"cookies":[{"name":"session","value":"owned-session","domain":"login.vk.ru","path":"/"}]}}`,
+			target: "challenge-manual",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, tc.path, bytes.NewBufferString(tc.body))
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("POST %s code = %d body=%s", tc.path, rec.Code, rec.Body.String())
+			}
+
+			var payload map[string]any
+			if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+				t.Fatalf("decode error payload: %v", err)
+			}
+			if got := payload["code"]; got != "challenge_continue_invalid" {
+				t.Fatalf("error code = %v, want challenge_continue_invalid", got)
+			}
+
+			select {
+			case action := <-host.challenges[tc.target].actionCh:
+				t.Fatalf("unexpected challenge action = %#v", action)
+			default:
+			}
+		})
+	}
+}
+
 func TestHandlerProfileUpsertReturnsFieldAwareProviderSettingsFailure(t *testing.T) {
 	host := New(
 		withRegistry(provider.NewRegistry(fakeAdapter{

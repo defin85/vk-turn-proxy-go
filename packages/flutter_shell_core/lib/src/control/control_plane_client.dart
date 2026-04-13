@@ -41,7 +41,10 @@ abstract class ControlPlaneApi {
   Future<SessionRecord> startSession({String? profileId, ProfileSpec? spec});
   Future<SessionRecord> stopSession(String sessionId);
   Future<ChallengeRecord> challenge(String challengeId);
-  Future<ChallengeRecord> continueChallenge(String challengeId);
+  Future<ChallengeRecord> continueChallenge(
+    String challengeId, {
+    ChallengeContinuationSubmission? browserContinuation,
+  });
   Future<ChallengeRecord> cancelChallenge(String challengeId);
   Future<DiagnosticsBundle> diagnostics(String sessionId);
   Stream<EventRecord> events();
@@ -255,10 +258,18 @@ class ControlPlaneClient implements ControlPlaneApi {
   }
 
   @override
-  Future<ChallengeRecord> continueChallenge(String challengeId) async {
+  Future<ChallengeRecord> continueChallenge(
+    String challengeId, {
+    ChallengeContinuationSubmission? browserContinuation,
+  }) async {
     final payload = await _jsonRequest(
       'POST',
       '/v1/challenges/$challengeId/continue',
+      body: browserContinuation == null || browserContinuation.isEmpty
+          ? null
+          : <String, dynamic>{
+              'browser_continuation': browserContinuation.toJson(),
+            },
     );
     return ChallengeRecord.fromJson(payload);
   }

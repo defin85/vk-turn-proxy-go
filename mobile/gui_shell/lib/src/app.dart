@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_gui_shell/src/control/mobile_shell_controller.dart';
 import 'package:mobile_gui_shell/src/ui/dashboard_page.dart';
+import 'package:mobile_gui_shell/src/ui/owned_browser_challenge.dart';
 
 class MobileShellApp extends StatefulWidget {
-  const MobileShellApp({super.key, required this.controller});
+  const MobileShellApp({
+    super.key,
+    required this.controller,
+    this.ownedBrowserChallengeRunner =
+        const WebViewOwnedBrowserChallengeRunner(),
+  });
 
   final MobileShellController controller;
+  final OwnedBrowserChallengeRunner ownedBrowserChallengeRunner;
 
   @override
   State<MobileShellApp> createState() => _MobileShellAppState();
@@ -58,7 +65,10 @@ class _MobileShellAppState extends State<MobileShellApp>
           ),
         ),
       ),
-      home: DashboardPage(controller: widget.controller),
+      home: DashboardPage(
+        controller: widget.controller,
+        ownedBrowserChallengeRunner: widget.ownedBrowserChallengeRunner,
+      ),
     );
   }
 }

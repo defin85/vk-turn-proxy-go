@@ -71,41 +71,43 @@ const (
 )
 
 type hostConfig struct {
-	logger            *slog.Logger
-	registry          *provider.Registry
-	build             BuildIdentity
-	now               func() time.Time
-	newID             func() string
-	newSessionID      func() string
-	newRunner         session.RunnerFactory
-	startContinuation func(context.Context, provider.InteractiveChallenge) (browserContinuation, error)
-	historyLimit      int
-	mode              challengeMode
-	cliStdin          io.Reader
-	cliStderr         io.Writer
-	promptOpts        providerprompt.Options
-	platformTunnels   []PlatformTunnelCapability
-	tunnelsConfigured bool
-	startTunnel       func(context.Context, PlatformTunnelStartRequest) (PlatformTunnelStartResult, error)
+	logger                   *slog.Logger
+	registry                 *provider.Registry
+	build                    BuildIdentity
+	now                      func() time.Time
+	newID                    func() string
+	newSessionID             func() string
+	newRunner                session.RunnerFactory
+	resolveChallengeMetadata func(provider.InteractiveChallenge) provider.InteractiveChallengeMetadata
+	startContinuation        func(context.Context, provider.InteractiveChallenge) (browserContinuation, error)
+	historyLimit             int
+	mode                     challengeMode
+	cliStdin                 io.Reader
+	cliStderr                io.Writer
+	promptOpts               providerprompt.Options
+	platformTunnels          []PlatformTunnelCapability
+	tunnelsConfigured        bool
+	startTunnel              func(context.Context, PlatformTunnelStartRequest) (PlatformTunnelStartResult, error)
 }
 
 type Host struct {
-	mu                sync.Mutex
-	logger            *slog.Logger
-	registry          *provider.Registry
-	build             BuildIdentity
-	now               func() time.Time
-	newID             func() string
-	newSessionID      func() string
-	newRunner         session.RunnerFactory
-	startContinuation func(context.Context, provider.InteractiveChallenge) (browserContinuation, error)
-	historyLimit      int
-	mode              challengeMode
-	cliStdin          io.Reader
-	cliStderr         io.Writer
-	promptOpts        providerprompt.Options
-	platformTunnels   []PlatformTunnelCapability
-	startTunnel       func(context.Context, PlatformTunnelStartRequest) (PlatformTunnelStartResult, error)
+	mu                       sync.Mutex
+	logger                   *slog.Logger
+	registry                 *provider.Registry
+	build                    BuildIdentity
+	now                      func() time.Time
+	newID                    func() string
+	newSessionID             func() string
+	newRunner                session.RunnerFactory
+	resolveChallengeMetadata func(provider.InteractiveChallenge) provider.InteractiveChallengeMetadata
+	startContinuation        func(context.Context, provider.InteractiveChallenge) (browserContinuation, error)
+	historyLimit             int
+	mode                     challengeMode
+	cliStdin                 io.Reader
+	cliStderr                io.Writer
+	promptOpts               providerprompt.Options
+	platformTunnels          []PlatformTunnelCapability
+	startTunnel              func(context.Context, PlatformTunnelStartRequest) (PlatformTunnelStartResult, error)
 
 	profiles        map[string]Profile
 	providerConfigs map[string]ProviderConfig
@@ -137,25 +139,31 @@ type browserContinuation interface {
 	Close() error
 }
 
-type challengeAction int
+type challengeActionKind int
 
 const (
-	challengeActionContinue challengeAction = iota + 1
-	challengeActionCancel
+	challengeActionContinueKind challengeActionKind = iota + 1
+	challengeActionCancelKind
 )
+
+type challengeAction struct {
+	kind                challengeActionKind
+	browserContinuation *ChallengeContinuation
+}
 
 func New(opts ...Option) *Host {
 	cfg := hostConfig{
-		logger:            slog.Default(),
-		registry:          provider.NewRegistry(genericturn.New(), vk.New()),
-		build:             toBuildIdentity(buildinfo.Current(buildinfo.Options{Role: "clientd"})),
-		now:               time.Now,
-		newID:             observe.NewSessionID,
-		newSessionID:      observe.NewSessionID,
-		newRunner:         nil,
-		startContinuation: nil,
-		historyLimit:      defaultHistoryLimit,
-		mode:              challengeModeControlPlane,
+		logger:                   slog.Default(),
+		registry:                 provider.NewRegistry(genericturn.New(), vk.New()),
+		build:                    toBuildIdentity(buildinfo.Current(buildinfo.Options{Role: "clientd"})),
+		now:                      time.Now,
+		newID:                    observe.NewSessionID,
+		newSessionID:             observe.NewSessionID,
+		newRunner:                nil,
+		resolveChallengeMetadata: defaultInteractiveChallengeMetadata,
+		startContinuation:        nil,
+		historyLimit:             defaultHistoryLimit,
+		mode:                     challengeModeControlPlane,
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -176,6 +184,9 @@ func New(opts ...Option) *Host {
 	}
 	if cfg.newSessionID == nil {
 		cfg.newSessionID = observe.NewSessionID
+	}
+	if cfg.resolveChallengeMetadata == nil {
+		cfg.resolveChallengeMetadata = defaultInteractiveChallengeMetadata
 	}
 	if cfg.historyLimit <= 0 {
 		cfg.historyLimit = defaultHistoryLimit
@@ -198,27 +209,28 @@ func New(opts ...Option) *Host {
 	}
 
 	return &Host{
-		logger:            cfg.logger,
-		registry:          cfg.registry,
-		build:             cfg.build,
-		now:               cfg.now,
-		newID:             cfg.newID,
-		newSessionID:      cfg.newSessionID,
-		newRunner:         cfg.newRunner,
-		startContinuation: cfg.startContinuation,
-		historyLimit:      cfg.historyLimit,
-		mode:              cfg.mode,
-		cliStdin:          cfg.cliStdin,
-		cliStderr:         cfg.cliStderr,
-		promptOpts:        cfg.promptOpts,
-		platformTunnels:   cfg.platformTunnels,
-		startTunnel:       cfg.startTunnel,
-		profiles:          make(map[string]Profile),
-		providerConfigs:   make(map[string]ProviderConfig),
-		resolutions:       make(map[string]*managedResolution),
-		sessions:          make(map[string]*managedSession),
-		challenges:        make(map[string]*managedChallenge),
-		subscribers:       make(map[uint64]chan Event),
+		logger:                   cfg.logger,
+		registry:                 cfg.registry,
+		build:                    cfg.build,
+		now:                      cfg.now,
+		newID:                    cfg.newID,
+		newSessionID:             cfg.newSessionID,
+		newRunner:                cfg.newRunner,
+		resolveChallengeMetadata: cfg.resolveChallengeMetadata,
+		startContinuation:        cfg.startContinuation,
+		historyLimit:             cfg.historyLimit,
+		mode:                     cfg.mode,
+		cliStdin:                 cfg.cliStdin,
+		cliStderr:                cfg.cliStderr,
+		promptOpts:               cfg.promptOpts,
+		platformTunnels:          cfg.platformTunnels,
+		startTunnel:              cfg.startTunnel,
+		profiles:                 make(map[string]Profile),
+		providerConfigs:          make(map[string]ProviderConfig),
+		resolutions:              make(map[string]*managedResolution),
+		sessions:                 make(map[string]*managedSession),
+		challenges:               make(map[string]*managedChallenge),
+		subscribers:              make(map[uint64]chan Event),
 	}
 }
 
@@ -246,6 +258,10 @@ func withRegistry(registry *provider.Registry) Option {
 	return func(cfg *hostConfig) {
 		cfg.registry = registry
 	}
+}
+
+func WithRegistry(registry *provider.Registry) Option {
+	return withRegistry(registry)
 }
 
 func withNow(now func() time.Time) Option {
@@ -281,6 +297,14 @@ func withPromptOptions(options providerprompt.Options) Option {
 func withContinuationStarter(start func(context.Context, provider.InteractiveChallenge) (browserContinuation, error)) Option {
 	return func(cfg *hostConfig) {
 		cfg.startContinuation = start
+	}
+}
+
+func WithInteractiveChallengeMetadataResolver(
+	resolver func(provider.InteractiveChallenge) provider.InteractiveChallengeMetadata,
+) Option {
+	return func(cfg *hostConfig) {
+		cfg.resolveChallengeMetadata = resolver
 	}
 }
 
@@ -550,11 +574,23 @@ func (h *Host) Challenge(challengeID string) (Challenge, error) {
 }
 
 func (h *Host) ContinueChallenge(challengeID string) (Challenge, error) {
-	return h.signalChallenge(challengeID, challengeActionContinue, ChallengeStatusContinuing)
+	return h.ContinueChallengeWithBrowserContinuation(challengeID, nil)
+}
+
+func (h *Host) ContinueChallengeWithBrowserContinuation(
+	challengeID string,
+	continuation *ChallengeContinuation,
+) (Challenge, error) {
+	return h.signalChallenge(challengeID, challengeAction{
+		kind:                challengeActionContinueKind,
+		browserContinuation: continuation,
+	}, ChallengeStatusContinuing)
 }
 
 func (h *Host) CancelChallenge(challengeID string) (Challenge, error) {
-	return h.signalChallenge(challengeID, challengeActionCancel, ChallengeStatusCancelled)
+	return h.signalChallenge(challengeID, challengeAction{
+		kind: challengeActionCancelKind,
+	}, ChallengeStatusCancelled)
 }
 
 func (h *Host) MetricsHandler(sessionID string) (http.Handler, error) {
@@ -935,12 +971,12 @@ func (h *Host) waitChallengeAction(ctx context.Context, challengeID string) (cha
 	managed, ok := h.challenges[challengeID]
 	h.mu.Unlock()
 	if !ok {
-		return 0, ErrChallengeNotFound
+		return challengeAction{}, ErrChallengeNotFound
 	}
 
 	select {
 	case <-ctx.Done():
-		return 0, ctx.Err()
+		return challengeAction{}, ctx.Err()
 	case action := <-managed.actionCh:
 		return action, nil
 	}
@@ -952,6 +988,10 @@ func (h *Host) signalChallenge(challengeID string, action challengeAction, statu
 	if !ok {
 		h.mu.Unlock()
 		return Challenge{}, ErrChallengeNotFound
+	}
+	if err := validateChallengeContinuationRequest(managed.snapshot, action); err != nil {
+		h.mu.Unlock()
+		return Challenge{}, err
 	}
 	managed.snapshot.Status = status
 	managed.snapshot.UpdatedAt = h.now().UTC()
@@ -1018,6 +1058,63 @@ func (h *Host) publishEvent(event Event) {
 	}
 }
 
+func (h *Host) challengeMetadata(
+	challenge provider.InteractiveChallenge,
+) provider.InteractiveChallengeMetadata {
+	if h.resolveChallengeMetadata == nil {
+		return defaultInteractiveChallengeMetadata(challenge)
+	}
+	return h.resolveChallengeMetadata(challenge)
+}
+
+func (h *Host) buildChallengeRecord(
+	id string,
+	sessionID string,
+	resolutionID string,
+	challenge provider.InteractiveChallenge,
+) Challenge {
+	metadata := h.challengeMetadata(challenge)
+	completionMode, browserReturn, ownedBrowser :=
+		challengeContractMetadataFromProviderMetadata(challenge, metadata)
+	now := h.now().UTC()
+	return Challenge{
+		ID:             id,
+		SessionID:      sessionID,
+		ResolutionID:   resolutionID,
+		Provider:       challenge.ProviderName(),
+		Stage:          challenge.StageName(),
+		Kind:           challenge.Kind(),
+		Prompt:         providerprompt.ContinuationPrompt(challenge),
+		OpenURL:        providerprompt.ContinuationOpenURL(challenge),
+		Status:         ChallengeStatusPending,
+		CompletionMode: completionMode,
+		BrowserReturn:  browserReturn,
+		OwnedBrowser:   ownedBrowser,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+}
+
+func validateChallengeContinuationRequest(
+	challenge Challenge,
+	action challengeAction,
+) error {
+	if action.kind != challengeActionContinueKind {
+		return nil
+	}
+	switch challenge.CompletionMode {
+	case ChallengeCompletionModeOwnedBrowserObserved:
+		if action.browserContinuation == nil {
+			return errors.New("owned browser continuation payload is required for this challenge")
+		}
+	default:
+		if action.browserContinuation != nil {
+			return errors.New("browser continuation payload is not supported for this challenge")
+		}
+	}
+	return nil
+}
+
 func (h *Host) clearPendingChallenges(sessionID string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -1043,12 +1140,11 @@ func (b *challengeBroker) Handle(ctx context.Context, challenge provider.Interac
 		return errors.New("interactive provider challenge is required")
 	}
 
-	record := newChallengeRecord(
+	record := b.host.buildChallengeRecord(
 		b.host.newID(),
 		b.sessionID,
 		"",
 		challenge,
-		b.host.now().UTC(),
 	)
 	b.host.recordChallenge(b.sessionID, record)
 
@@ -1057,7 +1153,7 @@ func (b *challengeBroker) Handle(ctx context.Context, challenge provider.Interac
 		b.host.completeChallenge(record.ID, ChallengeStatusFailed, err.Error())
 		return fmt.Errorf("interactive provider challenge aborted: %w", err)
 	}
-	if action == challengeActionCancel {
+	if action.kind == challengeActionCancelKind {
 		b.host.completeChallenge(record.ID, ChallengeStatusCancelled, "cancelled")
 		return errors.New("interactive provider challenge was cancelled")
 	}
@@ -1071,6 +1167,43 @@ func (b *challengeBroker) Continue(ctx context.Context, challenge provider.Inter
 		return nil, errors.New("interactive provider challenge is required")
 	}
 
+	completionMode, _, _ := challengeContractMetadataFromProviderMetadata(
+		challenge,
+		b.host.challengeMetadata(challenge),
+	)
+	if completionMode == ChallengeCompletionModeOwnedBrowserObserved {
+		record := b.host.buildChallengeRecord(
+			b.host.newID(),
+			b.sessionID,
+			"",
+			challenge,
+		)
+		b.host.recordChallenge(b.sessionID, record)
+
+		action, err := b.host.waitChallengeAction(ctx, record.ID)
+		if err != nil {
+			b.host.completeChallenge(record.ID, ChallengeStatusFailed, err.Error())
+			return nil, fmt.Errorf("interactive provider challenge aborted: %w", err)
+		}
+		if action.kind == challengeActionCancelKind {
+			b.host.completeChallenge(record.ID, ChallengeStatusCancelled, "cancelled")
+			return nil, errors.New("interactive provider challenge was cancelled")
+		}
+
+		result, err := browserContinuationFromChallengeAction(
+			ctx,
+			challenge,
+			action,
+		)
+		if err != nil {
+			b.host.completeChallenge(record.ID, ChallengeStatusFailed, err.Error())
+			return nil, err
+		}
+
+		b.host.completeChallenge(record.ID, ChallengeStatusCompleted, "completed")
+		return result, nil
+	}
+
 	continuation, err := b.host.startContinuation(ctx, challenge)
 	if err != nil {
 		return nil, err
@@ -1079,12 +1212,11 @@ func (b *challengeBroker) Continue(ctx context.Context, challenge provider.Inter
 		_ = continuation.Close()
 	}()
 
-	record := newChallengeRecord(
+	record := b.host.buildChallengeRecord(
 		b.host.newID(),
 		b.sessionID,
 		"",
 		challenge,
-		b.host.now().UTC(),
 	)
 	b.host.recordChallenge(b.sessionID, record)
 
@@ -1093,7 +1225,7 @@ func (b *challengeBroker) Continue(ctx context.Context, challenge provider.Inter
 		b.host.completeChallenge(record.ID, ChallengeStatusFailed, err.Error())
 		return nil, fmt.Errorf("interactive provider challenge aborted: %w", err)
 	}
-	if action == challengeActionCancel {
+	if action.kind == challengeActionCancelKind {
 		b.host.completeChallenge(record.ID, ChallengeStatusCancelled, "cancelled")
 		return nil, errors.New("interactive provider challenge was cancelled")
 	}

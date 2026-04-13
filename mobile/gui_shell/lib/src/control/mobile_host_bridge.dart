@@ -281,8 +281,14 @@ class HttpMobileHostBridge implements MobileHostBridge {
   }
 
   @override
-  Future<ChallengeRecord> continueChallenge(String challengeId) {
-    return _client.continueChallenge(challengeId);
+  Future<ChallengeRecord> continueChallenge(
+    String challengeId, {
+    ChallengeContinuationSubmission? browserContinuation,
+  }) {
+    return _client.continueChallenge(
+      challengeId,
+      browserContinuation: browserContinuation,
+    );
   }
 
   @override
@@ -488,7 +494,10 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
   Future<ChallengeRecord> challenge(String challengeId) => _fail();
 
   @override
-  Future<ChallengeRecord> continueChallenge(String challengeId) => _fail();
+  Future<ChallengeRecord> continueChallenge(
+    String challengeId, {
+    ChallengeContinuationSubmission? browserContinuation,
+  }) => _fail();
 
   @override
   Future<void> deleteProfile(String profileId) => _fail();

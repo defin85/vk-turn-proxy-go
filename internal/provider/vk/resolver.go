@@ -263,6 +263,13 @@ func (r *resolver) resolveAnonymousToken(
 
 		if challenge, ok := parseCaptchaChallenge(payload); ok {
 			challenge.browserOpenURL = inviteURL
+			challenge.stageRequests = []provider.BrowserStageRequest{
+				buildBrowserOwnedStageRequest(descriptor, map[string]string{
+					"vk_join_link": "https://vk.com/call/join/" + joinToken,
+					"name":         "123",
+					"access_token": accessToken,
+				}),
+			}
 			challenge.stageObservations = liveBrowserObservedStageObservations(joinToken)
 			challengeStage := withStageOutcome(stageArtifact, "provider_error", nil, captchaRequiredCode)
 			browserHandler := provider.BrowserContinuationHandlerFromContext(ctx)

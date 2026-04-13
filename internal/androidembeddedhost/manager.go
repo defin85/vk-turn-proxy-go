@@ -43,6 +43,10 @@ func New(opts ...Option) *Manager {
 			return clientcontrol.New(
 				clientcontrol.WithLogger(logger),
 				clientcontrol.WithBuildIdentity(currentBuildIdentity()),
+				clientcontrol.WithRegistry(mobileProviderRegistry()),
+				clientcontrol.WithInteractiveChallengeMetadataResolver(
+					mobileChallengeMetadata,
+				),
 			)
 		},
 	}
@@ -61,6 +65,10 @@ func New(opts ...Option) *Manager {
 			return clientcontrol.New(
 				clientcontrol.WithLogger(logger),
 				clientcontrol.WithBuildIdentity(currentBuildIdentity()),
+				clientcontrol.WithRegistry(mobileProviderRegistry()),
+				clientcontrol.WithInteractiveChallengeMetadataResolver(
+					mobileChallengeMetadata,
+				),
 			)
 		}
 	}

@@ -543,7 +543,10 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
   }
 
   @override
-  Future<ChallengeRecord> continueChallenge(String challengeId) {
+  Future<ChallengeRecord> continueChallenge(
+    String challengeId, {
+    ChallengeContinuationSubmission? browserContinuation,
+  }) {
     throw UnimplementedError();
   }
 

@@ -128,6 +128,11 @@ class MobileShellController extends ChangeNotifier {
     return _platformTunnelResults[mode];
   }
 
+  void publishNotice(String message) {
+    notice = message;
+    _notify();
+  }
+
   List<ProviderPreset> get presetCatalog => kProviderPresetCatalog;
 
   List<ProviderDescriptor> get providerConfigDescriptors => providerDescriptors
@@ -704,6 +709,18 @@ class MobileShellController extends ChangeNotifier {
     });
   }
 
+  Future<void> continueOwnedBrowserChallenge(
+    String challengeId,
+    ChallengeContinuationSubmission browserContinuation,
+  ) async {
+    await _runBridgeMutation(() async {
+      await _continueChallengeThroughBridge(
+        challengeId,
+        browserContinuation: browserContinuation,
+      );
+    });
+  }
+
   Future<void> cancelChallenge(String challengeId) async {
     await _runBridgeMutation(() async {
       final challenge = await bridge.cancelChallenge(challengeId);
@@ -1236,15 +1253,27 @@ class MobileShellController extends ChangeNotifier {
     String challengeId, {
     bool automatic = false,
     BrowserReturnSignalKind? signalKind,
+    ChallengeContinuationSubmission? browserContinuation,
   }) async {
     _browserHandoffChallengeId = null;
-    final challenge = await bridge.continueChallenge(challengeId);
+    final challenge = await bridge.continueChallenge(
+      challengeId,
+      browserContinuation: browserContinuation,
+    );
     _challengeCache[challenge.id] = challenge;
     notice = automatic
         ? 'Detected ${_browserReturnSignalLabel(signalKind)} and continued challenge $challengeId.'
-        : 'Continued challenge $challengeId.';
+        : (browserContinuation != null
+              ? 'Completed the in-app browser continuation for challenge $challengeId.'
+              : 'Continued challenge $challengeId.');
     await refresh();
   }
+
+  bool challengeRequiresOwnedBrowser(ChallengeRecord challenge) =>
+      challenge.completionMode ==
+          ChallengeCompletionMode.ownedBrowserObserved &&
+      challenge.ownedBrowser != null &&
+      challenge.ownedBrowser!.cookieUrls.isNotEmpty;
 
   String _browserReturnSignalLabel(BrowserReturnSignalKind? signalKind) {
     return switch (signalKind) {

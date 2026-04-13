@@ -7,6 +7,8 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -77,6 +79,39 @@ func (f fakeChallenge) OpenURL() string      { return f.openURL }
 func (f fakeChallenge) CookieURLs() []string { return []string{"https://api.vk.ru/"} }
 func (f fakeChallenge) ChallengeMetadata() provider.InteractiveChallengeMetadata {
 	return f.metadata
+}
+
+type fakeOwnedBrowserChallenge struct {
+	fakeChallenge
+	cookieURLs    []string
+	stageRequests []provider.BrowserStageRequest
+}
+
+func (f fakeOwnedBrowserChallenge) CookieURLs() []string {
+	return append([]string(nil), f.cookieURLs...)
+}
+
+func (f fakeOwnedBrowserChallenge) BrowserStageRequests() []provider.BrowserStageRequest {
+	if len(f.stageRequests) == 0 {
+		return nil
+	}
+
+	out := make([]provider.BrowserStageRequest, 0, len(f.stageRequests))
+	for _, request := range f.stageRequests {
+		cloned := provider.BrowserStageRequest{
+			Stage:  request.Stage,
+			Method: request.Method,
+			URL:    request.URL,
+		}
+		if len(request.Form) > 0 {
+			cloned.Form = make(map[string]string, len(request.Form))
+			for key, value := range request.Form {
+				cloned.Form[key] = value
+			}
+		}
+		out = append(out, cloned)
+	}
+	return out
 }
 
 type fakeContinuation struct {
@@ -1403,6 +1438,250 @@ func TestHostResolutionChallengeExposesAppReturnMetadata(t *testing.T) {
 		t.Fatalf("ContinueChallenge() error = %v", err)
 	}
 	waitForResolutionState(t, host, resolutionState.ID, ResolutionStateResolved)
+}
+
+func TestHostResolutionChallengeOwnedBrowserUsesSubmittedContinuation(t *testing.T) {
+	var (
+		seenCookieValue string
+		startedExternal bool
+	)
+	stageServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/captcha/continue" {
+			http.NotFound(w, r)
+			return
+		}
+		if err := r.ParseForm(); err != nil {
+			t.Fatalf("ParseForm() error = %v", err)
+		}
+		cookie, err := r.Cookie("session")
+		if err != nil {
+			t.Fatalf("Cookie(session) error = %v", err)
+		}
+		seenCookieValue = cookie.Value
+		if got := r.PostForm.Get("code"); got != "captcha-ok" {
+			t.Fatalf("POST form code = %q, want captcha-ok", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok","ticket":"captcha-ticket"}`))
+	}))
+	defer stageServer.Close()
+
+	host := New(
+		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+		WithBuildIdentity(testBuildIdentity()),
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name: "vk",
+			descriptor: provider.ProviderDescriptor{
+				ID:             "vk",
+				DisplayName:    "VK Calls",
+				InputKind:      provider.ProviderInputKindLink,
+				AuthPosture:    provider.ProviderAuthPostureGuestOrAccount,
+				BrowserPolicy:  provider.ProviderBrowserPolicyExternalRequired,
+				ChallengeModes: []provider.ProviderChallengeMode{provider.ProviderChallengeModeBrowser},
+			},
+			resolve: func(ctx context.Context, link string) (provider.Resolution, error) {
+				handler := provider.BrowserContinuationHandlerFromContext(ctx)
+				if handler == nil {
+					return provider.Resolution{}, io.ErrUnexpectedEOF
+				}
+				continuation, err := handler.Continue(ctx, fakeOwnedBrowserChallenge{
+					fakeChallenge: fakeChallenge{
+						provider: "vk",
+						stage:    "provider_resolve",
+						kind:     "captcha",
+						prompt:   "complete captcha",
+						openURL:  "https://example.test/challenge",
+						metadata: provider.InteractiveChallengeMetadata{
+							CompletionMode: provider.ChallengeCompletionModeOwnedBrowserObserved,
+						},
+					},
+					cookieURLs: []string{
+						stageServer.URL,
+					},
+					stageRequests: []provider.BrowserStageRequest{
+						{
+							Stage:  "captcha_submit",
+							Method: http.MethodPost,
+							URL:    stageServer.URL + "/captcha/continue",
+							Form: map[string]string{
+								"code": "captcha-ok",
+							},
+						},
+					},
+				})
+				if err != nil {
+					return provider.Resolution{}, err
+				}
+				if len(continuation.Cookies) != 1 {
+					t.Fatalf("continuation cookies len = %d, want 1", len(continuation.Cookies))
+				}
+				if continuation.Cookies[0].Value != "owned-session" {
+					t.Fatalf("continuation cookie value = %q, want owned-session", continuation.Cookies[0].Value)
+				}
+				stageResult, ok := continuation.StageResult("captcha_submit")
+				if !ok {
+					t.Fatal("continuation missing captcha_submit stage result")
+				}
+				if got := stageResult.Body["ticket"]; got != "captcha-ticket" {
+					t.Fatalf("stage result ticket = %#v, want captcha-ticket", got)
+				}
+				return provider.Resolution{
+					Credentials: provider.Credentials{
+						Username: "turn-user",
+						Password: "turn-pass",
+						Address:  "turn.example.test:3478",
+					},
+				}, nil
+			},
+		})),
+		withContinuationStarter(func(ctx context.Context, challenge provider.InteractiveChallenge) (browserContinuation, error) {
+			startedExternal = true
+			return fakeContinuation{result: &provider.BrowserContinuation{}}, nil
+		}),
+	)
+
+	events, cancel := host.Subscribe(16)
+	defer cancel()
+
+	resolutionState, err := host.StartResolution(context.Background(), StartResolutionRequest{
+		Provider: "vk",
+		Input: &ProviderInputEnvelope{
+			Kind: ProviderInputKindLink,
+			Link: "https://vk.com/call/join/test-token",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartResolution() error = %v", err)
+	}
+
+	challengeEvent := waitForEvent(t, events, EventChallengeRequired)
+	if challengeEvent.Challenge == nil {
+		t.Fatal("challenge event missing payload")
+	}
+	if challengeEvent.Challenge.CompletionMode != ChallengeCompletionModeOwnedBrowserObserved {
+		t.Fatalf("challenge completion_mode = %q, want %q", challengeEvent.Challenge.CompletionMode, ChallengeCompletionModeOwnedBrowserObserved)
+	}
+	if challengeEvent.Challenge.OwnedBrowser == nil {
+		t.Fatal("challenge owned_browser = nil, want metadata")
+	}
+	if got := challengeEvent.Challenge.OwnedBrowser.CookieURLs; len(got) != 1 || got[0] != stageServer.URL {
+		t.Fatalf("challenge owned_browser.cookie_urls = %#v, want %q", got, stageServer.URL)
+	}
+
+	challenge, err := host.ContinueChallengeWithBrowserContinuation(
+		challengeEvent.Challenge.ID,
+		&ChallengeContinuation{
+			Cookies: []BrowserCookie{
+				{
+					Name:   "session",
+					Value:  "owned-session",
+					Domain: "127.0.0.1",
+					Path:   "/",
+				},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("ContinueChallengeWithBrowserContinuation() error = %v", err)
+	}
+	if challenge.Status != ChallengeStatusContinuing {
+		t.Fatalf("challenge status = %q, want continuing", challenge.Status)
+	}
+
+	waitForEvent(t, events, EventChallengeUpdated)
+	waitForEvent(t, events, EventResolutionResolved)
+	waitForResolutionState(t, host, resolutionState.ID, ResolutionStateResolved)
+
+	if startedExternal {
+		t.Fatal("startContinuation() called for owned browser challenge, want in-app continuation path")
+	}
+	if seenCookieValue != "owned-session" {
+		t.Fatalf("stage request cookie value = %q, want owned-session", seenCookieValue)
+	}
+}
+
+func TestHostResolutionChallengeOwnedBrowserFailsClosedWithoutCookieURLs(t *testing.T) {
+	var startedExternal bool
+
+	host := New(
+		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name: "vk",
+			descriptor: provider.ProviderDescriptor{
+				ID:             "vk",
+				DisplayName:    "VK Calls",
+				InputKind:      provider.ProviderInputKindLink,
+				AuthPosture:    provider.ProviderAuthPostureGuestOrAccount,
+				BrowserPolicy:  provider.ProviderBrowserPolicyExternalRequired,
+				ChallengeModes: []provider.ProviderChallengeMode{provider.ProviderChallengeModeBrowser},
+			},
+			resolve: func(ctx context.Context, link string) (provider.Resolution, error) {
+				handler := provider.BrowserContinuationHandlerFromContext(ctx)
+				if handler == nil {
+					return provider.Resolution{}, io.ErrUnexpectedEOF
+				}
+				if _, err := handler.Continue(ctx, fakeOwnedBrowserChallenge{
+					fakeChallenge: fakeChallenge{
+						provider: "vk",
+						stage:    "provider_resolve",
+						kind:     "browser",
+						prompt:   "return after browser",
+						openURL:  "https://example.test/challenge",
+						metadata: provider.InteractiveChallengeMetadata{
+							CompletionMode: provider.ChallengeCompletionModeOwnedBrowserObserved,
+						},
+					},
+				}); err != nil {
+					return provider.Resolution{}, err
+				}
+				return provider.Resolution{
+					Credentials: provider.Credentials{
+						Username: "turn-user",
+						Password: "turn-pass",
+						Address:  "turn.example.test:3478",
+					},
+				}, nil
+			},
+		})),
+		withContinuationStarter(func(ctx context.Context, challenge provider.InteractiveChallenge) (browserContinuation, error) {
+			startedExternal = true
+			return fakeContinuation{result: &provider.BrowserContinuation{}}, nil
+		}),
+	)
+
+	events, cancel := host.Subscribe(16)
+	defer cancel()
+
+	resolutionState, err := host.StartResolution(context.Background(), StartResolutionRequest{
+		Provider: "vk",
+		Input: &ProviderInputEnvelope{
+			Kind: ProviderInputKindLink,
+			Link: "https://vk.com/call/join/test-token",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartResolution() error = %v", err)
+	}
+
+	challengeEvent := waitForEvent(t, events, EventChallengeRequired)
+	if challengeEvent.Challenge == nil {
+		t.Fatal("challenge event missing payload")
+	}
+	if challengeEvent.Challenge.CompletionMode != ChallengeCompletionModeManualConfirm {
+		t.Fatalf("challenge completion_mode = %q, want %q", challengeEvent.Challenge.CompletionMode, ChallengeCompletionModeManualConfirm)
+	}
+	if challengeEvent.Challenge.OwnedBrowser != nil {
+		t.Fatalf("challenge owned_browser = %#v, want nil", challengeEvent.Challenge.OwnedBrowser)
+	}
+
+	if _, err := host.ContinueChallenge(challengeEvent.Challenge.ID); err != nil {
+		t.Fatalf("ContinueChallenge() error = %v", err)
+	}
+	waitForResolutionState(t, host, resolutionState.ID, ResolutionStateResolved)
+
+	if !startedExternal {
+		t.Fatal("startContinuation() not called, want fail-closed external browser path")
+	}
 }
 
 func TestResolutionArtifactFromNonTURNFamilyKeepsSummaryRedacted(t *testing.T) {

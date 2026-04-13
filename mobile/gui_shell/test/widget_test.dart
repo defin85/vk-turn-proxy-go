@@ -9,6 +9,7 @@ import 'package:mobile_gui_shell/src/control/mobile_host_bridge.dart';
 import 'package:mobile_gui_shell/src/control/mobile_shell_controller.dart';
 import 'package:mobile_gui_shell/src/control/mobile_shell_state_store.dart';
 import 'package:mobile_gui_shell/src/control/profile_draft.dart';
+import 'package:mobile_gui_shell/src/ui/owned_browser_challenge.dart';
 
 const ProviderDescriptor _unsupportedProviderSettingsDescriptor =
     ProviderDescriptor(
@@ -134,6 +135,111 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('vk mobile draft'), findsOneWidget);
   });
+
+  testWidgets(
+    'mobile shell renders owned-browser challenges in-app without manual fallback',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final runner = _FakeOwnedBrowserChallengeRunner(
+        ChallengeContinuationSubmission(
+          cookies: const <BrowserCookieRecord>[
+            BrowserCookieRecord(
+              name: 'session',
+              value: 'owned-session',
+              domain: 'login.vk.ru',
+              path: '/',
+            ),
+          ],
+        ),
+      );
+      final bridge = _FakeMobileHostBridge(
+        sessionsList: <SessionRecord>[
+          SessionRecord(
+            id: 'session-1',
+            profileId: 'profile-1',
+            profileName: 'vk live',
+            profile: _profileSpec(),
+            state: SessionState.challengeRequired,
+            activeChallengeId: 'challenge-1',
+            startedAt: DateTime.utc(2026, 4, 7, 12, 0),
+            updatedAt: DateTime.utc(2026, 4, 7, 12, 1),
+          ),
+        ],
+        challengeMap: <String, ChallengeRecord>{
+          'challenge-1': ChallengeRecord(
+            id: 'challenge-1',
+            sessionId: 'session-1',
+            provider: 'vk',
+            stage: 'provider_resolve',
+            kind: 'browser',
+            prompt: 'Continue inside the in-app browser.',
+            openUrl: 'https://vk.com/call/join/test',
+            status: ChallengeStatus.pending,
+            completionMode: ChallengeCompletionMode.ownedBrowserObserved,
+            ownedBrowser: const ChallengeOwnedBrowserMetadata(
+              cookieUrls: <String>['https://login.vk.ru/'],
+            ),
+            createdAt: DateTime.utc(2026, 4, 7, 12, 0),
+            updatedAt: DateTime.utc(2026, 4, 7, 12, 1),
+          ),
+        },
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: 'profile-1',
+            draft: ProfileDraft.fromProfile(
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ),
+          ),
+        ),
+      );
+      await controller.initialize();
+      await tester.pumpWidget(
+        MobileShellApp(
+          controller: controller,
+          ownedBrowserChallengeRunner: runner,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Activity'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sessions (1)'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Continue in app', skipOffstage: false), findsOneWidget);
+      expect(find.text("I've completed it", skipOffstage: false), findsNothing);
+
+      await tester.tap(find.text('Continue in app', skipOffstage: false));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(runner.challengeIds, <String>['challenge-1']);
+      expect(bridge.continueChallengeCalls, <String>['challenge-1']);
+      expect(bridge.continueChallengePayloads, hasLength(1));
+      expect(
+        bridge.continueChallengePayloads.single?.cookies.single.value,
+        'owned-session',
+      );
+    },
+  );
 
   testWidgets('mobile shell exposes reset action for blocked local state', (
     WidgetTester tester,
@@ -1015,6 +1121,22 @@ class _FakeBrowserLauncher implements BrowserLauncher {
   }
 }
 
+class _FakeOwnedBrowserChallengeRunner implements OwnedBrowserChallengeRunner {
+  _FakeOwnedBrowserChallengeRunner(this.result);
+
+  final ChallengeContinuationSubmission? result;
+  final List<String> challengeIds = <String>[];
+
+  @override
+  Future<ChallengeContinuationSubmission?> run(
+    BuildContext context,
+    ChallengeRecord challenge,
+  ) async {
+    challengeIds.add(challenge.id);
+    return result;
+  }
+}
+
 class _FakeMobileHostBridge implements MobileHostBridge {
   _FakeMobileHostBridge({
     List<ProviderDescriptor>? providersList,
@@ -1055,6 +1177,9 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   final List<ResolutionRecord> _resolutions;
   final List<PlatformTunnelMode> startedPlatformTunnels =
       <PlatformTunnelMode>[];
+  final List<String> continueChallengeCalls = <String>[];
+  final List<ChallengeContinuationSubmission?> continueChallengePayloads =
+      <ChallengeContinuationSubmission?>[];
 
   @override
   Stream<MobileBrowserReturnSignal> get browserReturnSignals =>
@@ -1071,7 +1196,12 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   }
 
   @override
-  Future<ChallengeRecord> continueChallenge(String challengeId) async {
+  Future<ChallengeRecord> continueChallenge(
+    String challengeId, {
+    ChallengeContinuationSubmission? browserContinuation,
+  }) async {
+    continueChallengeCalls.add(challengeId);
+    continueChallengePayloads.add(browserContinuation);
     return challengeMap[challengeId]!;
   }
 

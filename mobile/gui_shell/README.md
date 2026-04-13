@@ -135,7 +135,10 @@ overflow affordances instead of crowding the first mobile screen.
 The shell is app-owned and mobile-aware:
 
 - app resume triggers a reconnect or refresh attempt
-- browser challenges are opened through the platform browser handoff path
+- browser challenges stay on the platform browser handoff path by default
+- challenges that advertise `owned_browser_observed` open in an app-owned
+  embedded WebView instead of the external browser and continue with the
+  documented cookie-backed payload from that same in-app session
 - app-return-compatible challenges may auto-continue once when the app receives
   the documented foreground-resume or native browser-return signal for that
   active challenge
@@ -146,6 +149,22 @@ Current repo-owned VK challenge metadata advertises the documented
 foreground-resume path for that one-shot auto-continue policy.
 Returning from the browser remains a continuation hint rather than proof that
 provider resolution succeeded, so the manual fallback action stays available.
+
+Owned browser continuation is fail-closed.
+If the host does not advertise `owned_browser_observed`, if the challenge omits
+the documented cookie domains, or if the embedded WebView session cannot return
+cookies for those domains, the shell does not silently claim success or invent a
+fallback path.
+
+The current repo-owned approval gate is narrow by design:
+
+- Android embedded host upgrades only approved provider flows to
+  `owned_browser_observed`
+- the shipped approval list currently covers the `vk` provider only when the
+  challenge also exposes browser-owned stage requests
+- other providers and hosts remain on the documented system-browser path unless
+  they explicitly advertise the owned-browser mode through the typed challenge
+  contract
 
 ## Diagnostics
 

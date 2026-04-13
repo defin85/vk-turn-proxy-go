@@ -282,6 +282,7 @@ type Challenge struct {
 	Status         ChallengeStatus                 `json:"status"`
 	CompletionMode ChallengeCompletionMode         `json:"completion_mode"`
 	BrowserReturn  *ChallengeBrowserReturnMetadata `json:"browser_return,omitempty"`
+	OwnedBrowser   *ChallengeOwnedBrowserMetadata  `json:"owned_browser,omitempty"`
 	CreatedAt      time.Time                       `json:"created_at"`
 	UpdatedAt      time.Time                       `json:"updated_at"`
 }
@@ -290,6 +291,24 @@ type ChallengeBrowserReturnMetadata struct {
 	SignalKinds       []BrowserReturnSignalKind `json:"signal_kinds,omitempty"`
 	AllowAutoContinue bool                      `json:"allow_auto_continue"`
 	ExpectedReturnURI string                    `json:"expected_return_uri,omitempty"`
+}
+
+type ChallengeOwnedBrowserMetadata struct {
+	CookieURLs []string `json:"cookie_urls,omitempty"`
+}
+
+type BrowserCookie struct {
+	Name     string    `json:"name"`
+	Value    string    `json:"value"`
+	Domain   string    `json:"domain,omitempty"`
+	Path     string    `json:"path,omitempty"`
+	Expires  time.Time `json:"expires,omitempty"`
+	Secure   bool      `json:"secure,omitempty"`
+	HTTPOnly bool      `json:"http_only,omitempty"`
+}
+
+type ChallengeContinuation struct {
+	Cookies []BrowserCookie `json:"cookies,omitempty"`
 }
 
 type Event struct {

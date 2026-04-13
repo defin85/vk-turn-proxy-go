@@ -767,6 +767,103 @@ class ChallengeBrowserReturnMetadata {
   }
 }
 
+class ChallengeOwnedBrowserMetadata {
+  const ChallengeOwnedBrowserMetadata({this.cookieUrls = const <String>[]});
+
+  factory ChallengeOwnedBrowserMetadata.fromJson(Map<String, dynamic> json) {
+    final seen = <String>{};
+    final cookieUrls = <String>[];
+    for (final raw
+        in json['cookie_urls'] as List<dynamic>? ?? const <dynamic>[]) {
+      final value = (raw as String?)?.trim() ?? '';
+      if (value.isEmpty || !seen.add(value)) {
+        continue;
+      }
+      cookieUrls.add(value);
+    }
+    return ChallengeOwnedBrowserMetadata(
+      cookieUrls: List<String>.unmodifiable(cookieUrls),
+    );
+  }
+
+  final List<String> cookieUrls;
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{'cookie_urls': cookieUrls});
+  }
+}
+
+class BrowserCookieRecord {
+  const BrowserCookieRecord({
+    required this.name,
+    required this.value,
+    this.domain,
+    this.path,
+    this.expires,
+    this.secure = false,
+    this.httpOnly = false,
+  });
+
+  factory BrowserCookieRecord.fromJson(Map<String, dynamic> json) {
+    return BrowserCookieRecord(
+      name: json['name'] as String? ?? '',
+      value: json['value'] as String? ?? '',
+      domain: json['domain'] as String?,
+      path: json['path'] as String?,
+      expires: json['expires'] == null ? null : _readTimestamp(json['expires']),
+      secure: json['secure'] as bool? ?? false,
+      httpOnly: json['http_only'] as bool? ?? false,
+    );
+  }
+
+  final String name;
+  final String value;
+  final String? domain;
+  final String? path;
+  final DateTime? expires;
+  final bool secure;
+  final bool httpOnly;
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{
+      'name': name,
+      'value': value,
+      'domain': domain,
+      'path': path,
+      'expires': expires?.toUtc().toIso8601String(),
+      'secure': secure ? true : null,
+      'http_only': httpOnly ? true : null,
+    });
+  }
+}
+
+class ChallengeContinuationSubmission {
+  const ChallengeContinuationSubmission({
+    this.cookies = const <BrowserCookieRecord>[],
+  });
+
+  factory ChallengeContinuationSubmission.fromJson(Map<String, dynamic> json) {
+    return ChallengeContinuationSubmission(
+      cookies: (json['cookies'] as List<dynamic>? ?? const <dynamic>[])
+          .whereType<Map<String, dynamic>>()
+          .map(BrowserCookieRecord.fromJson)
+          .toList(growable: false),
+    );
+  }
+
+  final List<BrowserCookieRecord> cookies;
+
+  bool get isEmpty => cookies.isEmpty;
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{
+      'cookies': cookies
+          .map((BrowserCookieRecord cookie) => cookie.toJson())
+          .toList(growable: false),
+    });
+  }
+}
+
 enum EventType {
   sessionStarting('session_starting'),
   sessionReady('session_ready'),
@@ -2010,6 +2107,7 @@ class ChallengeRecord {
     this.openUrl,
     this.completionMode = ChallengeCompletionMode.manualConfirm,
     this.browserReturn,
+    this.ownedBrowser,
   });
 
   factory ChallengeRecord.fromJson(Map<String, dynamic> json) {
@@ -2018,12 +2116,18 @@ class ChallengeRecord {
             json['browser_return'] as Map<String, dynamic>,
           )
         : null;
+    final ownedBrowser = json['owned_browser'] is Map<String, dynamic>
+        ? ChallengeOwnedBrowserMetadata.fromJson(
+            json['owned_browser'] as Map<String, dynamic>,
+          )
+        : null;
     final completionMode =
         ChallengeCompletionMode.fromJson(json['completion_mode'] as String?) ??
         ChallengeCompletionMode.manualConfirm;
     final normalized = _normalizeChallengeCompletion(
       completionMode: completionMode,
       browserReturn: browserReturn,
+      ownedBrowser: ownedBrowser,
     );
     return ChallengeRecord(
       id: json['id'] as String? ?? '',
@@ -2039,6 +2143,7 @@ class ChallengeRecord {
           ChallengeStatus.pending,
       completionMode: normalized.completionMode,
       browserReturn: normalized.browserReturn,
+      ownedBrowser: normalized.ownedBrowser,
       createdAt: _readTimestamp(json['created_at']),
       updatedAt: _readTimestamp(json['updated_at']),
     );
@@ -2055,6 +2160,7 @@ class ChallengeRecord {
   final ChallengeStatus status;
   final ChallengeCompletionMode completionMode;
   final ChallengeBrowserReturnMetadata? browserReturn;
+  final ChallengeOwnedBrowserMetadata? ownedBrowser;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -2062,6 +2168,7 @@ class ChallengeRecord {
     ChallengeStatus? status,
     ChallengeCompletionMode? completionMode,
     ChallengeBrowserReturnMetadata? browserReturn,
+    ChallengeOwnedBrowserMetadata? ownedBrowser,
     DateTime? updatedAt,
   }) {
     return ChallengeRecord(
@@ -2076,6 +2183,7 @@ class ChallengeRecord {
       status: status ?? this.status,
       completionMode: completionMode ?? this.completionMode,
       browserReturn: browserReturn ?? this.browserReturn,
+      ownedBrowser: ownedBrowser ?? this.ownedBrowser,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -2094,6 +2202,7 @@ class ChallengeRecord {
       'status': status.value,
       'completion_mode': completionMode.value,
       'browser_return': browserReturn?.toJson(),
+      'owned_browser': ownedBrowser?.toJson(),
       'created_at': createdAt.toUtc().toIso8601String(),
       'updated_at': updatedAt.toUtc().toIso8601String(),
     });
@@ -2104,26 +2213,38 @@ class _NormalizedChallengeCompletion {
   const _NormalizedChallengeCompletion({
     required this.completionMode,
     required this.browserReturn,
+    required this.ownedBrowser,
   });
 
   final ChallengeCompletionMode completionMode;
   final ChallengeBrowserReturnMetadata? browserReturn;
+  final ChallengeOwnedBrowserMetadata? ownedBrowser;
 }
 
 _NormalizedChallengeCompletion _normalizeChallengeCompletion({
   required ChallengeCompletionMode completionMode,
   required ChallengeBrowserReturnMetadata? browserReturn,
+  required ChallengeOwnedBrowserMetadata? ownedBrowser,
 }) {
   switch (completionMode) {
     case ChallengeCompletionMode.manualConfirm:
       return const _NormalizedChallengeCompletion(
         completionMode: ChallengeCompletionMode.manualConfirm,
         browserReturn: null,
+        ownedBrowser: null,
       );
     case ChallengeCompletionMode.ownedBrowserObserved:
-      return const _NormalizedChallengeCompletion(
+      if (ownedBrowser == null || ownedBrowser.cookieUrls.isEmpty) {
+        return const _NormalizedChallengeCompletion(
+          completionMode: ChallengeCompletionMode.manualConfirm,
+          browserReturn: null,
+          ownedBrowser: null,
+        );
+      }
+      return _NormalizedChallengeCompletion(
         completionMode: ChallengeCompletionMode.ownedBrowserObserved,
         browserReturn: null,
+        ownedBrowser: ownedBrowser,
       );
     case ChallengeCompletionMode.appReturnCallback:
       if (browserReturn == null ||
@@ -2132,11 +2253,13 @@ _NormalizedChallengeCompletion _normalizeChallengeCompletion({
         return const _NormalizedChallengeCompletion(
           completionMode: ChallengeCompletionMode.manualConfirm,
           browserReturn: null,
+          ownedBrowser: null,
         );
       }
       return _NormalizedChallengeCompletion(
         completionMode: ChallengeCompletionMode.appReturnCallback,
         browserReturn: browserReturn,
+        ownedBrowser: null,
       );
   }
 }

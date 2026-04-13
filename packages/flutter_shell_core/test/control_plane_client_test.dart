@@ -597,4 +597,98 @@ void main() {
     expect(restored.id, 'cfg-restore');
     expect(restored.availability.isAvailable, isFalse);
   });
+
+  test(
+    'challenge record fails closed when owned-browser metadata is incomplete',
+    () {
+      final challenge = ChallengeRecord.fromJson(<String, dynamic>{
+        'id': 'challenge-1',
+        'session_id': 'session-1',
+        'provider': 'vk',
+        'stage': 'provider_resolve',
+        'kind': 'browser',
+        'status': 'pending',
+        'completion_mode': 'owned_browser_observed',
+        'created_at': DateTime.utc(2026, 4, 5, 14, 0).toIso8601String(),
+        'updated_at': DateTime.utc(2026, 4, 5, 14, 0).toIso8601String(),
+      });
+
+      expect(challenge.completionMode, ChallengeCompletionMode.manualConfirm);
+      expect(challenge.ownedBrowser, isNull);
+      expect(challenge.browserReturn, isNull);
+    },
+  );
+
+  test(
+    'control plane client sends owned-browser continuation payloads',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(server.close);
+
+      server.listen((HttpRequest request) async {
+        expect(request.uri.path, '/v1/challenges/challenge-1/continue');
+        expect(request.method, 'POST');
+
+        final payload =
+            jsonDecode(await utf8.decoder.bind(request).join())
+                as Map<String, dynamic>;
+        final browserContinuation =
+            payload['browser_continuation'] as Map<String, dynamic>?;
+        expect(browserContinuation, isNotNull);
+        final cookies =
+            browserContinuation!['cookies'] as List<dynamic>? ?? <dynamic>[];
+        expect(cookies, hasLength(1));
+        expect((cookies.single as Map<String, dynamic>)['name'], 'session');
+        expect(
+          (cookies.single as Map<String, dynamic>)['value'],
+          'owned-session',
+        );
+
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(
+          jsonEncode(<String, dynamic>{
+            'id': 'challenge-1',
+            'session_id': 'session-1',
+            'provider': 'vk',
+            'stage': 'provider_resolve',
+            'kind': 'browser',
+            'status': 'continuing',
+            'completion_mode': 'owned_browser_observed',
+            'owned_browser': <String, dynamic>{
+              'cookie_urls': <String>['https://login.vk.ru/'],
+            },
+            'created_at': DateTime.utc(2026, 4, 5, 14, 0).toIso8601String(),
+            'updated_at': DateTime.utc(2026, 4, 5, 14, 1).toIso8601String(),
+          }),
+        );
+        await request.response.close();
+      });
+
+      final client = ControlPlaneClient(
+        baseUri: Uri.parse('http://${server.address.address}:${server.port}'),
+      );
+      final challenge = await client.continueChallenge(
+        'challenge-1',
+        browserContinuation: ChallengeContinuationSubmission(
+          cookies: <BrowserCookieRecord>[
+            BrowserCookieRecord(
+              name: 'session',
+              value: 'owned-session',
+              domain: 'login.vk.ru',
+              path: '/',
+            ),
+          ],
+        ),
+      );
+
+      expect(challenge.status, ChallengeStatus.continuing);
+      expect(
+        challenge.completionMode,
+        ChallengeCompletionMode.ownedBrowserObserved,
+      );
+      expect(challenge.ownedBrowser?.cookieUrls, <String>[
+        'https://login.vk.ru/',
+      ]);
+    },
+  );
 }

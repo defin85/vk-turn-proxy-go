@@ -15,7 +15,9 @@ func newChallengeRecord(
 	challenge provider.InteractiveChallenge,
 	now time.Time,
 ) Challenge {
-	completionMode, browserReturn := challengeContractMetadata(challenge)
+	completionMode, browserReturn, ownedBrowser := challengeContractMetadata(
+		challenge,
+	)
 	return Challenge{
 		ID:             id,
 		SessionID:      sessionID,
@@ -28,6 +30,7 @@ func newChallengeRecord(
 		Status:         ChallengeStatusPending,
 		CompletionMode: completionMode,
 		BrowserReturn:  browserReturn,
+		OwnedBrowser:   ownedBrowser,
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
@@ -35,31 +38,77 @@ func newChallengeRecord(
 
 func challengeContractMetadata(
 	challenge provider.InteractiveChallenge,
-) (ChallengeCompletionMode, *ChallengeBrowserReturnMetadata) {
+) (
+	ChallengeCompletionMode,
+	*ChallengeBrowserReturnMetadata,
+	*ChallengeOwnedBrowserMetadata,
+) {
+	return challengeContractMetadataFromProviderMetadata(
+		challenge,
+		defaultInteractiveChallengeMetadata(challenge),
+	)
+}
+
+func challengeContractMetadataWithMetadata(
+	challenge provider.InteractiveChallenge,
+	metadata provider.InteractiveChallengeMetadata,
+) (
+	ChallengeCompletionMode,
+	*ChallengeBrowserReturnMetadata,
+	*ChallengeOwnedBrowserMetadata,
+) {
 	if challenge == nil {
-		return ChallengeCompletionModeManualConfirm, nil
+		return ChallengeCompletionModeManualConfirm, nil, nil
+	}
+
+	switch metadata.CompletionMode {
+	case provider.ChallengeCompletionModeManualConfirm:
+		return ChallengeCompletionModeManualConfirm, nil, nil
+	case provider.ChallengeCompletionModeOwnedBrowserObserved:
+		ownedBrowser := normalizeOwnedBrowserMetadata(challenge)
+		if ownedBrowser == nil {
+			return ChallengeCompletionModeManualConfirm, nil, nil
+		}
+		return ChallengeCompletionModeOwnedBrowserObserved, nil, ownedBrowser
+	case provider.ChallengeCompletionModeAppReturnCallback:
+		browserReturn := normalizeAppReturnMetadata(metadata.BrowserReturn)
+		if browserReturn == nil {
+			return ChallengeCompletionModeManualConfirm, nil, nil
+		}
+		return ChallengeCompletionModeAppReturnCallback, browserReturn, nil
+	default:
+		return ChallengeCompletionModeManualConfirm, nil, nil
+	}
+}
+
+func challengeContractMetadataFromProviderMetadata(
+	challenge provider.InteractiveChallenge,
+	metadata provider.InteractiveChallengeMetadata,
+) (
+	ChallengeCompletionMode,
+	*ChallengeBrowserReturnMetadata,
+	*ChallengeOwnedBrowserMetadata,
+) {
+	return challengeContractMetadataWithMetadata(challenge, metadata)
+}
+
+func defaultInteractiveChallengeMetadata(
+	challenge provider.InteractiveChallenge,
+) provider.InteractiveChallengeMetadata {
+	if challenge == nil {
+		return provider.InteractiveChallengeMetadata{
+			CompletionMode: provider.ChallengeCompletionModeManualConfirm,
+		}
 	}
 
 	metadataProvider, ok := challenge.(provider.InteractiveChallengeMetadataProvider)
 	if !ok {
-		return ChallengeCompletionModeManualConfirm, nil
+		return provider.InteractiveChallengeMetadata{
+			CompletionMode: provider.ChallengeCompletionModeManualConfirm,
+		}
 	}
 
-	metadata := metadataProvider.ChallengeMetadata()
-	switch metadata.CompletionMode {
-	case provider.ChallengeCompletionModeManualConfirm:
-		return ChallengeCompletionModeManualConfirm, nil
-	case provider.ChallengeCompletionModeOwnedBrowserObserved:
-		return ChallengeCompletionModeOwnedBrowserObserved, nil
-	case provider.ChallengeCompletionModeAppReturnCallback:
-		browserReturn := normalizeAppReturnMetadata(metadata.BrowserReturn)
-		if browserReturn == nil {
-			return ChallengeCompletionModeManualConfirm, nil
-		}
-		return ChallengeCompletionModeAppReturnCallback, browserReturn
-	default:
-		return ChallengeCompletionModeManualConfirm, nil
-	}
+	return metadataProvider.ChallengeMetadata()
 }
 
 func normalizeAppReturnMetadata(
@@ -82,6 +131,19 @@ func normalizeAppReturnMetadata(
 		returnMetadata.ExpectedReturnURI = expectedReturnURI
 	}
 	return returnMetadata
+}
+
+func normalizeOwnedBrowserMetadata(
+	challenge provider.InteractiveChallenge,
+) *ChallengeOwnedBrowserMetadata {
+	cookieURLs := providerprompt.ContinuationCookieURLs(challenge)
+	if len(cookieURLs) == 0 {
+		return nil
+	}
+
+	return &ChallengeOwnedBrowserMetadata{
+		CookieURLs: append([]string(nil), cookieURLs...),
+	}
 }
 
 func normalizeBrowserReturnSignalKinds(
