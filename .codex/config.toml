@@ -7,3 +7,7 @@ EMBEDDING_MODEL = "nomic-embed-text-v2-moe"
 EMBEDDING_PROVIDER = "Ollama"
 MILVUS_ADDRESS = "127.0.0.1:20530"
 CUSTOM_IGNORE_PATTERNS = ".git/**,.beads/**,bin/**,dist/**,coverage.out,*.log,openspec/changes/**"
+
+[mcp_servers.dart]
+command = "dart"
+args = ["mcp-server", "--force-roots-fallback"]

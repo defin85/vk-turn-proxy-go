@@ -7,8 +7,17 @@ import 'package:gui_shell/src/control/desktop_host_supervisor.dart';
 import 'package:gui_shell/src/control/desktop_shell_controller.dart';
 import 'package:gui_shell/src/control/shell_state_store.dart';
 
+const bool _designReferenceMode = bool.fromEnvironment(
+  'VKTP_DESIGN_REFERENCES',
+);
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+
+  if (_designReferenceMode) {
+    runApp(const DesktopShellDesignReferencesApp());
+    return;
+  }
 
   final client = ControlPlaneClient.localhost();
   final controller = DesktopShellController(
