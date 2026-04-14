@@ -122,6 +122,7 @@ class DesktopShellController extends ChangeNotifier {
   bool _suppressEventStreamClosure = false;
   String? _persistedStateSignature;
   bool _restoredState = false;
+  Future<void>? _shutdownFuture;
 
   List<PlatformTunnelCapability> get platformTunnels =>
       hostConnection?.info?.platformTunnels ??
@@ -225,6 +226,10 @@ class DesktopShellController extends ChangeNotifier {
   Future<void> reconnect() async {
     await _stopRuntimeMonitoring();
     await _connectHost();
+  }
+
+  Future<void> shutdown() {
+    return _shutdownFuture ??= _shutdownInternal();
   }
 
   Future<void> _connectHost() async {
@@ -877,16 +882,17 @@ class DesktopShellController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    _debounceTimer?.cancel();
-    _persistTimer?.cancel();
-    _pollTimer?.cancel();
-    _eventSubscription?.cancel();
+    unawaited(shutdown());
     shellChromeRevision.dispose();
     workflowRevision.dispose();
     inspectorLayoutRevision.dispose();
     inspectorRevision.dispose();
-    unawaited(supervisor.dispose());
     super.dispose();
+  }
+
+  Future<void> _shutdownInternal() async {
+    await _stopRuntimeMonitoring();
+    await supervisor.dispose();
   }
 
   void _startEventStream() {

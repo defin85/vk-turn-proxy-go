@@ -304,7 +304,9 @@ class _DashboardPageState extends State<DashboardPage> {
             child: Scaffold(
               key: _scaffoldKey,
               onEndDrawerChanged: (bool isOpened) {
-                if (showPersistentInspector || isOpened || !controller.isInspectorOpen) {
+                if (showPersistentInspector ||
+                    isOpened ||
+                    !controller.isInspectorOpen) {
                   return;
                 }
                 controller.closeInspector();
@@ -448,16 +450,7 @@ class _ShellBody extends StatelessWidget {
             final contextPane = AnimatedBuilder(
               animation: controller.workflowRevision,
               builder: (BuildContext context, Widget? child) {
-                return _WorkflowContextPane(
-                  controller: controller,
-                  onOpenSavedProfiles: onOpenSavedProfiles,
-                  onOpenManagedProvidersForProfile:
-                      onOpenManagedProvidersForProfile,
-                  onOpenManagedProvidersForProvider:
-                      onOpenManagedProvidersForProvider,
-                  onOpenPresetBootstrap: onOpenPresetBootstrap,
-                  onOpenProviderFamilies: onOpenProviderFamilies,
-                );
+                return _WorkflowContextPane(controller: controller);
               },
             );
             final editorPane = AnimatedBuilder(
@@ -517,6 +510,21 @@ class _ShellBody extends StatelessWidget {
                 return _FocusedAssurancePane(controller: controller);
               },
             );
+            final workflowLauncherBar = AnimatedBuilder(
+              animation: controller.workflowRevision,
+              builder: (BuildContext context, Widget? child) {
+                return _WorkflowActionBar(
+                  controller: controller,
+                  onOpenSavedProfiles: onOpenSavedProfiles,
+                  onOpenManagedProvidersForProfile:
+                      onOpenManagedProvidersForProfile,
+                  onOpenManagedProvidersForProvider:
+                      onOpenManagedProvidersForProvider,
+                  onOpenPresetBootstrap: onOpenPresetBootstrap,
+                  onOpenProviderFamilies: onOpenProviderFamilies,
+                );
+              },
+            );
             final mainColumn = FocusTraversalGroup(
               child: Focus(
                 key: const ValueKey<String>('desktop-active-workflow-focus'),
@@ -526,6 +534,8 @@ class _ShellBody extends StatelessWidget {
                   children: <Widget>[
                     assurancePane,
                     const SizedBox(height: 12),
+                    workflowLauncherBar,
+                    const SizedBox(height: 12),
                     Expanded(child: editorPane),
                   ],
                 ),
@@ -533,7 +543,7 @@ class _ShellBody extends StatelessWidget {
             );
 
             if (compactLayout) {
-              final contextHeight = constraints.maxHeight < 920 ? 188.0 : 220.0;
+              final contextHeight = constraints.maxHeight < 920 ? 112.0 : 128.0;
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
@@ -557,7 +567,7 @@ class _ShellBody extends StatelessWidget {
                 if (showExpandedPad)
                   FocusTraversalGroup(
                     child: SizedBox(
-                      width: 296,
+                      width: 236,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: <Widget>[
@@ -586,7 +596,7 @@ class _ShellBody extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   SizedBox(
-                    width: 288,
+                    width: 220,
                     child: FocusTraversalGroup(child: contextPane),
                   ),
                 ],
@@ -900,7 +910,7 @@ class _ExpandedNavigationPad extends StatelessWidget {
     final theme = Theme.of(context);
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -912,7 +922,7 @@ class _ExpandedNavigationPad extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              'Keep switching visible, but quiet. The editor should still own the screen.',
+              'Keep switching visible, but quiet.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -946,8 +956,8 @@ class _ExpandedNavigationPad extends StatelessWidget {
   }
 }
 
-class _WorkflowContextPane extends StatelessWidget {
-  const _WorkflowContextPane({
+class _WorkflowActionBar extends StatelessWidget {
+  const _WorkflowActionBar({
     required this.controller,
     required this.onOpenSavedProfiles,
     required this.onOpenManagedProvidersForProfile,
@@ -966,134 +976,162 @@ class _WorkflowContextPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
+    final profileWorkflow =
+        controller.activeSection == DesktopShellSection.profileWorkflow;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text(
-                  controller.activeSection ==
-                          DesktopShellSection.profileWorkflow
-                      ? 'Saved profiles'
-                      : 'Provider tools',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        profileWorkflow
+                            ? 'Profile tools'
+                            : 'Managed provider actions',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        profileWorkflow
+                            ? 'Keep browsing intentional. The editor stays primary and the library opens only when you ask for it.'
+                            : 'Keep presets, reusable records, and family choice subordinate to the active managed-record editor.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  controller.activeSection ==
-                          DesktopShellSection.profileWorkflow
-                      ? 'Keep saved-profile browsing off the first read until you explicitly open it.'
-                      : 'Presets, reusable records, and family choice stay deliberate secondary actions.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: controller.activeSection ==
-                          DesktopShellSection.profileWorkflow
-                      ? <Widget>[
-                          FilledButton.tonal(
-                            key: const ValueKey<String>(
-                              'desktop-open-profile-library-button',
-                            ),
-                            onPressed: () => unawaited(onOpenSavedProfiles()),
-                            child: const Text('Browse saved profiles'),
-                          ),
-                          OutlinedButton(
-                            key: const ValueKey<String>(
-                              'desktop-create-profile-draft-button',
-                            ),
-                            onPressed: controller.busy
-                                ? null
-                                : controller.resetDraft,
-                            child: const Text('New draft'),
-                          ),
-                        ]
-                      : <Widget>[
-                          FilledButton.tonal(
-                            key: const ValueKey<String>(
-                              'desktop-open-preset-bootstrap-button',
-                            ),
-                            onPressed: () =>
-                                unawaited(onOpenPresetBootstrap()),
-                            child: const Text('New from preset'),
-                          ),
-                          FilledButton.tonal(
-                            key: const ValueKey<String>(
-                              'desktop-open-managed-provider-library-button',
-                            ),
-                            onPressed: () => unawaited(
-                              onOpenManagedProvidersForProvider(),
-                            ),
-                            child: const Text('Browse records'),
-                          ),
-                          OutlinedButton(
-                            key: const ValueKey<String>(
-                              'desktop-open-provider-family-chooser-button',
-                            ),
-                            onPressed: () =>
-                                unawaited(onOpenProviderFamilies()),
-                            child: const Text('Choose family'),
-                          ),
-                        ],
+                _AssuranceChip(
+                  label: profileWorkflow
+                      ? 'Profile workflow'
+                      : 'Provider workflow',
                 ),
               ],
             ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Expanded(
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: SingleChildScrollView(
-                child: controller.activeSection ==
-                        DesktopShellSection.profileWorkflow
-                    ? _ProfileWorkflowContextSummary(
-                        controller: controller,
-                        onOpenSavedProfiles: onOpenSavedProfiles,
-                        onOpenManagedProvidersForProfile:
-                            onOpenManagedProvidersForProfile,
-                      )
-                    : _ProviderWorkflowContextSummary(
-                        controller: controller,
-                        onOpenManagedProvidersForProvider:
-                            onOpenManagedProvidersForProvider,
-                        onOpenPresetBootstrap: onOpenPresetBootstrap,
-                        onOpenProviderFamilies: onOpenProviderFamilies,
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: profileWorkflow
+                  ? <Widget>[
+                      FilledButton.tonal(
+                        key: const ValueKey<String>(
+                          'desktop-open-profile-library-button',
+                        ),
+                        onPressed: () => unawaited(onOpenSavedProfiles()),
+                        child: const Text('Browse saved profiles'),
                       ),
-              ),
+                      OutlinedButton(
+                        key: const ValueKey<String>(
+                          'desktop-create-profile-draft-button',
+                        ),
+                        onPressed: controller.busy
+                            ? null
+                            : controller.resetDraft,
+                        child: const Text('New draft'),
+                      ),
+                      OutlinedButton(
+                        key: const ValueKey<String>(
+                          'desktop-context-open-profile-managed-providers-button',
+                        ),
+                        onPressed: controller.managedProviders.isEmpty
+                            ? null
+                            : () =>
+                                  unawaited(onOpenManagedProvidersForProfile()),
+                        child: const Text('Choose provider record'),
+                      ),
+                    ]
+                  : <Widget>[
+                      FilledButton.tonal(
+                        key: const ValueKey<String>(
+                          'desktop-open-preset-bootstrap-button',
+                        ),
+                        onPressed: () => unawaited(onOpenPresetBootstrap()),
+                        child: const Text('New from preset'),
+                      ),
+                      FilledButton.tonal(
+                        key: const ValueKey<String>(
+                          'desktop-open-managed-provider-library-button',
+                        ),
+                        onPressed: () =>
+                            unawaited(onOpenManagedProvidersForProvider()),
+                        child: const Text('Browse records'),
+                      ),
+                      OutlinedButton(
+                        key: const ValueKey<String>(
+                          'desktop-open-provider-family-chooser-button',
+                        ),
+                        onPressed: () => unawaited(onOpenProviderFamilies()),
+                        child: const Text('Choose family'),
+                      ),
+                    ],
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WorkflowContextPane extends StatelessWidget {
+  const _WorkflowContextPane({required this.controller});
+
+  final DesktopShellController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                'Current focus',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                controller.activeSection == DesktopShellSection.profileWorkflow
+                    ? 'The side lane should orient the active draft, not become a second browsing surface.'
+                    : 'The side lane should orient the active managed record, not reopen presets and catalogs by default.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              controller.activeSection == DesktopShellSection.profileWorkflow
+                  ? _ProfileWorkflowContextSummary(controller: controller)
+                  : _ProviderWorkflowContextSummary(controller: controller),
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 }
 
 class _ProfileWorkflowContextSummary extends StatelessWidget {
-  const _ProfileWorkflowContextSummary({
-    required this.controller,
-    required this.onOpenSavedProfiles,
-    required this.onOpenManagedProvidersForProfile,
-  });
+  const _ProfileWorkflowContextSummary({required this.controller});
 
   final DesktopShellController controller;
-  final Future<void> Function() onOpenSavedProfiles;
-  final Future<void> Function() onOpenManagedProvidersForProfile;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     ProfileRecord? selectedProfile;
     if (controller.selectedProfileId != null) {
       for (final profile in controller.profiles) {
@@ -1103,7 +1141,8 @@ class _ProfileWorkflowContextSummary extends StatelessWidget {
         }
       }
     }
-    final managedProviderId = controller.draft.providerBinding.managedProviderId;
+    final managedProviderId =
+        controller.draft.providerBinding.managedProviderId;
     ManagedProviderRecord? managedProvider;
     if (managedProviderId != null) {
       for (final provider in controller.managedProviders) {
@@ -1120,9 +1159,9 @@ class _ProfileWorkflowContextSummary extends StatelessWidget {
       children: <Widget>[
         Text(
           'Current task',
-          style: theme.textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w800,
-          ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
         ),
         const SizedBox(height: 8),
         _ContextSummaryCard(
@@ -1141,27 +1180,10 @@ class _ProfileWorkflowContextSummary extends StatelessWidget {
               : '${managedProvider.name.isEmpty ? managedProvider.id : managedProvider.name} · ${managedProvider.provider}',
         ),
         const SizedBox(height: 10),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: <Widget>[
-            OutlinedButton(
-              key: const ValueKey<String>(
-                'desktop-context-open-profile-library-button',
-              ),
-              onPressed: () => unawaited(onOpenSavedProfiles()),
-              child: const Text('Open saved profiles'),
-            ),
-            OutlinedButton(
-              key: const ValueKey<String>(
-                'desktop-context-open-profile-managed-providers-button',
-              ),
-              onPressed: controller.managedProviders.isEmpty
-                  ? null
-                  : () => unawaited(onOpenManagedProvidersForProfile()),
-              child: const Text('Choose provider record'),
-            ),
-          ],
+        _ContextHint(
+          icon: Icons.fact_check_outlined,
+          message:
+              'Keep library browsing secondary. The main editor is where the draft should feel owned.',
         ),
       ],
     );
@@ -1169,21 +1191,12 @@ class _ProfileWorkflowContextSummary extends StatelessWidget {
 }
 
 class _ProviderWorkflowContextSummary extends StatelessWidget {
-  const _ProviderWorkflowContextSummary({
-    required this.controller,
-    required this.onOpenManagedProvidersForProvider,
-    required this.onOpenPresetBootstrap,
-    required this.onOpenProviderFamilies,
-  });
+  const _ProviderWorkflowContextSummary({required this.controller});
 
   final DesktopShellController controller;
-  final Future<void> Function() onOpenManagedProvidersForProvider;
-  final Future<void> Function() onOpenPresetBootstrap;
-  final Future<void> Function() onOpenProviderFamilies;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     ManagedProviderRecord? selectedManagedProvider;
     if (controller.selectedManagedProviderId != null) {
       for (final provider in controller.managedProviders) {
@@ -1203,9 +1216,9 @@ class _ProviderWorkflowContextSummary extends StatelessWidget {
       children: <Widget>[
         Text(
           'Current task',
-          style: theme.textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w800,
-          ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
         ),
         const SizedBox(height: 8),
         _ContextSummaryCard(
@@ -1224,35 +1237,48 @@ class _ProviderWorkflowContextSummary extends StatelessWidget {
               : '${selectedManagedProvider.name.isEmpty ? selectedManagedProvider.id : selectedManagedProvider.name} · ${selectedManagedProvider.provider}',
         ),
         const SizedBox(height: 10),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: <Widget>[
-            OutlinedButton(
-              key: const ValueKey<String>(
-                'desktop-context-open-provider-family-button',
-              ),
-              onPressed: () => unawaited(onOpenProviderFamilies()),
-              child: const Text('Choose family'),
-            ),
-            OutlinedButton(
-              key: const ValueKey<String>(
-                'desktop-context-open-provider-records-button',
-              ),
-              onPressed: () =>
-                  unawaited(onOpenManagedProvidersForProvider()),
-              child: const Text('Browse records'),
-            ),
-            OutlinedButton(
-              key: const ValueKey<String>(
-                'desktop-context-open-provider-presets-button',
-              ),
-              onPressed: () => unawaited(onOpenPresetBootstrap()),
-              child: const Text('Open presets'),
-            ),
-          ],
+        _ContextHint(
+          icon: Icons.tune_outlined,
+          message:
+              'Keep family choice, presets, and record browsing subordinate to the active managed-record edit path.',
         ),
       ],
+    );
+  }
+}
+
+class _ContextHint extends StatelessWidget {
+  const _ContextHint({required this.icon, required this.message});
+
+  final IconData icon;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.24,
+        ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Icon(icon, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1269,7 +1295,9 @@ class _ContextSummaryCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.32),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.32,
+        ),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -1391,43 +1419,38 @@ class _FocusedAssurancePane extends StatelessWidget {
       HostLifecycleState.failed => const Color(0xFFFFEEE9),
       _ => const Color(0xFFF2F4F8),
     };
+    final showPinnedSummary =
+        controller.status != ShellStatus.ready || controller.hasLiveWork;
 
     return Card(
       color: tone,
       child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints constraints) {
+            final stacked = constraints.maxWidth < 820;
+            final summary = Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        'Workflow readiness',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _workflowAssuranceSummary(controller),
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                    ],
+                Text(
+                  'Workflow readiness',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
-                _AssuranceChip(label: stateLabel),
+                const SizedBox(height: 4),
+                Text(
+                  _workflowAssuranceSummary(controller),
+                  style: theme.textTheme.bodySmall,
+                ),
               ],
-            ),
-            const SizedBox(height: 12),
-            Wrap(
+            );
+            final chips = Wrap(
               spacing: 8,
               runSpacing: 8,
+              alignment: stacked ? WrapAlignment.start : WrapAlignment.end,
               children: <Widget>[
+                _AssuranceChip(label: stateLabel),
                 _AssuranceChip(
                   label: readyTunnelModes > 0
                       ? '$readyTunnelModes/$tunnelModes tunnel modes ready'
@@ -1441,21 +1464,37 @@ class _FocusedAssurancePane extends StatelessWidget {
                 if (controller.hostConnection?.isReady != true)
                   _AssuranceChip(label: 'Support context pinned'),
               ],
-            ),
-            const SizedBox(height: 10),
-            Text(
-              _platformTunnelHeaderSummary(controller),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            if (controller.status != ShellStatus.ready ||
-                controller.hasLiveWork ||
-                controller.notice != null) ...<Widget>[
-              const SizedBox(height: 12),
-              _PinnedSupportSummary(controller: controller),
-            ],
-          ],
+            );
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                if (stacked) ...<Widget>[
+                  summary,
+                  const SizedBox(height: 10),
+                  chips,
+                ] else
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Expanded(child: summary),
+                      const SizedBox(width: 12),
+                      Flexible(child: chips),
+                    ],
+                  ),
+                const SizedBox(height: 8),
+                Text(
+                  _platformTunnelHeaderSummary(controller),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                if (showPinnedSummary) ...<Widget>[
+                  const SizedBox(height: 10),
+                  _PinnedSupportSummary(controller: controller),
+                ],
+              ],
+            );
+          },
         ),
       ),
     );
@@ -1490,7 +1529,7 @@ class _PinnedSupportSummary extends StatelessWidget {
             : 'Use Diagnostics or Live work when you need deeper inspection. The main workflow remains primary.',
     };
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.74),
         borderRadius: BorderRadius.circular(16),

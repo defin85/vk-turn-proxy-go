@@ -99,17 +99,16 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
           ),
           FilledButton.tonal(
             key: const ValueKey<String>('managed-provider-apply-action'),
-            onPressed:
-                widget.busy || widget.selectedManagedProviderId == null
+            onPressed: widget.busy || widget.selectedManagedProviderId == null
                 ? null
-                : () =>
-                    widget.onApplyToProfileDraft(widget.selectedManagedProviderId!),
+                : () => widget.onApplyToProfileDraft(
+                    widget.selectedManagedProviderId!,
+                  ),
             child: const Text('Apply record to profile draft'),
           ),
           OutlinedButton(
             key: const ValueKey<String>('managed-provider-delete-action'),
-            onPressed:
-                widget.busy || widget.selectedManagedProviderId == null
+            onPressed: widget.busy || widget.selectedManagedProviderId == null
                 ? null
                 : () => unawaited(widget.onDelete()),
             child: const Text('Delete record'),
@@ -174,105 +173,105 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                         nextStepCard,
                         const SizedBox(height: 16),
                       ],
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest
-                          .withValues(alpha: 0.45),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Text(
-                      'The app still owns the supported provider catalog, but the catalog now opens explicitly instead of staying expanded in the default first read.',
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                  ),
-                  if (widget.supportedProviders.isEmpty)
-                    _unavailableCard(
-                      theme,
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHighest
+                              .withValues(alpha: 0.45),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Text(
+                          'The app still owns the supported provider catalog, but the catalog now opens explicitly instead of staying expanded in the default first read.',
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ),
+                      if (widget.supportedProviders.isEmpty)
+                        _unavailableCard(
+                          theme,
                           'This build does not advertise any shipped provider families yet.',
-                    )
-                  else ...<Widget>[
-                    _familyEntryCard(
-                      theme,
-                      provider: supportedProvider,
-                      availability: hostAvailability,
-                    ),
-                    const SizedBox(height: 16),
-                    if (supportedProvider != null)
-                      _selectedFamilyCard(
-                        theme,
-                        provider: supportedProvider,
-                        availability: hostAvailability,
-                        descriptor: descriptor,
-                      ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Managed provider record',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'This shell-owned record stores only reusable, non-secret provider-owned values for the selected shipped family.',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _field(
-                      controller: _nameController,
-                      label: 'Managed record name',
-                      onChanged: (String value) => _pushDraft(name: value),
-                    ),
-                    if (hostAvailability != null &&
-                        !hostAvailability.isAvailable) ...<Widget>[
-                      _unavailableCard(theme, hostAvailability.message),
-                      const SizedBox(height: 12),
-                    ],
-                    if (descriptor != null) ...<Widget>[
-                      _descriptorSummary(theme, descriptor),
-                      const SizedBox(height: 12),
-                    ],
-                    if (descriptor?.providerSettingsSupportError != null &&
-                        widget.draft.providerSettings.isNotEmpty)
-                      _unavailableCard(
-                        theme,
-                        'This desktop shell cannot render the provider settings schema for ${descriptor!.displayName}: ${descriptor.providerSettingsSupportError}. Save stays blocked until the host advertises a supported schema subset.',
-                      )
-                    else if (descriptor?.settingsSchema == null)
-                      _infoCard(
-                        theme,
-                        supportedProvider == null
-                            ? 'This managed provider currently has no reusable field surface in the shipped shell.'
-                            : '${supportedProvider.title} currently has no reusable managed fields in this shipped shell. The record still stays valid as a named supported provider entry.',
-                      )
-                    else if (descriptor != null) ...<Widget>[
-                      Text(
-                        'Reusable provider settings',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
+                        )
+                      else ...<Widget>[
+                        _familyEntryCard(
+                          theme,
+                          provider: supportedProvider,
+                          availability: hostAvailability,
                         ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Only descriptor-retained, non-secret provider settings belong here. Runtime defaults and profile input stay in the profile workspace.',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                        const SizedBox(height: 16),
+                        if (supportedProvider != null)
+                          _selectedFamilyCard(
+                            theme,
+                            provider: supportedProvider,
+                            availability: hostAvailability,
+                            descriptor: descriptor,
+                          ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Managed provider record',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      ProviderSettingsForm(
-                        descriptor: descriptor,
-                        values: widget.draft.providerSettings,
-                        enabled: !widget.busy,
-                        onChanged: (Map<String, dynamic> values) {
-                          _pushDraft(providerSettings: values);
-                        },
-                      ),
-                    ],
-                  ],
+                        const SizedBox(height: 6),
+                        Text(
+                          'This shell-owned record stores only reusable, non-secret provider-owned values for the selected shipped family.',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _field(
+                          controller: _nameController,
+                          label: 'Managed record name',
+                          onChanged: (String value) => _pushDraft(name: value),
+                        ),
+                        if (hostAvailability != null &&
+                            !hostAvailability.isAvailable) ...<Widget>[
+                          _unavailableCard(theme, hostAvailability.message),
+                          const SizedBox(height: 12),
+                        ],
+                        if (descriptor != null) ...<Widget>[
+                          _descriptorSummary(theme, descriptor),
+                          const SizedBox(height: 12),
+                        ],
+                        if (descriptor?.providerSettingsSupportError != null &&
+                            widget.draft.providerSettings.isNotEmpty)
+                          _unavailableCard(
+                            theme,
+                            'This desktop shell cannot render the provider settings schema for ${descriptor!.displayName}: ${descriptor.providerSettingsSupportError}. Save stays blocked until the host advertises a supported schema subset.',
+                          )
+                        else if (descriptor?.settingsSchema == null)
+                          _infoCard(
+                            theme,
+                            supportedProvider == null
+                                ? 'This managed provider currently has no reusable field surface in the shipped shell.'
+                                : '${supportedProvider.title} currently has no reusable managed fields in this shipped shell. The record still stays valid as a named supported provider entry.',
+                          )
+                        else if (descriptor != null) ...<Widget>[
+                          Text(
+                            'Reusable provider settings',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Only descriptor-retained, non-secret provider settings belong here. Runtime defaults and profile input stay in the profile workspace.',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          ProviderSettingsForm(
+                            descriptor: descriptor,
+                            values: widget.draft.providerSettings,
+                            enabled: !widget.busy,
+                            onChanged: (Map<String, dynamic> values) {
+                              _pushDraft(providerSettings: values);
+                            },
+                          ),
+                        ],
+                      ],
                     ],
                   ),
                 ),
@@ -351,7 +350,9 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.35,
+        ),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
@@ -389,35 +390,13 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
             ),
           ],
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: <Widget>[
-              FilledButton.tonal(
-                key: const ValueKey<String>('provider-open-family-chooser-button'),
-                onPressed: widget.busy || widget.onChooseProviderFamily == null
-                    ? null
-                    : () => unawaited(widget.onChooseProviderFamily!()),
-                child: Text(provider == null ? 'Choose family' : 'Change family'),
-              ),
-              FilledButton.tonal(
-                key: const ValueKey<String>('provider-open-preset-bootstrap-button'),
-                onPressed: widget.busy || widget.onOpenPresetBootstrap == null
-                    ? null
-                    : () => unawaited(widget.onOpenPresetBootstrap!()),
-                child: const Text('New from preset'),
-              ),
-              OutlinedButton(
-                key: const ValueKey<String>(
-                  'provider-open-managed-record-library-button',
-                ),
-                onPressed:
-                    widget.busy || widget.onBrowseManagedProviders == null
-                    ? null
-                    : () => unawaited(widget.onBrowseManagedProviders!()),
-                child: const Text('Browse records'),
-              ),
-            ],
+          Text(
+            provider == null
+                ? 'Use the action strip above the editor to choose the shipped family before you continue.'
+                : 'Keep preset bootstrap, family changes, and record browsing in the action strip above so this editor stays focused on one managed record.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),

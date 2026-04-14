@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gui_shell/src/app.dart';
 import 'package:gui_shell/src/control/control_plane_client.dart';
 import 'package:gui_shell/src/control/control_plane_models.dart';
 import 'package:gui_shell/src/control/desktop_host_supervisor.dart';
@@ -130,6 +132,49 @@ const ProviderDescriptor _supportedProviderWithUnsupportedSettingsDescriptor =
 
 void main() {
   testWidgets(
+    'desktop shell waits for owned host shutdown before app exit completes',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1600, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final supervisor = _TrackingHostSupervisor();
+      final controller = DesktopShellController(
+        api: _FakeControlPlaneApi(),
+        supervisor: supervisor,
+        stateStore: const _InMemoryShellStateStore(),
+        appBuild: _testGuiBuild,
+      );
+
+      await tester.pumpWidget(DesktopShellApp(controller: controller));
+      await tester.pump();
+
+      var exitResolved = false;
+      final exitFuture = WidgetsBinding.instance.handleRequestAppExit().then((
+        ui.AppExitResponse response,
+      ) {
+        exitResolved = true;
+        return response;
+      });
+
+      await tester.pump();
+
+      expect(supervisor.disposeCalls, 1);
+      expect(exitResolved, isFalse);
+
+      supervisor.completeDispose();
+
+      expect(await exitFuture, ui.AppExitResponse.exit);
+      expect(exitResolved, isTrue);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+
+      expect(supervisor.disposeCalls, 1);
+    },
+  );
+
+  testWidgets(
     'desktop shell shows connecting state before host negotiation completes',
     (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1600, 1200);
@@ -155,7 +200,7 @@ void main() {
       );
       expect(find.text('Local host blocked'), findsNothing);
       expect(find.text('Workflows'), findsOneWidget);
-      expect(find.text('Saved profiles'), findsOneWidget);
+      expect(find.text('Current focus'), findsOneWidget);
       expect(find.text('Profile workspace'), findsOneWidget);
       expect(
         find.byKey(const ValueKey<String>('desktop-open-diagnostics-button')),
@@ -230,7 +275,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Workflows'), findsOneWidget);
-    expect(find.text('Saved profiles'), findsOneWidget);
+    expect(find.text('Current focus'), findsOneWidget);
     expect(find.text('Profile workspace'), findsOneWidget);
     expect(
       find.byKey(const ValueKey<String>('profile-library-item-profile-2')),
@@ -295,7 +340,9 @@ void main() {
       final draftName = controller.draft.name;
 
       await tester.tap(
-        find.byKey(const ValueKey<String>('desktop-open-profile-library-button')),
+        find.byKey(
+          const ValueKey<String>('desktop-open-profile-library-button'),
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -323,7 +370,9 @@ void main() {
       );
 
       await tester.tap(
-        find.byKey(const ValueKey<String>('desktop-open-profile-library-button')),
+        find.byKey(
+          const ValueKey<String>('desktop-open-profile-library-button'),
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -379,7 +428,7 @@ void main() {
     expect(find.text('Host 0.1.0+1 @deadbeefcafe'), findsOneWidget);
     expect(find.text('Contract 1'), findsOneWidget);
     expect(find.text('Workflows'), findsOneWidget);
-    expect(find.text('Saved profiles'), findsOneWidget);
+    expect(find.text('Current focus'), findsOneWidget);
     expect(find.text('Profile workspace'), findsOneWidget);
     expect(
       find.byKey(const ValueKey<String>('desktop-open-diagnostics-button')),
@@ -583,7 +632,9 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(
-      find.byKey(const ValueKey<String>('desktop-open-preset-bootstrap-button')),
+      find.byKey(
+        const ValueKey<String>('desktop-open-preset-bootstrap-button'),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -626,7 +677,9 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(
-      find.byKey(const ValueKey<String>('desktop-open-preset-bootstrap-button')),
+      find.byKey(
+        const ValueKey<String>('desktop-open-preset-bootstrap-button'),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -680,7 +733,7 @@ void main() {
 
       await tester.tap(
         find.byKey(
-          const ValueKey<String>('provider-open-family-chooser-button'),
+          const ValueKey<String>('desktop-open-provider-family-chooser-button'),
         ),
       );
       await tester.pumpAndSettle();
@@ -1732,6 +1785,33 @@ class _FakeHostSupervisor implements HostSupervisor {
   @override
   Future<HostConnectionResult> ensureReady() async {
     return result;
+  }
+}
+
+class _TrackingHostSupervisor implements HostSupervisor {
+  int disposeCalls = 0;
+  Completer<void>? _disposeCompleter;
+  Future<void>? _disposeFuture;
+
+  void completeDispose() {
+    _disposeCompleter?.complete();
+  }
+
+  @override
+  Future<void> dispose() {
+    disposeCalls++;
+    _disposeCompleter ??= Completer<void>();
+    _disposeFuture ??= _disposeCompleter!.future;
+    return _disposeFuture!;
+  }
+
+  @override
+  Future<HostConnectionResult> ensureReady() async {
+    return const HostConnectionResult(
+      state: HostLifecycleState.ready,
+      message: 'Connected to local host 127.0.0.1:7777',
+      info: _readyHostInfo,
+    );
   }
 }
 

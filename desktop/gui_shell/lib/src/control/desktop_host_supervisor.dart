@@ -155,9 +155,16 @@ class DesktopHostSupervisor implements HostSupervisor {
   final SidecarStarter _starter;
 
   ManagedSidecarProcess? _ownedProcess;
+  bool _shutdownRequested = false;
 
   @override
   Future<HostConnectionResult> ensureReady() async {
+    if (_shutdownRequested) {
+      return const HostConnectionResult(
+        state: HostLifecycleState.failed,
+        message: 'Local host shutdown requested.',
+      );
+    }
     final initial = await _probeHost();
     if (initial.isReady || initial.state == HostLifecycleState.incompatible) {
       return initial;
@@ -175,10 +182,30 @@ class DesktopHostSupervisor implements HostSupervisor {
     Object? lastError;
     HostConnectionResult? lastResult;
     for (final spec in candidates) {
+      if (_shutdownRequested) {
+        return const HostConnectionResult(
+          state: HostLifecycleState.failed,
+          message: 'Local host shutdown requested.',
+        );
+      }
       try {
         final process = await _starter(spec);
         _ownedProcess = process;
+        if (_shutdownRequested) {
+          await _disposeOwnedProcess();
+          return const HostConnectionResult(
+            state: HostLifecycleState.failed,
+            message: 'Local host shutdown requested.',
+          );
+        }
         final result = await _waitForReady(spec, process);
+        if (_shutdownRequested) {
+          await _disposeOwnedProcess();
+          return const HostConnectionResult(
+            state: HostLifecycleState.failed,
+            message: 'Local host shutdown requested.',
+          );
+        }
         if (result.isReady) {
           return result;
         }
@@ -186,7 +213,7 @@ class DesktopHostSupervisor implements HostSupervisor {
       } catch (error) {
         lastError = error;
       }
-      await dispose();
+      await _disposeOwnedProcess();
     }
 
     if (lastResult != null) {
@@ -203,6 +230,11 @@ class DesktopHostSupervisor implements HostSupervisor {
 
   @override
   Future<void> dispose() async {
+    _shutdownRequested = true;
+    await _disposeOwnedProcess();
+  }
+
+  Future<void> _disposeOwnedProcess() async {
     final process = _ownedProcess;
     _ownedProcess = null;
     if (process == null) {
@@ -263,6 +295,12 @@ class DesktopHostSupervisor implements HostSupervisor {
   ) async {
     final deadline = DateTime.now().add(startupTimeout);
     while (DateTime.now().isBefore(deadline)) {
+      if (_shutdownRequested) {
+        return const HostConnectionResult(
+          state: HostLifecycleState.failed,
+          message: 'Local host shutdown requested.',
+        );
+      }
       final result = await _probeHost();
       if (result.isReady) {
         return HostConnectionResult(

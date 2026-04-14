@@ -280,6 +280,56 @@ void main() {
     },
   );
 
+  test(
+    'supervisor stops launching fallbacks after shutdown is requested',
+    () async {
+      final listenPort = await _reservePort();
+      final listenAddress = '127.0.0.1:$listenPort';
+      final client = ControlPlaneClient(
+        baseUri: Uri.parse('http://$listenAddress'),
+        timeout: const Duration(milliseconds: 50),
+      );
+      final launched = <String>[];
+      final firstLaunch = Completer<void>();
+      final processes = <String, _TrackingManagedProcess>{};
+      final supervisor = DesktopHostSupervisor(
+        client: client,
+        listenAddress: listenAddress,
+        locator: _StaticLocator(const <SidecarLaunchSpec>[
+          SidecarLaunchSpec(
+            executable: 'clientd-a',
+            description: 'first-sidecar',
+          ),
+          SidecarLaunchSpec(
+            executable: 'clientd-b',
+            description: 'second-sidecar',
+          ),
+        ]),
+        startupTimeout: const Duration(seconds: 5),
+        probeInterval: const Duration(milliseconds: 10),
+        starter: (SidecarLaunchSpec spec) async {
+          launched.add(spec.description);
+          final process = _TrackingManagedProcess();
+          processes[spec.description] = process;
+          if (!firstLaunch.isCompleted) {
+            firstLaunch.complete();
+          }
+          return process;
+        },
+      );
+
+      final ensureFuture = supervisor.ensureReady();
+      await firstLaunch.future;
+      await supervisor.dispose();
+
+      final result = await ensureFuture;
+      expect(result.state, HostLifecycleState.failed);
+      expect(result.message, 'Local host shutdown requested.');
+      expect(launched, <String>['first-sidecar']);
+      expect(processes['first-sidecar']?.killCalls, 1);
+    },
+  );
+
   test('macOS bundled sidecar path resolves inside Contents/Frameworks', () {
     expect(
       macOSBundledSidecarPath(
@@ -328,6 +378,23 @@ class _ServerManagedProcess implements ManagedSidecarProcess {
         }
       }),
     );
+    return true;
+  }
+}
+
+class _TrackingManagedProcess implements ManagedSidecarProcess {
+  final Completer<int> _exitCode = Completer<int>();
+  int killCalls = 0;
+
+  @override
+  Future<int> get exitCode => _exitCode.future;
+
+  @override
+  bool kill([ProcessSignal signal = ProcessSignal.sigterm]) {
+    killCalls++;
+    if (!_exitCode.isCompleted) {
+      _exitCode.complete(0);
+    }
     return true;
   }
 }

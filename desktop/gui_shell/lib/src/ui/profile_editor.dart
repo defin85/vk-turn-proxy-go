@@ -205,134 +205,144 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                         nextStepCard,
                         const SizedBox(height: 16),
                       ],
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest
-                          .withValues(alpha: 0.45),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        const Icon(Icons.playlist_add_check_circle_outlined),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              Text(
-                                'Task-first workspace',
-                                style: theme.textTheme.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                ),
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHighest
+                              .withValues(alpha: 0.45),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            const Icon(
+                              Icons.playlist_add_check_circle_outlined,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  Text(
+                                    'Task-first workspace',
+                                    style: theme.textTheme.titleSmall?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Use this workspace to shape the active profile, save it if needed, then resolve or start. Saved-profile browsing now opens only from an explicit secondary surface.',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Use this workspace to shape the active profile, save it if needed, then resolve or start. Saved-profile browsing now opens only from an explicit secondary surface.',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (descriptor != null) ...<Widget>[
+                        _providerDescriptorCard(theme, descriptor),
+                        const SizedBox(height: 16),
+                      ],
+                      _field(
+                        controller: _nameController,
+                        label: 'Profile name',
+                        onChanged: (String value) => _pushDraft(name: value),
+                      ),
+                      _providerModeCard(theme, managedMode),
+                      _providerField(),
+                      _field(
+                        controller: _linkController,
+                        label: _providerLinkLabel(descriptor),
+                        maxLines: 3,
+                        onChanged: (String value) => _pushDraft(
+                          spec: widget.draft.spec.copyWith(link: value.trim()),
+                        ),
+                      ),
+                      _providerFlowCard(theme, descriptor),
+                      ..._providerSettingsSection(theme, descriptor),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Operator-managed runtime defaults',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'These runtime defaults stay separate from the provider input. They are reused only after the resolution reaches a family that supports Start on this device.',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ExpansionTile(
+                        tilePadding: EdgeInsets.zero,
+                        childrenPadding: const EdgeInsets.only(top: 8),
+                        title: const Text('Inspect or edit runtime defaults'),
+                        subtitle: Text(
+                          _runtimeDefaultsSummary(widget.draft.spec),
+                        ),
+                        children: _runtimeDefaultsFields(),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Operator/support actions',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Direct profile start remains available for support work, but descriptor-driven resolution stays primary.',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ExpansionTile(
+                        tilePadding: EdgeInsets.zero,
+                        childrenPadding: const EdgeInsets.only(top: 8),
+                        title: const Text('Inspect support-only actions'),
+                        subtitle: const Text(
+                          'Start or delete the saved profile without expanding the first read by default.',
+                        ),
+                        children: <Widget>[
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
+                            children: <Widget>[
+                              FilledButton.tonal(
+                                key: const ValueKey<String>(
+                                  'profile-start-action',
                                 ),
+                                onPressed:
+                                    widget.busy ||
+                                        widget.selectedProfileId == null
+                                    ? null
+                                    : () => unawaited(widget.onStart()),
+                                child: const Text('Start saved profile'),
+                              ),
+                              OutlinedButton(
+                                key: const ValueKey<String>(
+                                  'profile-delete-action',
+                                ),
+                                onPressed:
+                                    widget.busy ||
+                                        widget.selectedProfileId == null
+                                    ? null
+                                    : () => unawaited(widget.onDelete()),
+                                child: const Text('Delete'),
                               ),
                             ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (descriptor != null) ...<Widget>[
-                    _providerDescriptorCard(theme, descriptor),
-                    const SizedBox(height: 16),
-                  ],
-                  _field(
-                    controller: _nameController,
-                    label: 'Profile name',
-                    onChanged: (String value) => _pushDraft(name: value),
-                  ),
-                  _providerModeCard(theme, managedMode),
-                  _providerField(),
-                  _field(
-                    controller: _linkController,
-                    label: _providerLinkLabel(descriptor),
-                    maxLines: 3,
-                    onChanged: (String value) => _pushDraft(
-                      spec: widget.draft.spec.copyWith(link: value.trim()),
-                    ),
-                  ),
-                  _providerFlowCard(theme, descriptor),
-                  ..._providerSettingsSection(theme, descriptor),
-                  const SizedBox(height: 20),
-                  Text(
-                    'Operator-managed runtime defaults',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'These runtime defaults stay separate from the provider input. They are reused only after the resolution reaches a family that supports Start on this device.',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  ExpansionTile(
-                    tilePadding: EdgeInsets.zero,
-                    childrenPadding: const EdgeInsets.only(top: 8),
-                    title: const Text('Inspect or edit runtime defaults'),
-                    subtitle: Text(_runtimeDefaultsSummary(widget.draft.spec)),
-                    children: _runtimeDefaultsFields(),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Operator/support actions',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Direct profile start remains available for support work, but descriptor-driven resolution stays primary.',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  ExpansionTile(
-                    tilePadding: EdgeInsets.zero,
-                    childrenPadding: const EdgeInsets.only(top: 8),
-                    title: const Text('Inspect support-only actions'),
-                    subtitle: const Text(
-                      'Start or delete the saved profile without expanding the first read by default.',
-                    ),
-                    children: <Widget>[
-                      Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
-                        children: <Widget>[
-                          FilledButton.tonal(
-                            key: const ValueKey<String>('profile-start-action'),
-                            onPressed:
-                                widget.busy || widget.selectedProfileId == null
-                                ? null
-                                : () => unawaited(widget.onStart()),
-                            child: const Text('Start saved profile'),
-                          ),
-                          OutlinedButton(
-                            key: const ValueKey<String>('profile-delete-action'),
-                            onPressed:
-                                widget.busy || widget.selectedProfileId == null
-                                ? null
-                                : () => unawaited(widget.onDelete()),
-                            child: const Text('Delete'),
                           ),
                         ],
                       ),
                     ],
                   ),
-                ],
-              ),
                 ),
               ],
             ),
@@ -872,18 +882,15 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    () {
-                      final provider = widget.managedProviders.firstWhere(
-                        (ManagedProviderRecord provider) =>
-                            provider.id == selectedManagedProviderId,
-                      );
-                      return provider.name.isEmpty
-                          ? selectedManagedProviderId!
-                          : provider.name;
-                    }(),
-                    style: theme.textTheme.bodyMedium,
-                  ),
+                  Text(() {
+                    final provider = widget.managedProviders.firstWhere(
+                      (ManagedProviderRecord provider) =>
+                          provider.id == selectedManagedProviderId,
+                    );
+                    return provider.name.isEmpty
+                        ? selectedManagedProviderId!
+                        : provider.name;
+                  }(), style: theme.textTheme.bodyMedium),
                   const SizedBox(height: 4),
                   Text(
                     'Browse reusable records from the explicit secondary surface when you need a different source.',
@@ -891,18 +898,13 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  if (widget.onBrowseManagedProviders != null) ...<Widget>[
-                    const SizedBox(height: 10),
-                    OutlinedButton(
-                      key: const ValueKey<String>(
-                        'profile-open-managed-provider-library-button',
-                      ),
-                      onPressed: widget.busy
-                          ? null
-                          : () => unawaited(widget.onBrowseManagedProviders!()),
-                      child: const Text('Choose provider record'),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Use the action strip above the editor when you need to pick a different reusable record.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
                     ),
-                  ],
+                  ),
                 ],
               ),
             ),

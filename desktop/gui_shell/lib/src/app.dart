@@ -1,3 +1,5 @@
+import 'dart:ui' show AppExitResponse;
+
 import 'package:flutter/material.dart';
 import 'package:gui_shell/src/design/design_reference_gallery_page.dart';
 import 'package:gui_shell/src/control/desktop_shell_controller.dart';
@@ -14,8 +16,24 @@ class DesktopShellApp extends StatefulWidget {
 }
 
 class _DesktopShellAppState extends State<DesktopShellApp> {
+  late final AppLifecycleListener _appLifecycleListener;
+
+  @override
+  void initState() {
+    super.initState();
+    _appLifecycleListener = AppLifecycleListener(
+      onExitRequested: _handleExitRequested,
+    );
+  }
+
+  Future<AppExitResponse> _handleExitRequested() async {
+    await widget.controller.shutdown();
+    return AppExitResponse.exit;
+  }
+
   @override
   void dispose() {
+    _appLifecycleListener.dispose();
     widget.controller.dispose();
     super.dispose();
   }
