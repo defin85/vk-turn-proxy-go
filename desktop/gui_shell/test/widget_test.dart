@@ -975,6 +975,125 @@ void main() {
   );
 
   testWidgets(
+    'desktop shell preserves open inspector context across resize transitions',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1600, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final controller = DesktopShellController(
+        api: _FakeControlPlaneApi(providers: _providerDescriptors),
+        supervisor: _FakeHostSupervisor(),
+        stateStore: const _InMemoryShellStateStore(),
+        appBuild: _testGuiBuild,
+      );
+
+      await controller.initialize();
+      await tester.pumpWidget(
+        MaterialApp(home: DashboardPage(controller: controller)),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('desktop-open-diagnostics-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(controller.isInspectorOpen, isTrue);
+      expect(controller.activeInspectorPane, DesktopInspectorPane.diagnostics);
+      expect(
+        find.byKey(const ValueKey<String>('desktop-inspector-surface')),
+        findsOneWidget,
+      );
+
+      tester.view.physicalSize = const Size(1280, 1200);
+      await tester.pumpAndSettle();
+
+      expect(controller.isInspectorOpen, isTrue);
+      expect(controller.activeInspectorPane, DesktopInspectorPane.diagnostics);
+      expect(
+        find.byKey(const ValueKey<String>('desktop-section-rail')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('desktop-inspector-surface')),
+        findsOneWidget,
+      );
+
+      tester.view.physicalSize = const Size(1600, 1200);
+      await tester.pumpAndSettle();
+
+      expect(controller.isInspectorOpen, isTrue);
+      expect(
+        find.byKey(const ValueKey<String>('desktop-inspector-surface')),
+        findsOneWidget,
+      );
+
+      controller.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'desktop shell returns focus to the active workflow after overlay support closes',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1280, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final controller = DesktopShellController(
+        api: _FakeControlPlaneApi(providers: _providerDescriptors),
+        supervisor: _FakeHostSupervisor(),
+        stateStore: const _InMemoryShellStateStore(),
+        appBuild: _testGuiBuild,
+      );
+
+      await controller.initialize();
+      await tester.pumpWidget(
+        MaterialApp(home: DashboardPage(controller: controller)),
+      );
+      await tester.pumpAndSettle();
+
+      final workflowFocusFinder = find.byKey(
+        const ValueKey<String>('desktop-active-workflow-focus'),
+      );
+
+      expect(
+        tester.widget<Focus>(workflowFocusFinder).focusNode?.hasPrimaryFocus,
+        isTrue,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('desktop-open-diagnostics-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey<String>('desktop-inspector-surface')),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('desktop-inspector-close-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(controller.isInspectorOpen, isFalse);
+      expect(
+        find.byKey(const ValueKey<String>('desktop-inspector-surface')),
+        findsNothing,
+      );
+      expect(
+        tester.widget<Focus>(workflowFocusFinder).focusNode?.hasPrimaryFocus,
+        isTrue,
+      );
+
+      controller.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
     'desktop shell uses compact drawer navigation and overlay inspector',
     (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1080, 1200);

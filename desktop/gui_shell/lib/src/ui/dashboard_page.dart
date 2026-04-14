@@ -22,16 +22,81 @@ class _DashboardPageState extends State<DashboardPage> {
   static const double _compactWidth = 1180;
   static const double _persistentInspectorWidth = 1520;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final FocusNode _profileWorkflowFocusNode = FocusNode(
+    debugLabel: 'desktop-profile-workflow',
+  );
+  final FocusNode _providerWorkflowFocusNode = FocusNode(
+    debugLabel: 'desktop-provider-workflow',
+  );
+  bool? _lastPersistentInspector;
 
   DesktopShellController get controller => widget.controller;
+
+  FocusNode get _activeWorkflowFocusNode =>
+      controller.activeSection == DesktopShellSection.profileWorkflow
+      ? _profileWorkflowFocusNode
+      : _providerWorkflowFocusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _restoreWorkflowFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _profileWorkflowFocusNode.dispose();
+    _providerWorkflowFocusNode.dispose();
+    super.dispose();
+  }
 
   void _openNavigationDrawer() {
     _scaffoldKey.currentState?.openDrawer();
   }
 
+  void _restoreWorkflowFocus() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _activeWorkflowFocusNode.requestFocus();
+    });
+  }
+
   void _openOverlayInspector(DesktopInspectorPane pane) {
     controller.openInspector(pane: pane);
     _scaffoldKey.currentState?.openEndDrawer();
+  }
+
+  void _closeOverlayInspector() {
+    controller.closeInspector();
+    Navigator.of(context).maybePop();
+    _restoreWorkflowFocus();
+  }
+
+  void _syncInspectorPresentation({required bool persistent}) {
+    if (_lastPersistentInspector == persistent) {
+      return;
+    }
+    _lastPersistentInspector = persistent;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      final scaffold = _scaffoldKey.currentState;
+      if (persistent) {
+        if (scaffold?.isEndDrawerOpen ?? false) {
+          Navigator.of(context).maybePop();
+          _restoreWorkflowFocus();
+        }
+        return;
+      }
+      if (controller.isInspectorOpen && !(scaffold?.isEndDrawerOpen ?? false)) {
+        scaffold?.openEndDrawer();
+      }
+    });
   }
 
   void _handleInspectorAction({
@@ -52,6 +117,7 @@ class _DashboardPageState extends State<DashboardPage> {
         final showCompactLayout = constraints.maxWidth < _compactWidth;
         final showPersistentInspector =
             constraints.maxWidth >= _persistentInspectorWidth;
+        _syncInspectorPresentation(persistent: showPersistentInspector);
         final shellChromeListenable = Listenable.merge(<Listenable>[
           controller.shellChromeRevision,
           controller.workflowRevision,
@@ -78,6 +144,9 @@ class _DashboardPageState extends State<DashboardPage> {
             persistent: showPersistentInspector,
           ),
           const SingleActivator(LogicalKeyboardKey.escape): () {
+            final shouldRestoreWorkflowFocus =
+                controller.isInspectorOpen ||
+                (_scaffoldKey.currentState?.isEndDrawerOpen ?? false);
             if (controller.isInspectorOpen) {
               controller.closeInspector();
             }
@@ -86,6 +155,9 @@ class _DashboardPageState extends State<DashboardPage> {
             }
             if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
               Navigator.of(context).maybePop();
+            }
+            if (shouldRestoreWorkflowFocus) {
+              _restoreWorkflowFocus();
             }
           },
         };
@@ -96,6 +168,13 @@ class _DashboardPageState extends State<DashboardPage> {
             autofocus: true,
             child: Scaffold(
               key: _scaffoldKey,
+              onEndDrawerChanged: (bool isOpened) {
+                if (showPersistentInspector || isOpened || !controller.isInspectorOpen) {
+                  return;
+                }
+                controller.closeInspector();
+                _restoreWorkflowFocus();
+              },
               drawer: showCompactLayout
                   ? Drawer(
                       child: SafeArea(
@@ -115,10 +194,7 @@ class _DashboardPageState extends State<DashboardPage> {
                               return _InspectorSurface(
                                 controller: controller,
                                 compact: true,
-                                onClose: () {
-                                  controller.closeInspector();
-                                  Navigator.of(context).maybePop();
-                                },
+                                onClose: _closeOverlayInspector,
                               );
                             },
                           ),
@@ -156,6 +232,11 @@ class _DashboardPageState extends State<DashboardPage> {
                           controller: controller,
                           compactLayout: showCompactLayout,
                           persistentInspector: showPersistentInspector,
+                          activeWorkflowFocusNode: _activeWorkflowFocusNode,
+                          onClosePersistentInspector: () {
+                            controller.closeInspector();
+                            _restoreWorkflowFocus();
+                          },
                         ),
                       ),
                     ],
@@ -175,11 +256,15 @@ class _ShellBody extends StatelessWidget {
     required this.controller,
     required this.compactLayout,
     required this.persistentInspector,
+    required this.activeWorkflowFocusNode,
+    required this.onClosePersistentInspector,
   });
 
   final DesktopShellController controller;
   final bool compactLayout;
   final bool persistentInspector;
+  final FocusNode activeWorkflowFocusNode;
+  final VoidCallback onClosePersistentInspector;
 
   @override
   Widget build(BuildContext context) {
@@ -267,13 +352,17 @@ class _ShellBody extends StatelessWidget {
               },
             );
             final mainColumn = FocusTraversalGroup(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  assurancePane,
-                  const SizedBox(height: 12),
-                  Expanded(child: editorPane),
-                ],
+              child: Focus(
+                key: const ValueKey<String>('desktop-active-workflow-focus'),
+                focusNode: activeWorkflowFocusNode,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    assurancePane,
+                    const SizedBox(height: 12),
+                    Expanded(child: editorPane),
+                  ],
+                ),
               ),
             );
 
@@ -348,7 +437,7 @@ class _ShellBody extends StatelessWidget {
                           return _InspectorSurface(
                             controller: controller,
                             compact: false,
-                            onClose: controller.closeInspector,
+                            onClose: onClosePersistentInspector,
                           );
                         },
                       ),
