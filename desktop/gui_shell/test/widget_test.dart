@@ -229,25 +229,27 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final libraryScrollable = _profileWorkflowScrollable();
-    await tester.scrollUntilVisible(
-      find.byKey(const ValueKey<String>('profile-library-item-profile-2')),
-      180,
-      scrollable: libraryScrollable,
-    );
-    await tester.pumpAndSettle();
-
     expect(find.text('Workflows'), findsOneWidget);
     expect(find.text('Saved profiles'), findsOneWidget);
     expect(find.text('Profile workspace'), findsOneWidget);
     expect(
       find.byKey(const ValueKey<String>('profile-library-item-profile-2')),
-      findsOneWidget,
+      findsNothing,
     );
 
-    final libraryOffset = tester.getTopLeft(find.text('Saved profiles'));
-    final workspaceOffset = tester.getTopLeft(find.text('Profile workspace'));
-    expect(libraryOffset.dx, lessThan(workspaceOffset.dx));
+    await tester.tap(
+      find.byKey(const ValueKey<String>('desktop-open-profile-library-button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('profile-library-item-profile-2')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('desktop-secondary-surface')),
+      findsOneWidget,
+    );
 
     await tester.tap(
       find.byKey(const ValueKey<String>('profile-library-item-profile-2')),
@@ -256,6 +258,10 @@ void main() {
 
     expect(controller.selectedProfileId, 'profile-2');
     expect(controller.draft.name, 'beta');
+    expect(
+      find.byKey(const ValueKey<String>('desktop-secondary-surface')),
+      findsNothing,
+    );
 
     controller.dispose();
     await tester.pumpWidget(const SizedBox.shrink());
@@ -302,13 +308,24 @@ void main() {
       ),
       findsOneWidget,
     );
-    final libraryOffset = tester.getTopLeft(find.text('Saved profiles'));
-    final workspaceOffset = tester.getTopLeft(find.text('Profile workspace'));
-
-    expect(libraryOffset.dx, lessThan(workspaceOffset.dx));
+    expect(
+      find.byKey(const ValueKey<String>('profile-library-item-profile-1')),
+      findsNothing,
+    );
 
     final workspaceScrollable = _profileWorkspaceScrollable();
-    final startButton = find.text('Start saved profile', skipOffstage: false);
+    await tester.scrollUntilVisible(
+      find.text('Inspect support-only actions'),
+      320,
+      scrollable: workspaceScrollable,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Inspect support-only actions'));
+    await tester.pumpAndSettle();
+
+    final startButton = find.byKey(
+      const ValueKey<String>('profile-start-action'),
+    );
     await tester.scrollUntilVisible(
       startButton,
       320,
@@ -481,11 +498,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final libraryScrollable = _providerWorkflowScrollable();
-    await tester.scrollUntilVisible(
-      find.byKey(const ValueKey<String>('preset-card-generic-turn-default')),
-      180,
-      scrollable: libraryScrollable,
+    await tester.tap(
+      find.byKey(const ValueKey<String>('desktop-open-preset-bootstrap-button')),
     );
     await tester.pumpAndSettle();
 
@@ -527,23 +541,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final libraryScrollable = _providerWorkflowScrollable();
-    await tester.scrollUntilVisible(
-      find.byKey(const ValueKey<String>('preset-card-generic-turn-default')),
-      180,
-      scrollable: libraryScrollable,
+    await tester.tap(
+      find.byKey(const ValueKey<String>('desktop-open-preset-bootstrap-button')),
     );
     await tester.pumpAndSettle();
 
     final wbPresetButton = find.byKey(
       const ValueKey<String>('preset-use-generic-turn-default'),
     );
-    await tester.scrollUntilVisible(
-      wbPresetButton,
-      120,
-      scrollable: libraryScrollable,
-    );
-    await tester.pumpAndSettle();
     await tester.tap(wbPresetButton);
     await tester.pumpAndSettle();
 
@@ -583,25 +588,19 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final libraryScrollable = _providerWorkflowScrollable();
-      await tester.scrollUntilVisible(
-        find.byKey(const ValueKey<String>('managed-provider-create-button')),
-        180,
-        scrollable: libraryScrollable,
-      );
-      await tester.pumpAndSettle();
-
-      await tester.tap(
-        find.byKey(const ValueKey<String>('managed-provider-create-button')),
-      );
-      await tester.pumpAndSettle();
-
       expect(
         controller.workspaceSurface,
         DesktopWorkspaceSurface.providerConfig,
       );
       expect(find.text('App-owned provider catalog'), findsOneWidget);
-      expect(find.text('Supported provider families'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(
+          const ValueKey<String>('provider-open-family-chooser-button'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
       expect(
         find.byKey(const ValueKey<String>('supported-provider-card-vk')),
         findsOneWidget,
@@ -612,6 +611,10 @@ void main() {
         ),
         findsOneWidget,
       );
+      await tester.tap(
+        find.byKey(const ValueKey<String>('supported-provider-card-vk')),
+      );
+      await tester.pumpAndSettle();
 
       final providerWorkspaceScrollable = _managedProviderWorkspaceScrollable();
       await tester.scrollUntilVisible(
@@ -705,12 +708,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(controller.workspaceSurface, DesktopWorkspaceSurface.providerConfig);
-    expect(
-      find.textContaining(
-        'does not advertise the Generic TURN provider family',
-      ),
-      findsOneWidget,
-    );
+    expect(find.text('Host overlay: unavailable'), findsOneWidget);
     expect(
       tester
           .widget<FilledButton>(
@@ -1133,7 +1131,9 @@ void main() {
 
       expect(controller.activeSection, DesktopShellSection.providerWorkflow);
       expect(
-        find.byKey(const ValueKey<String>('provider-workflow-library-scroll')),
+        find.byKey(
+          const ValueKey<String>('desktop-open-preset-bootstrap-button'),
+        ),
         findsOneWidget,
       );
 
@@ -1185,10 +1185,6 @@ void main() {
 
       await tester.tap(
         find.byKey(const ValueKey<String>('desktop-section-provider')),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey<String>('managed-provider-create-button')),
       );
       await tester.pumpAndSettle();
       final providerWorkspaceScrollable = _managedProviderWorkspaceScrollable();
@@ -1274,7 +1270,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Provider mode'), findsOneWidget);
+      expect(find.text('Provider mode'), findsWidgets);
       expect(
         find.widgetWithText(ChoiceChip, 'Managed provider'),
         findsOneWidget,
@@ -1304,28 +1300,6 @@ void main() {
       unawaited(api.dispose());
     },
   );
-}
-
-Finder _profileWorkflowScrollable() {
-  return find
-      .descendant(
-        of: find.byKey(
-          const ValueKey<String>('profile-workflow-library-scroll'),
-        ),
-        matching: find.byType(Scrollable),
-      )
-      .first;
-}
-
-Finder _providerWorkflowScrollable() {
-  return find
-      .descendant(
-        of: find.byKey(
-          const ValueKey<String>('provider-workflow-library-scroll'),
-        ),
-        matching: find.byType(Scrollable),
-      )
-      .first;
 }
 
 Finder _managedProviderWorkspaceScrollable() {

@@ -18,6 +18,7 @@ class ProfileEditorPanel extends StatefulWidget {
     required this.onReset,
     required this.onResolve,
     required this.onStart,
+    this.onBrowseManagedProviders,
     List<ManagedProviderRecord>? managedProviders,
     String? initialManagedProviderId,
     void Function({String? managedProviderId})? onActivateManagedProviderMode,
@@ -45,6 +46,7 @@ class ProfileEditorPanel extends StatefulWidget {
   final void Function({String? managedProviderId})
   onActivateManagedProviderMode;
   final VoidCallback onUseCustomProvider;
+  final Future<void> Function()? onBrowseManagedProviders;
   final Future<void> Function() onSave;
   final Future<void> Function() onDelete;
   final VoidCallback onReset;
@@ -228,7 +230,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Use this workspace to shape the active profile, save it if needed, then resolve or start. Saved-profile browsing now stays in the separate library rail.',
+                                'Use this workspace to shape the active profile, save it if needed, then resolve or start. Saved-profile browsing now opens only from an explicit secondary surface.',
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),
@@ -291,36 +293,46 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Direct profile start and raw transport tuning remain available for support work, but descriptor-driven resolution is the primary provider entry path.',
+                    'Direct profile start remains available for support work, but descriptor-driven resolution stays primary.',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
+                  ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    childrenPadding: const EdgeInsets.only(top: 8),
+                    title: const Text('Inspect support-only actions'),
+                    subtitle: const Text(
+                      'Start or delete the saved profile without expanding the first read by default.',
+                    ),
                     children: <Widget>[
-                      FilledButton.tonal(
-                        key: const ValueKey<String>('profile-start-action'),
-                        onPressed:
-                            widget.busy || widget.selectedProfileId == null
-                            ? null
-                            : () => unawaited(widget.onStart()),
-                        child: const Text('Start saved profile'),
-                      ),
-                      OutlinedButton(
-                        key: const ValueKey<String>('profile-delete-action'),
-                        onPressed:
-                            widget.busy || widget.selectedProfileId == null
-                            ? null
-                            : () => unawaited(widget.onDelete()),
-                        child: const Text('Delete'),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: <Widget>[
+                          FilledButton.tonal(
+                            key: const ValueKey<String>('profile-start-action'),
+                            onPressed:
+                                widget.busy || widget.selectedProfileId == null
+                                ? null
+                                : () => unawaited(widget.onStart()),
+                            child: const Text('Start saved profile'),
+                          ),
+                          OutlinedButton(
+                            key: const ValueKey<String>('profile-delete-action'),
+                            onPressed:
+                                widget.busy || widget.selectedProfileId == null
+                                ? null
+                                : () => unawaited(widget.onDelete()),
+                            child: const Text('Delete'),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                    ],
-                  ),
+                ],
+              ),
                 ),
               ],
             ),
@@ -763,7 +775,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
             ),
             const SizedBox(height: 6),
             Text(
-              'No managed providers are available yet. Use custom mode for direct provider entry or create a provider record from the library rail first.',
+              'No managed providers are available yet. Use custom mode for direct provider entry or create a provider record from the explicit provider-record surface first.',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -844,33 +856,55 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
           ),
           if (managedMode) ...<Widget>[
             const SizedBox(height: 10),
-            DropdownButtonFormField<String>(
-              initialValue: selectedManagedProviderId,
-              decoration: const InputDecoration(labelText: 'Managed provider'),
-              items: widget.managedProviders
-                  .map(
-                    (ManagedProviderRecord provider) =>
-                        DropdownMenuItem<String>(
-                          value: provider.id,
-                          child: Text(
-                            provider.name.isEmpty ? provider.id : provider.name,
-                          ),
-                        ),
-                  )
-                  .toList(growable: false),
-              onChanged: widget.busy
-                  ? null
-                  : (String? value) {
-                      if (value == null) {
-                        return;
-                      }
-                      setState(() {
-                        _selectedManagedProviderId = value;
-                      });
-                      widget.onActivateManagedProviderMode(
-                        managedProviderId: value,
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.72),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    'Managed provider',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    () {
+                      final provider = widget.managedProviders.firstWhere(
+                        (ManagedProviderRecord provider) =>
+                            provider.id == selectedManagedProviderId,
                       );
-                    },
+                      return provider.name.isEmpty
+                          ? selectedManagedProviderId!
+                          : provider.name;
+                    }(),
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Browse reusable records from the explicit secondary surface when you need a different source.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  if (widget.onBrowseManagedProviders != null) ...<Widget>[
+                    const SizedBox(height: 10),
+                    OutlinedButton(
+                      key: const ValueKey<String>(
+                        'profile-open-managed-provider-library-button',
+                      ),
+                      onPressed: widget.busy
+                          ? null
+                          : () => unawaited(widget.onBrowseManagedProviders!()),
+                      child: const Text('Choose provider record'),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ],
         ],

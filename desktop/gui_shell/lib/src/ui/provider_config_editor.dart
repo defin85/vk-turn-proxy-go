@@ -18,6 +18,9 @@ class ProviderConfigEditorPanel extends StatefulWidget {
     required this.onDelete,
     required this.onReset,
     required this.onApplyToProfileDraft,
+    this.onChooseProviderFamily,
+    this.onOpenPresetBootstrap,
+    this.onBrowseManagedProviders,
   });
 
   final List<SupportedProviderDefinition> supportedProviders;
@@ -30,6 +33,9 @@ class ProviderConfigEditorPanel extends StatefulWidget {
   final Future<void> Function() onDelete;
   final VoidCallback onReset;
   final ValueChanged<String> onApplyToProfileDraft;
+  final Future<void> Function()? onChooseProviderFamily;
+  final Future<void> Function()? onOpenPresetBootstrap;
+  final Future<void> Function()? onBrowseManagedProviders;
 
   @override
   State<ProviderConfigEditorPanel> createState() =>
@@ -136,8 +142,8 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                           const SizedBox(height: 6),
                           Text(
                             selectedSavedProvider
-                                ? 'Editing a managed provider record from the shipped provider catalog'
-                                : 'Select a shipped provider family, then create a managed provider record',
+                                ? 'Editing one active managed provider record'
+                                : 'Choose one shipped provider family, then shape one managed provider record',
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
@@ -177,17 +183,21 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Text(
-                      'The app owns the supported provider catalog. Host descriptors only overlay current availability and reusable-field validation. Applying a managed record still snapshots its current provider values into the profile draft.',
+                      'The app still owns the supported provider catalog, but the catalog now opens explicitly instead of staying expanded in the default first read.',
                       style: theme.textTheme.bodyMedium,
                     ),
                   ),
                   if (widget.supportedProviders.isEmpty)
                     _unavailableCard(
                       theme,
-                      'This build does not advertise any shipped provider families yet.',
+                          'This build does not advertise any shipped provider families yet.',
                     )
                   else ...<Widget>[
-                    _supportedProviderCatalog(theme),
+                    _familyEntryCard(
+                      theme,
+                      provider: supportedProvider,
+                      availability: hostAvailability,
+                    ),
                     const SizedBox(height: 16),
                     if (supportedProvider != null)
                       _selectedFamilyCard(
@@ -326,137 +336,91 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
     );
   }
 
-  Widget _supportedProviderCatalog(ThemeData theme) {
-    final selectedProviderId = _selectedSupportedProvider()?.id
-        .trim()
-        .toLowerCase();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text(
-          'Supported provider families',
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w700,
+  Widget _familyEntryCard(
+    ThemeData theme, {
+    required SupportedProviderDefinition? provider,
+    required SupportedProviderAvailability? availability,
+  }) {
+    final title = provider == null
+        ? 'Provider family chooser'
+        : 'Selected provider family';
+    final detail = provider == null
+        ? 'Open the explicit family chooser before you expand the managed-record details.'
+        : '${provider.title} stays selected until you intentionally change it through the chooser surface.';
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            title,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
           ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Shipped provider families stay visible here even when the connected host cannot currently run them.',
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
+          const SizedBox(height: 6),
+          Text(
+            detail,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
-        ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: widget.supportedProviders
-              .map((SupportedProviderDefinition provider) {
-                final availability = provider.availabilityFor(
-                  widget.providerDescriptors,
-                );
-                final descriptor = availability.descriptor;
-                final selected =
-                    provider.id.trim().toLowerCase() == selectedProviderId;
-                final managedFieldLabel = _managedFieldSurfaceLabel(descriptor);
-                final canSelect =
-                    !widget.busy &&
-                    provider.id.trim().toLowerCase() !=
-                        widget.draft.provider.trim().toLowerCase();
-                return ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    minWidth: 260,
-                    maxWidth: 320,
+          if (provider != null) ...<Widget>[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: <Widget>[
+                _metaChip(theme, label: 'Shipped by app', accent: true),
+                if (availability != null)
+                  _metaChip(
+                    theme,
+                    label: availability.isAvailable
+                        ? 'Host overlay: available'
+                        : 'Host overlay: unavailable',
+                    accent: availability.isAvailable,
                   ),
-                  child: Material(
-                    color: selected
-                        ? theme.colorScheme.primary.withValues(alpha: 0.08)
-                        : theme.colorScheme.surfaceContainerHighest.withValues(
-                            alpha: 0.35,
-                          ),
-                    borderRadius: BorderRadius.circular(16),
-                    child: InkWell(
-                      key: ValueKey<String>(
-                        'supported-provider-card-${provider.id}',
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                      onTap: !canSelect
-                          ? null
-                          : () => _pushDraft(
-                              provider: provider.id,
-                              providerSettings: const <String, dynamic>{},
-                            ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            Row(
-                              children: <Widget>[
-                                Expanded(
-                                  child: Text(
-                                    provider.title,
-                                    style: theme.textTheme.titleSmall?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                                _stateChip(
-                                  theme,
-                                  label: availability.isAvailable
-                                      ? 'Available'
-                                      : 'Unavailable',
-                                  accent: availability.isAvailable,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              provider.description,
-                              style: theme.textTheme.bodySmall,
-                            ),
-                            const SizedBox(height: 10),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: <Widget>[
-                                _metaChip(
-                                  theme,
-                                  label: selected
-                                      ? 'Selected family'
-                                      : 'Shipped by app',
-                                  accent: selected,
-                                ),
-                                _metaChip(
-                                  theme,
-                                  label: managedFieldLabel,
-                                  accent:
-                                      descriptor?.settingsSchema != null &&
-                                      descriptor
-                                              ?.providerSettingsSupportError ==
-                                          null,
-                                ),
-                              ],
-                            ),
-                            if (availability.message.isNotEmpty) ...<Widget>[
-                              const SizedBox(height: 10),
-                              Text(
-                                availability.message,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              })
-              .toList(growable: false),
-        ),
-      ],
+              ],
+            ),
+          ],
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: <Widget>[
+              FilledButton.tonal(
+                key: const ValueKey<String>('provider-open-family-chooser-button'),
+                onPressed: widget.busy || widget.onChooseProviderFamily == null
+                    ? null
+                    : () => unawaited(widget.onChooseProviderFamily!()),
+                child: Text(provider == null ? 'Choose family' : 'Change family'),
+              ),
+              FilledButton.tonal(
+                key: const ValueKey<String>('provider-open-preset-bootstrap-button'),
+                onPressed: widget.busy || widget.onOpenPresetBootstrap == null
+                    ? null
+                    : () => unawaited(widget.onOpenPresetBootstrap!()),
+                child: const Text('New from preset'),
+              ),
+              OutlinedButton(
+                key: const ValueKey<String>(
+                  'provider-open-managed-record-library-button',
+                ),
+                onPressed:
+                    widget.busy || widget.onBrowseManagedProviders == null
+                    ? null
+                    : () => unawaited(widget.onBrowseManagedProviders!()),
+                child: const Text('Browse records'),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -587,28 +551,6 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
         borderRadius: BorderRadius.circular(14),
       ),
       child: Text(message, style: theme.textTheme.bodyMedium),
-    );
-  }
-
-  Widget _stateChip(
-    ThemeData theme, {
-    required String label,
-    required bool accent,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: (accent ? theme.colorScheme.primary : theme.colorScheme.error)
-            .withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: accent ? theme.colorScheme.primary : theme.colorScheme.error,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
     );
   }
 

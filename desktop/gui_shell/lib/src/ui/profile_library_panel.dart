@@ -1,171 +1,274 @@
 import 'package:flutter/material.dart';
 import 'package:gui_shell/src/control/control_plane_models.dart';
-import 'package:gui_shell/src/control/desktop_shell_controller.dart';
 
-class DesktopWorkflowPane extends StatelessWidget {
-  const DesktopWorkflowPane({
+class SavedProfilesLibrarySurface extends StatelessWidget {
+  const SavedProfilesLibrarySurface({
     super.key,
-    required this.section,
-    required this.presets,
-    required this.providerDescriptors,
-    required this.managedProviders,
     required this.profiles,
     required this.selectedProfileId,
-    required this.selectedManagedProviderId,
     required this.busy,
-    required this.onApplyPreset,
-    required this.onSelectManagedProvider,
-    required this.onCreateManagedProvider,
     required this.onSelectProfile,
     required this.onCreateDraft,
   });
 
-  final DesktopShellSection section;
-  final List<ProviderPreset> presets;
-  final List<ProviderDescriptor> providerDescriptors;
-  final List<ManagedProviderRecord> managedProviders;
   final List<ProfileRecord> profiles;
   final String? selectedProfileId;
-  final String? selectedManagedProviderId;
   final bool busy;
-  final ValueChanged<ProviderPreset> onApplyPreset;
-  final ValueChanged<String> onSelectManagedProvider;
-  final VoidCallback onCreateManagedProvider;
   final ValueChanged<String> onSelectProfile;
   final VoidCallback onCreateDraft;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return switch (section) {
-      DesktopShellSection.profileWorkflow => _buildProfilesPane(theme),
-      DesktopShellSection.providerWorkflow => _buildProvidersPane(theme),
-    };
-  }
-
-  Widget _buildProfilesPane(ThemeData theme) {
-    return Card(
-      child: ListView(
-        key: const ValueKey<String>('profile-workflow-library-scroll'),
-        primary: false,
-        padding: const EdgeInsets.all(20),
-        children: <Widget>[
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: _sectionHeader(
-                  theme,
-                  title: 'Saved profiles',
-                  subtitle:
-                      'Switch context here without turning the lane into a second main canvas.',
-                ),
-              ),
-              FilledButton.tonal(
-                key: const ValueKey<String>('profile-create-draft-button'),
-                onPressed: busy ? null : onCreateDraft,
-                child: const Text('New draft'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _laneHint(
-            theme,
-            icon: Icons.fact_check_outlined,
-            title: 'Profile workflow',
-            message:
-                'Recent snapshots stay visible here while the active editor owns resolve, save, and start decisions.',
-          ),
-          const SizedBox(height: 14),
-          if (profiles.isEmpty)
-            _emptyCard(theme, 'No saved profiles yet.')
-          else
-            ...profiles.map(
-              (ProfileRecord profile) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: _profileCard(theme, profile),
+    return ListView(
+      key: const ValueKey<String>('saved-profile-library-scroll'),
+      primary: false,
+      padding: const EdgeInsets.all(20),
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: _LibrarySectionHeader(
+                title: 'Saved profiles',
+                subtitle:
+                    'Browse saved operator workspaces intentionally, then return to the active editor without leaving the main path permanently split.',
               ),
             ),
-        ],
-      ),
+            FilledButton.tonal(
+              key: const ValueKey<String>('profile-create-draft-button'),
+              onPressed: busy ? null : onCreateDraft,
+              child: const Text('New draft'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        const _LibraryHintCard(
+          icon: Icons.fact_check_outlined,
+          title: 'Return path stays explicit',
+          message:
+              'Selecting a saved profile updates the active workflow and closes this secondary surface.',
+        ),
+        const SizedBox(height: 14),
+        if (profiles.isEmpty)
+          const _EmptyCard(message: 'No saved profiles yet.')
+        else
+          ...profiles.map(
+            (ProfileRecord profile) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _ProfileCard(
+                theme: theme,
+                profile: profile,
+                selected: selectedProfileId == profile.id,
+                onTap: () => onSelectProfile(profile.id),
+              ),
+            ),
+          ),
+      ],
     );
   }
+}
 
-  Widget _buildProvidersPane(ThemeData theme) {
-    return Card(
-      child: ListView(
-        key: const ValueKey<String>('provider-workflow-library-scroll'),
-        primary: false,
-        padding: const EdgeInsets.all(20),
-        children: <Widget>[
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: _sectionHeader(
-                  theme,
-                  title: 'Providers',
-                  subtitle:
-                      'Use this lane to pick a family, seed a record, or reopen reusable provider data.',
-                ),
+class ManagedProvidersLibrarySurface extends StatelessWidget {
+  const ManagedProvidersLibrarySurface({
+    super.key,
+    required this.managedProviders,
+    required this.selectedManagedProviderId,
+    required this.onSelectManagedProvider,
+    this.onCreateManagedProvider,
+  });
+
+  final List<ManagedProviderRecord> managedProviders;
+  final String? selectedManagedProviderId;
+  final ValueChanged<String> onSelectManagedProvider;
+  final VoidCallback? onCreateManagedProvider;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ListView(
+      key: const ValueKey<String>('managed-provider-library-scroll'),
+      primary: false,
+      padding: const EdgeInsets.all(20),
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            const Expanded(
+              child: _LibrarySectionHeader(
+                title: 'Managed records',
+                subtitle:
+                    'Reusable provider-owned values stay available on demand instead of occupying the default first screen.',
               ),
+            ),
+            if (onCreateManagedProvider != null)
               FilledButton.tonal(
                 key: const ValueKey<String>('managed-provider-create-button'),
-                onPressed: busy ? null : onCreateManagedProvider,
+                onPressed: onCreateManagedProvider,
                 child: const Text('New record'),
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _laneHint(
-            theme,
-            icon: Icons.tune_outlined,
-            title: 'Managed-provider workflow',
+          ],
+        ),
+        const SizedBox(height: 12),
+        const _LibraryHintCard(
+          icon: Icons.tune_outlined,
+          title: 'Reusable data stays secondary',
+          message:
+              'Choose an existing managed record here, or close this surface to continue the active editor unchanged.',
+        ),
+        const SizedBox(height: 14),
+        if (managedProviders.isEmpty)
+          const _EmptyCard(
             message:
-                'Presets remain seed actions. The dominant editor still owns record details and next actions.',
-          ),
-          const SizedBox(height: 14),
-          _sectionHeader(
-            theme,
-            title: 'Presets',
-            subtitle: 'Seed a new managed record from a shipped family.',
-          ),
-          const SizedBox(height: 10),
-          ...presets.map((ProviderPreset preset) {
-            final availability = preset.availabilityFor(providerDescriptors);
-            return Padding(
+                'No managed records yet. Create one from the active provider workflow when you need reusable non-secret values.',
+          )
+        else
+          ...managedProviders.map(
+            (ManagedProviderRecord provider) => Padding(
               padding: const EdgeInsets.only(bottom: 10),
-              child: _presetCard(theme, preset, availability),
-            );
-          }),
-          const SizedBox(height: 18),
-          _sectionHeader(
-            theme,
-            title: 'Managed records',
-            subtitle:
-                'Reusable non-secret provider-owned values kept in shell state.',
-          ),
-          const SizedBox(height: 10),
-          if (managedProviders.isEmpty)
-            _emptyCard(
-              theme,
-              'No managed records yet. Create one from the app-owned catalog and keep runtime-only inputs in profile drafts.',
-            )
-          else
-            ...managedProviders.map(
-              (ManagedProviderRecord config) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: _providerConfigCard(theme, config),
+              child: _ManagedProviderCard(
+                theme: theme,
+                provider: provider,
+                selected: selectedManagedProviderId == provider.id,
+                onTap: () => onSelectManagedProvider(provider.id),
               ),
             ),
-        ],
-      ),
+          ),
+      ],
     );
   }
+}
 
-  Widget _sectionHeader(
-    ThemeData theme, {
-    required String title,
-    required String subtitle,
-  }) {
+class PresetBootstrapSurface extends StatelessWidget {
+  const PresetBootstrapSurface({
+    super.key,
+    required this.presets,
+    required this.providerDescriptors,
+    required this.busy,
+    required this.onApplyPreset,
+  });
+
+  final List<ProviderPreset> presets;
+  final List<ProviderDescriptor> providerDescriptors;
+  final bool busy;
+  final ValueChanged<ProviderPreset> onApplyPreset;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ListView(
+      key: const ValueKey<String>('preset-bootstrap-scroll'),
+      primary: false,
+      padding: const EdgeInsets.all(20),
+      children: <Widget>[
+        const _LibrarySectionHeader(
+          title: 'New from preset',
+          subtitle:
+              'Start from a curated provider seed only when you intentionally ask for it.',
+        ),
+        const SizedBox(height: 12),
+        const _LibraryHintCard(
+          icon: Icons.auto_awesome_outlined,
+          title: 'Preset bootstrap stays explicit',
+          message:
+              'Unavailable presets remain visible and honest here, but they no longer occupy the default provider workspace.',
+        ),
+        const SizedBox(height: 14),
+        ...presets.map((ProviderPreset preset) {
+          final availability = preset.availabilityFor(providerDescriptors);
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _PresetCard(
+              theme: theme,
+              preset: preset,
+              availability: availability,
+              busy: busy,
+              onApply: () => onApplyPreset(preset),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+}
+
+class SupportedProviderChooserSurface extends StatelessWidget {
+  const SupportedProviderChooserSurface({
+    super.key,
+    required this.supportedProviders,
+    required this.providerDescriptors,
+    required this.selectedProviderId,
+    required this.busy,
+    required this.onSelectProvider,
+  });
+
+  final List<SupportedProviderDefinition> supportedProviders;
+  final List<ProviderDescriptor> providerDescriptors;
+  final String selectedProviderId;
+  final bool busy;
+  final ValueChanged<String> onSelectProvider;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ListView(
+      key: const ValueKey<String>('provider-family-chooser-scroll'),
+      primary: false,
+      padding: const EdgeInsets.all(20),
+      children: <Widget>[
+        const _LibrarySectionHeader(
+          title: 'Provider families',
+          subtitle:
+              'Choose the shipped family deliberately, then return to one managed-record editor instead of browsing a permanent catalog beside it.',
+        ),
+        const SizedBox(height: 12),
+        const _LibraryHintCard(
+          icon: Icons.widgets_outlined,
+          title: 'App-owned family chooser',
+          message:
+              'The catalog belongs to the shipped shell. Host descriptors only overlay current availability and field support.',
+        ),
+        const SizedBox(height: 14),
+        if (supportedProviders.isEmpty)
+          const _EmptyCard(
+            message:
+                'This build does not advertise any shipped provider families yet.',
+          )
+        else
+          ...supportedProviders.map((SupportedProviderDefinition provider) {
+            final availability = provider.availabilityFor(providerDescriptors);
+            final descriptor = availability.descriptor;
+            final selected =
+                provider.id.trim().toLowerCase() ==
+                selectedProviderId.trim().toLowerCase();
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _SupportedProviderCard(
+                theme: theme,
+                provider: provider,
+                descriptor: descriptor,
+                availability: availability,
+                selected: selected,
+                enabled: !busy,
+                onTap: () => onSelectProvider(provider.id),
+              ),
+            );
+          }),
+      ],
+    );
+  }
+}
+
+class _LibrarySectionHeader extends StatelessWidget {
+  const _LibrarySectionHeader({
+    required this.title,
+    required this.subtitle,
+  });
+
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -185,13 +288,22 @@ class DesktopWorkflowPane extends StatelessWidget {
       ],
     );
   }
+}
 
-  Widget _laneHint(
-    ThemeData theme, {
-    required IconData icon,
-    required String title,
-    required String message,
-  }) {
+class _LibraryHintCard extends StatelessWidget {
+  const _LibraryHintCard({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -229,12 +341,25 @@ class DesktopWorkflowPane extends StatelessWidget {
       ),
     );
   }
+}
 
-  Widget _presetCard(
-    ThemeData theme,
-    ProviderPreset preset,
-    ProviderPresetAvailability availability,
-  ) {
+class _PresetCard extends StatelessWidget {
+  const _PresetCard({
+    required this.theme,
+    required this.preset,
+    required this.availability,
+    required this.busy,
+    required this.onApply,
+  });
+
+  final ThemeData theme;
+  final ProviderPreset preset;
+  final ProviderPresetAvailability availability;
+  final bool busy;
+  final VoidCallback onApply;
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       key: ValueKey<String>('preset-card-${preset.id}'),
       padding: const EdgeInsets.all(14),
@@ -255,8 +380,7 @@ class DesktopWorkflowPane extends StatelessWidget {
                   ),
                 ),
               ),
-              _statusChip(
-                theme,
+              _StatusChip(
                 label: availability.isAvailable ? 'Available' : 'Unavailable',
                 accent: availability.isAvailable,
               ),
@@ -278,9 +402,7 @@ class DesktopWorkflowPane extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: FilledButton.tonal(
               key: ValueKey<String>('preset-use-${preset.id}'),
-              onPressed: busy || !availability.isAvailable
-                  ? null
-                  : () => onApplyPreset(preset),
+              onPressed: busy || !availability.isAvailable ? null : onApply,
               child: const Text('Use preset'),
             ),
           ),
@@ -288,20 +410,33 @@ class DesktopWorkflowPane extends StatelessWidget {
       ),
     );
   }
+}
 
-  Widget _providerConfigCard(ThemeData theme, ManagedProviderRecord config) {
-    final selected = selectedManagedProviderId == config.id;
-    final accent = config.isAvailable;
-    final supportedProvider = supportedProviderDefinitionFor(config.provider);
+class _ManagedProviderCard extends StatelessWidget {
+  const _ManagedProviderCard({
+    required this.theme,
+    required this.provider,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final ThemeData theme;
+  final ManagedProviderRecord provider;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final supportedProvider = supportedProviderDefinitionFor(provider.provider);
     return Material(
       color: selected
           ? theme.colorScheme.primary.withValues(alpha: 0.1)
           : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
-        key: ValueKey<String>('managed-provider-item-${config.id}'),
+        key: ValueKey<String>('managed-provider-item-${provider.id}'),
         borderRadius: BorderRadius.circular(16),
-        onTap: () => onSelectManagedProvider(config.id),
+        onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
@@ -311,23 +446,22 @@ class DesktopWorkflowPane extends StatelessWidget {
                 children: <Widget>[
                   Expanded(
                     child: Text(
-                      config.name.isEmpty ? config.id : config.name,
+                      provider.name.isEmpty ? provider.id : provider.name,
                       style: theme.textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
-                  _statusChip(
-                    theme,
-                    label: config.availability.state.label,
-                    accent: accent,
+                  _StatusChip(
+                    label: provider.availability.state.label,
+                    accent: provider.isAvailable,
                   ),
                 ],
               ),
               const SizedBox(height: 6),
               Text(
                 supportedProvider == null
-                    ? config.provider
+                    ? provider.provider
                     : 'Provider family: ${supportedProvider.title}',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
@@ -342,10 +476,10 @@ class DesktopWorkflowPane extends StatelessWidget {
                   ),
                 ),
               ],
-              if (config.availability.message.isNotEmpty) ...<Widget>[
+              if (provider.availability.message.isNotEmpty) ...<Widget>[
                 const SizedBox(height: 4),
                 Text(
-                  config.availability.message,
+                  provider.availability.message,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -357,9 +491,23 @@ class DesktopWorkflowPane extends StatelessWidget {
       ),
     );
   }
+}
 
-  Widget _profileCard(ThemeData theme, ProfileRecord profile) {
-    final selected = selectedProfileId == profile.id;
+class _ProfileCard extends StatelessWidget {
+  const _ProfileCard({
+    required this.theme,
+    required this.profile,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final ThemeData theme;
+  final ProfileRecord profile;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
     return Material(
       color: selected
           ? theme.colorScheme.primary.withValues(alpha: 0.1)
@@ -368,7 +516,7 @@ class DesktopWorkflowPane extends StatelessWidget {
       child: InkWell(
         key: ValueKey<String>('profile-library-item-${profile.id}'),
         borderRadius: BorderRadius.circular(16),
-        onTap: () => onSelectProfile(profile.id),
+        onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
@@ -398,8 +546,108 @@ class DesktopWorkflowPane extends StatelessWidget {
       ),
     );
   }
+}
 
-  Widget _emptyCard(ThemeData theme, String message) {
+class _SupportedProviderCard extends StatelessWidget {
+  const _SupportedProviderCard({
+    required this.theme,
+    required this.provider,
+    required this.descriptor,
+    required this.availability,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final ThemeData theme;
+  final SupportedProviderDefinition provider;
+  final ProviderDescriptor? descriptor;
+  final SupportedProviderAvailability availability;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final managedFieldLabel = switch (descriptor) {
+      null => 'No reusable fields yet',
+      final ProviderDescriptor descriptor
+          when descriptor.providerSettingsSupportError != null =>
+        'Schema blocked in this shell',
+      final ProviderDescriptor descriptor when descriptor.settingsSchema == null =>
+        'No reusable fields yet',
+      _ => 'Reusable fields ready',
+    };
+
+    return Material(
+      color: selected
+          ? theme.colorScheme.primary.withValues(alpha: 0.08)
+          : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        key: ValueKey<String>('supported-provider-card-${provider.id}'),
+        borderRadius: BorderRadius.circular(16),
+        onTap: enabled ? onTap : null,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      provider.title,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  _StatusChip(
+                    label: availability.isAvailable ? 'Available' : 'Unavailable',
+                    accent: availability.isAvailable,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                provider.description,
+                style: theme.textTheme.bodySmall,
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: <Widget>[
+                  _MetaChip(label: selected ? 'Selected family' : 'Shipped by app'),
+                  _MetaChip(label: managedFieldLabel),
+                ],
+              ),
+              if (availability.message.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 10),
+                Text(
+                  availability.message,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyCard extends StatelessWidget {
+  const _EmptyCard({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -414,12 +662,17 @@ class DesktopWorkflowPane extends StatelessWidget {
       ),
     );
   }
+}
 
-  Widget _statusChip(
-    ThemeData theme, {
-    required String label,
-    required bool accent,
-  }) {
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({required this.label, required this.accent});
+
+  final String label;
+  final bool accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
@@ -431,6 +684,31 @@ class DesktopWorkflowPane extends StatelessWidget {
         label,
         style: theme.textTheme.labelSmall?.copyWith(
           color: accent ? theme.colorScheme.primary : theme.colorScheme.error,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _MetaChip extends StatelessWidget {
+  const _MetaChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.secondary.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: theme.colorScheme.secondary,
           fontWeight: FontWeight.w700,
         ),
       ),
