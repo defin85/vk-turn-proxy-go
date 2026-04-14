@@ -267,6 +267,90 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets(
+    'desktop shell closes secondary surfaces without changing workflow context',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1600, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final controller = DesktopShellController(
+        api: _FakeControlPlaneApi(),
+        supervisor: _FakeHostSupervisor(),
+        stateStore: const _InMemoryShellStateStore(),
+        appBuild: _testGuiBuild,
+      );
+
+      await controller.initialize();
+      controller.updateDraft(controller.draft.copyWith(name: 'Keep context'));
+      await tester.pumpWidget(
+        MaterialApp(home: DashboardPage(controller: controller)),
+      );
+      await tester.pumpAndSettle();
+
+      final workflowFocusFinder = find.byKey(
+        const ValueKey<String>('desktop-active-workflow-focus'),
+      );
+      final selectedProfileId = controller.selectedProfileId;
+      final draftName = controller.draft.name;
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('desktop-open-profile-library-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey<String>('desktop-secondary-surface')),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.byKey(
+          const ValueKey<String>('desktop-secondary-surface-close-button'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey<String>('desktop-secondary-surface')),
+        findsNothing,
+      );
+      expect(controller.selectedProfileId, selectedProfileId);
+      expect(controller.draft.name, draftName);
+      expect(
+        tester.widget<Focus>(workflowFocusFinder).focusNode?.hasPrimaryFocus,
+        isTrue,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('desktop-open-profile-library-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey<String>('desktop-secondary-surface')),
+        findsOneWidget,
+      );
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey<String>('desktop-secondary-surface')),
+        findsNothing,
+      );
+      expect(controller.selectedProfileId, selectedProfileId);
+      expect(controller.draft.name, draftName);
+      expect(
+        tester.widget<Focus>(workflowFocusFinder).focusNode?.hasPrimaryFocus,
+        isTrue,
+      );
+
+      controller.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   testWidgets('desktop shell starts a saved profile from the GUI', (
     WidgetTester tester,
   ) async {
