@@ -1,7 +1,7 @@
 # platform-tunnel-integration Specification
 
 ## Purpose
-TBD - created by archiving change add-05-platform-tunnel-integrations. Update Purpose after archive.
+Define the typed capability, startup, and fail-closed reporting contract for platform-owned tunnel integrations across packaged hosts and GUI shells.
 ## Requirements
 ### Requirement: Platform tunnel support is capability-gated and explicit
 
@@ -76,4 +76,3 @@ The system SHALL keep OS-specific tunnel behavior and packet-capture mechanics s
 - **WHEN** the host establishes packet capture and route handling for that mode
 - **THEN** those OS-specific mechanics remain inside the platform host or extension boundary
 - **AND** the shared runtime receives traffic through the documented host boundary instead of embedding platform-specific tunnel APIs
-

@@ -1,7 +1,7 @@
 # mobile-gui-client Specification
 
 ## Purpose
-TBD - created by archiving change add-03-mobile-gui-shell. Update Purpose after archive.
+Define the mobile GUI shell contract over the mobile host bridge, including packaged-host defaults, challenge handoff, and explicit non-VPN scope.
 ## Requirements
 ### Requirement: Mobile GUI shell manages local profiles and sessions through an embedded host
 

@@ -1,7 +1,7 @@
 # provider-runtime-artifacts Specification
 
 ## Purpose
-TBD - created by archiving change add-20-multi-provider-runtime-families. Update Purpose after archive.
+Define the typed provider-runtime artifact model that hosts and shells use to inspect resolved handoffs, runtime families, and related metadata without leaking secrets.
 ## Requirements
 ### Requirement: Provider catalog exposes runtime-aware descriptors
 
@@ -184,4 +184,3 @@ pretending they are ordinary reusable profile settings.
 - **THEN** the shell can render it as prompt-only input
 - **AND** ordinary saved-profile flows do not require that value to be echoed
   back from the host as plaintext profile metadata
-

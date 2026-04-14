@@ -7,59 +7,87 @@ The prototype remains the compatibility oracle until equivalent behavior is cove
 
 ## Status
 
-Phase 0 is complete in this repository:
-- canonical module and package layout
-- working modular server baseline
-- client and probe entrypoints with stable contracts
-- ADR and provider matrix for future work
-- unit-test baseline for config and provider registry
+Current baseline in this repository:
+- canonical Go module and package layout
+- provider resolution for `vk` and `generic-turn`
+- local client control plane in `cmd/clientd` and `pkg/clientcontrol`
+- runtime observability, compatibility scaffolding, and the local TURN lab harness
+- desktop and mobile Flutter shells with repo-owned build workflows
 
-Phase 1 is next:
-- port the legacy client behavior behind provider and transport boundaries
-- add compatibility tests against the legacy Go implementation
-- add runtime observability
-- add GUI shells on top of the local client control plane
+Ongoing delivery now continues through the checked-in OpenSpec changes under `openspec/changes/`.
+Treat `openspec/specs/*/spec.md` plus any approved active change as the current behavior contract.
 
 ## Repository layout
 
 ```text
 cmd/
+  android-mobile-host/
   clientd/
   probe/
   tunnel-client/
   tunnel-server/
+  turn-expiry-check/
+  turnlab-shell/
 desktop/
   gui_shell/
 mobile/
   gui_shell/
+packages/
+  flutter_shell_core/
 pkg/
   clientcontrol/
 docs/
   agent/
   adr/
 internal/
+  androidembeddedhost/
   config/
   observe/
+  overlay/
   provider/
     genericturn/
     vk/
   providerprompt/
+  runstage/
   session/
   transport/
   tunnelserver/
+  turnrest/
 test/
   compatibility/
+  turnlab/
 ```
 
 ## Agent docs
 
 Use these repo-local documents when working through Codex or other agents:
 
+- `AGENTS.md`: root repository rules and routing
 - `docs/agent/index.md`: task routing and the smallest useful doc set
+- `docs/agent/runtime-surface.md`: concise runtime/operator surface and primary entrypoints
 - `docs/agent/architecture-map.md`: subsystem ownership and navigation
 - `docs/build-workflows.md`: reproducible local and CI build entrypoints
 - `docs/agent/verification.md`: change-specific verification matrix
 - `code_review.md`: repository review rubric
+- `.agents/skills/vk-turn-desktop-shell/SKILL.md`: product-specific desktop-shell skill
+
+Fast repo context refresh:
+
+```bash
+make codex-onboard
+```
+
+Add current git/Beads workflow state when needed:
+
+```bash
+make codex-onboard-workflow
+```
+
+Agent-doc and onboarding verification:
+
+```bash
+make verify-docs
+```
 
 ## Design contract
 

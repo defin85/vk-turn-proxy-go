@@ -1,7 +1,7 @@
 # vk-invite-user-workflow Specification
 
 ## Purpose
-TBD - created by archiving change add-10-vk-invite-user-workflow. Update Purpose after archive.
+Define the invite-first VK actor model, user workflow boundary, and ready-state expectations shared by provider resolution, hosts, and shells.
 ## Requirements
 ### Requirement: VK-backed user sessions start from a shared invite link
 
@@ -63,4 +63,3 @@ The system SHALL guide the user through browser continuation and only report ses
 - **WHEN** the runtime fails during `turn_allocate`, `peer_setup`, `dtls_handshake`, or another documented startup stage
 - **THEN** the product reports a stage-aware failure instead of implying a successful join
 - **AND** diagnostics remain available through the supported support surface without exposing raw live-browser secrets
-

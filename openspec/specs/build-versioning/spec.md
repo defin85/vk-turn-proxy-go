@@ -1,7 +1,7 @@
 # build-versioning Specification
 
 ## Purpose
-TBD - created by archiving change add-11-build-version-surfacing. Update Purpose after archive.
+Define the canonical product-version and build-identity contract that packaged binaries, hosts, and GUI shells surface to operators.
 ## Requirements
 ### Requirement: Supported artifacts use a canonical product version and build identity
 
@@ -76,4 +76,3 @@ The system SHALL include build identity context in diagnostics bundles so export
 - **THEN** the bundle includes the GUI build identity that initiated the export
 - **AND** it includes the host build identity associated with the session
 - **AND** it includes the relevant control-plane contract version separately from the human-facing build identity
-

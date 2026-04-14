@@ -3,12 +3,22 @@
 ACT_WORKFLOW ?= .github/workflows/ci.yml
 ACT_JOB ?= test
 
-.PHONY: ci build-go build-gui-windows build-gui-android smoke-android-embedded-host wg-e2e-check wg-e2e wg-live-vk-check wg-live-vk-run wg-live-vk-start wg-live-vk-continue wg-live-vk-cleanup android-phone-check android-phone-status android-phone-start android-phone-stop android-phone-diagnostics sync-version-assets check-version-assets ci-act ci-act-dry ci-act-verbose deps-act
+.PHONY: ci codex-onboard codex-onboard-workflow verify-docs build-go build-gui-windows build-gui-android smoke-android-embedded-host wg-e2e-check wg-e2e wg-live-vk-check wg-live-vk-run wg-live-vk-start wg-live-vk-continue wg-live-vk-cleanup android-phone-check android-phone-status android-phone-start android-phone-stop android-phone-diagnostics sync-version-assets check-version-assets ci-act ci-act-dry ci-act-verbose deps-act
 
 ci:
+	python3 ./scripts/verify-agent-docs.py
 	./scripts/sync-version-assets.py --check
 	go test ./...
 	go build ./...
+
+codex-onboard:
+	bash ./scripts/codex-onboard.sh
+
+codex-onboard-workflow:
+	bash ./scripts/codex-onboard.sh --workflow
+
+verify-docs:
+	python3 ./scripts/verify-agent-docs.py
 
 build-go:
 	./scripts/build-go-matrix.sh

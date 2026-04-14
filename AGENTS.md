@@ -21,7 +21,10 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 ## First pass
 - Start with `docs/agent/index.md` for the repo map and task routing.
-- Use `README.md` for the runtime/operator surface.
+- Run `make codex-onboard` when you need a fast repo-context refresh across agent docs and OpenSpec.
+- Run `make codex-onboard-workflow` when you specifically need current git/Beads workflow context.
+- Use `docs/agent/runtime-surface.md` for the concise runtime/operator surface.
+- Use `README.md` when you need the full operator quick start and CLI examples.
 - Use `openspec/project.md` plus `openspec/specs/*/spec.md` as the checked-in behavior contract.
 - For compatibility or wire-behavior work, also open `test/compatibility/AGENTS.md`.
 
@@ -30,9 +33,16 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - Open `code_review.md` for review requests or when you need the repo review rubric.
 
 ## Repo map
-- `cmd/`: operator entrypoints (`probe`, `tunnel-client`, `tunnel-server`)
+- `cmd/`: operator entrypoints (`probe`, `tunnel-client`, `tunnel-server`, `clientd`, `turnlab-shell`, `turn-expiry-check`, `android-mobile-host`)
+- `pkg/clientcontrol/`: versioned local control-plane contract for profiles, sessions, challenges, diagnostics, and negotiation
+- `desktop/gui_shell/` and `mobile/gui_shell/`: Flutter shells over the local control plane; each subtree can carry tighter local agent guidance
+- `packages/flutter_shell_core/`: shared Flutter workspace package for shell code that should not stay app-local
 - `internal/provider/`: provider-specific signaling and credential resolution
+- `internal/androidembeddedhost/`: packaged Android embedded-host bootstrap and host-policy wiring
+- `internal/overlay/`: native ingress/egress overlay adapters and frame protocol
+- `internal/runstage/`: shared runtime stage taxonomy and stage-aware errors
 - `internal/transport/`: provider-agnostic TURN/DTLS/UDP primitives
+- `internal/turnrest/`: TURN REST expiry parsing helpers and related diagnostics
 - `internal/session/`: client runtime orchestration and supervision
 - `internal/observe/`: structured logs and metrics
 - `test/compatibility/`: replayable compatibility contracts and fixtures
@@ -56,6 +66,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 ## Verification and tracking
 - Use `docs/agent/verification.md` to choose the smallest relevant verification set.
+- Run `make verify-docs` for agent-doc, onboarding, or workflow-document changes; it validates repo-path references and fast onboarding entrypoints.
 - For Go changes, escalate to `go test ./...` and `go build ./...` when the smaller relevant checks pass.
 - Run `bd prime` for workflow context, track work in Beads, and keep approved OpenSpec tasks aligned with Beads.
 

@@ -1,7 +1,7 @@
 # provider-resolution-handoff Specification
 
 ## Purpose
-TBD - created by archiving change add-17-provider-resolution-handoff. Update Purpose after archive.
+Define how provider resolution results, challenges, and typed handoff records move from provider adapters into runtime- and shell-facing surfaces.
 ## Requirements
 ### Requirement: Local host exposes provider resolution as a typed handoff resource
 
@@ -158,4 +158,3 @@ and provider layers.
   copy, share, QR, or other platform-native handoff UX
 - **AND** the platform-specific clipboard or sharing behavior remains outside
   the provider and transport packages
-

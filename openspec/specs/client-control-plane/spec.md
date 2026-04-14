@@ -1,7 +1,7 @@
 # client-control-plane Specification
 
 ## Purpose
-TBD - created by archiving change add-01-client-control-plane. Update Purpose after archive.
+Define the versioned local control-plane contract for profiles, sessions, challenges, diagnostics, event streaming, and capability negotiation.
 ## Requirements
 ### Requirement: Client control plane manages profiles and sessions through a stable local API
 

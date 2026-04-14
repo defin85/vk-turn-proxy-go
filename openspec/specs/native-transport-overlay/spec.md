@@ -1,7 +1,7 @@
 # native-transport-overlay Specification
 
 ## Purpose
-TBD - created by archiving change add-04-native-transport-overlay. Update Purpose after archive.
+Define the native transport overlay contract for supported adapter pairs, overlay framing, and ingress-to-runtime routing boundaries.
 ## Requirements
 ### Requirement: Native transport overlay exposes explicit ingress and egress adapters
 
@@ -86,4 +86,3 @@ The system SHALL back new adapter-pair support claims with deterministic tests o
 - **THEN** deterministic tests or replayable compatibility evidence cover startup, data transfer, and teardown for that pair
 - **AND** docs and specs state any remaining limitations explicitly
 - **AND** the support claim stays scoped to that documented pairing instead of implying support for every other adapter combination
-

@@ -1,7 +1,7 @@
 # desktop-gui-client Specification
 
 ## Purpose
-TBD - created by archiving change add-02-desktop-gui-shell. Update Purpose after archive.
+Define the desktop GUI shell contract over the local host, including profile/session workflows, sidecar supervision, diagnostics, and challenge handoff.
 ## Requirements
 ### Requirement: Desktop GUI shell manages local profiles and sessions
 

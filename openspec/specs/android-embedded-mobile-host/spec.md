@@ -1,7 +1,7 @@
 # android-embedded-mobile-host Specification
 
 ## Purpose
-TBD - created by archiving change add-14-android-embedded-mobile-host. Update Purpose after archive.
+Define the packaged Android embedded-host contract and the rules for bridging the canonical client-control semantics into the mobile app.
 ## Requirements
 ### Requirement: Android app package includes a compatible embedded host
 
@@ -42,4 +42,3 @@ The system SHALL treat external Android bridge endpoints as explicit development
 - **WHEN** the operator runs that build for debugging or compatibility work
 - **THEN** the app may use the explicit override instead of the packaged host
 - **AND** that path remains a development-only exception to the production packaging model
-
