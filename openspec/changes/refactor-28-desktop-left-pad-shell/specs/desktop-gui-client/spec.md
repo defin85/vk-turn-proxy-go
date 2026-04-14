@@ -11,8 +11,10 @@ the active task surface.
 - **WHEN** the operator lands on the main screen
 - **THEN** the shell shows a compact left pad plus one dominant main-canvas
   task route
-- **AND** the shell does not stack multiple explanatory context cards beside
-  the active editor
+- **AND** the shell does not stack multiple explanatory context cards or
+  route-restating action cards beside or above the active canvas route
+- **AND** the shell does not present a second persistent peer region that
+  competes with the active canvas route for substantive operator attention
 - **AND** empty diagnostics and live-work surfaces do not occupy a persistent
   dominant region
 
@@ -24,6 +26,8 @@ the active task surface.
 - **THEN** the main canvas changes to the requested route
 - **AND** the left pad remains a stable navigation surface instead of becoming
   a second detail pane
+- **AND** routine task-entry commands do not require a separate persistent
+  explanatory card above the active route
 
 ## ADDED Requirements
 ### Requirement: Desktop GUI shell uses canvas-routed secondary task surfaces
@@ -52,7 +56,17 @@ persistent companion cards.
 - **THEN** the shell returns to the prior editor route
 - **AND** it preserves the draft and active selection state
 
-### Requirement: Desktop GUI shell avoids duplicated task summaries beside the active canvas
+#### Scenario: Canvas-routed chooser exposes an explicit in-canvas return path
+
+- **GIVEN** a saved-profile, preset, managed-provider, or provider-family
+  chooser is active in the main canvas
+- **WHEN** the operator views that chooser route
+- **THEN** the route exposes its own title and explicit back affordance inside
+  the main canvas
+- **AND** using that back affordance returns to the prior workflow route
+  without relying on modal dismissal as the primary interaction model
+
+### Requirement: Desktop GUI shell avoids duplicated task summaries around the active canvas
 
 The system SHALL avoid persistent summary cards or companion panes that restate
 the same entity or task already open in the main canvas.
@@ -61,15 +75,28 @@ the same entity or task already open in the main canvas.
 
 - **GIVEN** the profile editor route is active in the desktop shell
 - **WHEN** the operator views the full shell layout
-- **THEN** the shell does not render separate persistent summary cards for that
-  same profile or draft beside the editor
+- **THEN** the shell does not render separate persistent summary cards or
+  route-restating action cards for that same profile or draft beside or above
+  the editor
 - **AND** the left pad stays compact and command-oriented
 
 #### Scenario: Active managed-provider editor is open
 
 - **GIVEN** the managed-provider editor route is active in the desktop shell
 - **WHEN** the operator views the full shell layout
-- **THEN** the shell does not render a second persistent companion surface that
-  repeats the same record context through stacked cards
+- **THEN** the shell does not render a second persistent companion surface or
+  route-restating action card that repeats the same record context through
+  stacked cards beside or above the editor
 - **AND** the main canvas remains the only substantive detail surface for that
   task
+
+#### Scenario: Routine ready shell avoids multi-region card dashboards
+
+- **GIVEN** the desktop GUI shell is in a routine ready state on a desktop-width
+  window
+- **WHEN** the operator views the first screen without opening diagnostics or
+  live work
+- **THEN** the screen reads as `left pad + one dominant canvas + optional
+  inspector`
+- **AND** the default ready layout does not read as multiple equal-weight card
+  regions competing for the operator's first attention

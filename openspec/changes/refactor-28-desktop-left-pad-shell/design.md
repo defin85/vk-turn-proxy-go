@@ -164,6 +164,8 @@ the operator explicitly chooses a different entity or starts a new draft.
 - modal-first browsing for routine library entry
 - showing a list/card summary for the same entity that is already open in the
   central editor
+- any default ready-state composition that still reads as multiple equal-weight
+  card regions instead of one dominant canvas
 
 ## Risks / Trade-offs
 
@@ -179,6 +181,21 @@ the operator explicitly chooses a different entity or starts a new draft.
 - Keep active selection visible in one compact place in the left pad
 - Add widget coverage for route entry, route exit, state preservation, and
   inspector coexistence
+
+## Acceptance Gate
+
+The change is not acceptable if the routine ready-state first screen still
+reads like a dashboard of several peer card zones.
+
+The intended first-read hierarchy is:
+
+- left pad for compact command/navigation
+- one dominant canvas for the active task route
+- optional right inspector only when explicitly opened
+
+Any implementation that keeps a separate persistent summary or action region
+competing with the active route should be treated as incomplete even if a rail
+or pad is technically present.
 
 ## Migration Plan
 
