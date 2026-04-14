@@ -174,6 +174,41 @@ void main() {
     },
   );
 
+  testWidgets('desktop shell exit does not hang on event stream cancellation', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final api = _HangingEventCancelControlPlaneApi();
+    final supervisor = _TrackingHostSupervisor();
+    final controller = DesktopShellController(
+      api: api,
+      supervisor: supervisor,
+      stateStore: const _InMemoryShellStateStore(),
+      appBuild: _testGuiBuild,
+    );
+
+    await controller.initialize();
+    await tester.pumpWidget(DesktopShellApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    final exitFuture = WidgetsBinding.instance.handleRequestAppExit();
+    await tester.pump();
+
+    expect(supervisor.disposeCalls, 1);
+    supervisor.completeDispose();
+
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(await exitFuture, ui.AppExitResponse.exit);
+    expect(api.cancelAttempts, 1);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+
   testWidgets(
     'desktop shell shows connecting state before host negotiation completes',
     (WidgetTester tester) async {
@@ -1812,6 +1847,23 @@ class _TrackingHostSupervisor implements HostSupervisor {
       message: 'Connected to local host 127.0.0.1:7777',
       info: _readyHostInfo,
     );
+  }
+}
+
+class _HangingEventCancelControlPlaneApi extends _FakeControlPlaneApi {
+  final Completer<void> _cancelCompleter = Completer<void>();
+  int cancelAttempts = 0;
+
+  @override
+  Stream<EventRecord> events() {
+    return Stream<EventRecord>.multi((
+      StreamController<EventRecord> controller,
+    ) {
+      controller.onCancel = () {
+        cancelAttempts++;
+        return _cancelCompleter.future;
+      };
+    });
   }
 }
 

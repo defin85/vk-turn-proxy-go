@@ -119,6 +119,7 @@ class DesktopShellController extends ChangeNotifier {
   Timer? _persistTimer;
   bool _recoveringHost = false;
   bool _disposed = false;
+  bool _shuttingDown = false;
   bool _suppressEventStreamClosure = false;
   String? _persistedStateSignature;
   bool _restoredState = false;
@@ -891,8 +892,11 @@ class DesktopShellController extends ChangeNotifier {
   }
 
   Future<void> _shutdownInternal() async {
-    await _stopRuntimeMonitoring();
+    _shuttingDown = true;
     await supervisor.dispose();
+    await _stopRuntimeMonitoring(
+      eventSubscriptionCancelTimeout: const Duration(milliseconds: 250),
+    );
   }
 
   void _startEventStream() {
@@ -912,13 +916,14 @@ class DesktopShellController extends ChangeNotifier {
         _notifyInspector();
       },
       onError: (Object error) {
-        if (_suppressEventStreamClosure || _disposed) {
+        if (_suppressEventStreamClosure || _disposed || _shuttingDown) {
           return;
         }
         unawaited(_handleHostFailure(error));
       },
       onDone: () {
         if (_disposed ||
+            _shuttingDown ||
             _suppressEventStreamClosure ||
             status != ShellStatus.ready) {
           return;
@@ -1064,7 +1069,9 @@ class DesktopShellController extends ChangeNotifier {
     }
   }
 
-  Future<void> _stopRuntimeMonitoring() async {
+  Future<void> _stopRuntimeMonitoring({
+    Duration? eventSubscriptionCancelTimeout,
+  }) async {
     _suppressEventStreamClosure = true;
     _debounceTimer?.cancel();
     _debounceTimer = null;
@@ -1072,8 +1079,19 @@ class DesktopShellController extends ChangeNotifier {
     _persistTimer = null;
     _pollTimer?.cancel();
     _pollTimer = null;
-    await _eventSubscription?.cancel();
+    final eventSubscription = _eventSubscription;
     _eventSubscription = null;
+    if (eventSubscription != null) {
+      final cancelFuture = eventSubscription.cancel();
+      if (eventSubscriptionCancelTimeout != null) {
+        await cancelFuture.timeout(
+          eventSubscriptionCancelTimeout,
+          onTimeout: () {},
+        );
+      } else {
+        await cancelFuture;
+      }
+    }
     _suppressEventStreamClosure = false;
   }
 
@@ -1081,6 +1099,9 @@ class DesktopShellController extends ChangeNotifier {
     Object error, {
     bool scheduleRecovery = true,
   }) async {
+    if (_shuttingDown) {
+      return;
+    }
     await _stopRuntimeMonitoring();
     final message = error is ControlPlaneError ? error.message : '$error';
     hostConnection = HostConnectionResult(
@@ -1104,7 +1125,7 @@ class DesktopShellController extends ChangeNotifier {
   }
 
   Future<void> _recoverHost() async {
-    if (_recoveringHost || _disposed) {
+    if (_recoveringHost || _disposed || _shuttingDown) {
       return;
     }
     _recoveringHost = true;
