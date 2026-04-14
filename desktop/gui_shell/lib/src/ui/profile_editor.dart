@@ -127,47 +127,82 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     final profileScopeLabel = widget.selectedProfileId == null
         ? 'Editing an unsaved draft'
         : 'Editing a saved profile workspace';
+    final stepTitle = _nextStepTitle(descriptor);
+    final stepDetail = _nextStepDetail(descriptor);
+    final nextStepCard = _nextStepCard(
+      theme,
+      title: stepTitle,
+      detail: stepDetail,
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: <Widget>[
+          FilledButton(
+            key: const ValueKey<String>('profile-resolve-action'),
+            onPressed: widget.busy ? null : () => unawaited(widget.onResolve()),
+            child: const Text('Resolve invite'),
+          ),
+          FilledButton.tonal(
+            key: const ValueKey<String>('profile-save-action'),
+            onPressed: widget.busy ? null : () => unawaited(widget.onSave()),
+            child: const Text('Save profile'),
+          ),
+        ],
+      ),
+    );
 
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final pinActionHeader = constraints.maxHeight >= 360;
+          return Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            'Profile workspace',
+                            style: theme.textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            profileScopeLabel,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    FilledButton.tonalIcon(
+                      onPressed: widget.busy ? null : widget.onReset,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Fresh draft'),
+                    ),
+                  ],
+                ),
+                if (pinActionHeader) ...<Widget>[
+                  const SizedBox(height: 16),
+                  nextStepCard,
+                ],
+                const SizedBox(height: 16),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: ListView(
+                    key: const ValueKey<String>('profile-workspace-scroll'),
+                    primary: true,
                     children: <Widget>[
-                      Text(
-                        'Profile workspace',
-                        style: theme.textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        profileScopeLabel,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                FilledButton.tonalIcon(
-                  onPressed: widget.busy ? null : widget.onReset,
-                  icon: const Icon(Icons.add),
-                  label: const Text('Fresh draft'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView(
-                key: const ValueKey<String>('profile-workspace-scroll'),
-                children: <Widget>[
+                      if (!pinActionHeader) ...<Widget>[
+                        nextStepCard,
+                        const SizedBox(height: 16),
+                      ],
                   Container(
                     margin: const EdgeInsets.only(bottom: 16),
                     padding: const EdgeInsets.all(14),
@@ -225,25 +260,6 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                   ),
                   _providerFlowCard(theme, descriptor),
                   ..._providerSettingsSection(theme, descriptor),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: <Widget>[
-                      FilledButton(
-                        onPressed: widget.busy
-                            ? null
-                            : () => unawaited(widget.onSave()),
-                        child: const Text('Save profile'),
-                      ),
-                      FilledButton.tonal(
-                        onPressed: widget.busy
-                            ? null
-                            : () => unawaited(widget.onResolve()),
-                        child: const Text('Resolve invite'),
-                      ),
-                    ],
-                  ),
                   const SizedBox(height: 20),
                   Text(
                     'Operator-managed runtime defaults',
@@ -286,6 +302,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                     runSpacing: 12,
                     children: <Widget>[
                       FilledButton.tonal(
+                        key: const ValueKey<String>('profile-start-action'),
                         onPressed:
                             widget.busy || widget.selectedProfileId == null
                             ? null
@@ -293,6 +310,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                         child: const Text('Start saved profile'),
                       ),
                       OutlinedButton(
+                        key: const ValueKey<String>('profile-delete-action'),
                         onPressed:
                             widget.busy || widget.selectedProfileId == null
                             ? null
@@ -301,11 +319,49 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                       ),
                     ],
                   ),
-                ],
-              ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _nextStepCard(
+    ThemeData theme, {
+    required String title,
+    required String detail,
+    required Widget child,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F1E4),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            title,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            detail,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
+          child,
+        ],
       ),
     );
   }
@@ -414,6 +470,26 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     return switch (descriptor.inputKind) {
       ProviderInputKind.link => 'Provider link',
     };
+  }
+
+  String _nextStepTitle(ProviderDescriptor? descriptor) {
+    if (widget.draft.spec.link.trim().isEmpty) {
+      return 'Step 1 · Add the provider input';
+    }
+    if (descriptor?.mayRequireBrowserContinuation == true) {
+      return 'Step 2 · Resolve, then continue in browser if needed';
+    }
+    return 'Step 2 · Resolve this profile from the active editor';
+  }
+
+  String _nextStepDetail(ProviderDescriptor? descriptor) {
+    if (widget.draft.spec.link.trim().isEmpty) {
+      return 'Keep the main editor calm: choose the provider mode, add the current input, then resolve or save when the draft is ready.';
+    }
+    if (descriptor?.mayRequireBrowserContinuation == true) {
+      return 'The normal path is resolve first. If the host reports a browser challenge, continue there and then return to the same workflow.';
+    }
+    return 'Resolve stays primary for the common path. Save the profile when you need to keep this draft for later runtime starts.';
   }
 
   ProviderDescriptor? _selectedDescriptor() {

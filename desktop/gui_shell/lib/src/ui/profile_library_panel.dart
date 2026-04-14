@@ -47,6 +47,7 @@ class DesktopWorkflowPane extends StatelessWidget {
     return Card(
       child: ListView(
         key: const ValueKey<String>('profile-workflow-library-scroll'),
+        primary: false,
         padding: const EdgeInsets.all(20),
         children: <Widget>[
           Row(
@@ -56,7 +57,7 @@ class DesktopWorkflowPane extends StatelessWidget {
                   theme,
                   title: 'Saved profiles',
                   subtitle:
-                      'Browse saved snapshots and keep the active profile workflow separate from reusable provider records.',
+                      'Switch context here without turning the lane into a second main canvas.',
                 ),
               ),
               FilledButton.tonal(
@@ -66,15 +67,15 @@ class DesktopWorkflowPane extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          _infoCard(
+          const SizedBox(height: 12),
+          _laneHint(
             theme,
-            icon: Icons.inventory_2_outlined,
+            icon: Icons.fact_check_outlined,
             title: 'Profile workflow',
             message:
-                'Resolve, start, and save runtime snapshots from the active task pane. Managed providers stay in the separate provider workflow.',
+                'Recent snapshots stay visible here while the active editor owns resolve, save, and start decisions.',
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           if (profiles.isEmpty)
             _emptyCard(theme, 'No saved profiles yet.')
           else
@@ -93,6 +94,7 @@ class DesktopWorkflowPane extends StatelessWidget {
     return Card(
       child: ListView(
         key: const ValueKey<String>('provider-workflow-library-scroll'),
+        primary: false,
         padding: const EdgeInsets.all(20),
         children: <Widget>[
           Row(
@@ -102,7 +104,7 @@ class DesktopWorkflowPane extends StatelessWidget {
                   theme,
                   title: 'Providers',
                   subtitle:
-                      'App-owned managed records live here. Presets remain seed actions for new records, not a separate provider taxonomy.',
+                      'Use this lane to pick a family, seed a record, or reopen reusable provider data.',
                 ),
               ),
               FilledButton.tonal(
@@ -112,19 +114,19 @@ class DesktopWorkflowPane extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          _infoCard(
+          const SizedBox(height: 12),
+          _laneHint(
             theme,
             icon: Icons.tune_outlined,
             title: 'Managed-provider workflow',
             message:
-                'Create or edit app-owned managed records here, then apply one by snapshot to the active profile workflow.',
+                'Presets remain seed actions. The dominant editor still owns record details and next actions.',
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           _sectionHeader(
             theme,
             title: 'Presets',
-            subtitle: 'Curated seed actions for shipped provider families.',
+            subtitle: 'Seed a new managed record from a shipped family.',
           ),
           const SizedBox(height: 10),
           ...presets.map((ProviderPreset preset) {
@@ -139,7 +141,7 @@ class DesktopWorkflowPane extends StatelessWidget {
             theme,
             title: 'Managed records',
             subtitle:
-                'Reusable non-secret provider-owned values stored in shell state.',
+                'Reusable non-secret provider-owned values kept in shell state.',
           ),
           const SizedBox(height: 10),
           if (managedProviders.isEmpty)
@@ -169,7 +171,7 @@ class DesktopWorkflowPane extends StatelessWidget {
       children: <Widget>[
         Text(
           title,
-          style: theme.textTheme.titleMedium?.copyWith(
+          style: theme.textTheme.titleSmall?.copyWith(
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -184,17 +186,17 @@ class DesktopWorkflowPane extends StatelessWidget {
     );
   }
 
-  Widget _infoCard(
+  Widget _laneHint(
     ThemeData theme, {
     required IconData icon,
     required String title,
     required String message,
   }) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.35,
+          alpha: 0.28,
         ),
         borderRadius: BorderRadius.circular(16),
       ),
@@ -209,7 +211,7 @@ class DesktopWorkflowPane extends StatelessWidget {
               children: <Widget>[
                 Text(
                   title,
-                  style: theme.textTheme.titleSmall?.copyWith(
+                  style: theme.textTheme.labelLarge?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
                 ),

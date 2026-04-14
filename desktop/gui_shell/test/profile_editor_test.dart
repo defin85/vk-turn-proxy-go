@@ -131,7 +131,17 @@ void main() {
 
     expect(find.text('Operator-managed runtime defaults'), findsOneWidget);
     expect(find.text('Inspect or edit runtime defaults'), findsOneWidget);
-    expect(find.text('Start saved profile'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('profile-start-action')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('profile-start-action')),
+      findsOneWidget,
+    );
     expect(find.text('Local UDP listen'), findsNothing);
 
     await tester.tap(find.text('Inspect or edit runtime defaults'));

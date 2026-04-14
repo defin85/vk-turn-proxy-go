@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gui_shell/src/control/control_plane_client.dart';
 import 'package:gui_shell/src/control/control_plane_models.dart';
@@ -621,14 +622,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).first, 'WB Central');
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(
-        find.widgetWithText(FilledButton, 'Save managed record'),
-        180,
-        scrollable: providerWorkspaceScrollable,
-      );
-      await tester.pumpAndSettle();
       await tester.tap(
-        find.widgetWithText(FilledButton, 'Save managed record'),
+        find.byKey(const ValueKey<String>('managed-provider-save-action')),
       );
       await tester.pumpAndSettle();
 
@@ -646,27 +641,17 @@ void main() {
         'WB Central Updated',
       );
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(
-        find.widgetWithText(FilledButton, 'Save managed record'),
-        180,
-        scrollable: providerWorkspaceScrollable,
-      );
-      await tester.pumpAndSettle();
       await tester.tap(
-        find.widgetWithText(FilledButton, 'Save managed record'),
+        find.byKey(const ValueKey<String>('managed-provider-save-action')),
       );
       await tester.pumpAndSettle();
 
       expect(controller.providerConfigs, hasLength(1));
       expect(controller.providerConfigs.single.name, 'WB Central Updated');
 
-      await tester.scrollUntilVisible(
-        find.widgetWithText(OutlinedButton, 'Delete record'),
-        180,
-        scrollable: providerWorkspaceScrollable,
+      await tester.tap(
+        find.byKey(const ValueKey<String>('managed-provider-delete-action')),
       );
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(OutlinedButton, 'Delete record'));
       await tester.pumpAndSettle();
 
       expect(controller.providerConfigs, isEmpty);
@@ -798,7 +783,9 @@ void main() {
       expect(
         tester
             .widget<FilledButton>(
-              find.widgetWithText(FilledButton, 'Save managed record'),
+              find.byKey(
+                const ValueKey<String>('managed-provider-save-action'),
+              ),
             )
             .onPressed,
         isNull,
@@ -806,9 +793,8 @@ void main() {
       expect(
         tester
             .widget<FilledButton>(
-              find.widgetWithText(
-                FilledButton,
-                'Apply record to profile draft',
+              find.byKey(
+                const ValueKey<String>('managed-provider-apply-action'),
               ),
             )
             .onPressed,
@@ -927,6 +913,64 @@ void main() {
       controller.dispose();
       await tester.pumpWidget(const SizedBox.shrink());
       unawaited(api.dispose());
+    },
+  );
+
+  testWidgets(
+    'desktop shell routes workflow and inspector shortcuts deterministically',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1600, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final controller = DesktopShellController(
+        api: _FakeControlPlaneApi(providers: _providerDescriptors),
+        supervisor: _FakeHostSupervisor(),
+        stateStore: const _InMemoryShellStateStore(),
+        appBuild: _testGuiBuild,
+      );
+
+      await controller.initialize();
+      await tester.pumpWidget(
+        MaterialApp(home: DashboardPage(controller: controller)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(controller.activeSection, DesktopShellSection.profileWorkflow);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.digit2);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+
+      expect(controller.activeSection, DesktopShellSection.providerWorkflow);
+      expect(find.text('App-owned provider catalog'), findsOneWidget);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyD);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+
+      expect(controller.isInspectorOpen, isTrue);
+      expect(controller.activeInspectorPane, DesktopInspectorPane.diagnostics);
+      expect(
+        find.byKey(const ValueKey<String>('desktop-inspector-surface')),
+        findsOneWidget,
+      );
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+
+      expect(controller.isInspectorOpen, isFalse);
+      expect(
+        find.byKey(const ValueKey<String>('desktop-inspector-surface')),
+        findsNothing,
+      );
+
+      controller.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
     },
   );
 

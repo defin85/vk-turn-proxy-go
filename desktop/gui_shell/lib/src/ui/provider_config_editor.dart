@@ -76,51 +76,98 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
     final hostAvailability = supportedProvider?.availabilityFor(
       widget.providerDescriptors,
     );
+    final nextStepCard = _nextStepCard(
+      theme,
+      title: _nextStepTitle(supportedProvider),
+      detail: _nextStepDetail(supportedProvider),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: <Widget>[
+          FilledButton(
+            key: const ValueKey<String>('managed-provider-save-action'),
+            onPressed: widget.busy || blockedBySchemaSupport
+                ? null
+                : () => unawaited(widget.onSave()),
+            child: const Text('Save managed record'),
+          ),
+          FilledButton.tonal(
+            key: const ValueKey<String>('managed-provider-apply-action'),
+            onPressed:
+                widget.busy || widget.selectedManagedProviderId == null
+                ? null
+                : () =>
+                    widget.onApplyToProfileDraft(widget.selectedManagedProviderId!),
+            child: const Text('Apply record to profile draft'),
+          ),
+          OutlinedButton(
+            key: const ValueKey<String>('managed-provider-delete-action'),
+            onPressed:
+                widget.busy || widget.selectedManagedProviderId == null
+                ? null
+                : () => unawaited(widget.onDelete()),
+            child: const Text('Delete record'),
+          ),
+        ],
+      ),
+    );
 
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final pinActionHeader = constraints.maxHeight >= 360;
+          return Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            'App-owned provider catalog',
+                            style: theme.textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            selectedSavedProvider
+                                ? 'Editing a managed provider record from the shipped provider catalog'
+                                : 'Select a shipped provider family, then create a managed provider record',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    FilledButton.tonalIcon(
+                      onPressed: widget.busy ? null : widget.onReset,
+                      icon: const Icon(Icons.tune),
+                      label: const Text('New record'),
+                    ),
+                  ],
+                ),
+                if (pinActionHeader) ...<Widget>[
+                  const SizedBox(height: 16),
+                  nextStepCard,
+                ],
+                const SizedBox(height: 16),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: ListView(
+                    key: const ValueKey<String>(
+                      'managed-provider-workspace-scroll',
+                    ),
+                    primary: true,
                     children: <Widget>[
-                      Text(
-                        'App-owned provider catalog',
-                        style: theme.textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        selectedSavedProvider
-                            ? 'Editing a managed provider record from the shipped provider catalog'
-                            : 'Select a shipped provider family, then create a managed provider record',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                FilledButton.tonalIcon(
-                  onPressed: widget.busy ? null : widget.onReset,
-                  icon: const Icon(Icons.tune),
-                  label: const Text('New record'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView(
-                key: const ValueKey<String>(
-                  'managed-provider-workspace-scroll',
-                ),
-                children: <Widget>[
+                      if (!pinActionHeader) ...<Widget>[
+                        nextStepCard,
+                        const SizedBox(height: 16),
+                      ],
                   Container(
                     margin: const EdgeInsets.only(bottom: 16),
                     padding: const EdgeInsets.all(14),
@@ -216,40 +263,49 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                       ),
                     ],
                   ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: <Widget>[
-                FilledButton(
-                  onPressed: widget.busy || blockedBySchemaSupport
-                      ? null
-                      : () => unawaited(widget.onSave()),
-                  child: const Text('Save managed record'),
-                ),
-                FilledButton.tonal(
-                  onPressed:
-                      widget.busy || widget.selectedManagedProviderId == null
-                      ? null
-                      : () => widget.onApplyToProfileDraft(
-                          widget.selectedManagedProviderId!,
-                        ),
-                  child: const Text('Apply record to profile draft'),
-                ),
-                OutlinedButton(
-                  onPressed:
-                      widget.busy || widget.selectedManagedProviderId == null
-                      ? null
-                      : () => unawaited(widget.onDelete()),
-                  child: const Text('Delete record'),
+                    ],
+                  ),
                 ),
               ],
             ),
-          ],
-        ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _nextStepCard(
+    ThemeData theme, {
+    required String title,
+    required String detail,
+    required Widget child,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F1E4),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            title,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            detail,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
+          child,
+        ],
       ),
     );
   }
@@ -402,6 +458,26 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
         ),
       ],
     );
+  }
+
+  String _nextStepTitle(SupportedProviderDefinition? provider) {
+    if (provider == null) {
+      return 'Step 1 · Choose a shipped provider family';
+    }
+    if (widget.draft.name.trim().isEmpty) {
+      return 'Step 2 · Name the managed record';
+    }
+    return 'Step 3 · Save or apply this managed record';
+  }
+
+  String _nextStepDetail(SupportedProviderDefinition? provider) {
+    if (provider == null) {
+      return 'Select the family first. The editor stays focused on one record shape instead of competing with a second navigation wall.';
+    }
+    if (widget.draft.name.trim().isEmpty) {
+      return 'Keep only reusable non-secret values here, then save the record or apply it to the active profile draft.';
+    }
+    return 'Save remains the primary action. Apply is secondary and snapshots the current provider values into the profile workflow.';
   }
 
   Widget _selectedFamilyCard(
