@@ -126,222 +126,178 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     final theme = Theme.of(context);
     final descriptor = _selectedDescriptor();
     final managedMode = widget.draft.providerBinding.isManaged;
-    final profileScopeLabel = widget.selectedProfileId == null
-        ? 'Editing an unsaved draft'
-        : 'Editing a saved profile workspace';
-    final stepTitle = _nextStepTitle(descriptor);
-    final stepDetail = _nextStepDetail(descriptor);
-    final nextStepCard = _nextStepCard(
-      theme,
-      title: stepTitle,
-      detail: stepDetail,
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        children: <Widget>[
-          FilledButton(
-            key: const ValueKey<String>('profile-resolve-action'),
-            onPressed: widget.busy ? null : () => unawaited(widget.onResolve()),
-            child: const Text('Resolve invite'),
-          ),
-          FilledButton.tonal(
-            key: const ValueKey<String>('profile-save-action'),
-            onPressed: widget.busy ? null : () => unawaited(widget.onSave()),
-            child: const Text('Save profile'),
-          ),
-        ],
-      ),
+    final selectedManagedProviderId = _resolvedManagedProviderId();
+    final selectedManagedProvider = _managedProviderForId(
+      selectedManagedProviderId,
     );
+    final selectedManagedDescriptor = _descriptorForProviderId(
+      selectedManagedProvider?.provider ?? widget.draft.spec.provider,
+    );
+    final profileScopeLabel = widget.selectedProfileId == null
+        ? 'Unsaved draft'
+        : 'Saved profile workspace';
 
     return Card(
       child: LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
-          final pinActionHeader = constraints.maxHeight >= 360;
+          final stackHeader = constraints.maxWidth < 960;
+          final twoPaneWorkspace = constraints.maxWidth >= 1020;
+          final headerActions = Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: <Widget>[
+              FilledButton(
+                key: const ValueKey<String>('profile-resolve-action'),
+                onPressed: widget.busy
+                    ? null
+                    : () => unawaited(widget.onResolve()),
+                child: Text(_nextStepTitle(descriptor)),
+              ),
+              Tooltip(
+                message: widget.selectedProfileId == null
+                    ? 'Save profile first'
+                    : 'Start a session from this saved profile',
+                child: FilledButton.tonal(
+                  key: const ValueKey<String>('profile-start-action'),
+                  onPressed: widget.busy || widget.selectedProfileId == null
+                      ? null
+                      : () => unawaited(widget.onStart()),
+                  child: const Text('Start session'),
+                ),
+              ),
+              FilledButton.tonal(
+                key: const ValueKey<String>('profile-save-action'),
+                onPressed: widget.busy
+                    ? null
+                    : () => unawaited(widget.onSave()),
+                child: const Text('Save profile'),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: widget.busy ? null : widget.onReset,
+                icon: const Icon(Icons.add),
+                label: const Text('Fresh draft'),
+              ),
+            ],
+          );
           return Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            'Profile workspace',
-                            style: theme.textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            profileScopeLabel,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    FilledButton.tonalIcon(
-                      onPressed: widget.busy ? null : widget.onReset,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Fresh draft'),
-                    ),
-                  ],
-                ),
-                if (pinActionHeader) ...<Widget>[
-                  const SizedBox(height: 16),
-                  nextStepCard,
-                ],
-                const SizedBox(height: 16),
-                Expanded(
-                  child: ListView(
-                    key: const ValueKey<String>('profile-workspace-scroll'),
-                    primary: true,
+                if (stackHeader)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      if (!pinActionHeader) ...<Widget>[
-                        nextStepCard,
-                        const SizedBox(height: 16),
-                      ],
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surfaceContainerHighest
-                              .withValues(alpha: 0.45),
-                          borderRadius: BorderRadius.circular(16),
+                      Text(
+                        'Profile workspace',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
                         ),
-                        child: Row(
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        profileScopeLabel,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      headerActions,
+                    ],
+                  )
+                else
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Expanded(
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: <Widget>[
-                            const Icon(
-                              Icons.playlist_add_check_circle_outlined,
+                            Text(
+                              'Profile workspace',
+                              style: theme.textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: <Widget>[
-                                  Text(
-                                    'Task-first workspace',
-                                    style: theme.textTheme.titleSmall?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Use this workspace to shape the active profile, save it if needed, then resolve or start. Saved-profile browsing now opens only from an explicit secondary surface.',
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: theme.colorScheme.onSurfaceVariant,
-                                    ),
-                                  ),
-                                ],
+                            const SizedBox(height: 4),
+                            Text(
+                              profileScopeLabel,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
                               ),
                             ),
                           ],
                         ),
                       ),
-                      if (descriptor != null) ...<Widget>[
-                        _providerDescriptorCard(theme, descriptor),
-                        const SizedBox(height: 16),
-                      ],
-                      _field(
-                        controller: _nameController,
-                        label: 'Profile name',
-                        onChanged: (String value) => _pushDraft(name: value),
-                      ),
-                      _providerModeCard(theme, managedMode),
-                      _providerField(),
-                      _field(
-                        controller: _linkController,
-                        label: _providerLinkLabel(descriptor),
-                        maxLines: 3,
-                        onChanged: (String value) => _pushDraft(
-                          spec: widget.draft.spec.copyWith(link: value.trim()),
-                        ),
-                      ),
-                      _providerFlowCard(theme, descriptor),
-                      ..._providerSettingsSection(theme, descriptor),
-                      const SizedBox(height: 20),
-                      Text(
-                        'Operator-managed runtime defaults',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'These runtime defaults stay separate from the provider input. They are reused only after the resolution reaches a family that supports Start on this device.',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      ExpansionTile(
-                        tilePadding: EdgeInsets.zero,
-                        childrenPadding: const EdgeInsets.only(top: 8),
-                        title: const Text('Inspect or edit runtime defaults'),
-                        subtitle: Text(
-                          _runtimeDefaultsSummary(widget.draft.spec),
-                        ),
-                        children: _runtimeDefaultsFields(),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Operator/support actions',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Direct profile start remains available for support work, but descriptor-driven resolution stays primary.',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      ExpansionTile(
-                        tilePadding: EdgeInsets.zero,
-                        childrenPadding: const EdgeInsets.only(top: 8),
-                        title: const Text('Inspect support-only actions'),
-                        subtitle: const Text(
-                          'Start or delete the saved profile without expanding the first read by default.',
-                        ),
-                        children: <Widget>[
-                          Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
-                            children: <Widget>[
-                              FilledButton.tonal(
-                                key: const ValueKey<String>(
-                                  'profile-start-action',
-                                ),
-                                onPressed:
-                                    widget.busy ||
-                                        widget.selectedProfileId == null
-                                    ? null
-                                    : () => unawaited(widget.onStart()),
-                                child: const Text('Start saved profile'),
-                              ),
-                              OutlinedButton(
-                                key: const ValueKey<String>(
-                                  'profile-delete-action',
-                                ),
-                                onPressed:
-                                    widget.busy ||
-                                        widget.selectedProfileId == null
-                                    ? null
-                                    : () => unawaited(widget.onDelete()),
-                                child: const Text('Delete'),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                      const SizedBox(width: 12),
+                      Flexible(child: headerActions),
                     ],
+                  ),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: ListView(
+                    key: const ValueKey<String>('profile-workspace-scroll'),
+                    primary: true,
+                    children: twoPaneWorkspace
+                        ? <Widget>[
+                            Align(
+                              alignment: Alignment.topLeft,
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 1220,
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: <Widget>[
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: _primaryWorkspaceChildren(
+                                          theme,
+                                          descriptor,
+                                          managedMode,
+                                          selectedManagedProvider,
+                                          selectedManagedDescriptor,
+                                          twoPaneLayout: true,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 20),
+                                    SizedBox(
+                                      width: 280,
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: _secondaryWorkspaceChildren(
+                                          theme,
+                                          descriptor,
+                                          managedMode,
+                                          selectedManagedProviderId,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ]
+                        : <Widget>[
+                            ..._primaryWorkspaceChildren(
+                              theme,
+                              descriptor,
+                              managedMode,
+                              selectedManagedProvider,
+                              selectedManagedDescriptor,
+                              twoPaneLayout: false,
+                            ),
+                            ..._secondaryWorkspaceChildren(
+                              theme,
+                              descriptor,
+                              managedMode,
+                              selectedManagedProviderId,
+                            ),
+                          ],
                   ),
                 ),
               ],
@@ -352,47 +308,12 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     );
   }
 
-  Widget _nextStepCard(
-    ThemeData theme, {
-    required String title,
-    required String detail,
-    required Widget child,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8F1E4),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            title,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            detail,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 12),
-          child,
-        ],
-      ),
-    );
-  }
-
   Widget _providerDescriptorCard(
     ThemeData theme,
     ProviderDescriptor descriptor,
   ) {
     return Container(
+      key: const ValueKey<String>('profile-provider-descriptor-card'),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFFE6EDF7),
@@ -431,20 +352,262 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     );
   }
 
-  Widget _providerField() {
-    if (widget.draft.providerBinding.isManaged) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: TextField(
-          controller: _providerController,
-          enabled: false,
-          decoration: const InputDecoration(labelText: 'Provider family'),
+  List<Widget> _primaryWorkspaceChildren(
+    ThemeData theme,
+    ProviderDescriptor? descriptor,
+    bool managedMode,
+    ManagedProviderRecord? selectedManagedProvider,
+    ProviderDescriptor? selectedManagedDescriptor, {
+    required bool twoPaneLayout,
+  }) {
+    final settingsCard = _providerSettingsCard(theme, descriptor);
+    return <Widget>[
+      _identityStrip(
+        theme,
+      ),
+      const SizedBox(height: 10),
+      _primarySectionCard(
+        theme,
+        title: 'Profile settings',
+        child: _mainSettingsSection(
+          theme,
+          descriptor,
+          managedMode: managedMode,
+          selectedManagedProvider: selectedManagedProvider,
+          selectedManagedDescriptor: selectedManagedDescriptor,
+          sideBySide: twoPaneLayout,
         ),
+      ),
+      if (settingsCard != null) ...<Widget>[
+        const SizedBox(height: 10),
+        settingsCard,
+      ],
+    ];
+  }
+
+  List<Widget> _secondaryWorkspaceChildren(
+    ThemeData theme,
+    ProviderDescriptor? descriptor,
+    bool managedMode,
+    String? selectedManagedProviderId,
+  ) {
+    final children = <Widget>[
+      _secondarySectionCard(
+        theme,
+        title: 'Change source',
+        subtitle:
+            'Switch between a saved provider record and draft-owned input only when the profile needs a different source.',
+        child: _providerModeCard(
+          theme,
+          managedMode,
+          selectedManagedProviderId: selectedManagedProviderId,
+        ),
+      ),
+      const SizedBox(height: 12),
+      _providerFlowCard(theme, descriptor),
+    ];
+    if (!managedMode && descriptor != null) {
+      children.add(const SizedBox(height: 12));
+      children.add(_providerDescriptorCard(theme, descriptor));
+    }
+    children.add(const SizedBox(height: 12));
+    children.add(_supportActionsCard(theme));
+    return children;
+  }
+
+  Widget _identityStrip(ThemeData theme) {
+    return _field(
+      key: const ValueKey<String>('profile-name-field'),
+      controller: _nameController,
+      label: 'Profile name',
+      onChanged: (String value) => _pushDraft(name: value),
+    );
+  }
+
+  Widget _mainSettingsSection(
+    ThemeData theme,
+    ProviderDescriptor? descriptor, {
+    required bool managedMode,
+    required ManagedProviderRecord? selectedManagedProvider,
+    required ProviderDescriptor? selectedManagedDescriptor,
+    required bool sideBySide,
+  }) {
+    final providerFields = <Widget>[];
+    if (managedMode && selectedManagedProvider != null) {
+      final recordName = selectedManagedProvider.name.isEmpty
+          ? selectedManagedProvider.id
+          : selectedManagedProvider.name;
+      providerFields.add(
+        _readOnlyField(
+          key: const ValueKey<String>('profile-provider-record-field'),
+          label: 'Provider record',
+          value: recordName,
+        ),
+      );
+    }
+    providerFields.add(
+      _providerFamilyField(
+        descriptor: selectedManagedDescriptor ?? descriptor,
+        managedMode: managedMode,
+      ),
+    );
+
+    final providerSummary = sideBySide && providerFields.length == 2
+        ? Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(child: providerFields[0]),
+              const SizedBox(width: 12),
+              Expanded(child: providerFields[1]),
+            ],
+          )
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: providerFields,
+          );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        providerSummary,
+        _field(
+          controller: _linkController,
+          label: _providerLinkLabel(descriptor),
+          maxLines: 3,
+          onChanged: (String value) =>
+              _pushDraft(spec: widget.draft.spec.copyWith(link: value.trim())),
+        ),
+        const Divider(height: 16),
+        Text(
+          'Runtime defaults',
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'These fields apply when the profile starts on this device.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 8),
+        ..._runtimeDefaultsFields(),
+      ],
+    );
+  }
+
+  Widget _primarySectionCard(
+    ThemeData theme, {
+    required String title,
+    required Widget child,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.22,
+        ),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            title,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _supportActionsCard(ThemeData theme) {
+    return _secondarySectionCard(
+      theme,
+      title: 'Profile maintenance',
+      subtitle: 'Keep destructive actions out of the main edit flow.',
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(top: 8),
+        title: const Text('Show maintenance actions'),
+        subtitle: const Text(
+          'Delete the saved profile without crowding the action row.',
+        ),
+        children: <Widget>[
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: <Widget>[
+              OutlinedButton(
+                key: const ValueKey<String>('profile-delete-action'),
+                onPressed: widget.busy || widget.selectedProfileId == null
+                    ? null
+                    : () => unawaited(widget.onDelete()),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _secondarySectionCard(
+    ThemeData theme, {
+    required String title,
+    required String subtitle,
+    required Widget child,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.35,
+        ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            title,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            subtitle,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 8),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _providerFamilyField({
+    required ProviderDescriptor? descriptor,
+    required bool managedMode,
+  }) {
+    if (managedMode) {
+      return _readOnlyField(
+        key: const ValueKey<String>('profile-managed-provider-family'),
+        label: 'Provider family',
+        value: _providerFamilyValue(descriptor),
       );
     }
     return _field(
       controller: _providerController,
-      label: 'Provider',
+      label: 'Provider family',
       onChanged: (String value) =>
           _pushDraft(spec: widget.draft.spec.copyWith(provider: value.trim())),
     );
@@ -462,25 +625,14 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
         ? 'Browser continuation may appear for this provider.'
         : 'No browser challenge mode is currently advertised for this provider.';
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF1D6),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            message,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(continuation, style: theme.textTheme.bodyMedium),
-        ],
+    return _secondarySectionCard(
+      theme,
+      title: 'Browser handling',
+      subtitle:
+          'Show this context only when the provider can hand off into a browser challenge.',
+      child: Text(
+        '$message $continuation',
+        style: theme.textTheme.bodySmall,
       ),
     );
   }
@@ -494,24 +646,20 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     };
   }
 
-  String _nextStepTitle(ProviderDescriptor? descriptor) {
-    if (widget.draft.spec.link.trim().isEmpty) {
-      return 'Step 1 · Add the provider input';
+  String _providerFamilyValue(ProviderDescriptor? descriptor) {
+    final displayName = descriptor?.displayName.trim() ?? '';
+    if (displayName.isNotEmpty) {
+      return displayName;
     }
-    if (descriptor?.mayRequireBrowserContinuation == true) {
-      return 'Step 2 · Resolve, then continue in browser if needed';
-    }
-    return 'Step 2 · Resolve this profile from the active editor';
+    return widget.draft.spec.provider.trim();
   }
 
-  String _nextStepDetail(ProviderDescriptor? descriptor) {
-    if (widget.draft.spec.link.trim().isEmpty) {
-      return 'Keep the main editor calm: choose the provider mode, add the current input, then resolve or save when the draft is ready.';
+  String _nextStepTitle(ProviderDescriptor? descriptor) {
+    if (descriptor?.mayRequireBrowserContinuation == true &&
+        widget.draft.spec.link.trim().isNotEmpty) {
+      return 'Resolve invite';
     }
-    if (descriptor?.mayRequireBrowserContinuation == true) {
-      return 'The normal path is resolve first. If the host reports a browser challenge, continue there and then return to the same workflow.';
-    }
-    return 'Resolve stays primary for the common path. Save the profile when you need to keep this draft for later runtime starts.';
+    return 'Resolve profile';
   }
 
   ProviderDescriptor? _selectedDescriptor() {
@@ -535,7 +683,30 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     );
   }
 
+  Widget _readOnlyField({
+    Key? key,
+    required String label,
+    required String value,
+  }) {
+    final displayValue = value.trim().isEmpty ? 'Not set' : value.trim();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: InputDecorator(
+        key: key,
+        decoration: InputDecoration(
+          labelText: label,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 10,
+          ),
+        ),
+        child: Text(displayValue),
+      ),
+    );
+  }
+
   Widget _field({
+    Key? key,
     required TextEditingController controller,
     required String label,
     required ValueChanged<String> onChanged,
@@ -546,6 +717,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: TextField(
+        key: key,
         controller: controller,
         maxLines: maxLines,
         obscureText: obscureText,
@@ -557,31 +729,21 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     );
   }
 
-  List<Widget> _providerSettingsSection(
+  Widget? _providerSettingsCard(
     ThemeData theme,
     ProviderDescriptor? descriptor,
   ) {
     final schema = descriptor?.settingsSchema;
     if (schema == null) {
-      return const <Widget>[];
+      return null;
     }
-
-    final section = <Widget>[
-      const SizedBox(height: 8),
-      Text(
-        'Provider settings',
-        style: theme.textTheme.titleMedium?.copyWith(
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-      const SizedBox(height: 6),
-    ];
 
     final supportError = descriptor?.providerSettingsSupportError;
     if (supportError != null) {
-      section.add(
-        Container(
-          margin: const EdgeInsets.only(bottom: 12),
+      return _primarySectionCard(
+        theme,
+        title: 'Profile provider settings',
+        child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: const Color(0xFFFFE2DE),
@@ -593,31 +755,34 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
           ),
         ),
       );
-      return section;
     }
 
-    section.add(
-      Text(
-        'Profile-retained settings stay with the saved profile. Prompt-only values remain only in the in-memory draft used for immediate resolution starts.',
-        style: theme.textTheme.bodyMedium?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
-        ),
+    return _primarySectionCard(
+      theme,
+      title: 'Profile provider settings',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'Saved profile settings for the selected provider. Prompt-only values stay only in the active draft.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ProviderSettingsForm(
+            descriptor: descriptor!,
+            values: widget.draft.spec.providerSettings,
+            enabled: !widget.busy,
+            onChanged: (Map<String, dynamic> values) {
+              _pushDraft(
+                spec: widget.draft.spec.copyWith(providerSettings: values),
+              );
+            },
+          ),
+        ],
       ),
     );
-    section.add(const SizedBox(height: 8));
-    section.add(
-      ProviderSettingsForm(
-        descriptor: descriptor!,
-        values: widget.draft.spec.providerSettings,
-        enabled: !widget.busy,
-        onChanged: (Map<String, dynamic> values) {
-          _pushDraft(
-            spec: widget.draft.spec.copyWith(providerSettings: values),
-          );
-        },
-      ),
-    );
-    return section;
   }
 
   List<Widget> _runtimeDefaultsFields() {
@@ -733,14 +898,6 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     ];
   }
 
-  String _runtimeDefaultsSummary(ProfileSpec spec) {
-    final turnOverride = (spec.turnServer ?? '').isEmpty
-        ? 'provider TURN'
-        : '${spec.turnServer}${(spec.turnPort ?? '').isEmpty ? '' : ':${spec.turnPort}'}';
-    final dtlsLabel = spec.useDtls ? 'DTLS on' : 'DTLS off';
-    return '${spec.listenAddress} -> ${spec.peerAddress} | ${spec.connections} conn | ${spec.mode.value} | $dtlsLabel | $turnOverride';
-  }
-
   void _pushDraft({String? name, ProfileSpec? spec}) {
     widget.onDraftChanged(
       widget.draft.copyWith(
@@ -751,166 +908,141 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   }
 
   void _syncFromDraft() {
-    _nameController.text = widget.draft.name;
-    _providerController.text = widget.draft.spec.provider;
-    _linkController.text = widget.draft.spec.link;
-    _listenController.text = widget.draft.spec.listenAddress;
-    _peerController.text = widget.draft.spec.peerAddress;
-    _connectionsController.text = widget.draft.spec.connections.toString();
-    _turnServerController.text = widget.draft.spec.turnServer ?? '';
-    _turnPortController.text = widget.draft.spec.turnPort ?? '';
-    _bindInterfaceController.text = widget.draft.spec.bindInterface ?? '';
-    _logLevelController.text = widget.draft.spec.logLevel;
+    _syncControllerText(_nameController, widget.draft.name);
+    _syncControllerText(_providerController, widget.draft.spec.provider);
+    _syncControllerText(_linkController, widget.draft.spec.link);
+    _syncControllerText(_listenController, widget.draft.spec.listenAddress);
+    _syncControllerText(_peerController, widget.draft.spec.peerAddress);
+    _syncControllerText(
+      _connectionsController,
+      widget.draft.spec.connections.toString(),
+    );
+    _syncControllerText(
+      _turnServerController,
+      widget.draft.spec.turnServer ?? '',
+    );
+    _syncControllerText(_turnPortController, widget.draft.spec.turnPort ?? '');
+    _syncControllerText(
+      _bindInterfaceController,
+      widget.draft.spec.bindInterface ?? '',
+    );
+    _syncControllerText(_logLevelController, widget.draft.spec.logLevel);
   }
 
-  Widget _providerModeCard(ThemeData theme, bool managedMode) {
+  void _syncControllerText(TextEditingController controller, String value) {
+    if (controller.text == value) {
+      return;
+    }
+    controller.value = controller.value.copyWith(
+      text: value,
+      selection: TextSelection.collapsed(offset: value.length),
+      composing: TextRange.empty,
+    );
+  }
+
+  Widget _providerModeCard(
+    ThemeData theme,
+    bool managedMode, {
+    String? selectedManagedProviderId,
+  }) {
     if (widget.managedProviders.isEmpty) {
-      return Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerHighest.withValues(
-            alpha: 0.35,
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'No saved provider records are available yet.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
-          borderRadius: BorderRadius.circular(14),
+          const SizedBox(height: 10),
+          ChoiceChip(
+            selected: true,
+            label: const Text('Direct input'),
+            onSelected: widget.busy
+                ? null
+                : (_) => widget.onUseCustomProvider(),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          managedMode
+              ? 'A saved provider record is attached to this draft.'
+              : 'This draft keeps its own provider input.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
           children: <Widget>[
-            Text(
-              'Provider mode',
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'No managed providers are available yet. Use custom mode for direct provider entry or create a provider record from the explicit provider-record surface first.',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 10),
             ChoiceChip(
-              selected: true,
-              label: const Text('Custom provider'),
+              selected: managedMode,
+              label: const Text('Saved record'),
+              onSelected: widget.busy
+                  ? null
+                  : (_) => widget.onActivateManagedProviderMode(
+                      managedProviderId: selectedManagedProviderId,
+                    ),
+            ),
+            ChoiceChip(
+              selected: !managedMode,
+              label: const Text('Direct input'),
               onSelected: widget.busy
                   ? null
                   : (_) => widget.onUseCustomProvider(),
             ),
           ],
         ),
-      );
-    }
+      ],
+    );
+  }
 
+  String? _resolvedManagedProviderId() {
+    if (widget.managedProviders.isEmpty) {
+      _selectedManagedProviderId = null;
+      return null;
+    }
     _selectedManagedProviderId ??=
         widget.selectedManagedProviderId ?? widget.managedProviders.first.id;
-    final selectedManagedProviderId =
-        widget.managedProviders.any(
-          (ManagedProviderRecord provider) =>
-              provider.id == _selectedManagedProviderId,
-        )
-        ? _selectedManagedProviderId
-        : widget.managedProviders.first.id;
-    _selectedManagedProviderId = selectedManagedProviderId;
+    if (!widget.managedProviders.any(
+      (ManagedProviderRecord provider) =>
+          provider.id == _selectedManagedProviderId,
+    )) {
+      _selectedManagedProviderId = widget.managedProviders.first.id;
+    }
+    return _selectedManagedProviderId;
+  }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.35,
-        ),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            'Provider mode',
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            managedMode
-                ? 'Managed mode snapshots values from a saved provider record, then keeps further profile edits local to this draft.'
-                : 'Custom mode lets you type a raw provider id and prompt-only inputs without mutating the managed provider catalog.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: <Widget>[
-              ChoiceChip(
-                selected: managedMode,
-                label: const Text('Managed provider'),
-                onSelected: widget.busy
-                    ? null
-                    : (_) => widget.onActivateManagedProviderMode(
-                        managedProviderId: selectedManagedProviderId,
-                      ),
-              ),
-              ChoiceChip(
-                selected: !managedMode,
-                label: const Text('Custom provider'),
-                onSelected: widget.busy
-                    ? null
-                    : (_) => widget.onUseCustomProvider(),
-              ),
-            ],
-          ),
-          if (managedMode) ...<Widget>[
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.72),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    'Managed provider',
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(() {
-                    final provider = widget.managedProviders.firstWhere(
-                      (ManagedProviderRecord provider) =>
-                          provider.id == selectedManagedProviderId,
-                    );
-                    return provider.name.isEmpty
-                        ? selectedManagedProviderId!
-                        : provider.name;
-                  }(), style: theme.textTheme.bodyMedium),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Browse reusable records from the explicit secondary surface when you need a different source.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'Use the action strip above the editor when you need to pick a different reusable record.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
+  ManagedProviderRecord? _managedProviderForId(String? managedProviderId) {
+    if (managedProviderId == null || managedProviderId.isEmpty) {
+      return null;
+    }
+    for (final provider in widget.managedProviders) {
+      if (provider.id == managedProviderId) {
+        return provider;
+      }
+    }
+    return null;
+  }
+
+  ProviderDescriptor? _descriptorForProviderId(String providerId) {
+    final normalized = providerId.trim().toLowerCase();
+    if (normalized.isEmpty) {
+      return null;
+    }
+    for (final descriptor in widget.providerDescriptors) {
+      if (descriptor.id.trim().toLowerCase() == normalized) {
+        return descriptor;
+      }
+    }
+    return null;
   }
 }

@@ -94,9 +94,9 @@ class ManagedProvidersLibrarySurface extends StatelessWidget {
           children: <Widget>[
             const Expanded(
               child: _LibrarySectionHeader(
-                title: 'Managed records',
+                title: 'Provider records',
                 subtitle:
-                    'Reusable provider-owned values stay available on demand instead of occupying the default first screen.',
+                    'Create a reusable provider record or reopen one you already saved.',
               ),
             ),
             if (onCreateManagedProvider != null)
@@ -110,15 +110,15 @@ class ManagedProvidersLibrarySurface extends StatelessWidget {
         const SizedBox(height: 12),
         const _LibraryHintCard(
           icon: Icons.tune_outlined,
-          title: 'Reusable data stays secondary',
+          title: 'Records are separate from families',
           message:
-              'Choose an existing managed record here, or close this surface to continue the active editor unchanged.',
+              'Create a record here, then choose its family in the separate family chooser. Open an existing record to continue editing it.',
         ),
         const SizedBox(height: 14),
         if (managedProviders.isEmpty)
           const _EmptyCard(
             message:
-                'No managed records yet. Create one from the active provider workflow when you need reusable non-secret values.',
+                'No provider records yet. Create one to choose a family and store reusable parameters.',
           )
         else
           ...managedProviders.map(
@@ -217,14 +217,14 @@ class SupportedProviderChooserSurface extends StatelessWidget {
         const _LibrarySectionHeader(
           title: 'Provider families',
           subtitle:
-              'Choose the shipped family deliberately, then return to one managed-record editor instead of browsing a permanent catalog beside it.',
+              'Choose the shipped family here, then return to the provider record editor.',
         ),
         const SizedBox(height: 12),
         const _LibraryHintCard(
           icon: Icons.widgets_outlined,
-          title: 'App-owned family chooser',
+          title: 'Families are read-only here',
           message:
-              'The catalog belongs to the shipped shell. Host descriptors only overlay current availability and field support.',
+              'This list belongs to the shipped shell. Choose a family here, then edit the selected record back in the record editor.',
         ),
         const SizedBox(height: 14),
         if (supportedProviders.isEmpty)

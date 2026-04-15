@@ -1,9 +1,11 @@
 ## MODIFIED Requirements
 ### Requirement: Desktop GUI shell presents a workflow-first workspace
 
-The system SHALL present the desktop GUI shell as a left-pad workspace where a
-compact persistent navigation pad stays on the left and one main canvas owns
-the active task surface.
+The system SHALL present the desktop GUI shell as a left-pad workspace where
+large desktop widths keep a compact persistent navigation pad on the left,
+narrower desktop widths expose the same workflow and task-entry commands
+through a compact drawer or equivalent trigger, and one main canvas owns the
+active task surface.
 
 #### Scenario: Shell opens into one active canvas route in routine ready state
 
@@ -28,6 +30,17 @@ the active task surface.
   a second detail pane
 - **AND** routine task-entry commands do not require a separate persistent
   explanatory card above the active route
+
+#### Scenario: Narrow desktop widths collapse the left pad without changing the active task
+
+- **GIVEN** the desktop GUI shell is running in a narrower desktop-width window
+- **WHEN** the operator opens workflow navigation or task-entry commands
+- **THEN** the shell exposes the same workflow and task-entry actions through a
+  compact drawer or equivalent trigger
+- **AND** opening or closing that compact navigation surface does not discard
+  the active canvas route, draft state, or active selection
+- **AND** the shell does not restore a separate persistent summary pane beside
+  the active canvas as a fallback for the collapsed left pad
 
 ## ADDED Requirements
 ### Requirement: Desktop GUI shell uses canvas-routed secondary task surfaces

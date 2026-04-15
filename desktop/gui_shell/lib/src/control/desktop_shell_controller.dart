@@ -18,6 +18,16 @@ enum DesktopWorkspaceSurface { profile, providerConfig, provider }
 
 enum DesktopShellSection { profileWorkflow, providerWorkflow }
 
+enum DesktopCanvasRoute {
+  profileEditor,
+  savedProfilePicker,
+  managedProviderPickerForProfile,
+  managedProviderEditor,
+  managedProviderPicker,
+  presetPicker,
+  providerFamilyPicker,
+}
+
 enum DesktopInspectorPane { diagnostics, activity }
 
 abstract class BrowserLauncher {
@@ -94,6 +104,7 @@ class DesktopShellController extends ChangeNotifier {
   ProfileDraft draft = ProfileDraft.defaults();
   ManagedProviderDraft managedProviderDraft = ManagedProviderDraft.defaults();
   DesktopShellSection activeSection = DesktopShellSection.profileWorkflow;
+  DesktopCanvasRoute activeCanvasRoute = DesktopCanvasRoute.profileEditor;
   DesktopInspectorPane activeInspectorPane = DesktopInspectorPane.diagnostics;
   bool isInspectorOpen = false;
   RuntimeDefaults materializeDefaults = const RuntimeDefaults(
@@ -167,10 +178,25 @@ class DesktopShellController extends ChangeNotifier {
   List<ManagedProviderRecord> get availableProviderConfigsForDraft =>
       availableManagedProvidersForDraft;
 
-  DesktopWorkspaceSurface get workspaceSurface =>
-      activeSection == DesktopShellSection.providerWorkflow
-      ? DesktopWorkspaceSurface.providerConfig
-      : DesktopWorkspaceSurface.profile;
+  DesktopWorkspaceSurface get workspaceSurface => switch (activeCanvasRoute) {
+    DesktopCanvasRoute.profileEditor ||
+    DesktopCanvasRoute.savedProfilePicker ||
+    DesktopCanvasRoute.managedProviderPickerForProfile =>
+      DesktopWorkspaceSurface.profile,
+    DesktopCanvasRoute.managedProviderEditor ||
+    DesktopCanvasRoute.managedProviderPicker ||
+    DesktopCanvasRoute.presetPicker ||
+    DesktopCanvasRoute.providerFamilyPicker =>
+      DesktopWorkspaceSurface.providerConfig,
+  };
+
+  DesktopCanvasRoute? _canvasRouteReturnTarget;
+
+  DesktopCanvasRoute? get canvasRouteReturnTarget => _canvasRouteReturnTarget;
+
+  bool get canReturnFromCanvasRoute =>
+      _canvasRouteReturnTarget != null &&
+      activeCanvasRoute != _canvasRouteReturnTarget;
 
   bool get hasLiveWork => resolutions.isNotEmpty || sessions.isNotEmpty;
 
@@ -183,12 +209,61 @@ class DesktopShellController extends ChangeNotifier {
       activeManagedProviderDescriptor;
 
   void showProfileWorkflow() {
-    activeSection = DesktopShellSection.profileWorkflow;
+    _showEditorRouteForSection(DesktopShellSection.profileWorkflow);
     _notifyWorkflow();
   }
 
   void showProviderWorkflow() {
-    activeSection = DesktopShellSection.providerWorkflow;
+    _showEditorRouteForSection(DesktopShellSection.providerWorkflow);
+    _notifyWorkflow();
+  }
+
+  void openSavedProfilePicker() {
+    _openCanvasRoute(
+      DesktopCanvasRoute.savedProfilePicker,
+      returnTarget: DesktopCanvasRoute.profileEditor,
+    );
+    _notifyWorkflow();
+  }
+
+  void openManagedProviderPickerForProfile() {
+    _openCanvasRoute(
+      DesktopCanvasRoute.managedProviderPickerForProfile,
+      returnTarget: DesktopCanvasRoute.profileEditor,
+    );
+    _notifyWorkflow();
+  }
+
+  void openManagedProviderPicker() {
+    _openCanvasRoute(
+      DesktopCanvasRoute.managedProviderPicker,
+      returnTarget: DesktopCanvasRoute.managedProviderEditor,
+    );
+    _notifyWorkflow();
+  }
+
+  void openPresetPicker() {
+    _openCanvasRoute(
+      DesktopCanvasRoute.presetPicker,
+      returnTarget: DesktopCanvasRoute.managedProviderEditor,
+    );
+    _notifyWorkflow();
+  }
+
+  void openProviderFamilyPicker() {
+    _openCanvasRoute(
+      DesktopCanvasRoute.providerFamilyPicker,
+      returnTarget: DesktopCanvasRoute.managedProviderEditor,
+    );
+    _notifyWorkflow();
+  }
+
+  void returnFromCanvasRoute() {
+    final returnTarget =
+        _canvasRouteReturnTarget ?? _editorRouteForSection(activeSection);
+    activeSection = _sectionForCanvasRoute(returnTarget);
+    activeCanvasRoute = returnTarget;
+    _canvasRouteReturnTarget = null;
     _notifyWorkflow();
   }
 
@@ -359,7 +434,7 @@ class DesktopShellController extends ChangeNotifier {
 
   void selectProfile(String profileId) {
     _restoredState = true;
-    activeSection = DesktopShellSection.profileWorkflow;
+    _showEditorRouteForSection(DesktopShellSection.profileWorkflow);
     selectedProfileId = profileId;
     final selected = profiles.firstWhere(
       (ProfileRecord profile) => profile.id == profileId,
@@ -389,7 +464,7 @@ class DesktopShellController extends ChangeNotifier {
 
   void updateDraft(ProfileDraft nextDraft) {
     _restoredState = true;
-    activeSection = DesktopShellSection.profileWorkflow;
+    _showEditorRouteForSection(DesktopShellSection.profileWorkflow);
     draft = _normalizeDraft(nextDraft);
     materializeDefaults = RuntimeDefaults.fromProfileSpec(draft.spec);
     _scheduleStatePersist();
@@ -398,7 +473,7 @@ class DesktopShellController extends ChangeNotifier {
 
   void useCustomProviderForDraft() {
     _restoredState = true;
-    activeSection = DesktopShellSection.profileWorkflow;
+    _showEditorRouteForSection(DesktopShellSection.profileWorkflow);
     draft = _normalizeDraft(draft.asCustomProvider());
     selectedManagedProviderId = null;
     materializeDefaults = RuntimeDefaults.fromProfileSpec(draft.spec);
@@ -424,7 +499,7 @@ class DesktopShellController extends ChangeNotifier {
 
   void resetDraft() {
     _restoredState = true;
-    activeSection = DesktopShellSection.profileWorkflow;
+    _showEditorRouteForSection(DesktopShellSection.profileWorkflow);
     selectedProfileId = null;
     draft = _defaultDraft();
     materializeDefaults = RuntimeDefaults.fromProfileSpec(draft.spec);
@@ -433,7 +508,7 @@ class DesktopShellController extends ChangeNotifier {
   }
 
   void selectManagedProvider(String providerId) {
-    activeSection = DesktopShellSection.providerWorkflow;
+    _showEditorRouteForSection(DesktopShellSection.providerWorkflow);
     selectedManagedProviderId = providerId;
     final selected =
         managedProviderById(providerId) ??
@@ -449,7 +524,7 @@ class DesktopShellController extends ChangeNotifier {
   }
 
   void updateManagedProviderDraft(ManagedProviderDraft nextDraft) {
-    activeSection = DesktopShellSection.providerWorkflow;
+    _showEditorRouteForSection(DesktopShellSection.providerWorkflow);
     managedProviderDraft = _normalizeManagedProviderDraft(nextDraft);
     _notifyWorkflow();
   }
@@ -464,7 +539,7 @@ class DesktopShellController extends ChangeNotifier {
     String? preferredProvider,
     ProviderPreset? preset,
   }) {
-    activeSection = DesktopShellSection.providerWorkflow;
+    _showEditorRouteForSection(DesktopShellSection.providerWorkflow);
     selectedManagedProviderId = null;
     managedProviderDraft = preset == null
         ? _defaultManagedProviderDraft(preferredProvider: preferredProvider)
@@ -474,6 +549,16 @@ class DesktopShellController extends ChangeNotifier {
               descriptor: descriptorForProvider(preset.provider),
             ),
           );
+    _notifyWorkflow();
+  }
+
+  void startManagedProviderCreation() {
+    selectedManagedProviderId = null;
+    managedProviderDraft = _defaultManagedProviderDraft();
+    _openCanvasRoute(
+      DesktopCanvasRoute.providerFamilyPicker,
+      returnTarget: DesktopCanvasRoute.managedProviderEditor,
+    );
     _notifyWorkflow();
   }
 
@@ -549,7 +634,7 @@ class DesktopShellController extends ChangeNotifier {
       managedProviders = _overlayManagedProviders(next);
       notice =
           'Saved managed provider ${saved.name.isEmpty ? saved.id : saved.name}.';
-      activeSection = DesktopShellSection.providerWorkflow;
+      _showEditorRouteForSection(DesktopShellSection.providerWorkflow);
       selectedManagedProviderId = saved.id;
       managedProviderDraft = ManagedProviderDraft.fromRecord(saved);
       _scheduleStatePersist();
@@ -596,7 +681,7 @@ class DesktopShellController extends ChangeNotifier {
       notice = 'Deleted managed provider $providerId.';
       selectedManagedProviderId = null;
       managedProviderDraft = _defaultManagedProviderDraft();
-      activeSection = DesktopShellSection.providerWorkflow;
+      _showEditorRouteForSection(DesktopShellSection.providerWorkflow);
       _scheduleStatePersist();
     });
   }
@@ -625,7 +710,7 @@ class DesktopShellController extends ChangeNotifier {
       _notify();
       return;
     }
-    activeSection = DesktopShellSection.profileWorkflow;
+    _showEditorRouteForSection(DesktopShellSection.profileWorkflow);
     draft = _normalizeDraft(draft.applyManagedProvider(provider));
     selectedManagedProviderId = managedProviderId;
     materializeDefaults = RuntimeDefaults.fromProfileSpec(draft.spec);
@@ -1448,6 +1533,43 @@ class DesktopShellController extends ChangeNotifier {
   void _bump(ValueNotifier<int> notifier) {
     notifier.value = notifier.value + 1;
   }
+
+  void _showEditorRouteForSection(DesktopShellSection section) {
+    activeSection = section;
+    activeCanvasRoute = _editorRouteForSection(section);
+    _canvasRouteReturnTarget = null;
+  }
+
+  void _openCanvasRoute(
+    DesktopCanvasRoute route, {
+    required DesktopCanvasRoute returnTarget,
+  }) {
+    activeSection = _sectionForCanvasRoute(route);
+    activeCanvasRoute = route;
+    _canvasRouteReturnTarget = returnTarget;
+  }
+}
+
+DesktopCanvasRoute _editorRouteForSection(DesktopShellSection section) {
+  return switch (section) {
+    DesktopShellSection.profileWorkflow => DesktopCanvasRoute.profileEditor,
+    DesktopShellSection.providerWorkflow =>
+      DesktopCanvasRoute.managedProviderEditor,
+  };
+}
+
+DesktopShellSection _sectionForCanvasRoute(DesktopCanvasRoute route) {
+  return switch (route) {
+    DesktopCanvasRoute.profileEditor ||
+    DesktopCanvasRoute.savedProfilePicker ||
+    DesktopCanvasRoute.managedProviderPickerForProfile =>
+      DesktopShellSection.profileWorkflow,
+    DesktopCanvasRoute.managedProviderEditor ||
+    DesktopCanvasRoute.managedProviderPicker ||
+    DesktopCanvasRoute.presetPicker ||
+    DesktopCanvasRoute.providerFamilyPicker =>
+      DesktopShellSection.providerWorkflow,
+  };
 }
 
 int _managedProviderNameSort(

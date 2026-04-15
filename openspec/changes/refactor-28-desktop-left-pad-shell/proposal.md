@@ -13,7 +13,9 @@ that is already open in the main workspace.
 
 The next step should be a stronger layout break:
 
-- a persistent left pad for workflow switching and task entry
+- a left-pad workflow model for workflow switching and task entry, with a
+  persistent pad on large desktop widths and a compact drawer/trigger path on
+  narrower desktop widths
 - one main canvas that owns the active task surface
 - no duplicated "current task" card stack beside the same task's editor
 - no modal-first library browsing for routine task switching
@@ -26,8 +28,10 @@ The next step should be a stronger layout break:
 
 ## What Changes
 - **BREAKING** Replace the current card-heavy desktop shell body with a
-  left-pad shell where the left side is a compact navigation and command pad,
-  not a summary-content pane.
+  left-pad shell model where large desktop widths keep a compact navigation and
+  command pad on the left, narrower desktop widths collapse that same command
+  model into a compact drawer/trigger path, and neither mode becomes a
+  summary-content pane.
 - Move saved-profile browsing, preset bootstrap, managed-provider browsing, and
   provider-family selection into dedicated main-canvas task routes instead of
   modal overlays or stacked companion cards.

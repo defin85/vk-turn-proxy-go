@@ -89,6 +89,20 @@ cards. It may show:
 It should avoid descriptive blocks that restate what the main canvas already
 shows.
 
+### Decision: Adapt the left pad by available desktop width
+
+The left-pad shell model should stay stable, but the left pad does not need to
+stay permanently visible at every window width.
+
+- large and extra-large desktop widths keep a persistent left pad
+- narrower desktop widths may collapse that pad into a compact drawer, sheet,
+  or equivalent explicit trigger
+- the active workflow, canvas route, return target, and inspector state remain
+  the same across those width changes
+
+This keeps the shell aligned with adaptive desktop guidance without regressing
+to modal-first task switching or reintroducing peer card regions.
+
 ### Decision: Separate workflow, canvas route, and inspector state
 
 The shell state model should explicitly separate:
@@ -117,7 +131,10 @@ It should not become a second editor or a replacement for the left pad.
 ### Shell chrome
 
 - compact operational header
-- main body with `left pad | main canvas | optional inspector`
+- large and extra-large widths use `left pad | main canvas | optional
+  inspector`
+- narrower desktop widths keep one dominant main canvas plus an explicit
+  left-pad trigger and optional overlay inspector
 
 ### Left pad
 
@@ -193,6 +210,10 @@ The intended first-read hierarchy is:
 - one dominant canvas for the active task route
 - optional right inspector only when explicitly opened
 
+On narrower desktop widths, the left pad may collapse behind an explicit
+navigation trigger, but the shell must still read as one dominant canvas rather
+than a stack of peer summary cards.
+
 Any implementation that keeps a separate persistent summary or action region
 competing with the active route should be treated as incomplete even if a rail
 or pad is technically present.
@@ -200,7 +221,9 @@ or pad is technically present.
 ## Migration Plan
 
 1. Introduce a dedicated desktop canvas-route state model.
-2. Replace the current left summary/card stack with a compact left pad.
+2. Replace the current left summary/card stack with a compact left pad on large
+   desktop widths and a predictable collapsed left-pad trigger on narrower
+   desktop widths.
 3. Convert saved-profile, preset, provider-record, and family selection flows
    from modal/secondary-card entry into canvas routes.
 4. Remove duplicated context cards from the main desktop shell.

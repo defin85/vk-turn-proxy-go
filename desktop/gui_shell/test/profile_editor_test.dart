@@ -120,40 +120,30 @@ void main() {
       ),
     );
 
-    expect(find.text('VK Calls'), findsWidgets);
-    expect(find.textContaining('external browser'), findsOneWidget);
     await tester.scrollUntilVisible(
-      find.text('Operator-managed runtime defaults'),
+      find.text('Runtime defaults'),
       300,
-      scrollable: find.byType(Scrollable).first,
+      scrollable: _profileWorkspaceScrollable(),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Operator-managed runtime defaults'), findsOneWidget);
-    expect(find.text('Inspect or edit runtime defaults'), findsOneWidget);
-    await tester.scrollUntilVisible(
-      find.text('Inspect support-only actions'),
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Inspect support-only actions'));
-    await tester.pumpAndSettle();
-
+    expect(find.text('Runtime defaults'), findsOneWidget);
     expect(
       find.byKey(const ValueKey<String>('profile-start-action')),
       findsOneWidget,
     );
-    expect(find.text('Local UDP listen'), findsNothing);
-
-    final runtimeDefaultsToggle = find.text('Inspect or edit runtime defaults');
-    await tester.ensureVisible(runtimeDefaultsToggle);
-    await tester.pumpAndSettle();
-    await tester.tap(runtimeDefaultsToggle, warnIfMissed: false);
-    await tester.pumpAndSettle();
-
     expect(find.text('Local UDP listen'), findsOneWidget);
     expect(find.text('Peer address'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('VK Calls'),
+      300,
+      scrollable: _profileWorkspaceScrollable(),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('VK Calls'), findsOneWidget);
+    expect(find.textContaining('external browser'), findsOneWidget);
   });
 
   testWidgets('generic-turn draft renders static-secret descriptor details', (
@@ -192,16 +182,24 @@ void main() {
       ),
     );
 
-    expect(find.text('Generic TURN'), findsWidgets);
-    expect(find.textContaining('static secret input'), findsOneWidget);
     await tester.scrollUntilVisible(
-      find.text('Operator-managed runtime defaults'),
+      find.text('Runtime defaults'),
       300,
-      scrollable: find.byType(Scrollable).first,
+      scrollable: _profileWorkspaceScrollable(),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Operator-managed runtime defaults'), findsOneWidget);
+    expect(find.text('Runtime defaults'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('Generic TURN'),
+      300,
+      scrollable: _profileWorkspaceScrollable(),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Generic TURN'), findsOneWidget);
+    expect(find.textContaining('static secret input'), findsOneWidget);
   });
 
   testWidgets('provider settings schema renders generic fields', (
@@ -247,13 +245,13 @@ void main() {
     );
 
     await tester.scrollUntilVisible(
-      find.text('Provider settings'),
+      find.text('Profile provider settings'),
       300,
-      scrollable: find.byType(Scrollable).first,
+      scrollable: _profileWorkspaceScrollable(),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Provider settings'), findsOneWidget);
+    expect(find.text('Profile provider settings'), findsOneWidget);
     expect(find.text('Region'), findsOneWidget);
     expect(find.text('Device PIN'), findsOneWidget);
   });
@@ -299,7 +297,7 @@ void main() {
     await tester.scrollUntilVisible(
       find.textContaining('cannot render the provider settings schema'),
       300,
-      scrollable: find.byType(Scrollable).first,
+      scrollable: _profileWorkspaceScrollable(),
     );
     await tester.pumpAndSettle();
 
@@ -308,4 +306,13 @@ void main() {
       findsOneWidget,
     );
   });
+}
+
+Finder _profileWorkspaceScrollable() {
+  return find
+      .descendant(
+        of: find.byKey(const ValueKey<String>('profile-workspace-scroll')),
+        matching: find.byType(Scrollable),
+      )
+      .first;
 }

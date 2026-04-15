@@ -235,7 +235,6 @@ void main() {
       );
       expect(find.text('Local host blocked'), findsNothing);
       expect(find.text('Workflows'), findsOneWidget);
-      expect(find.text('Current focus'), findsOneWidget);
       expect(find.text('Profile workspace'), findsOneWidget);
       expect(
         find.byKey(const ValueKey<String>('desktop-open-diagnostics-button')),
@@ -310,7 +309,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Workflows'), findsOneWidget);
-    expect(find.text('Current focus'), findsOneWidget);
     expect(find.text('Profile workspace'), findsOneWidget);
     expect(
       find.byKey(const ValueKey<String>('profile-library-item-profile-2')),
@@ -322,12 +320,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(controller.activeCanvasRoute, DesktopCanvasRoute.savedProfilePicker);
     expect(
       find.byKey(const ValueKey<String>('profile-library-item-profile-2')),
       findsOneWidget,
     );
     expect(
-      find.byKey(const ValueKey<String>('desktop-secondary-surface')),
+      find.byKey(const ValueKey<String>('desktop-canvas-route-frame')),
       findsOneWidget,
     );
 
@@ -338,8 +337,9 @@ void main() {
 
     expect(controller.selectedProfileId, 'profile-2');
     expect(controller.draft.name, 'beta');
+    expect(controller.activeCanvasRoute, DesktopCanvasRoute.profileEditor);
     expect(
-      find.byKey(const ValueKey<String>('desktop-secondary-surface')),
+      find.byKey(const ValueKey<String>('desktop-canvas-route-frame')),
       findsNothing,
     );
 
@@ -382,21 +382,24 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.byKey(const ValueKey<String>('desktop-secondary-surface')),
+        controller.activeCanvasRoute,
+        DesktopCanvasRoute.savedProfilePicker,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('desktop-canvas-route-frame')),
         findsOneWidget,
       );
 
       await tester.tap(
-        find.byKey(
-          const ValueKey<String>('desktop-secondary-surface-close-button'),
-        ),
+        find.byKey(const ValueKey<String>('desktop-canvas-route-back-button')),
       );
       await tester.pumpAndSettle();
 
       expect(
-        find.byKey(const ValueKey<String>('desktop-secondary-surface')),
+        find.byKey(const ValueKey<String>('desktop-canvas-route-frame')),
         findsNothing,
       );
+      expect(controller.activeCanvasRoute, DesktopCanvasRoute.profileEditor);
       expect(controller.selectedProfileId, selectedProfileId);
       expect(controller.draft.name, draftName);
       expect(
@@ -412,7 +415,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.byKey(const ValueKey<String>('desktop-secondary-surface')),
+        find.byKey(const ValueKey<String>('desktop-canvas-route-frame')),
         findsOneWidget,
       );
 
@@ -420,9 +423,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.byKey(const ValueKey<String>('desktop-secondary-surface')),
+        find.byKey(const ValueKey<String>('desktop-canvas-route-frame')),
         findsNothing,
       );
+      expect(controller.activeCanvasRoute, DesktopCanvasRoute.profileEditor);
       expect(controller.selectedProfileId, selectedProfileId);
       expect(controller.draft.name, draftName);
       expect(
@@ -463,43 +467,25 @@ void main() {
     expect(find.text('Host 0.1.0+1 @deadbeefcafe'), findsOneWidget);
     expect(find.text('Contract 1'), findsOneWidget);
     expect(find.text('Workflows'), findsOneWidget);
-    expect(find.text('Current focus'), findsOneWidget);
     expect(find.text('Profile workspace'), findsOneWidget);
     expect(
       find.byKey(const ValueKey<String>('desktop-open-diagnostics-button')),
       findsOneWidget,
     );
     expect(find.text('Live work'), findsOneWidget);
-    expect(
-      find.textContaining(
-        'All reported tunnel modes are currently fail-closed',
-      ),
-      findsOneWidget,
-    );
+    expect(find.text('127.0.0.1:7777'), findsOneWidget);
     expect(
       find.byKey(const ValueKey<String>('profile-library-item-profile-1')),
       findsNothing,
     );
-
-    final workspaceScrollable = _profileWorkspaceScrollable();
-    await tester.scrollUntilVisible(
-      find.text('Inspect support-only actions'),
-      320,
-      scrollable: workspaceScrollable,
+    expect(
+      find.byKey(const ValueKey<String>('profile-start-action')),
+      findsOneWidget,
     );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Inspect support-only actions'));
-    await tester.pumpAndSettle();
 
     final startButton = find.byKey(
       const ValueKey<String>('profile-start-action'),
     );
-    await tester.scrollUntilVisible(
-      startButton,
-      320,
-      scrollable: workspaceScrollable,
-    );
-    await tester.pumpAndSettle();
     await tester.tap(startButton);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
@@ -550,6 +536,38 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     unawaited(api.dispose());
   });
+
+  testWidgets(
+    'desktop profile editor shows disabled start session action for unsaved draft',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1600, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final controller = DesktopShellController(
+        api: _FakeControlPlaneApi(),
+        supervisor: _FakeHostSupervisor(),
+        stateStore: const _InMemoryShellStateStore(),
+        appBuild: _testGuiBuild,
+      );
+
+      await controller.initialize();
+      controller.resetDraft();
+      await tester.pumpWidget(
+        MaterialApp(home: DashboardPage(controller: controller)),
+      );
+      await tester.pumpAndSettle();
+
+      final startButton = tester.widget<FilledButton>(
+        find.byKey(const ValueKey<String>('profile-start-action')),
+      );
+      expect(startButton.onPressed, isNull);
+      expect(find.byTooltip('Save profile first'), findsOneWidget);
+
+      controller.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   testWidgets('desktop shell renders and executes open room actions', (
     WidgetTester tester,
@@ -764,14 +782,35 @@ void main() {
         controller.workspaceSurface,
         DesktopWorkspaceSurface.providerConfig,
       );
-      expect(find.text('App-owned provider catalog'), findsOneWidget);
+      expect(find.text('New provider record'), findsOneWidget);
 
       await tester.tap(
         find.byKey(
-          const ValueKey<String>('desktop-open-provider-family-chooser-button'),
+          const ValueKey<String>(
+            'desktop-open-managed-provider-library-button',
+          ),
         ),
       );
       await tester.pumpAndSettle();
+
+      expect(
+        controller.activeCanvasRoute,
+        DesktopCanvasRoute.managedProviderPicker,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('managed-provider-create-button')),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('managed-provider-create-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        controller.activeCanvasRoute,
+        DesktopCanvasRoute.providerFamilyPicker,
+      );
 
       expect(
         find.byKey(const ValueKey<String>('supported-provider-card-vk')),
@@ -788,9 +827,14 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      expect(
+        controller.activeCanvasRoute,
+        DesktopCanvasRoute.managedProviderEditor,
+      );
+
       final providerWorkspaceScrollable = _managedProviderWorkspaceScrollable();
       await tester.scrollUntilVisible(
-        find.text('Managed record name'),
+        find.byType(TextField).first,
         180,
         scrollable: providerWorkspaceScrollable,
       );
@@ -806,7 +850,7 @@ void main() {
       expect(controller.providerConfigs.single.name, 'WB Central');
 
       await tester.scrollUntilVisible(
-        find.text('Managed record name'),
+        find.byType(TextField).first,
         180,
         scrollable: providerWorkspaceScrollable,
       );
@@ -880,11 +924,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(controller.workspaceSurface, DesktopWorkspaceSurface.providerConfig);
-    expect(find.text('Host overlay: unavailable'), findsOneWidget);
+    expect(find.text('Host overlay: unavailable'), findsWidgets);
     expect(
       tester
           .widget<FilledButton>(
-            find.widgetWithText(FilledButton, 'Apply record to profile draft'),
+            find.widgetWithText(FilledButton, 'Use in profile draft'),
           )
           .onPressed,
       isNotNull,
@@ -1043,8 +1087,15 @@ void main() {
       controller.selectProviderConfig('provider-config-1');
       await tester.pumpAndSettle();
 
+      final providerWorkspaceScrollable = _managedProviderWorkspaceScrollable();
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey<String>('managed-provider-apply-action')),
+        180,
+        scrollable: providerWorkspaceScrollable,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(
-        find.widgetWithText(FilledButton, 'Apply record to profile draft'),
+        find.byKey(const ValueKey<String>('managed-provider-apply-action')),
       );
       await tester.pumpAndSettle();
 
@@ -1114,7 +1165,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(controller.activeSection, DesktopShellSection.providerWorkflow);
-      expect(find.text('App-owned provider catalog'), findsOneWidget);
+      expect(find.text('New provider record'), findsOneWidget);
 
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
       await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
@@ -1303,11 +1354,38 @@ void main() {
 
       expect(controller.activeSection, DesktopShellSection.providerWorkflow);
       expect(
+        find.byKey(const ValueKey<String>('desktop-section-drawer')),
+        findsNothing,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('desktop-navigation-drawer-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
         find.byKey(
           const ValueKey<String>('desktop-open-preset-bootstrap-button'),
         ),
         findsOneWidget,
       );
+      await tester.tap(
+        find.byKey(
+          const ValueKey<String>('desktop-open-preset-bootstrap-button'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(controller.activeCanvasRoute, DesktopCanvasRoute.presetPicker);
+      expect(
+        find.byKey(const ValueKey<String>('desktop-canvas-route-frame')),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('desktop-canvas-route-back-button')),
+      );
+      await tester.pumpAndSettle();
 
       await tester.tap(
         find.byKey(const ValueKey<String>('desktop-open-diagnostics-button')),
@@ -1361,7 +1439,7 @@ void main() {
       await tester.pumpAndSettle();
       final providerWorkspaceScrollable = _managedProviderWorkspaceScrollable();
       await tester.scrollUntilVisible(
-        find.text('Managed record name'),
+        find.byType(TextField).first,
         180,
         scrollable: providerWorkspaceScrollable,
       );
@@ -1388,6 +1466,72 @@ void main() {
       );
       expect(controller.activeSection, DesktopShellSection.providerWorkflow);
       expect(controller.managedProviderDraft.name, 'Resize Record');
+
+      controller.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'desktop profile name input keeps caret position across draft sync',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1600, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final controller = DesktopShellController(
+        api: _FakeControlPlaneApi(),
+        supervisor: const _FakeHostSupervisor(),
+        stateStore: const _InMemoryShellStateStore(),
+        appBuild: _testGuiBuild,
+      );
+
+      await controller.initialize();
+      await tester.pumpWidget(
+        MaterialApp(home: DashboardPage(controller: controller)),
+      );
+      await tester.pumpAndSettle();
+
+      final profileNameField = find.byType(TextField).first;
+
+      await tester.tap(profileNameField);
+      await tester.pumpAndSettle();
+
+      final focusedWidgetAfterTap =
+          FocusManager.instance.primaryFocus?.context?.widget;
+      expect(
+        focusedWidgetAfterTap is EditableText ||
+            FocusManager.instance.primaryFocus?.context
+                    ?.findAncestorWidgetOfExactType<EditableText>() !=
+                null,
+        isTrue,
+      );
+
+      await tester.enterText(profileNameField, 'A');
+      await tester.pumpAndSettle();
+
+      var editable = tester.widget<EditableText>(
+        find.descendant(
+          of: profileNameField,
+          matching: find.byType(EditableText),
+        ),
+      );
+      expect(editable.controller.text, 'A');
+      expect(editable.controller.selection.isCollapsed, isTrue);
+      expect(editable.controller.selection.baseOffset, 1);
+
+      await tester.enterText(profileNameField, 'AB');
+      await tester.pumpAndSettle();
+
+      editable = tester.widget<EditableText>(
+        find.descendant(
+          of: profileNameField,
+          matching: find.byType(EditableText),
+        ),
+      );
+      expect(editable.controller.text, 'AB');
+      expect(editable.controller.selection.isCollapsed, isTrue);
+      expect(editable.controller.selection.baseOffset, 2);
 
       controller.dispose();
       await tester.pumpWidget(const SizedBox.shrink());
@@ -1436,23 +1580,26 @@ void main() {
 
       final profileWorkspaceScrollable = _profileWorkspaceScrollable();
       await tester.scrollUntilVisible(
-        find.widgetWithText(ChoiceChip, 'Managed provider'),
+        find.widgetWithText(ChoiceChip, 'Saved record'),
         180,
         scrollable: profileWorkspaceScrollable,
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Provider mode'), findsWidgets);
       expect(
-        find.widgetWithText(ChoiceChip, 'Managed provider'),
+        find.widgetWithText(ChoiceChip, 'Saved record'),
         findsOneWidget,
       );
       expect(
-        find.widgetWithText(ChoiceChip, 'Custom provider'),
+        find.widgetWithText(ChoiceChip, 'Direct input'),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('profile-provider-descriptor-card')),
         findsOneWidget,
       );
 
-      await tester.tap(find.widgetWithText(ChoiceChip, 'Managed provider'));
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Saved record'));
       await tester.pumpAndSettle();
 
       expect(controller.draft.providerBinding.isManaged, isTrue);
@@ -1460,12 +1607,33 @@ void main() {
         controller.draft.providerBinding.managedProviderId,
         'provider-config-1',
       );
-      expect(find.text('Managed provider'), findsWidgets);
+      expect(
+        find.byKey(const ValueKey<String>('profile-provider-descriptor-card')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('profile-provider-record-field')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('profile-managed-provider-family')),
+        findsOneWidget,
+      );
+      expect(find.text('VK Calls'), findsOneWidget);
 
-      await tester.tap(find.widgetWithText(ChoiceChip, 'Custom provider'));
+      await tester.ensureVisible(
+        find.widgetWithText(ChoiceChip, 'Direct input'),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Direct input'));
       await tester.pumpAndSettle();
 
       expect(controller.draft.providerBinding.isManaged, isFalse);
+      expect(
+        find.byKey(const ValueKey<String>('profile-provider-descriptor-card')),
+        findsOneWidget,
+      );
+      expect(find.text('VK Calls'), findsWidgets);
 
       controller.dispose();
       await tester.pumpWidget(const SizedBox.shrink());

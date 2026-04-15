@@ -79,3 +79,10 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - Direct Android device testing is available when a phone is connected over USB with debugging enabled and authorized.
 - Prefer the Windows Android SDK `adb.exe` at `C:\Users\Egor\AppData\Local\Android\Sdk\platform-tools\adb.exe` (WSL path `/mnt/c/Users/Egor/AppData/Local/Android/Sdk/platform-tools/adb.exe`) for physical-device install/logcat/intent checks.
 - The Windows Android SDK root is `C:\Users\Egor\AppData\Local\Android\Sdk`, the Windows Flutter SDK used by the repo-owned mirror builds is `C:\flutter`, and the Windows mirror root is `E:\Projects\vk-turn-proxy-go`.
+- For the fastest desktop Flutter UI debug loop, prefer WSLg with the Linux target over the Windows mirror workflow.
+- The primary desktop UI path is: start `cmd/clientd` inside WSL on `127.0.0.1:7777`, run `dart pub get` from the repo root, then run `cd desktop/gui_shell && flutter run --machine -d linux`.
+- Prefer a hybrid desktop UI workflow: use direct WSLg launch for the running app, then connect Dart MCP tools to the `app.dtd` URI from Flutter machine output for `hot_reload`, widget-tree inspection, runtime errors, and driver actions.
+- For screenshot or Flutter Driver automation on Linux desktop, launch `desktop/gui_shell` with `flutter run --machine -d linux -t test_driver/driver_main.dart`, but keep `enableTextEntryEmulation` disabled in that entrypoint so real keyboard input on the live WSLg window keeps working.
+- If an automation step truly needs `FlutterDriver.enterText`, enable text-entry emulation only for that session and turn it back off afterwards; do not bake emulated text entry into the app entrypoint.
+- Do not rely on Dart MCP `launch_app` as the primary desktop Linux launcher unless it has been re-verified in the current environment; it may miss the WSLg display setup and fail with `cannot open display`.
+- Use the Windows mirror and `flutter run -d windows` only when the task specifically needs Windows-native behavior, packaging, or sidecar-placement validation.

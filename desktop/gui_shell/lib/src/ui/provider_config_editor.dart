@@ -76,91 +76,119 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
     final supportedProvider = _selectedSupportedProvider();
     final descriptor = _selectedDescriptor();
     final selectedSavedProvider = widget.selectedManagedProviderId != null;
+    final editorTitle = selectedSavedProvider
+        ? 'Provider record'
+        : 'New provider record';
+    final editorDetail = selectedSavedProvider
+        ? 'Edit one reusable provider record. The attached family is shown below and stays read-only here.'
+        : 'Create one reusable provider record. Choose its family separately, then edit the record parameters below.';
+    final parametersTitle = supportedProvider == null
+        ? 'Record parameters'
+        : 'Parameters for ${supportedProvider.title}';
+    final parametersDetail = supportedProvider == null
+        ? 'Choose a provider family from the separate family list first. Record parameters will appear here afterwards.'
+        : 'Edit reusable parameters stored in this record for ${supportedProvider.title}. This does not change the family itself.';
     final blockedBySchemaSupport =
         descriptor?.providerSettingsSupportError != null &&
         widget.draft.providerSettings.isNotEmpty;
     final hostAvailability = supportedProvider?.availabilityFor(
       widget.providerDescriptors,
     );
-    final nextStepCard = _nextStepCard(
-      theme,
-      title: _nextStepTitle(supportedProvider),
-      detail: _nextStepDetail(supportedProvider),
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        children: <Widget>[
-          FilledButton(
-            key: const ValueKey<String>('managed-provider-save-action'),
-            onPressed: widget.busy || blockedBySchemaSupport
-                ? null
-                : () => unawaited(widget.onSave()),
-            child: const Text('Save managed record'),
-          ),
-          FilledButton.tonal(
-            key: const ValueKey<String>('managed-provider-apply-action'),
-            onPressed: widget.busy || widget.selectedManagedProviderId == null
-                ? null
-                : () => widget.onApplyToProfileDraft(
-                    widget.selectedManagedProviderId!,
-                  ),
-            child: const Text('Apply record to profile draft'),
-          ),
-          OutlinedButton(
-            key: const ValueKey<String>('managed-provider-delete-action'),
-            onPressed: widget.busy || widget.selectedManagedProviderId == null
-                ? null
-                : () => unawaited(widget.onDelete()),
-            child: const Text('Delete record'),
-          ),
-        ],
-      ),
-    );
 
     return Card(
       child: LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
-          final pinActionHeader = constraints.maxHeight >= 360;
+          final stackHeader = constraints.maxWidth < 1080;
+          final headerActions = Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: <Widget>[
+              FilledButton(
+                key: const ValueKey<String>('managed-provider-save-action'),
+                onPressed: widget.busy || blockedBySchemaSupport
+                    ? null
+                    : () => unawaited(widget.onSave()),
+                child: Text(_nextStepTitle(supportedProvider)),
+              ),
+              FilledButton.tonal(
+                key: const ValueKey<String>('managed-provider-apply-action'),
+                onPressed:
+                    widget.busy || widget.selectedManagedProviderId == null
+                    ? null
+                    : () => widget.onApplyToProfileDraft(
+                        widget.selectedManagedProviderId!,
+                      ),
+                child: const Text('Use in profile draft'),
+              ),
+              OutlinedButton(
+                key: const ValueKey<String>('managed-provider-delete-action'),
+                onPressed:
+                    widget.busy || widget.selectedManagedProviderId == null
+                    ? null
+                    : () => unawaited(widget.onDelete()),
+                child: const Text('Delete'),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: widget.busy ? null : widget.onReset,
+                icon: const Icon(Icons.tune),
+                label: const Text('New record'),
+              ),
+            ],
+          );
           return Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            'App-owned provider catalog',
-                            style: theme.textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            selectedSavedProvider
-                                ? 'Editing one active managed provider record'
-                                : 'Choose one shipped provider family, then shape one managed provider record',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
+                if (stackHeader)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        editorTitle,
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                    ),
-                    FilledButton.tonalIcon(
-                      onPressed: widget.busy ? null : widget.onReset,
-                      icon: const Icon(Icons.tune),
-                      label: const Text('New record'),
-                    ),
-                  ],
-                ),
-                if (pinActionHeader) ...<Widget>[
-                  const SizedBox(height: 16),
-                  nextStepCard,
-                ],
+                      const SizedBox(height: 6),
+                      Text(
+                        editorDetail,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      headerActions,
+                    ],
+                  )
+                else
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              editorTitle,
+                              style: theme.textTheme.headlineSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              editorDetail,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Flexible(child: headerActions),
+                    ],
+                  ),
                 const SizedBox(height: 16),
                 Expanded(
                   child: ListView(
@@ -169,29 +197,46 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                     ),
                     primary: true,
                     children: <Widget>[
-                      if (!pinActionHeader) ...<Widget>[
-                        nextStepCard,
-                        const SizedBox(height: 16),
-                      ],
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surfaceContainerHighest
-                              .withValues(alpha: 0.45),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Text(
-                          'The app still owns the supported provider catalog, but the catalog now opens explicitly instead of staying expanded in the default first read.',
-                          style: theme.textTheme.bodyMedium,
-                        ),
-                      ),
                       if (widget.supportedProviders.isEmpty)
                         _unavailableCard(
                           theme,
                           'This build does not advertise any shipped provider families yet.',
                         )
                       else ...<Widget>[
+                        Text(
+                          'Record name',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Name this saved provider record first. Family choice and record parameters stay below.',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _field(
+                          controller: _nameController,
+                          label: 'Record name',
+                          onChanged: (String value) => _pushDraft(name: value),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Attached family',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Families live in a separate chooser. The selected family is attached to this record and described here.',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
                         _familyEntryCard(
                           theme,
                           provider: supportedProvider,
@@ -206,34 +251,43 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                             descriptor: descriptor,
                           ),
                         const SizedBox(height: 16),
+                        if (descriptor != null) ...<Widget>[
+                          Text(
+                            'Family characteristics',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Read-only characteristics from the selected family and current host overlay.',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          _descriptorSummary(theme, descriptor),
+                          const SizedBox(height: 16),
+                        ],
+                        if (hostAvailability != null &&
+                            !hostAvailability.isAvailable) ...<Widget>[
+                          _unavailableCard(theme, hostAvailability.message),
+                          const SizedBox(height: 12),
+                        ],
                         Text(
-                          'Managed provider record',
+                          parametersTitle,
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'This shell-owned record stores only reusable, non-secret provider-owned values for the selected shipped family.',
+                          parametersDetail,
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
                         const SizedBox(height: 12),
-                        _field(
-                          controller: _nameController,
-                          label: 'Managed record name',
-                          onChanged: (String value) => _pushDraft(name: value),
-                        ),
-                        if (hostAvailability != null &&
-                            !hostAvailability.isAvailable) ...<Widget>[
-                          _unavailableCard(theme, hostAvailability.message),
-                          const SizedBox(height: 12),
-                        ],
-                        if (descriptor != null) ...<Widget>[
-                          _descriptorSummary(theme, descriptor),
-                          const SizedBox(height: 12),
-                        ],
                         if (descriptor?.providerSettingsSupportError != null &&
                             widget.draft.providerSettings.isNotEmpty)
                           _unavailableCard(
@@ -244,24 +298,10 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                           _infoCard(
                             theme,
                             supportedProvider == null
-                                ? 'This managed provider currently has no reusable field surface in the shipped shell.'
-                                : '${supportedProvider.title} currently has no reusable managed fields in this shipped shell. The record still stays valid as a named supported provider entry.',
+                                ? 'Choose a provider family first. Record parameters will appear here afterwards.'
+                                : '${supportedProvider.title} has no editable record parameters in this desktop shell.',
                           )
                         else if (descriptor != null) ...<Widget>[
-                          Text(
-                            'Reusable provider settings',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Only descriptor-retained, non-secret provider settings belong here. Runtime defaults and profile input stay in the profile workspace.',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
                           ProviderSettingsForm(
                             descriptor: descriptor,
                             values: widget.draft.providerSettings,
@@ -279,42 +319,6 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
             ),
           );
         },
-      ),
-    );
-  }
-
-  Widget _nextStepCard(
-    ThemeData theme, {
-    required String title,
-    required String detail,
-    required Widget child,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8F1E4),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            title,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            detail,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 12),
-          child,
-        ],
       ),
     );
   }
@@ -341,11 +345,11 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
     required SupportedProviderAvailability? availability,
   }) {
     final title = provider == null
-        ? 'Provider family chooser'
-        : 'Selected provider family';
+        ? 'No family attached yet'
+        : 'Selected family';
     final detail = provider == null
-        ? 'Open the explicit family chooser before you expand the managed-record details.'
-        : '${provider.title} stays selected until you intentionally change it through the chooser surface.';
+        ? 'Open the separate family chooser before you continue with this provider record.'
+        : '${provider.title} is attached to this record until you intentionally change it in the family chooser.';
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -392,8 +396,8 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
           const SizedBox(height: 12),
           Text(
             provider == null
-                ? 'Use the action strip above the editor to choose the shipped family before you continue.'
-                : 'Keep preset bootstrap, family changes, and record browsing in the action strip above so this editor stays focused on one managed record.',
+                ? 'Use the action strip above to choose a family. Families are read-only here.'
+                : 'Families stay read-only here. Change the attached family from the action strip above; edit this record\'s parameters below.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -405,22 +409,12 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
 
   String _nextStepTitle(SupportedProviderDefinition? provider) {
     if (provider == null) {
-      return 'Step 1 · Choose a shipped provider family';
+      return 'Choose family';
     }
     if (widget.draft.name.trim().isEmpty) {
-      return 'Step 2 · Name the managed record';
+      return 'Save draft';
     }
-    return 'Step 3 · Save or apply this managed record';
-  }
-
-  String _nextStepDetail(SupportedProviderDefinition? provider) {
-    if (provider == null) {
-      return 'Select the family first. The editor stays focused on one record shape instead of competing with a second navigation wall.';
-    }
-    if (widget.draft.name.trim().isEmpty) {
-      return 'Keep only reusable non-secret values here, then save the record or apply it to the active profile draft.';
-    }
-    return 'Save remains the primary action. Apply is secondary and snapshots the current provider values into the profile workflow.';
+    return 'Save record';
   }
 
   Widget _selectedFamilyCard(
@@ -462,7 +456,7 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
             spacing: 8,
             runSpacing: 8,
             children: <Widget>[
-              _metaChip(theme, label: 'App-owned catalog', accent: true),
+              _metaChip(theme, label: 'Read-only family', accent: true),
               if (availability != null)
                 _metaChip(
                   theme,
@@ -473,6 +467,13 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                 ),
               _metaChip(theme, label: fieldLabel, accent: fieldAccent),
             ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'This card describes the attached family. Editable record parameters are shown below.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),
@@ -584,15 +585,15 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
 
   String _managedFieldSurfaceLabel(ProviderDescriptor? descriptor) {
     if (descriptor == null) {
-      return 'No reusable fields yet';
+      return 'No editable parameters yet';
     }
     if (descriptor.providerSettingsSupportError != null) {
       return 'Schema blocked in this shell';
     }
     if (descriptor.settingsSchema == null) {
-      return 'No reusable fields yet';
+      return 'No editable parameters';
     }
-    return 'Reusable fields ready';
+    return 'Editable parameters ready';
   }
 
   void _pushDraft({

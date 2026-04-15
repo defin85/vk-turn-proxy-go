@@ -14,6 +14,25 @@ It is a GUI over the local client control plane, not a second runtime implementa
 - export per-session diagnostics bundles
 - supervise a compatible local sidecar on Windows, macOS, and Linux
 
+## Workspace model
+
+The default desktop shell now reads as one workflow-oriented workspace instead
+of a dashboard of peer cards:
+
+- large desktop widths keep a persistent left pad for workflow switching, task
+  entry, and active-selection cues
+- narrower desktop widths collapse the same command set into a drawer without
+  changing the active canvas route, draft, or selection
+- profile library, managed-provider browsing, preset bootstrap, and provider
+  family choice open as dedicated main-canvas routes with an explicit in-canvas
+  back path
+- diagnostics and live work stay secondary through the inspector instead of
+  replacing the main editor canvas
+
+That layout keeps the dominant path compact in ready state: choose context,
+edit the active draft or managed record, then resolve or start from the same
+canvas.
+
 ## Local development
 
 From the repository root:
@@ -26,6 +45,21 @@ flutter test
 flutter run -d linux
 flutter build linux
 ```
+
+For screenshot/automation flows that need the Flutter driver extension, use the
+separate automation entrypoint instead of the normal app target:
+
+```bash
+cd desktop/gui_shell
+flutter run -d linux -t test_driver/driver_main.dart
+```
+
+That target enables `flutter_driver` automation hooks for tools that need
+driver actions or app screenshots, while keeping the default `lib/main.dart`
+path free of automation-only behavior. The automation target keeps real
+keyboard input enabled; if a tool needs `FlutterDriver.enterText`, toggle text
+entry emulation explicitly for that session instead of baking it into the app
+entrypoint.
 
 The current shell is verified on Linux.
 The project also includes generated `macos/` and `windows/` runners so packaging and sidecar placement can follow the same control-plane contract there.

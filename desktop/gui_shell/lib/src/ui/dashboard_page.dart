@@ -56,145 +56,50 @@ class _DashboardPageState extends State<DashboardPage> {
     _scaffoldKey.currentState?.openDrawer();
   }
 
-  Future<void> _showSecondarySurface({
-    required String title,
-    required String detail,
-    required Widget child,
-  }) async {
-    await showDialog<void>(
-      context: context,
-      builder: (BuildContext context) {
-        final size = MediaQuery.sizeOf(context);
-        final width = size.width < 900 ? size.width - 32 : 760.0;
-        final height = size.height < 780 ? size.height - 32 : 680.0;
-        return Dialog(
-          insetPadding: const EdgeInsets.all(16),
-          child: SizedBox(
-            width: width,
-            height: height,
-            child: _SecondarySurfaceFrame(
-              title: title,
-              detail: detail,
-              child: child,
-            ),
-          ),
-        );
-      },
-    );
+  void _openSavedProfilesRoute() {
+    controller.openSavedProfilePicker();
     _restoreWorkflowFocus();
   }
 
-  Future<void> _openSavedProfilesSurface() {
-    return _showSecondarySurface(
-      title: 'Saved profiles',
-      detail:
-          'Browse saved profile workspaces intentionally, then return to the active workflow without restoring a permanent library rail.',
-      child: AnimatedBuilder(
-        animation: controller.workflowRevision,
-        builder: (BuildContext context, Widget? child) {
-          return SavedProfilesLibrarySurface(
-            profiles: controller.profiles,
-            selectedProfileId: controller.selectedProfileId,
-            busy: controller.busy || controller.status != ShellStatus.ready,
-            onSelectProfile: (String profileId) {
-              controller.selectProfile(profileId);
-              Navigator.of(context).pop();
-            },
-            onCreateDraft: () {
-              controller.resetDraft();
-              Navigator.of(context).pop();
-            },
-          );
-        },
-      ),
-    );
+  void _openManagedProviderRouteForProfile() {
+    controller.openManagedProviderPickerForProfile();
+    _restoreWorkflowFocus();
   }
 
-  Future<void> _openManagedProviderSurface({
-    required String title,
-    required String detail,
-    required ValueChanged<String> onSelectManagedProvider,
-    VoidCallback? onCreateManagedProvider,
-  }) {
-    return _showSecondarySurface(
-      title: title,
-      detail: detail,
-      child: AnimatedBuilder(
-        animation: controller.workflowRevision,
-        builder: (BuildContext context, Widget? child) {
-          return ManagedProvidersLibrarySurface(
-            managedProviders: controller.managedProviders,
-            selectedManagedProviderId: controller.selectedManagedProviderId,
-            onSelectManagedProvider: (String providerId) {
-              onSelectManagedProvider(providerId);
-              Navigator.of(context).pop();
-            },
-            onCreateManagedProvider: onCreateManagedProvider == null
-                ? null
-                : () {
-                    onCreateManagedProvider();
-                    Navigator.of(context).pop();
-                  },
-          );
-        },
-      ),
-    );
+  void _openManagedProviderRouteForProvider() {
+    controller.openManagedProviderPicker();
+    _restoreWorkflowFocus();
   }
 
-  Future<void> _openPresetBootstrapSurface() {
-    return _showSecondarySurface(
-      title: 'New from preset',
-      detail:
-          'Use a preset only when you deliberately start from curated defaults. The default provider editor stays focused on one current record.',
-      child: AnimatedBuilder(
-        animation: controller.workflowRevision,
-        builder: (BuildContext context, Widget? child) {
-          return PresetBootstrapSurface(
-            presets: controller.presetCatalog,
-            providerDescriptors: controller.providerDescriptors,
-            busy: controller.busy || controller.status != ShellStatus.ready,
-            onApplyPreset: (ProviderPreset preset) {
-              controller.applyPreset(preset);
-              Navigator.of(context).pop();
-            },
-          );
-        },
-      ),
-    );
+  void _openPresetBootstrapRoute() {
+    controller.openPresetPicker();
+    _restoreWorkflowFocus();
   }
 
-  Future<void> _openProviderFamilySurface() {
-    return _showSecondarySurface(
-      title: 'Provider families',
-      detail:
-          'Pick the shipped family explicitly, then return to the same managed-record editor instead of browsing a permanent catalog beside it.',
-      child: AnimatedBuilder(
-        animation: controller.workflowRevision,
-        builder: (BuildContext context, Widget? child) {
-          return SupportedProviderChooserSurface(
-            supportedProviders: controller.supportedProviderCatalog,
-            providerDescriptors: controller.providerDescriptors,
-            selectedProviderId: controller.managedProviderDraft.provider,
-            busy: controller.busy || controller.status != ShellStatus.ready,
-            onSelectProvider: (String providerId) {
-              controller.updateManagedProviderDraft(
-                controller.managedProviderDraft.copyWith(
-                  provider: providerId,
-                  providerSettings: const <String, dynamic>{},
-                ),
-              );
-              Navigator.of(context).pop();
-            },
-          );
-        },
-      ),
-    );
+  void _openProviderFamilyRoute() {
+    controller.openProviderFamilyPicker();
+    _restoreWorkflowFocus();
+  }
+
+  void _returnFromCanvasRoute() {
+    controller.returnFromCanvasRoute();
+    _restoreWorkflowFocus();
   }
 
   void _restoreWorkflowFocus() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
         return;
+      }
+      final focusedContext = FocusManager.instance.primaryFocus?.context;
+      if (focusedContext != null) {
+        final keepsEditableFocus =
+            focusedContext.widget is EditableText ||
+            focusedContext.findAncestorWidgetOfExactType<EditableText>() !=
+                null;
+        if (keepsEditableFocus) {
+          return;
+        }
       }
       _activeWorkflowFocusNode.requestFocus();
     });
@@ -281,7 +186,8 @@ class _DashboardPageState extends State<DashboardPage> {
           const SingleActivator(LogicalKeyboardKey.escape): () {
             final shouldRestoreWorkflowFocus =
                 controller.isInspectorOpen ||
-                (_scaffoldKey.currentState?.isEndDrawerOpen ?? false);
+                (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) ||
+                controller.canReturnFromCanvasRoute;
             if (controller.isInspectorOpen) {
               controller.closeInspector();
             }
@@ -290,6 +196,8 @@ class _DashboardPageState extends State<DashboardPage> {
             }
             if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
               Navigator.of(context).maybePop();
+            } else if (controller.canReturnFromCanvasRoute) {
+              controller.returnFromCanvasRoute();
             }
             if (shouldRestoreWorkflowFocus) {
               _restoreWorkflowFocus();
@@ -315,7 +223,29 @@ class _DashboardPageState extends State<DashboardPage> {
               drawer: showCompactLayout
                   ? Drawer(
                       child: SafeArea(
-                        child: _CompactNavigationDrawer(controller: controller),
+                        child: _CompactNavigationDrawer(
+                          controller: controller,
+                          onOpenSavedProfiles: () {
+                            Navigator.of(context).maybePop();
+                            _openSavedProfilesRoute();
+                          },
+                          onOpenManagedProvidersForProfile: () {
+                            Navigator.of(context).maybePop();
+                            _openManagedProviderRouteForProfile();
+                          },
+                          onOpenManagedProvidersForProvider: () {
+                            Navigator.of(context).maybePop();
+                            _openManagedProviderRouteForProvider();
+                          },
+                          onOpenPresetBootstrap: () {
+                            Navigator.of(context).maybePop();
+                            _openPresetBootstrapRoute();
+                          },
+                          onOpenProviderFamilies: () {
+                            Navigator.of(context).maybePop();
+                            _openProviderFamilyRoute();
+                          },
+                        ),
                       ),
                     )
                   : null,
@@ -340,7 +270,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     ),
               body: SafeArea(
                 child: Padding(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: <Widget>[
@@ -363,36 +293,21 @@ class _DashboardPageState extends State<DashboardPage> {
                           );
                         },
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 10),
                       Expanded(
                         child: _ShellBody(
                           controller: controller,
                           compactLayout: showCompactLayout,
                           persistentInspector: showPersistentInspector,
                           activeWorkflowFocusNode: _activeWorkflowFocusNode,
-                          onOpenSavedProfiles: _openSavedProfilesSurface,
-                          onOpenManagedProvidersForProfile: () {
-                            return _openManagedProviderSurface(
-                              title: 'Managed records',
-                              detail:
-                                  'Choose a saved managed record to snapshot its current values into the active profile draft.',
-                              onSelectManagedProvider:
-                                  controller.useManagedProviderForDraft,
-                            );
-                          },
-                          onOpenManagedProvidersForProvider: () {
-                            return _openManagedProviderSurface(
-                              title: 'Managed records',
-                              detail:
-                                  'Browse reusable provider records explicitly, then return to the active provider workflow without keeping a permanent records wall on screen.',
-                              onSelectManagedProvider:
-                                  controller.selectManagedProvider,
-                              onCreateManagedProvider:
-                                  controller.resetManagedProviderDraft,
-                            );
-                          },
-                          onOpenPresetBootstrap: _openPresetBootstrapSurface,
-                          onOpenProviderFamilies: _openProviderFamilySurface,
+                          onOpenSavedProfiles: _openSavedProfilesRoute,
+                          onOpenManagedProvidersForProfile:
+                              _openManagedProviderRouteForProfile,
+                          onOpenManagedProvidersForProvider:
+                              _openManagedProviderRouteForProvider,
+                          onOpenPresetBootstrap: _openPresetBootstrapRoute,
+                          onOpenProviderFamilies: _openProviderFamilyRoute,
+                          onReturnFromCanvasRoute: _returnFromCanvasRoute,
                           onClosePersistentInspector: () {
                             controller.closeInspector();
                             _restoreWorkflowFocus();
@@ -422,6 +337,7 @@ class _ShellBody extends StatelessWidget {
     required this.onOpenManagedProvidersForProvider,
     required this.onOpenPresetBootstrap,
     required this.onOpenProviderFamilies,
+    required this.onReturnFromCanvasRoute,
     required this.onClosePersistentInspector,
   });
 
@@ -429,11 +345,12 @@ class _ShellBody extends StatelessWidget {
   final bool compactLayout;
   final bool persistentInspector;
   final FocusNode activeWorkflowFocusNode;
-  final Future<void> Function() onOpenSavedProfiles;
-  final Future<void> Function() onOpenManagedProvidersForProfile;
-  final Future<void> Function() onOpenManagedProvidersForProvider;
-  final Future<void> Function() onOpenPresetBootstrap;
-  final Future<void> Function() onOpenProviderFamilies;
+  final VoidCallback onOpenSavedProfiles;
+  final VoidCallback onOpenManagedProvidersForProfile;
+  final VoidCallback onOpenManagedProvidersForProvider;
+  final VoidCallback onOpenPresetBootstrap;
+  final VoidCallback onOpenProviderFamilies;
+  final VoidCallback onReturnFromCanvasRoute;
   final VoidCallback onClosePersistentInspector;
 
   @override
@@ -447,84 +364,9 @@ class _ShellBody extends StatelessWidget {
       builder: (BuildContext context, Widget? child) {
         return LayoutBuilder(
           builder: (BuildContext context, BoxConstraints constraints) {
-            final contextPane = AnimatedBuilder(
-              animation: controller.workflowRevision,
-              builder: (BuildContext context, Widget? child) {
-                return _WorkflowContextPane(controller: controller);
-              },
-            );
-            final editorPane = AnimatedBuilder(
-              animation: controller.workflowRevision,
-              builder: (BuildContext context, Widget? child) {
-                final busy =
-                    controller.busy || controller.status != ShellStatus.ready;
-                return controller.activeSection ==
-                        DesktopShellSection.profileWorkflow
-                    ? ProfileEditorPanel(
-                        providerDescriptors: controller.providerDescriptors,
-                        managedProviders: controller.managedProviders,
-                        initialManagedProviderId:
-                            controller.draft.providerBinding.managedProviderId,
-                        selectedProfileId: controller.selectedProfileId,
-                        draft: controller.draft,
-                        busy: busy,
-                        onDraftChanged: controller.updateDraft,
-                        onActivateManagedProviderMode:
-                            controller.activateManagedProviderMode,
-                        onUseCustomProvider:
-                            controller.useCustomProviderForDraft,
-                        onSave: controller.saveDraft,
-                        onDelete: controller.deleteSelectedProfile,
-                        onReset: controller.resetDraft,
-                        onResolve: controller.startResolutionFromDraft,
-                        onStart: controller.startSelectedProfile,
-                        onBrowseManagedProviders:
-                            onOpenManagedProvidersForProfile,
-                      )
-                    : ProviderConfigEditorPanel(
-                        supportedProviders: controller.supportedProviderCatalog,
-                        providerDescriptors: controller.providerDescriptors,
-                        selectedManagedProviderId:
-                            controller.selectedManagedProviderId,
-                        draft: controller.managedProviderDraft,
-                        busy: busy,
-                        onDraftChanged: controller.updateManagedProviderDraft,
-                        onSave: controller.saveManagedProviderDraft,
-                        onDelete: controller.deleteSelectedManagedProvider,
-                        onReset: controller.resetManagedProviderDraft,
-                        onApplyToProfileDraft:
-                            controller.useManagedProviderForDraft,
-                        onChooseProviderFamily: onOpenProviderFamilies,
-                        onOpenPresetBootstrap: onOpenPresetBootstrap,
-                        onBrowseManagedProviders:
-                            onOpenManagedProvidersForProvider,
-                      );
-              },
-            );
-            final assurancePane = AnimatedBuilder(
-              animation: Listenable.merge(<Listenable>[
-                controller.shellChromeRevision,
-                controller.workflowRevision,
-              ]),
-              builder: (BuildContext context, Widget? child) {
-                return _FocusedAssurancePane(controller: controller);
-              },
-            );
-            final workflowLauncherBar = AnimatedBuilder(
-              animation: controller.workflowRevision,
-              builder: (BuildContext context, Widget? child) {
-                return _WorkflowActionBar(
-                  controller: controller,
-                  onOpenSavedProfiles: onOpenSavedProfiles,
-                  onOpenManagedProvidersForProfile:
-                      onOpenManagedProvidersForProfile,
-                  onOpenManagedProvidersForProvider:
-                      onOpenManagedProvidersForProvider,
-                  onOpenPresetBootstrap: onOpenPresetBootstrap,
-                  onOpenProviderFamilies: onOpenProviderFamilies,
-                );
-              },
-            );
+            final showFocusedAssurance =
+                controller.status != ShellStatus.ready ||
+                controller.hasLiveWork;
             final mainColumn = FocusTraversalGroup(
               child: Focus(
                 key: const ValueKey<String>('desktop-active-workflow-focus'),
@@ -532,78 +374,75 @@ class _ShellBody extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: <Widget>[
-                    assurancePane,
-                    const SizedBox(height: 12),
-                    workflowLauncherBar,
-                    const SizedBox(height: 12),
-                    Expanded(child: editorPane),
+                    if (showFocusedAssurance) ...<Widget>[
+                      AnimatedBuilder(
+                        animation: Listenable.merge(<Listenable>[
+                          controller.shellChromeRevision,
+                          controller.workflowRevision,
+                        ]),
+                        builder: (BuildContext context, Widget? child) {
+                          return _FocusedAssurancePane(controller: controller);
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    Expanded(
+                      child: _CanvasSurface(
+                        controller: controller,
+                        onOpenSavedProfiles: onOpenSavedProfiles,
+                        onOpenManagedProvidersForProfile:
+                            onOpenManagedProvidersForProfile,
+                        onOpenManagedProvidersForProvider:
+                            onOpenManagedProvidersForProvider,
+                        onOpenPresetBootstrap: onOpenPresetBootstrap,
+                        onOpenProviderFamilies: onOpenProviderFamilies,
+                        onReturnFromCanvasRoute: onReturnFromCanvasRoute,
+                      ),
+                    ),
                   ],
                 ),
               ),
             );
 
             if (compactLayout) {
-              final contextHeight = constraints.maxHeight < 920 ? 112.0 : 128.0;
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  Expanded(child: mainColumn),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    height: contextHeight,
-                    child: FocusTraversalGroup(child: contextPane),
-                  ),
-                ],
-              );
+              return mainColumn;
             }
 
-            final showExpandedPad = persistentInspector;
             final showInspectorPane =
                 persistentInspector && controller.isInspectorOpen;
 
             return Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                if (showExpandedPad)
-                  FocusTraversalGroup(
-                    child: SizedBox(
-                      width: 236,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: <Widget>[
-                          AnimatedBuilder(
-                            animation: controller.workflowRevision,
-                            builder: (BuildContext context, Widget? child) {
-                              return _ExpandedNavigationPad(
-                                controller: controller,
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 12),
-                          Expanded(child: contextPane),
-                        ],
-                      ),
-                    ),
-                  )
-                else ...<Widget>[
-                  FocusTraversalGroup(
-                    child: AnimatedBuilder(
-                      animation: controller.workflowRevision,
-                      builder: (BuildContext context, Widget? child) {
-                        return _DesktopSectionRail(controller: controller);
-                      },
+                FocusTraversalGroup(
+                  child: SizedBox(
+                    width: 228,
+                    child: ListView(
+                      primary: false,
+                      children: <Widget>[
+                        AnimatedBuilder(
+                          animation: controller.workflowRevision,
+                          builder: (BuildContext context, Widget? child) {
+                            return _ExpandedNavigationPad(
+                              controller: controller,
+                              onOpenSavedProfiles: onOpenSavedProfiles,
+                              onOpenManagedProvidersForProfile:
+                                  onOpenManagedProvidersForProfile,
+                              onOpenManagedProvidersForProvider:
+                                  onOpenManagedProvidersForProvider,
+                              onOpenPresetBootstrap: onOpenPresetBootstrap,
+                              onOpenProviderFamilies: onOpenProviderFamilies,
+                            );
+                          },
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    width: 220,
-                    child: FocusTraversalGroup(child: contextPane),
-                  ),
-                ],
-                const SizedBox(width: 16),
+                ),
+                const SizedBox(width: 12),
                 Expanded(child: mainColumn),
                 if (showInspectorPane) ...<Widget>[
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 12),
                   FocusTraversalGroup(
                     child: SizedBox(
                       width: 372,
@@ -650,6 +489,8 @@ class _DesktopShellBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final connection = controller.hostConnection;
     final hostInfo = connection?.info;
+    final routineReadyChrome =
+        controller.status == ShellStatus.ready && !controller.hasLiveWork;
     final statusTitle = switch (controller.status) {
       ShellStatus.booting => 'Connecting to local host',
       ShellStatus.ready => 'Local host ready',
@@ -669,6 +510,9 @@ class _DesktopShellBar extends StatelessWidget {
       HostLifecycleState.failed => const Color(0xFFFFF0EC),
       _ => const Color(0xFFF4F7FA),
     };
+    final shouldShowNotice =
+        controller.notice != null &&
+        !(routineReadyChrome && controller.notice == connection?.message);
     final stacked = MediaQuery.sizeOf(context).width < 1260;
 
     final actions = Wrap(
@@ -718,8 +562,21 @@ class _DesktopShellBar extends StatelessWidget {
         Card(
           color: tone,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-            child: stacked
+            padding: EdgeInsets.fromLTRB(
+              routineReadyChrome ? 14 : 18,
+              routineReadyChrome ? 12 : 16,
+              routineReadyChrome ? 14 : 18,
+              routineReadyChrome ? 12 : 16,
+            ),
+            child: routineReadyChrome
+                ? _CompactReadyShellBarSummary(
+                    controller: controller,
+                    hostInfo: hostInfo,
+                    actions: actions,
+                    stacked: stacked,
+                    showPersistentInspector: showPersistentInspector,
+                  )
+                : stacked
                 ? Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
@@ -756,10 +613,107 @@ class _DesktopShellBar extends StatelessWidget {
                   ),
           ),
         ),
-        if (controller.notice != null) ...<Widget>[
-          const SizedBox(height: 12),
-          _NoticeBanner(message: controller.notice!),
+        if (shouldShowNotice) ...<Widget>[
+          const SizedBox(height: 10),
+          _NoticeBanner(
+            message: controller.notice!,
+            compact: routineReadyChrome,
+          ),
         ],
+      ],
+    );
+  }
+}
+
+class _CompactReadyShellBarSummary extends StatelessWidget {
+  const _CompactReadyShellBarSummary({
+    required this.controller,
+    required this.hostInfo,
+    required this.actions,
+    required this.stacked,
+    required this.showPersistentInspector,
+  });
+
+  final DesktopShellController controller;
+  final HostInfo? hostInfo;
+  final Widget actions;
+  final bool stacked;
+  final bool showPersistentInspector;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final detail = _routineConnectionDetail(controller.hostConnection?.message);
+    final summary = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            Container(
+              width: 10,
+              height: 10,
+              decoration: const BoxDecoration(
+                color: Color(0xFF255D6D),
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Local host ready',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            if (detail.isNotEmpty) ...<Widget>[
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  detail,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: <Widget>[
+            _Tag(label: 'GUI ${controller.appBuild.shortLabel}'),
+            if (hostInfo != null)
+              _Tag(label: 'Host ${hostInfo!.build.shortLabel}'),
+            if (hostInfo != null)
+              _Tag(label: 'Contract ${hostInfo!.contractVersion}'),
+            if (controller.hostConnection?.launched == true)
+              const _Tag(label: 'launched'),
+          ],
+        ),
+      ],
+    );
+
+    if (stacked) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          summary,
+          const SizedBox(height: 10),
+          actions,
+        ],
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Expanded(child: summary),
+        const SizedBox(width: 16),
+        SizedBox(
+          width: showPersistentInspector ? 344 : 284,
+          child: Align(alignment: Alignment.topRight, child: actions),
+        ),
       ],
     );
   }
@@ -831,9 +785,21 @@ class _ShellBarSummary extends StatelessWidget {
 }
 
 class _CompactNavigationDrawer extends StatelessWidget {
-  const _CompactNavigationDrawer({required this.controller});
+  const _CompactNavigationDrawer({
+    required this.controller,
+    required this.onOpenSavedProfiles,
+    required this.onOpenManagedProvidersForProfile,
+    required this.onOpenManagedProvidersForProvider,
+    required this.onOpenPresetBootstrap,
+    required this.onOpenProviderFamilies,
+  });
 
   final DesktopShellController controller;
+  final VoidCallback onOpenSavedProfiles;
+  final VoidCallback onOpenManagedProvidersForProfile;
+  final VoidCallback onOpenManagedProvidersForProvider;
+  final VoidCallback onOpenPresetBootstrap;
+  final VoidCallback onOpenProviderFamilies;
 
   @override
   Widget build(BuildContext context) {
@@ -848,52 +814,37 @@ class _CompactNavigationDrawer extends StatelessWidget {
           controller.showProviderWorkflow();
         }
       },
-      children: const <Widget>[
-        Padding(
+      children: <Widget>[
+        const Padding(
           padding: EdgeInsets.fromLTRB(28, 20, 28, 12),
           child: Text('Workflows'),
         ),
-        NavigationDrawerDestination(
+        const NavigationDrawerDestination(
           key: ValueKey<String>('desktop-section-profile'),
           icon: Icon(Icons.fact_check_outlined),
           label: Text('Profiles'),
         ),
-        NavigationDrawerDestination(
+        const NavigationDrawerDestination(
           key: ValueKey<String>('desktop-section-provider'),
           icon: Icon(Icons.tune_outlined),
           label: Text('Providers'),
         ),
-      ],
-    );
-  }
-}
-
-class _DesktopSectionRail extends StatelessWidget {
-  const _DesktopSectionRail({required this.controller});
-
-  final DesktopShellController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return NavigationRail(
-      key: const ValueKey<String>('desktop-section-rail'),
-      selectedIndex: _sectionIndex(controller.activeSection),
-      labelType: NavigationRailLabelType.all,
-      onDestinationSelected: (int index) {
-        if (index == 0) {
-          controller.showProfileWorkflow();
-        } else {
-          controller.showProviderWorkflow();
-        }
-      },
-      destinations: const <NavigationRailDestination>[
-        NavigationRailDestination(
-          icon: Icon(Icons.fact_check_outlined),
-          label: Text('Profiles'),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(28, 20, 28, 12),
+          child: Text('Quick actions'),
         ),
-        NavigationRailDestination(
-          icon: Icon(Icons.tune_outlined),
-          label: Text('Providers'),
+        Padding(
+          padding: EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: _WorkflowQuickActions(
+            controller: controller,
+            dense: true,
+            onOpenSavedProfiles: onOpenSavedProfiles,
+            onOpenManagedProvidersForProfile: onOpenManagedProvidersForProfile,
+            onOpenManagedProvidersForProvider:
+                onOpenManagedProvidersForProvider,
+            onOpenPresetBootstrap: onOpenPresetBootstrap,
+            onOpenProviderFamilies: onOpenProviderFamilies,
+          ),
         ),
       ],
     );
@@ -901,16 +852,29 @@ class _DesktopSectionRail extends StatelessWidget {
 }
 
 class _ExpandedNavigationPad extends StatelessWidget {
-  const _ExpandedNavigationPad({required this.controller});
+  const _ExpandedNavigationPad({
+    required this.controller,
+    required this.onOpenSavedProfiles,
+    required this.onOpenManagedProvidersForProfile,
+    required this.onOpenManagedProvidersForProvider,
+    required this.onOpenPresetBootstrap,
+    required this.onOpenProviderFamilies,
+  });
 
   final DesktopShellController controller;
+  final VoidCallback onOpenSavedProfiles;
+  final VoidCallback onOpenManagedProvidersForProfile;
+  final VoidCallback onOpenManagedProvidersForProvider;
+  final VoidCallback onOpenPresetBootstrap;
+  final VoidCallback onOpenProviderFamilies;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Card(
+      key: const ValueKey<String>('desktop-section-rail'),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -920,19 +884,12 @@ class _ExpandedNavigationPad extends StatelessWidget {
                 fontWeight: FontWeight.w800,
               ),
             ),
-            const SizedBox(height: 6),
-            Text(
-              'Keep switching visible, but quiet.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
             const SizedBox(height: 10),
             _SectionListTile(
               key: const ValueKey<String>('desktop-section-profile'),
               icon: Icons.fact_check_outlined,
               title: 'Profiles',
-              subtitle: 'Single-path profile editing.',
+              subtitle: 'Profile editing',
               selected:
                   controller.activeSection ==
                   DesktopShellSection.profileWorkflow,
@@ -943,11 +900,29 @@ class _ExpandedNavigationPad extends StatelessWidget {
               key: const ValueKey<String>('desktop-section-provider'),
               icon: Icons.tune_outlined,
               title: 'Providers',
-              subtitle: 'Managed record editing.',
+              subtitle: 'Provider records',
               selected:
                   controller.activeSection ==
                   DesktopShellSection.providerWorkflow,
               onTap: controller.showProviderWorkflow,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Quick actions',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _WorkflowQuickActions(
+              controller: controller,
+              onOpenSavedProfiles: onOpenSavedProfiles,
+              onOpenManagedProvidersForProfile:
+                  onOpenManagedProvidersForProfile,
+              onOpenManagedProvidersForProvider:
+                  onOpenManagedProvidersForProvider,
+              onOpenPresetBootstrap: onOpenPresetBootstrap,
+              onOpenProviderFamilies: onOpenProviderFamilies,
             ),
           ],
         ),
@@ -956,54 +931,290 @@ class _ExpandedNavigationPad extends StatelessWidget {
   }
 }
 
-class _WorkflowActionBar extends StatelessWidget {
-  const _WorkflowActionBar({
+class _WorkflowQuickActions extends StatelessWidget {
+  const _WorkflowQuickActions({
     required this.controller,
     required this.onOpenSavedProfiles,
     required this.onOpenManagedProvidersForProfile,
     required this.onOpenManagedProvidersForProvider,
     required this.onOpenPresetBootstrap,
     required this.onOpenProviderFamilies,
+    this.dense = false,
   });
 
   final DesktopShellController controller;
-  final Future<void> Function() onOpenSavedProfiles;
-  final Future<void> Function() onOpenManagedProvidersForProfile;
-  final Future<void> Function() onOpenManagedProvidersForProvider;
-  final Future<void> Function() onOpenPresetBootstrap;
-  final Future<void> Function() onOpenProviderFamilies;
+  final VoidCallback onOpenSavedProfiles;
+  final VoidCallback onOpenManagedProvidersForProfile;
+  final VoidCallback onOpenManagedProvidersForProvider;
+  final VoidCallback onOpenPresetBootstrap;
+  final VoidCallback onOpenProviderFamilies;
+  final bool dense;
+
+  @override
+  Widget build(BuildContext context) {
+    final profileWorkflow =
+        controller.activeSection == DesktopShellSection.profileWorkflow;
+    final actions = profileWorkflow
+        ? <Widget>[
+            FilledButton.tonal(
+              key: const ValueKey<String>('desktop-open-profile-library-button'),
+              onPressed: onOpenSavedProfiles,
+              child: Text(dense ? 'Profiles' : 'Saved profiles'),
+            ),
+            OutlinedButton(
+              key: const ValueKey<String>('desktop-create-profile-draft-button'),
+              onPressed: controller.busy ? null : controller.resetDraft,
+              child: const Text('New draft'),
+            ),
+            OutlinedButton(
+              key: const ValueKey<String>(
+                'desktop-context-open-profile-managed-providers-button',
+              ),
+              onPressed: controller.managedProviders.isEmpty
+                  ? null
+                  : onOpenManagedProvidersForProfile,
+              child: const Text('Provider records'),
+            ),
+          ]
+        : <Widget>[
+            FilledButton.tonal(
+              key: const ValueKey<String>('desktop-open-preset-bootstrap-button'),
+              onPressed: onOpenPresetBootstrap,
+              child: Text(dense ? 'Presets' : 'Use preset'),
+            ),
+            FilledButton.tonal(
+              key: const ValueKey<String>(
+                'desktop-open-managed-provider-library-button',
+              ),
+              onPressed: onOpenManagedProvidersForProvider,
+              child: const Text('Provider records'),
+            ),
+            OutlinedButton(
+              key: const ValueKey<String>(
+                'desktop-open-provider-family-chooser-button',
+              ),
+              onPressed: onOpenProviderFamilies,
+              child: const Text('Families'),
+            ),
+          ];
+
+    if (dense) {
+      return Wrap(spacing: 8, runSpacing: 8, children: actions);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        for (var i = 0; i < actions.length; i++) ...<Widget>[
+          actions[i],
+          if (i != actions.length - 1) const SizedBox(height: 8),
+        ],
+      ],
+    );
+  }
+}
+
+class _CanvasSurface extends StatelessWidget {
+  const _CanvasSurface({
+    required this.controller,
+    required this.onOpenSavedProfiles,
+    required this.onOpenManagedProvidersForProfile,
+    required this.onOpenManagedProvidersForProvider,
+    required this.onOpenPresetBootstrap,
+    required this.onOpenProviderFamilies,
+    required this.onReturnFromCanvasRoute,
+  });
+
+  final DesktopShellController controller;
+  final VoidCallback onOpenSavedProfiles;
+  final VoidCallback onOpenManagedProvidersForProfile;
+  final VoidCallback onOpenManagedProvidersForProvider;
+  final VoidCallback onOpenPresetBootstrap;
+  final VoidCallback onOpenProviderFamilies;
+  final VoidCallback onReturnFromCanvasRoute;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller.workflowRevision,
+      builder: (BuildContext context, Widget? child) {
+        final busy = controller.busy || controller.status != ShellStatus.ready;
+        final route = controller.activeCanvasRoute;
+
+        switch (route) {
+          case DesktopCanvasRoute.profileEditor:
+            return ProfileEditorPanel(
+              providerDescriptors: controller.providerDescriptors,
+              managedProviders: controller.managedProviders,
+              initialManagedProviderId:
+                  controller.draft.providerBinding.managedProviderId,
+              selectedProfileId: controller.selectedProfileId,
+              draft: controller.draft,
+              busy: busy,
+              onDraftChanged: controller.updateDraft,
+              onActivateManagedProviderMode:
+                  controller.activateManagedProviderMode,
+              onUseCustomProvider: controller.useCustomProviderForDraft,
+              onSave: controller.saveDraft,
+              onDelete: controller.deleteSelectedProfile,
+              onReset: controller.resetDraft,
+              onResolve: controller.startResolutionFromDraft,
+              onStart: controller.startSelectedProfile,
+              onBrowseManagedProviders: () async {
+                onOpenManagedProvidersForProfile();
+              },
+            );
+          case DesktopCanvasRoute.managedProviderEditor:
+            return ProviderConfigEditorPanel(
+              supportedProviders: controller.supportedProviderCatalog,
+              providerDescriptors: controller.providerDescriptors,
+              selectedManagedProviderId: controller.selectedManagedProviderId,
+              draft: controller.managedProviderDraft,
+              busy: busy,
+              onDraftChanged: controller.updateManagedProviderDraft,
+              onSave: controller.saveManagedProviderDraft,
+              onDelete: controller.deleteSelectedManagedProvider,
+              onReset: controller.resetManagedProviderDraft,
+              onApplyToProfileDraft: controller.useManagedProviderForDraft,
+              onChooseProviderFamily: () async {
+                onOpenProviderFamilies();
+              },
+              onOpenPresetBootstrap: () async {
+                onOpenPresetBootstrap();
+              },
+              onBrowseManagedProviders: () async {
+                onOpenManagedProvidersForProvider();
+              },
+            );
+          case DesktopCanvasRoute.savedProfilePicker:
+            return _CanvasRouteFrame(
+              title: 'Saved profiles',
+              detail:
+                  'Choose a saved profile, or return to the active profile editor without losing the current draft.',
+              onBack: onReturnFromCanvasRoute,
+              child: SavedProfilesLibrarySurface(
+                profiles: controller.profiles,
+                selectedProfileId: controller.selectedProfileId,
+                busy: busy,
+                onSelectProfile: controller.selectProfile,
+                onCreateDraft: controller.resetDraft,
+              ),
+            );
+          case DesktopCanvasRoute.managedProviderPickerForProfile:
+            return _CanvasRouteFrame(
+              title: 'Managed records',
+              detail:
+                  'Choose a reusable managed record for the active profile draft, or return without changing the draft.',
+              onBack: onReturnFromCanvasRoute,
+              child: ManagedProvidersLibrarySurface(
+                managedProviders: controller.managedProviders,
+                selectedManagedProviderId:
+                    controller.draft.providerBinding.managedProviderId,
+                onSelectManagedProvider: controller.useManagedProviderForDraft,
+              ),
+            );
+          case DesktopCanvasRoute.managedProviderPicker:
+            return _CanvasRouteFrame(
+              title: 'Provider records',
+              detail:
+                  'Create a provider record here, or reopen one to edit it. Families stay in a separate chooser.',
+              onBack: onReturnFromCanvasRoute,
+              child: ManagedProvidersLibrarySurface(
+                managedProviders: controller.managedProviders,
+                selectedManagedProviderId: controller.selectedManagedProviderId,
+                onSelectManagedProvider: controller.selectManagedProvider,
+                onCreateManagedProvider:
+                    controller.startManagedProviderCreation,
+              ),
+            );
+          case DesktopCanvasRoute.presetPicker:
+            return _CanvasRouteFrame(
+              title: 'Preset bootstrap',
+              detail:
+                  'Seed the provider workflow from a curated preset, then return to the managed-provider editor route.',
+              onBack: onReturnFromCanvasRoute,
+              child: PresetBootstrapSurface(
+                presets: controller.presetCatalog,
+                providerDescriptors: controller.providerDescriptors,
+                busy: busy,
+                onApplyPreset: controller.applyPreset,
+              ),
+            );
+          case DesktopCanvasRoute.providerFamilyPicker:
+            return _CanvasRouteFrame(
+              title: 'Provider families',
+              detail:
+                  'Choose a read-only shipped family here, then return to the provider record editor.',
+              onBack: onReturnFromCanvasRoute,
+              child: SupportedProviderChooserSurface(
+                supportedProviders: controller.supportedProviderCatalog,
+                providerDescriptors: controller.providerDescriptors,
+                selectedProviderId: controller.managedProviderDraft.provider,
+                busy: busy,
+                onSelectProvider: (String providerId) {
+                  controller.updateManagedProviderDraft(
+                    controller.managedProviderDraft.copyWith(
+                      provider: providerId,
+                      providerSettings: const <String, dynamic>{},
+                    ),
+                  );
+                },
+              ),
+            );
+        }
+      },
+    );
+  }
+}
+
+class _CanvasRouteFrame extends StatelessWidget {
+  const _CanvasRouteFrame({
+    required this.title,
+    required this.detail,
+    required this.onBack,
+    required this.child,
+  });
+
+  final String title;
+  final String detail;
+  final VoidCallback onBack;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final profileWorkflow =
-        controller.activeSection == DesktopShellSection.profileWorkflow;
     return Card(
+      key: const ValueKey<String>('desktop-canvas-route-frame'),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(18),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
+                IconButton(
+                  key: const ValueKey<String>(
+                    'desktop-canvas-route-back-button',
+                  ),
+                  onPressed: onBack,
+                  icon: const Icon(Icons.arrow_back),
+                  tooltip: 'Back',
+                ),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       Text(
-                        profileWorkflow
-                            ? 'Profile tools'
-                            : 'Managed provider actions',
-                        style: theme.textTheme.titleSmall?.copyWith(
+                        title,
+                        style: theme.textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.w800,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        profileWorkflow
-                            ? 'Keep browsing intentional. The editor stays primary and the library opens only when you ask for it.'
-                            : 'Keep presets, reusable records, and family choice subordinate to the active managed-record editor.',
+                        detail,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -1011,385 +1222,11 @@ class _WorkflowActionBar extends StatelessWidget {
                     ],
                   ),
                 ),
-                _AssuranceChip(
-                  label: profileWorkflow
-                      ? 'Profile workflow'
-                      : 'Provider workflow',
-                ),
               ],
             ),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: profileWorkflow
-                  ? <Widget>[
-                      FilledButton.tonal(
-                        key: const ValueKey<String>(
-                          'desktop-open-profile-library-button',
-                        ),
-                        onPressed: () => unawaited(onOpenSavedProfiles()),
-                        child: const Text('Browse saved profiles'),
-                      ),
-                      OutlinedButton(
-                        key: const ValueKey<String>(
-                          'desktop-create-profile-draft-button',
-                        ),
-                        onPressed: controller.busy
-                            ? null
-                            : controller.resetDraft,
-                        child: const Text('New draft'),
-                      ),
-                      OutlinedButton(
-                        key: const ValueKey<String>(
-                          'desktop-context-open-profile-managed-providers-button',
-                        ),
-                        onPressed: controller.managedProviders.isEmpty
-                            ? null
-                            : () =>
-                                  unawaited(onOpenManagedProvidersForProfile()),
-                        child: const Text('Choose provider record'),
-                      ),
-                    ]
-                  : <Widget>[
-                      FilledButton.tonal(
-                        key: const ValueKey<String>(
-                          'desktop-open-preset-bootstrap-button',
-                        ),
-                        onPressed: () => unawaited(onOpenPresetBootstrap()),
-                        child: const Text('New from preset'),
-                      ),
-                      FilledButton.tonal(
-                        key: const ValueKey<String>(
-                          'desktop-open-managed-provider-library-button',
-                        ),
-                        onPressed: () =>
-                            unawaited(onOpenManagedProvidersForProvider()),
-                        child: const Text('Browse records'),
-                      ),
-                      OutlinedButton(
-                        key: const ValueKey<String>(
-                          'desktop-open-provider-family-chooser-button',
-                        ),
-                        onPressed: () => unawaited(onOpenProviderFamilies()),
-                        child: const Text('Choose family'),
-                      ),
-                    ],
-            ),
+            Expanded(child: child),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _WorkflowContextPane extends StatelessWidget {
-  const _WorkflowContextPane({required this.controller});
-
-  final DesktopShellController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                'Current focus',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                controller.activeSection == DesktopShellSection.profileWorkflow
-                    ? 'The side lane should orient the active draft, not become a second browsing surface.'
-                    : 'The side lane should orient the active managed record, not reopen presets and catalogs by default.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 12),
-              controller.activeSection == DesktopShellSection.profileWorkflow
-                  ? _ProfileWorkflowContextSummary(controller: controller)
-                  : _ProviderWorkflowContextSummary(controller: controller),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ProfileWorkflowContextSummary extends StatelessWidget {
-  const _ProfileWorkflowContextSummary({required this.controller});
-
-  final DesktopShellController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    ProfileRecord? selectedProfile;
-    if (controller.selectedProfileId != null) {
-      for (final profile in controller.profiles) {
-        if (profile.id == controller.selectedProfileId) {
-          selectedProfile = profile;
-          break;
-        }
-      }
-    }
-    final managedProviderId =
-        controller.draft.providerBinding.managedProviderId;
-    ManagedProviderRecord? managedProvider;
-    if (managedProviderId != null) {
-      for (final provider in controller.managedProviders) {
-        if (provider.id == managedProviderId) {
-          managedProvider = provider;
-          break;
-        }
-      }
-    }
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text(
-          'Current task',
-          style: Theme.of(
-            context,
-          ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: 8),
-        _ContextSummaryCard(
-          title: selectedProfile == null ? 'Unsaved draft' : 'Saved profile',
-          detail: selectedProfile == null
-              ? 'The active editor owns the current draft. Saved-profile browsing opens only on demand.'
-              : '${selectedProfile.name.isEmpty ? selectedProfile.id : selectedProfile.name} · ${selectedProfile.spec.provider}',
-        ),
-        const SizedBox(height: 10),
-        _ContextSummaryCard(
-          title: managedProvider == null
-              ? 'Provider mode'
-              : 'Managed provider linked',
-          detail: managedProvider == null
-              ? 'Use custom provider input, or explicitly choose a managed record when you need reusable non-secret values.'
-              : '${managedProvider.name.isEmpty ? managedProvider.id : managedProvider.name} · ${managedProvider.provider}',
-        ),
-        const SizedBox(height: 10),
-        _ContextHint(
-          icon: Icons.fact_check_outlined,
-          message:
-              'Keep library browsing secondary. The main editor is where the draft should feel owned.',
-        ),
-      ],
-    );
-  }
-}
-
-class _ProviderWorkflowContextSummary extends StatelessWidget {
-  const _ProviderWorkflowContextSummary({required this.controller});
-
-  final DesktopShellController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    ManagedProviderRecord? selectedManagedProvider;
-    if (controller.selectedManagedProviderId != null) {
-      for (final provider in controller.managedProviders) {
-        if (provider.id == controller.selectedManagedProviderId) {
-          selectedManagedProvider = provider;
-          break;
-        }
-      }
-    }
-    final selectedFamily = supportedProviderDefinitionFor(
-      controller.managedProviderDraft.provider,
-    );
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text(
-          'Current task',
-          style: Theme.of(
-            context,
-          ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: 8),
-        _ContextSummaryCard(
-          title: selectedFamily == null ? 'Provider family pending' : 'Family',
-          detail: selectedFamily == null
-              ? 'Choose the shipped provider family explicitly before expanding the managed-record details.'
-              : '${selectedFamily.title} · ${selectedFamily.description}',
-        ),
-        const SizedBox(height: 10),
-        _ContextSummaryCard(
-          title: selectedManagedProvider == null
-              ? 'Managed record'
-              : 'Editing managed record',
-          detail: selectedManagedProvider == null
-              ? 'You are shaping the active managed record draft. Reusable record browsing stays behind an explicit secondary surface.'
-              : '${selectedManagedProvider.name.isEmpty ? selectedManagedProvider.id : selectedManagedProvider.name} · ${selectedManagedProvider.provider}',
-        ),
-        const SizedBox(height: 10),
-        _ContextHint(
-          icon: Icons.tune_outlined,
-          message:
-              'Keep family choice, presets, and record browsing subordinate to the active managed-record edit path.',
-        ),
-      ],
-    );
-  }
-}
-
-class _ContextHint extends StatelessWidget {
-  const _ContextHint({required this.icon, required this.message});
-
-  final IconData icon;
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.24,
-        ),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Icon(icon, size: 18),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              message,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ContextSummaryCard extends StatelessWidget {
-  const _ContextSummaryCard({required this.title, required this.detail});
-
-  final String title;
-  final String detail;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.32,
-        ),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            title,
-            style: theme.textTheme.labelLarge?.copyWith(
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            detail,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SecondarySurfaceFrame extends StatelessWidget {
-  const _SecondarySurfaceFrame({
-    required this.title,
-    required this.detail,
-    required this.child,
-  });
-
-  final String title;
-  final String detail;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return CallbackShortcuts(
-      bindings: <ShortcutActivator, VoidCallback>{
-        const SingleActivator(LogicalKeyboardKey.escape): () {
-          Navigator.of(context).maybePop();
-        },
-      },
-      child: Focus(
-        autofocus: true,
-        child: Card(
-          key: const ValueKey<String>('desktop-secondary-surface'),
-          margin: EdgeInsets.zero,
-          child: Padding(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            title,
-                            style: theme.textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            detail,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      key: const ValueKey<String>(
-                        'desktop-secondary-surface-close-button',
-                      ),
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close),
-                      tooltip: 'Close',
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Expanded(child: child),
-              ],
-            ),
-          ),
         ),
       ),
     );
@@ -1623,7 +1460,7 @@ class _SectionListTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(12),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -2864,21 +2701,29 @@ class _Tag extends StatelessWidget {
 }
 
 class _NoticeBanner extends StatelessWidget {
-  const _NoticeBanner({required this.message});
+  const _NoticeBanner({required this.message, this.compact = false});
 
   final String message;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return Card(
       color: const Color(0xFFFDF6C7),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: EdgeInsets.all(compact ? 10 : 14),
         child: Row(
           children: <Widget>[
-            const Icon(Icons.info_outline),
-            const SizedBox(width: 12),
-            Expanded(child: Text(message)),
+            Icon(Icons.info_outline, size: compact ? 18 : 24),
+            SizedBox(width: compact ? 10 : 12),
+            Expanded(
+              child: Text(
+                message,
+                style: compact
+                    ? Theme.of(context).textTheme.bodySmall
+                    : Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
           ],
         ),
       ),
@@ -2905,6 +2750,17 @@ String _workflowAssuranceSummary(DesktopShellController controller) {
           ? 'The local host is ready. Keep the current workflow dominant while live runtime detail stays one step away.'
           : 'The local host is ready. Routine support stays compact so the active workflow keeps visual priority.',
   };
+}
+
+String _routineConnectionDetail(String? message) {
+  if (message == null || message.isEmpty) {
+    return '';
+  }
+  const prefix = 'Connected to local host ';
+  if (message.startsWith(prefix)) {
+    return message.substring(prefix.length);
+  }
+  return message;
 }
 
 String _platformTunnelHeaderSummary(DesktopShellController controller) {
