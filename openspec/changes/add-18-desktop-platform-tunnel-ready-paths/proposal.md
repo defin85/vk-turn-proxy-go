@@ -11,7 +11,7 @@ Desktop needs one umbrella change so the first Windows delivery does not get mis
 
 ## Sequence
 - Order: `18`
-- Depends on: `add-02-desktop-gui-shell`, `add-05-platform-tunnel-integrations`, `add-09-native-build-workflows`
+- Depends on: `add-02-desktop-gui-shell`, `add-05-platform-tunnel-integrations`, `add-09-native-build-workflows`, `add-22-runtime-execution-planning`, `add-23-turn-datagram-wireguard-carrier`
 - Unblocks: first concrete desktop platform tunnel support claim on Windows, later Linux `linux_tun` and Apple desktop ready-path changes under the same desktop contract
 
 ## What Changes

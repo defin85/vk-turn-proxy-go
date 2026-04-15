@@ -16,9 +16,10 @@ import (
 type Option func(*config)
 
 type config struct {
-	listenAddr  string
-	logger      *slog.Logger
-	hostFactory func(*slog.Logger) *clientcontrol.Host
+	listenAddr               string
+	logger                   *slog.Logger
+	hostFactory              func(*slog.Logger) *clientcontrol.Host
+	platformTunnelController platformTunnelController
 }
 
 type Manager struct {
@@ -39,16 +40,7 @@ func New(opts ...Option) *Manager {
 		logger: slog.New(
 			slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}),
 		),
-		hostFactory: func(logger *slog.Logger) *clientcontrol.Host {
-			return clientcontrol.New(
-				clientcontrol.WithLogger(logger),
-				clientcontrol.WithBuildIdentity(currentBuildIdentity()),
-				clientcontrol.WithRegistry(mobileProviderRegistry()),
-				clientcontrol.WithInteractiveChallengeMetadataResolver(
-					mobileChallengeMetadata,
-				),
-			)
-		},
+		platformTunnelController: defaultAndroidVPNServiceController(currentBuildIdentity()),
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -61,16 +53,7 @@ func New(opts ...Option) *Manager {
 		)
 	}
 	if cfg.hostFactory == nil {
-		cfg.hostFactory = func(logger *slog.Logger) *clientcontrol.Host {
-			return clientcontrol.New(
-				clientcontrol.WithLogger(logger),
-				clientcontrol.WithBuildIdentity(currentBuildIdentity()),
-				clientcontrol.WithRegistry(mobileProviderRegistry()),
-				clientcontrol.WithInteractiveChallengeMetadataResolver(
-					mobileChallengeMetadata,
-				),
-			)
-		}
+		cfg.hostFactory = newHostFactory(cfg.platformTunnelController)
 	}
 
 	return &Manager{
@@ -95,6 +78,12 @@ func WithLogger(logger *slog.Logger) Option {
 func WithHostFactory(factory func(*slog.Logger) *clientcontrol.Host) Option {
 	return func(cfg *config) {
 		cfg.hostFactory = factory
+	}
+}
+
+func withPlatformTunnelController(controller platformTunnelController) Option {
+	return func(cfg *config) {
+		cfg.platformTunnelController = controller
 	}
 }
 
@@ -181,5 +170,27 @@ func currentBuildIdentity() clientcontrol.BuildIdentity {
 		BuiltAt:     identity.BuiltAt,
 		Role:        identity.Role,
 		Target:      identity.Target,
+	}
+}
+
+func newHostFactory(controller platformTunnelController) func(*slog.Logger) *clientcontrol.Host {
+	return func(logger *slog.Logger) *clientcontrol.Host {
+		opts := []clientcontrol.Option{
+			clientcontrol.WithLogger(logger),
+			clientcontrol.WithBuildIdentity(currentBuildIdentity()),
+			clientcontrol.WithRegistry(mobileProviderRegistry()),
+			clientcontrol.WithInteractiveChallengeMetadataResolver(
+				mobileChallengeMetadata,
+			),
+		}
+		if controller != nil {
+			opts = append(opts,
+				clientcontrol.WithPlatformTunnelCapabilities([]clientcontrol.PlatformTunnelCapability{
+					controller.Capability(),
+				}),
+				clientcontrol.WithPlatformTunnelStarter(controller.Start),
+			)
+		}
+		return clientcontrol.New(opts...)
 	}
 }

@@ -9,7 +9,7 @@ Android is the smallest viable first target because the packaged mobile host, br
 
 ## Sequence
 - Order: `17`
-- Depends on: `add-05-platform-tunnel-integrations`, `add-14-android-embedded-mobile-host`
+- Depends on: `add-05-platform-tunnel-integrations`, `add-14-android-embedded-mobile-host`, `add-22-runtime-execution-planning`, `add-23-turn-datagram-wireguard-carrier`
 - Unblocks: first concrete platform tunnel support claim, later iOS and desktop ready-path changes
 
 ## What Changes
