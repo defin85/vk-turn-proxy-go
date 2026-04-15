@@ -1262,6 +1262,10 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   Future<PlatformTunnelStartResult> startPlatformTunnel({
     required PlatformTunnelMode mode,
     RuntimeExecutionPlan? executionPlan,
+    PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
+        PlatformTunnelApplicationRoutingPolicy.allApps,
+    List<String> allowedPackages = const <String>[],
+    List<String> disallowedPackages = const <String>[],
   }) async {
     startPlatformTunnelCalls.add(mode);
     return const PlatformTunnelStartResult(
@@ -1270,6 +1274,20 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
       stage: PlatformTunnelStartupStage.capabilityCheck,
       missingPrerequisite: PlatformTunnelPrerequisite.hostImplementation,
       message: 'desktop sidecar does not implement system tunnel startup yet',
+    );
+  }
+
+  @override
+  Future<PlatformTunnelStartResult> resumePlatformTunnel({
+    required String startupAttemptId,
+  }) async {
+    return PlatformTunnelStartResult(
+      mode: PlatformTunnelMode.windowsWintun,
+      ready: false,
+      stage: PlatformTunnelStartupStage.permissionAcquire,
+      missingPrerequisite: PlatformTunnelPrerequisite.permission,
+      startupAttemptId: startupAttemptId,
+      message: 'desktop sidecar does not implement tunnel resume yet',
     );
   }
 

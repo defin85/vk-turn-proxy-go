@@ -13,6 +13,13 @@ abstract class ControlPlaneApi {
   Future<PlatformTunnelStartResult> startPlatformTunnel({
     required PlatformTunnelMode mode,
     RuntimeExecutionPlan? executionPlan,
+    PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
+        PlatformTunnelApplicationRoutingPolicy.allApps,
+    List<String> allowedPackages = const <String>[],
+    List<String> disallowedPackages = const <String>[],
+  });
+  Future<PlatformTunnelStartResult> resumePlatformTunnel({
+    required String startupAttemptId,
   });
   Future<List<ProviderDescriptor>> providers();
   Future<List<ProviderConfigRecord>> providerConfigs();
@@ -100,6 +107,10 @@ class ControlPlaneClient implements ControlPlaneApi {
   Future<PlatformTunnelStartResult> startPlatformTunnel({
     required PlatformTunnelMode mode,
     RuntimeExecutionPlan? executionPlan,
+    PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
+        PlatformTunnelApplicationRoutingPolicy.allApps,
+    List<String> allowedPackages = const <String>[],
+    List<String> disallowedPackages = const <String>[],
   }) async {
     final payload = await _jsonRequest(
       'POST',
@@ -107,7 +118,27 @@ class ControlPlaneClient implements ControlPlaneApi {
       body: <String, dynamic>{
         'mode': mode.value,
         if (executionPlan != null) 'execution_plan': executionPlan.toJson(),
+        if (mode == PlatformTunnelMode.androidVpnService)
+          'application_routing_policy': applicationRoutingPolicy.value,
+        if (mode == PlatformTunnelMode.androidVpnService &&
+            allowedPackages.isNotEmpty)
+          'allowed_packages': allowedPackages,
+        if (mode == PlatformTunnelMode.androidVpnService &&
+            disallowedPackages.isNotEmpty)
+          'disallowed_packages': disallowedPackages,
       },
+    );
+    return PlatformTunnelStartResult.fromJson(payload);
+  }
+
+  @override
+  Future<PlatformTunnelStartResult> resumePlatformTunnel({
+    required String startupAttemptId,
+  }) async {
+    final payload = await _jsonRequest(
+      'POST',
+      '/v1/platform-tunnels/resume',
+      body: <String, dynamic>{'startup_attempt_id': startupAttemptId},
     );
     return PlatformTunnelStartResult.fromJson(payload);
   }

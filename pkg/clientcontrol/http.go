@@ -302,10 +302,40 @@ func Handler(host *Host) http.Handler {
 				return
 			}
 			switch {
-			case errors.Is(err, ErrPlatformTunnelModeRequired), errors.Is(err, ErrPlatformTunnelModeUnknown):
+			case errors.Is(err, ErrPlatformTunnelModeRequired),
+				errors.Is(err, ErrPlatformTunnelModeUnknown),
+				errors.Is(err, ErrPlatformTunnelAppRoutingPolicyInvalid):
 				writeError(w, http.StatusBadRequest, "platform_tunnel_invalid", err)
 			default:
 				writeError(w, http.StatusInternalServerError, "platform_tunnel_start_failed", err)
+			}
+			return
+		}
+		writeJSON(w, http.StatusOK, result)
+	})
+	mux.HandleFunc("/v1/platform-tunnels/resume", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeMethodNotAllowed(w, r.Method)
+			return
+		}
+		var req PlatformTunnelResumeRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_json", err)
+			return
+		}
+		result, err := host.ResumePlatformTunnel(context.WithoutCancel(r.Context()), req)
+		if err != nil {
+			if startResult, ok := platformTunnelStartResultFromError(err); ok {
+				writeJSON(w, http.StatusOK, startResult)
+				return
+			}
+			switch {
+			case errors.Is(err, ErrPlatformTunnelStartupAttemptRequired):
+				writeError(w, http.StatusBadRequest, "platform_tunnel_resume_invalid", err)
+			case errors.Is(err, ErrPlatformTunnelStartupAttemptNotFound):
+				writeError(w, http.StatusNotFound, "platform_tunnel_startup_attempt_not_found", err)
+			default:
+				writeError(w, http.StatusInternalServerError, "platform_tunnel_resume_failed", err)
 			}
 			return
 		}

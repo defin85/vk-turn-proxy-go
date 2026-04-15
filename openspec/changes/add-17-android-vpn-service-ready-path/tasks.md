@@ -1,6 +1,6 @@
 ## 1. Android platform tunnel contract
-- [ ] 1.1 Define the Android-specific `android_vpn_service` capability and startup semantics, including how permission, route validation, host bring-up, runtime attach, startup-time `application_routing_policy`, and resumable `start -> permission required -> resume` flow are surfaced through the existing typed control-plane contract
-- [ ] 1.2 Define the fail-closed cleanup guarantees for partial Android VPN startup after permission grant, route preparation, package-policy application, or runtime attach failures
+- [x] 1.1 Define the Android-specific `android_vpn_service` capability and startup semantics, including how permission, route validation, host bring-up, runtime attach, startup-time `application_routing_policy`, and resumable `start -> permission required -> resume` flow are surfaced through the existing typed control-plane contract
+- [x] 1.2 Define the fail-closed cleanup guarantees for partial Android VPN startup after permission grant, route preparation, package-policy application, or runtime attach failures
 
 ## 2. Android packaged host integration
 - [ ] 2.1 Implement the packaged Android host and `VpnService` lifecycle wiring needed to establish one documented `android_vpn_service` ready path

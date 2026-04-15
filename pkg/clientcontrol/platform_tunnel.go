@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"slices"
 	"strings"
 )
 
@@ -43,6 +44,12 @@ func WithPlatformTunnelCapabilities(capabilities []PlatformTunnelCapability) Opt
 func WithPlatformTunnelStarter(start func(context.Context, PlatformTunnelStartRequest) (PlatformTunnelStartResult, error)) Option {
 	return func(cfg *hostConfig) {
 		cfg.startTunnel = start
+	}
+}
+
+func WithPlatformTunnelResumer(resume func(context.Context, PlatformTunnelResumeRequest) (PlatformTunnelStartResult, error)) Option {
+	return func(cfg *hostConfig) {
+		cfg.resumeTunnel = resume
 	}
 }
 
@@ -210,6 +217,17 @@ func validatePlatformTunnelStartResult(req PlatformTunnelStartRequest, result Pl
 			return fmt.Errorf("startup result for mode %s reports invalid execution_plan: %w", result.Mode, err)
 		}
 	}
+	if strings.TrimSpace(result.StartupAttemptID) != "" {
+		if result.Ready {
+			return fmt.Errorf("startup result for mode %s is ready but still reports startup_attempt_id", result.Mode)
+		}
+		if result.Stage != PlatformTunnelStartupStagePermissionAcquire {
+			return fmt.Errorf("startup result for mode %s reports startup_attempt_id outside permission_acquire", result.Mode)
+		}
+		if result.MissingPrerequisite != PlatformTunnelPrerequisitePermission {
+			return fmt.Errorf("startup result for mode %s reports startup_attempt_id without permission prerequisite", result.Mode)
+		}
+	}
 	if result.Ready {
 		if strings.TrimSpace(string(result.MissingPrerequisite)) != "" {
 			return fmt.Errorf("startup result for mode %s is ready but still reports missing_prerequisite %q", result.Mode, result.MissingPrerequisite)
@@ -294,7 +312,19 @@ func isKnownPlatformTunnelPrerequisite(prerequisite PlatformTunnelPrerequisite) 
 		PlatformTunnelPrerequisiteDriver,
 		PlatformTunnelPrerequisiteRouteExclusion,
 		PlatformTunnelPrerequisiteDNSBypass,
+		PlatformTunnelPrerequisiteAppRoutingPolicy,
 		PlatformTunnelPrerequisiteHostImplementation:
+		return true
+	default:
+		return false
+	}
+}
+
+func isKnownPlatformTunnelApplicationRoutingPolicy(policy PlatformTunnelApplicationRoutingPolicy) bool {
+	switch policy {
+	case PlatformTunnelApplicationRoutingPolicyAllApps,
+		PlatformTunnelApplicationRoutingPolicyAllowedPackages,
+		PlatformTunnelApplicationRoutingPolicyDisallowedPackages:
 		return true
 	default:
 		return false
@@ -321,4 +351,68 @@ func hostTargetLabel(build BuildIdentity) string {
 		return target
 	}
 	return runtime.GOOS
+}
+
+func normalizePlatformTunnelStartRequest(req PlatformTunnelStartRequest) (PlatformTunnelStartRequest, error) {
+	if req.Mode != PlatformTunnelModeAndroidVPNService {
+		if strings.TrimSpace(string(req.ApplicationRoutingPolicy)) != "" || len(req.AllowedPackages) > 0 || len(req.DisallowedPackages) > 0 {
+			return PlatformTunnelStartRequest{}, fmt.Errorf("%w: mode %s does not accept application routing policy", ErrPlatformTunnelAppRoutingPolicyInvalid, req.Mode)
+		}
+		return req, nil
+	}
+
+	normalized := req
+	if strings.TrimSpace(string(normalized.ApplicationRoutingPolicy)) == "" {
+		normalized.ApplicationRoutingPolicy = PlatformTunnelApplicationRoutingPolicyAllApps
+	}
+	if !isKnownPlatformTunnelApplicationRoutingPolicy(normalized.ApplicationRoutingPolicy) {
+		return PlatformTunnelStartRequest{}, fmt.Errorf("%w: unknown application_routing_policy %q", ErrPlatformTunnelAppRoutingPolicyInvalid, normalized.ApplicationRoutingPolicy)
+	}
+	normalized.AllowedPackages = normalizePackageNames(normalized.AllowedPackages)
+	normalized.DisallowedPackages = normalizePackageNames(normalized.DisallowedPackages)
+	if len(normalized.AllowedPackages) > 0 && len(normalized.DisallowedPackages) > 0 {
+		return PlatformTunnelStartRequest{}, fmt.Errorf("%w: mixed allowed_packages and disallowed_packages are not supported", ErrPlatformTunnelAppRoutingPolicyInvalid)
+	}
+	switch normalized.ApplicationRoutingPolicy {
+	case PlatformTunnelApplicationRoutingPolicyAllApps:
+		if len(normalized.AllowedPackages) > 0 || len(normalized.DisallowedPackages) > 0 {
+			return PlatformTunnelStartRequest{}, fmt.Errorf("%w: all_apps cannot include package lists", ErrPlatformTunnelAppRoutingPolicyInvalid)
+		}
+	case PlatformTunnelApplicationRoutingPolicyAllowedPackages:
+		if len(normalized.AllowedPackages) == 0 || len(normalized.DisallowedPackages) > 0 {
+			return PlatformTunnelStartRequest{}, fmt.Errorf("%w: allowed_packages requires a non-empty allowed_packages list", ErrPlatformTunnelAppRoutingPolicyInvalid)
+		}
+	case PlatformTunnelApplicationRoutingPolicyDisallowedPackages:
+		if len(normalized.DisallowedPackages) == 0 || len(normalized.AllowedPackages) > 0 {
+			return PlatformTunnelStartRequest{}, fmt.Errorf("%w: disallowed_packages requires a non-empty disallowed_packages list", ErrPlatformTunnelAppRoutingPolicyInvalid)
+		}
+	}
+	return normalized, nil
+}
+
+func normalizePlatformTunnelResumeRequest(req PlatformTunnelResumeRequest) (PlatformTunnelResumeRequest, error) {
+	normalized := req
+	normalized.StartupAttemptID = strings.TrimSpace(normalized.StartupAttemptID)
+	if normalized.StartupAttemptID == "" {
+		return PlatformTunnelResumeRequest{}, ErrPlatformTunnelStartupAttemptRequired
+	}
+	return normalized, nil
+}
+
+func normalizePackageNames(packages []string) []string {
+	if len(packages) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(packages))
+	for _, pkg := range packages {
+		pkg = strings.TrimSpace(pkg)
+		if pkg == "" {
+			continue
+		}
+		if slices.Contains(out, pkg) {
+			continue
+		}
+		out = append(out, pkg)
+	}
+	return out
 }

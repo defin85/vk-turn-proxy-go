@@ -189,6 +189,7 @@ func newHostFactory(controller platformTunnelController) func(*slog.Logger) *cli
 					controller.Capability(),
 				}),
 				clientcontrol.WithPlatformTunnelStarter(controller.Start),
+				clientcontrol.WithPlatformTunnelResumer(controller.Resume),
 			)
 		}
 		return clientcontrol.New(opts...)

@@ -441,11 +441,25 @@ class HttpMobileHostBridge implements MobileHostBridge {
   Future<PlatformTunnelStartResult> startPlatformTunnel({
     required PlatformTunnelMode mode,
     RuntimeExecutionPlan? executionPlan,
+    PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
+        PlatformTunnelApplicationRoutingPolicy.allApps,
+    List<String> allowedPackages = const <String>[],
+    List<String> disallowedPackages = const <String>[],
   }) {
     return _client.startPlatformTunnel(
       mode: mode,
       executionPlan: executionPlan,
+      applicationRoutingPolicy: applicationRoutingPolicy,
+      allowedPackages: allowedPackages,
+      disallowedPackages: disallowedPackages,
     );
+  }
+
+  @override
+  Future<PlatformTunnelStartResult> resumePlatformTunnel({
+    required String startupAttemptId,
+  }) {
+    return _client.resumePlatformTunnel(startupAttemptId: startupAttemptId);
   }
 
   @override
@@ -549,6 +563,15 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
   Future<PlatformTunnelStartResult> startPlatformTunnel({
     required PlatformTunnelMode mode,
     RuntimeExecutionPlan? executionPlan,
+    PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
+        PlatformTunnelApplicationRoutingPolicy.allApps,
+    List<String> allowedPackages = const <String>[],
+    List<String> disallowedPackages = const <String>[],
+  }) => _fail();
+
+  @override
+  Future<PlatformTunnelStartResult> resumePlatformTunnel({
+    required String startupAttemptId,
   }) => _fail();
 
   @override

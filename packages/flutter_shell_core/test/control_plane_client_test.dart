@@ -739,4 +739,86 @@ void main() {
       ]);
     },
   );
+
+  test(
+    'control plane client sends Android app scope and resumes startup',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(server.close);
+
+      server.listen((HttpRequest request) async {
+        request.response.headers.contentType = ContentType.json;
+        switch (request.uri.path) {
+          case '/v1/platform-tunnels/start':
+            final payload =
+                jsonDecode(await utf8.decoder.bind(request).join())
+                    as Map<String, dynamic>;
+            expect(payload['mode'], 'android_vpn_service');
+            expect(payload['application_routing_policy'], 'allowed_packages');
+            expect(payload['allowed_packages'], <dynamic>[
+              'com.example.youtube',
+            ]);
+            request.response.write(
+              jsonEncode(<String, dynamic>{
+                'mode': 'android_vpn_service',
+                'ready': false,
+                'stage': 'permission_acquire',
+                'missing_prerequisite': 'permission',
+                'startup_attempt_id': 'attempt-android-1',
+                'message': 'permission required',
+              }),
+            );
+            await request.response.close();
+            return;
+          case '/v1/platform-tunnels/resume':
+            final payload =
+                jsonDecode(await utf8.decoder.bind(request).join())
+                    as Map<String, dynamic>;
+            expect(payload['startup_attempt_id'], 'attempt-android-1');
+            request.response.write(
+              jsonEncode(<String, dynamic>{
+                'mode': 'android_vpn_service',
+                'ready': true,
+              }),
+            );
+            await request.response.close();
+            return;
+          default:
+            request.response.statusCode = HttpStatus.notFound;
+            request.response.write(
+              jsonEncode(<String, dynamic>{
+                'code': 'not_found',
+                'message': 'missing fixture route',
+              }),
+            );
+            await request.response.close();
+            return;
+        }
+      });
+
+      final client = ControlPlaneClient(
+        baseUri: Uri.parse('http://${server.address.address}:${server.port}'),
+      );
+
+      final startResult = await client.startPlatformTunnel(
+        mode: PlatformTunnelMode.androidVpnService,
+        applicationRoutingPolicy:
+            PlatformTunnelApplicationRoutingPolicy.allowedPackages,
+        allowedPackages: const <String>['com.example.youtube'],
+      );
+      expect(startResult.ready, isFalse);
+      expect(startResult.stage, PlatformTunnelStartupStage.permissionAcquire);
+      expect(
+        startResult.missingPrerequisite,
+        PlatformTunnelPrerequisite.permission,
+      );
+      expect(startResult.startupAttemptId, 'attempt-android-1');
+
+      final resumeResult = await client.resumePlatformTunnel(
+        startupAttemptId: startResult.startupAttemptId,
+      );
+      expect(resumeResult.ready, isTrue);
+      expect(resumeResult.startupAttemptId, isEmpty);
+    },
+  );
 }

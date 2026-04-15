@@ -119,6 +119,7 @@ const (
 	PlatformTunnelPrerequisiteDriver              PlatformTunnelPrerequisite = "driver"
 	PlatformTunnelPrerequisiteRouteExclusion      PlatformTunnelPrerequisite = "route_exclusion"
 	PlatformTunnelPrerequisiteDNSBypass           PlatformTunnelPrerequisite = "dns_bypass"
+	PlatformTunnelPrerequisiteAppRoutingPolicy    PlatformTunnelPrerequisite = "app_routing_policy"
 	PlatformTunnelPrerequisiteHostImplementation  PlatformTunnelPrerequisite = "host_implementation"
 )
 
@@ -132,6 +133,14 @@ const (
 	PlatformTunnelStartupStageRouteValidate      PlatformTunnelStartupStage = "route_validate"
 	PlatformTunnelStartupStageHostBringup        PlatformTunnelStartupStage = "host_bringup"
 	PlatformTunnelStartupStageRuntimeAttach      PlatformTunnelStartupStage = "runtime_attach"
+)
+
+type PlatformTunnelApplicationRoutingPolicy string
+
+const (
+	PlatformTunnelApplicationRoutingPolicyAllApps            PlatformTunnelApplicationRoutingPolicy = "all_apps"
+	PlatformTunnelApplicationRoutingPolicyAllowedPackages    PlatformTunnelApplicationRoutingPolicy = "allowed_packages"
+	PlatformTunnelApplicationRoutingPolicyDisallowedPackages PlatformTunnelApplicationRoutingPolicy = "disallowed_packages"
 )
 
 type PlatformTunnelCapability struct {
@@ -380,8 +389,15 @@ type MaterializeResolutionRequest struct {
 }
 
 type PlatformTunnelStartRequest struct {
-	Mode          PlatformTunnelMode    `json:"mode"`
-	ExecutionPlan *RuntimeExecutionPlan `json:"execution_plan,omitempty"`
+	Mode                     PlatformTunnelMode                     `json:"mode"`
+	ExecutionPlan            *RuntimeExecutionPlan                  `json:"execution_plan,omitempty"`
+	ApplicationRoutingPolicy PlatformTunnelApplicationRoutingPolicy `json:"application_routing_policy,omitempty"`
+	AllowedPackages          []string                               `json:"allowed_packages,omitempty"`
+	DisallowedPackages       []string                               `json:"disallowed_packages,omitempty"`
+}
+
+type PlatformTunnelResumeRequest struct {
+	StartupAttemptID string `json:"startup_attempt_id"`
 }
 
 type PlatformTunnelStartResult struct {
@@ -390,5 +406,6 @@ type PlatformTunnelStartResult struct {
 	Ready               bool                       `json:"ready"`
 	Stage               PlatformTunnelStartupStage `json:"stage,omitempty"`
 	MissingPrerequisite PlatformTunnelPrerequisite `json:"missing_prerequisite,omitempty"`
+	StartupAttemptID    string                     `json:"startup_attempt_id,omitempty"`
 	Message             string                     `json:"message,omitempty"`
 }

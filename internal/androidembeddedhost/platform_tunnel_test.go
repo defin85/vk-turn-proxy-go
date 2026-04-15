@@ -111,6 +111,82 @@ func TestManagerPlatformTunnelStartPermissionAcquireFailureStaysFailClosed(t *te
 	assertAndroidVPNExecutionPlan(t, result.ExecutionPlan)
 }
 
+func TestManagerPlatformTunnelStartReturnsResumablePermissionAttempt(t *testing.T) {
+	t.Parallel()
+
+	lifecycle := &fakeAndroidVPNServiceLifecycle{
+		acquirePermissionErr: newAndroidPermissionPendingError("android vpn permission prompt launched"),
+	}
+	manager := New(withPlatformTunnelController(newAndroidVPNServiceController(
+		supportedAndroidVPNServiceCapability(""),
+		lifecycle,
+	)))
+	baseURL := ensureStartedManager(t, manager)
+
+	result := startPlatformTunnel(t, baseURL, clientcontrol.PlatformTunnelStartRequest{
+		Mode: clientcontrol.PlatformTunnelModeAndroidVPNService,
+	})
+
+	if result.Ready {
+		t.Fatal("platform tunnel start result ready = true, want false")
+	}
+	if result.Stage != clientcontrol.PlatformTunnelStartupStagePermissionAcquire {
+		t.Fatalf("platform tunnel start stage = %q, want %q", result.Stage, clientcontrol.PlatformTunnelStartupStagePermissionAcquire)
+	}
+	if result.MissingPrerequisite != clientcontrol.PlatformTunnelPrerequisitePermission {
+		t.Fatalf(
+			"platform tunnel start missing_prerequisite = %q, want %q",
+			result.MissingPrerequisite,
+			clientcontrol.PlatformTunnelPrerequisitePermission,
+		)
+	}
+	if strings.TrimSpace(result.StartupAttemptID) == "" {
+		t.Fatal("platform tunnel start startup_attempt_id = empty, want resumable attempt id")
+	}
+	if lifecycle.cleanupCalls != 0 {
+		t.Fatalf("cleanup calls = %d, want 0", lifecycle.cleanupCalls)
+	}
+	if got := strings.Join(lifecycle.calls, ","); got != "acquire_permission" {
+		t.Fatalf("lifecycle calls = %q, want %q", got, "acquire_permission")
+	}
+	assertAndroidVPNExecutionPlan(t, result.ExecutionPlan)
+}
+
+func TestManagerPlatformTunnelResumeContinuesAfterPermissionGrant(t *testing.T) {
+	t.Parallel()
+
+	lifecycle := &fakeAndroidVPNServiceLifecycle{
+		acquirePermissionErr: newAndroidPermissionPendingError("android vpn permission prompt launched"),
+	}
+	manager := New(withPlatformTunnelController(newAndroidVPNServiceController(
+		supportedAndroidVPNServiceCapability(""),
+		lifecycle,
+	)))
+	baseURL := ensureStartedManager(t, manager)
+
+	startResult := startPlatformTunnel(t, baseURL, clientcontrol.PlatformTunnelStartRequest{
+		Mode: clientcontrol.PlatformTunnelModeAndroidVPNService,
+	})
+	if strings.TrimSpace(startResult.StartupAttemptID) == "" {
+		t.Fatal("startup attempt id = empty, want resumable attempt")
+	}
+
+	resumeResult := resumePlatformTunnel(t, baseURL, clientcontrol.PlatformTunnelResumeRequest{
+		StartupAttemptID: startResult.StartupAttemptID,
+	})
+	if !resumeResult.Ready {
+		t.Fatalf("platform tunnel resume result ready = false, want true: %+v", resumeResult)
+	}
+	if got := strings.Join(lifecycle.calls, ","); got != "acquire_permission,resume_after_permission,validate_route_policy,bringup_host,attach_runtime" {
+		t.Fatalf(
+			"lifecycle calls = %q, want %q",
+			got,
+			"acquire_permission,resume_after_permission,validate_route_policy,bringup_host,attach_runtime",
+		)
+	}
+	assertAndroidVPNExecutionPlan(t, resumeResult.ExecutionPlan)
+}
+
 func TestManagerPlatformTunnelStartRouteValidationFailureCleansUp(t *testing.T) {
 	t.Parallel()
 
@@ -131,6 +207,12 @@ func TestManagerPlatformTunnelStartRouteValidationFailureCleansUp(t *testing.T) 
 			err:                  newAndroidDNSBypassError("provider DNS bypass cannot be applied safely"),
 			wantPrerequisite:     clientcontrol.PlatformTunnelPrerequisiteDNSBypass,
 			wantMessageSubstring: "DNS bypass",
+		},
+		{
+			name:                 "app routing policy",
+			err:                  newAndroidAppRoutingPolicyError("requested package allowlist is invalid"),
+			wantPrerequisite:     clientcontrol.PlatformTunnelPrerequisiteAppRoutingPolicy,
+			wantMessageSubstring: "allowlist",
 		},
 	}
 
@@ -265,6 +347,7 @@ func TestManagerPlatformTunnelStartRuntimeAttachFailureCleansUp(t *testing.T) {
 
 type fakeAndroidVPNServiceLifecycle struct {
 	acquirePermissionErr error
+	resumePermissionErr  error
 	validateRouteErr     error
 	bringupErr           error
 	attachErr            error
@@ -277,6 +360,11 @@ type fakeAndroidVPNServiceLifecycle struct {
 func (f *fakeAndroidVPNServiceLifecycle) AcquirePermission(_ context.Context) error {
 	f.calls = append(f.calls, "acquire_permission")
 	return f.acquirePermissionErr
+}
+
+func (f *fakeAndroidVPNServiceLifecycle) ResumeAfterPermission(_ context.Context, _ string) error {
+	f.calls = append(f.calls, "resume_after_permission")
+	return f.resumePermissionErr
 }
 
 func (f *fakeAndroidVPNServiceLifecycle) ValidateRoutePolicy(_ context.Context) error {
@@ -341,6 +429,36 @@ func startPlatformTunnel(
 	var result clientcontrol.PlatformTunnelStartResult
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		t.Fatalf("decode platform tunnel start result: %v", err)
+	}
+	return result
+}
+
+func resumePlatformTunnel(
+	t *testing.T,
+	baseURL string,
+	req clientcontrol.PlatformTunnelResumeRequest,
+) clientcontrol.PlatformTunnelStartResult {
+	t.Helper()
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Post(baseURL+"/v1/platform-tunnels/resume", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST /v1/platform-tunnels/resume error = %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("POST /v1/platform-tunnels/resume status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	var result clientcontrol.PlatformTunnelStartResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode platform tunnel resume result: %v", err)
 	}
 	return result
 }

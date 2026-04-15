@@ -845,6 +845,65 @@ func TestHostStartPlatformTunnelRejectsStartupResultWithoutMissingPrerequisite(t
 	}
 }
 
+func TestHostStartPlatformTunnelDefaultsAndroidAppRoutingPolicyToAllApps(t *testing.T) {
+	var captured PlatformTunnelStartRequest
+	host := New(
+		WithBuildIdentity(BuildIdentity{Target: "android/embedded"}),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{{
+			Mode:      PlatformTunnelModeAndroidVPNService,
+			Available: true,
+			SatisfiedPrerequisites: []PlatformTunnelPrerequisite{
+				PlatformTunnelPrerequisiteRouteExclusion,
+			},
+		}}),
+		WithPlatformTunnelStarter(func(_ context.Context, req PlatformTunnelStartRequest) (PlatformTunnelStartResult, error) {
+			captured = req
+			return PlatformTunnelStartResult{
+				Mode:                req.Mode,
+				Ready:               false,
+				Stage:               PlatformTunnelStartupStageCapabilityCheck,
+				MissingPrerequisite: PlatformTunnelPrerequisiteHostImplementation,
+			}, nil
+		}),
+	)
+
+	if _, err := host.StartPlatformTunnel(context.Background(), PlatformTunnelStartRequest{
+		Mode: PlatformTunnelModeAndroidVPNService,
+	}); err != nil {
+		t.Fatalf("StartPlatformTunnel() error = %v", err)
+	}
+	if captured.ApplicationRoutingPolicy != PlatformTunnelApplicationRoutingPolicyAllApps {
+		t.Fatalf("application_routing_policy = %q, want %q", captured.ApplicationRoutingPolicy, PlatformTunnelApplicationRoutingPolicyAllApps)
+	}
+	if len(captured.AllowedPackages) != 0 || len(captured.DisallowedPackages) != 0 {
+		t.Fatalf("unexpected package scope in normalized request: %+v", captured)
+	}
+}
+
+func TestHostStartPlatformTunnelRejectsInvalidAndroidAppRoutingPolicy(t *testing.T) {
+	host := New(WithBuildIdentity(BuildIdentity{Target: "android/embedded"}))
+
+	if _, err := host.StartPlatformTunnel(context.Background(), PlatformTunnelStartRequest{
+		Mode:                     PlatformTunnelModeAndroidVPNService,
+		ApplicationRoutingPolicy: PlatformTunnelApplicationRoutingPolicyAllApps,
+		AllowedPackages:          []string{"com.example.youtube"},
+	}); err == nil {
+		t.Fatal("StartPlatformTunnel() error = nil, want app routing policy validation error")
+	} else if !errors.Is(err, ErrPlatformTunnelAppRoutingPolicyInvalid) {
+		t.Fatalf("StartPlatformTunnel() error = %v, want ErrPlatformTunnelAppRoutingPolicyInvalid", err)
+	}
+}
+
+func TestHostResumePlatformTunnelRejectsMissingAttemptID(t *testing.T) {
+	host := New()
+
+	if _, err := host.ResumePlatformTunnel(context.Background(), PlatformTunnelResumeRequest{}); err == nil {
+		t.Fatal("ResumePlatformTunnel() error = nil, want missing startup attempt id")
+	} else if !errors.Is(err, ErrPlatformTunnelStartupAttemptRequired) {
+		t.Fatalf("ResumePlatformTunnel() error = %v, want ErrPlatformTunnelStartupAttemptRequired", err)
+	}
+}
+
 func TestHostStartsReadySessionAndExportsDiagnostics(t *testing.T) {
 	host := New(
 		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),

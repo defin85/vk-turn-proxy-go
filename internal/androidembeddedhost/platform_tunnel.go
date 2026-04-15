@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/defin85/vk-turn-proxy-go/pkg/clientcontrol"
 )
@@ -12,10 +13,12 @@ import (
 type platformTunnelController interface {
 	Capability() clientcontrol.PlatformTunnelCapability
 	Start(context.Context, clientcontrol.PlatformTunnelStartRequest) (clientcontrol.PlatformTunnelStartResult, error)
+	Resume(context.Context, clientcontrol.PlatformTunnelResumeRequest) (clientcontrol.PlatformTunnelStartResult, error)
 }
 
 type androidVPNServiceLifecycle interface {
 	AcquirePermission(context.Context) error
+	ResumeAfterPermission(context.Context, string) error
 	ValidateRoutePolicy(context.Context) error
 	BringupHost(context.Context) error
 	AttachRuntime(context.Context) error
@@ -25,11 +28,24 @@ type androidVPNServiceLifecycle interface {
 type androidVPNServiceController struct {
 	capability clientcontrol.PlatformTunnelCapability
 	lifecycle  androidVPNServiceLifecycle
+	mu         sync.Mutex
+	nextID     uint64
+	attempts   map[string]androidVPNServiceStartupAttempt
+}
+
+type androidVPNServiceStartupAttempt struct {
+	req  clientcontrol.PlatformTunnelStartRequest
+	plan *clientcontrol.RuntimeExecutionPlan
 }
 
 type androidVPNServiceRoutePolicyError struct {
 	prerequisite clientcontrol.PlatformTunnelPrerequisite
 	message      string
+}
+
+type androidVPNServicePermissionPendingError struct {
+	attemptID string
+	message   string
 }
 
 func (e *androidVPNServiceRoutePolicyError) Error() string {
@@ -40,6 +56,16 @@ func (e *androidVPNServiceRoutePolicyError) Error() string {
 		return e.message
 	}
 	return fmt.Sprintf("android vpn route policy requires %s", e.prerequisite)
+}
+
+func (e *androidVPNServicePermissionPendingError) Error() string {
+	if e == nil {
+		return ""
+	}
+	if strings.TrimSpace(e.message) != "" {
+		return e.message
+	}
+	return "android vpn permission is required before startup can continue"
 }
 
 func defaultAndroidVPNServiceController(build clientcontrol.BuildIdentity) platformTunnelController {
@@ -73,6 +99,7 @@ func newAndroidVPNServiceController(
 	return &androidVPNServiceController{
 		capability: normalized,
 		lifecycle:  lifecycle,
+		attempts:   make(map[string]androidVPNServiceStartupAttempt),
 	}
 }
 
@@ -125,6 +152,19 @@ func (c *androidVPNServiceController) Start(
 	}
 
 	if err := c.lifecycle.AcquirePermission(ctx); err != nil {
+		var pending *androidVPNServicePermissionPendingError
+		if errors.As(err, &pending) {
+			attemptID := c.storeStartupAttempt(pending.attemptID, req, selectedPlanPtr)
+			return clientcontrol.PlatformTunnelStartResult{
+				Mode:                req.Mode,
+				ExecutionPlan:       cloneRuntimeExecutionPlan(selectedPlanPtr),
+				Ready:               false,
+				Stage:               clientcontrol.PlatformTunnelStartupStagePermissionAcquire,
+				MissingPrerequisite: clientcontrol.PlatformTunnelPrerequisitePermission,
+				StartupAttemptID:    attemptID,
+				Message:             pending.Error(),
+			}, nil
+		}
 		return startFailureResult(
 			req.Mode,
 			selectedPlanPtr,
@@ -134,10 +174,41 @@ func (c *androidVPNServiceController) Start(
 		)
 	}
 
+	return c.finishStartup(ctx, req.Mode, selectedPlanPtr)
+}
+
+func (c *androidVPNServiceController) Resume(
+	ctx context.Context,
+	req clientcontrol.PlatformTunnelResumeRequest,
+) (clientcontrol.PlatformTunnelStartResult, error) {
+	if c.lifecycle == nil {
+		return clientcontrol.PlatformTunnelStartResult{}, fmt.Errorf("android embedded host does not implement resume for android_vpn_service")
+	}
+	attempt, ok := c.takeStartupAttempt(req.StartupAttemptID)
+	if !ok {
+		return clientcontrol.PlatformTunnelStartResult{}, clientcontrol.ErrPlatformTunnelStartupAttemptNotFound
+	}
+	if err := c.lifecycle.ResumeAfterPermission(ctx, req.StartupAttemptID); err != nil {
+		return startFailureResult(
+			attempt.req.Mode,
+			attempt.plan,
+			clientcontrol.PlatformTunnelStartupStagePermissionAcquire,
+			clientcontrol.PlatformTunnelPrerequisitePermission,
+			err.Error(),
+		)
+	}
+	return c.finishStartup(ctx, attempt.req.Mode, attempt.plan)
+}
+
+func (c *androidVPNServiceController) finishStartup(
+	ctx context.Context,
+	mode clientcontrol.PlatformTunnelMode,
+	selectedPlanPtr *clientcontrol.RuntimeExecutionPlan,
+) (clientcontrol.PlatformTunnelStartResult, error) {
 	cleanupRequired := true
 	if err := c.lifecycle.ValidateRoutePolicy(ctx); err != nil {
 		return startFailureResult(
-			req.Mode,
+			mode,
 			selectedPlanPtr,
 			clientcontrol.PlatformTunnelStartupStageRouteValidate,
 			routePolicyPrerequisite(err),
@@ -146,7 +217,7 @@ func (c *androidVPNServiceController) Start(
 	}
 	if err := c.lifecycle.BringupHost(ctx); err != nil {
 		return startFailureResult(
-			req.Mode,
+			mode,
 			selectedPlanPtr,
 			clientcontrol.PlatformTunnelStartupStageHostBringup,
 			clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
@@ -155,7 +226,7 @@ func (c *androidVPNServiceController) Start(
 	}
 	if err := c.lifecycle.AttachRuntime(ctx); err != nil {
 		return startFailureResult(
-			req.Mode,
+			mode,
 			selectedPlanPtr,
 			clientcontrol.PlatformTunnelStartupStageRuntimeAttach,
 			clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
@@ -164,10 +235,42 @@ func (c *androidVPNServiceController) Start(
 	}
 
 	return clientcontrol.PlatformTunnelStartResult{
-		Mode:          req.Mode,
+		Mode:          mode,
 		ExecutionPlan: selectedPlanPtr,
 		Ready:         true,
 	}, nil
+}
+
+func (c *androidVPNServiceController) storeStartupAttempt(
+	requestedID string,
+	req clientcontrol.PlatformTunnelStartRequest,
+	plan *clientcontrol.RuntimeExecutionPlan,
+) string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	attemptID := strings.TrimSpace(requestedID)
+	if attemptID == "" {
+		c.nextID++
+		attemptID = fmt.Sprintf("android-vpn-startup-%d", c.nextID)
+	}
+	c.attempts[attemptID] = androidVPNServiceStartupAttempt{
+		req:  req,
+		plan: cloneRuntimeExecutionPlan(plan),
+	}
+	return attemptID
+}
+
+func (c *androidVPNServiceController) takeStartupAttempt(startupAttemptID string) (androidVPNServiceStartupAttempt, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	attempt, ok := c.attempts[strings.TrimSpace(startupAttemptID)]
+	if !ok {
+		return androidVPNServiceStartupAttempt{}, false
+	}
+	delete(c.attempts, strings.TrimSpace(startupAttemptID))
+	return attempt, true
 }
 
 func capabilityCheckFailure(
@@ -337,6 +440,19 @@ func newAndroidDNSBypassError(message string) error {
 	return &androidVPNServiceRoutePolicyError{
 		prerequisite: clientcontrol.PlatformTunnelPrerequisiteDNSBypass,
 		message:      strings.TrimSpace(message),
+	}
+}
+
+func newAndroidAppRoutingPolicyError(message string) error {
+	return &androidVPNServiceRoutePolicyError{
+		prerequisite: clientcontrol.PlatformTunnelPrerequisiteAppRoutingPolicy,
+		message:      strings.TrimSpace(message),
+	}
+}
+
+func newAndroidPermissionPendingError(message string) error {
+	return &androidVPNServicePermissionPendingError{
+		message: strings.TrimSpace(message),
 	}
 }
 

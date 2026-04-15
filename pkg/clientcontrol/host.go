@@ -26,13 +26,16 @@ import (
 const defaultHistoryLimit = 256
 
 var (
-	ErrProfileNotFound            = errors.New("client control profile not found")
-	ErrProviderConfigNotFound     = errors.New("client control provider config not found")
-	ErrSessionNotFound            = errors.New("client control session not found")
-	ErrChallengeNotFound          = errors.New("client control challenge not found")
-	ErrResolutionNotFound         = errors.New("client control resolution not found")
-	ErrPlatformTunnelModeRequired = errors.New("platform tunnel mode is required")
-	ErrPlatformTunnelModeUnknown  = errors.New("platform tunnel mode is not supported by this contract")
+	ErrProfileNotFound                       = errors.New("client control profile not found")
+	ErrProviderConfigNotFound                = errors.New("client control provider config not found")
+	ErrSessionNotFound                       = errors.New("client control session not found")
+	ErrChallengeNotFound                     = errors.New("client control challenge not found")
+	ErrResolutionNotFound                    = errors.New("client control resolution not found")
+	ErrPlatformTunnelModeRequired            = errors.New("platform tunnel mode is required")
+	ErrPlatformTunnelModeUnknown             = errors.New("platform tunnel mode is not supported by this contract")
+	ErrPlatformTunnelAppRoutingPolicyInvalid = errors.New("platform tunnel application routing policy is invalid")
+	ErrPlatformTunnelStartupAttemptRequired  = errors.New("platform tunnel startup attempt id is required")
+	ErrPlatformTunnelStartupAttemptNotFound  = errors.New("platform tunnel startup attempt was not found")
 )
 
 type IncompatibleHostError struct {
@@ -89,6 +92,7 @@ type hostConfig struct {
 	tunnelsConfigured         bool
 	wireGuardTurnMaterializer WireGuardTurnMaterializer
 	startTunnel               func(context.Context, PlatformTunnelStartRequest) (PlatformTunnelStartResult, error)
+	resumeTunnel              func(context.Context, PlatformTunnelResumeRequest) (PlatformTunnelStartResult, error)
 }
 
 type Host struct {
@@ -110,6 +114,7 @@ type Host struct {
 	platformTunnels           []PlatformTunnelCapability
 	wireGuardTurnMaterializer WireGuardTurnMaterializer
 	startTunnel               func(context.Context, PlatformTunnelStartRequest) (PlatformTunnelStartResult, error)
+	resumeTunnel              func(context.Context, PlatformTunnelResumeRequest) (PlatformTunnelStartResult, error)
 
 	profiles        map[string]Profile
 	providerConfigs map[string]ProviderConfig
@@ -232,6 +237,7 @@ func New(opts ...Option) *Host {
 		platformTunnels:           cfg.platformTunnels,
 		wireGuardTurnMaterializer: cfg.wireGuardTurnMaterializer,
 		startTunnel:               cfg.startTunnel,
+		resumeTunnel:              cfg.resumeTunnel,
 		profiles:                  make(map[string]Profile),
 		providerConfigs:           make(map[string]ProviderConfig),
 		resolutions:               make(map[string]*managedResolution),
@@ -384,6 +390,10 @@ func (h *Host) Negotiate(req NegotiateRequest) (HostInfo, error) {
 }
 
 func (h *Host) StartPlatformTunnel(ctx context.Context, req PlatformTunnelStartRequest) (PlatformTunnelStartResult, error) {
+	normalizedReq, err := normalizePlatformTunnelStartRequest(req)
+	if err != nil {
+		return PlatformTunnelStartResult{}, err
+	}
 	if !isKnownPlatformTunnelMode(req.Mode) {
 		if strings.TrimSpace(string(req.Mode)) == "" {
 			return PlatformTunnelStartResult{}, ErrPlatformTunnelModeRequired
@@ -393,16 +403,39 @@ func (h *Host) StartPlatformTunnel(ctx context.Context, req PlatformTunnelStartR
 	if h.startTunnel == nil {
 		return PlatformTunnelStartResult{}, fmt.Errorf("platform tunnel starter is not configured")
 	}
-	result, err := h.startTunnel(ctx, req)
+	result, err := h.startTunnel(ctx, normalizedReq)
 	if err != nil {
 		if startResult, ok := platformTunnelStartResultFromError(err); ok {
-			if validateErr := validatePlatformTunnelStartResult(req, startResult); validateErr != nil {
+			if validateErr := validatePlatformTunnelStartResult(normalizedReq, startResult); validateErr != nil {
 				return PlatformTunnelStartResult{}, fmt.Errorf("invalid platform tunnel startup result: %w", validateErr)
 			}
 		}
 		return PlatformTunnelStartResult{}, err
 	}
-	if validateErr := validatePlatformTunnelStartResult(req, result); validateErr != nil {
+	if validateErr := validatePlatformTunnelStartResult(normalizedReq, result); validateErr != nil {
+		return PlatformTunnelStartResult{}, fmt.Errorf("invalid platform tunnel startup result: %w", validateErr)
+	}
+	return result, nil
+}
+
+func (h *Host) ResumePlatformTunnel(ctx context.Context, req PlatformTunnelResumeRequest) (PlatformTunnelStartResult, error) {
+	normalizedReq, err := normalizePlatformTunnelResumeRequest(req)
+	if err != nil {
+		return PlatformTunnelStartResult{}, err
+	}
+	if h.resumeTunnel == nil {
+		return PlatformTunnelStartResult{}, fmt.Errorf("platform tunnel resumer is not configured")
+	}
+	result, err := h.resumeTunnel(ctx, normalizedReq)
+	if err != nil {
+		if startResult, ok := platformTunnelStartResultFromError(err); ok {
+			if validateErr := validatePlatformTunnelStartResult(PlatformTunnelStartRequest{Mode: startResult.Mode}, startResult); validateErr != nil {
+				return PlatformTunnelStartResult{}, fmt.Errorf("invalid platform tunnel startup result: %w", validateErr)
+			}
+		}
+		return PlatformTunnelStartResult{}, err
+	}
+	if validateErr := validatePlatformTunnelStartResult(PlatformTunnelStartRequest{Mode: result.Mode}, result); validateErr != nil {
 		return PlatformTunnelStartResult{}, fmt.Errorf("invalid platform tunnel startup result: %w", validateErr)
 	}
 	return result, nil

@@ -849,6 +849,95 @@ func TestHandlerPlatformTunnelStartReturnsTypedFailureResult(t *testing.T) {
 	}
 }
 
+func TestHandlerPlatformTunnelStartRejectsInvalidAndroidAppRoutingPolicy(t *testing.T) {
+	host := New(WithBuildIdentity(BuildIdentity{Target: "android/embedded"}))
+	handler := Handler(host)
+
+	body, _ := json.Marshal(PlatformTunnelStartRequest{
+		Mode:                     PlatformTunnelModeAndroidVPNService,
+		ApplicationRoutingPolicy: PlatformTunnelApplicationRoutingPolicyAllApps,
+		AllowedPackages:          []string{"com.example.youtube"},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/platform-tunnels/start", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("POST /v1/platform-tunnels/start code = %d body=%s, want 400", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode platform tunnel invalid payload: %v", err)
+	}
+	if payload["code"] != "platform_tunnel_invalid" {
+		t.Fatalf("platform tunnel invalid code = %v, want platform_tunnel_invalid", payload["code"])
+	}
+}
+
+func TestHandlerPlatformTunnelResumeReturnsTypedFailureResult(t *testing.T) {
+	host := New(
+		WithBuildIdentity(testBuildIdentity()),
+		WithPlatformTunnelResumer(func(_ context.Context, req PlatformTunnelResumeRequest) (PlatformTunnelStartResult, error) {
+			return PlatformTunnelStartResult{}, &PlatformTunnelStartError{
+				Result: PlatformTunnelStartResult{
+					Mode:                PlatformTunnelModeAndroidVPNService,
+					Ready:               false,
+					Stage:               PlatformTunnelStartupStagePermissionAcquire,
+					MissingPrerequisite: PlatformTunnelPrerequisitePermission,
+					StartupAttemptID:    req.StartupAttemptID,
+					Message:             "permission still missing after resume",
+				},
+			}
+		}),
+	)
+	handler := Handler(host)
+
+	body, _ := json.Marshal(PlatformTunnelResumeRequest{StartupAttemptID: "attempt-1"})
+	req := httptest.NewRequest(http.MethodPost, "/v1/platform-tunnels/resume", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /v1/platform-tunnels/resume code = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var result PlatformTunnelStartResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode platform tunnel resume result: %v", err)
+	}
+	if result.StartupAttemptID != "attempt-1" {
+		t.Fatalf("startup_attempt_id = %q, want attempt-1", result.StartupAttemptID)
+	}
+	if result.Stage != PlatformTunnelStartupStagePermissionAcquire {
+		t.Fatalf("resume stage = %q, want %q", result.Stage, PlatformTunnelStartupStagePermissionAcquire)
+	}
+}
+
+func TestHandlerPlatformTunnelResumeRejectsUnknownAttempt(t *testing.T) {
+	host := New(
+		WithBuildIdentity(testBuildIdentity()),
+		WithPlatformTunnelResumer(func(_ context.Context, req PlatformTunnelResumeRequest) (PlatformTunnelStartResult, error) {
+			return PlatformTunnelStartResult{}, ErrPlatformTunnelStartupAttemptNotFound
+		}),
+	)
+	handler := Handler(host)
+
+	body, _ := json.Marshal(PlatformTunnelResumeRequest{StartupAttemptID: "attempt-missing"})
+	req := httptest.NewRequest(http.MethodPost, "/v1/platform-tunnels/resume", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("POST /v1/platform-tunnels/resume code = %d body=%s, want 404", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode platform tunnel resume payload: %v", err)
+	}
+	if payload["code"] != "platform_tunnel_startup_attempt_not_found" {
+		t.Fatalf("platform tunnel resume code = %v, want platform_tunnel_startup_attempt_not_found", payload["code"])
+	}
+}
+
 func TestHandlerPlatformTunnelStartRejectsInvalidTypedFailureResult(t *testing.T) {
 	host := New(
 		WithBuildIdentity(testBuildIdentity()),

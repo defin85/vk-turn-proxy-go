@@ -931,6 +931,7 @@ enum PlatformTunnelPrerequisite {
   driver('driver'),
   routeExclusion('route_exclusion'),
   dnsBypass('dns_bypass'),
+  appRoutingPolicy('app_routing_policy'),
   hostImplementation('host_implementation');
 
   const PlatformTunnelPrerequisite(this.value);
@@ -955,8 +956,28 @@ extension PlatformTunnelPrerequisiteDisplay on PlatformTunnelPrerequisite {
     PlatformTunnelPrerequisite.driver => 'driver',
     PlatformTunnelPrerequisite.routeExclusion => 'route exclusion',
     PlatformTunnelPrerequisite.dnsBypass => 'DNS bypass',
+    PlatformTunnelPrerequisite.appRoutingPolicy => 'app routing policy',
     PlatformTunnelPrerequisite.hostImplementation => 'host implementation',
   };
+}
+
+enum PlatformTunnelApplicationRoutingPolicy {
+  allApps('all_apps'),
+  allowedPackages('allowed_packages'),
+  disallowedPackages('disallowed_packages');
+
+  const PlatformTunnelApplicationRoutingPolicy(this.value);
+
+  final String value;
+
+  static PlatformTunnelApplicationRoutingPolicy? fromJson(String? raw) {
+    for (final policy in values) {
+      if (policy.value == raw) {
+        return policy;
+      }
+    }
+    return null;
+  }
 }
 
 enum PlatformTunnelStartupStage {
@@ -1200,6 +1221,7 @@ class PlatformTunnelStartResult {
     this.executionPlan,
     this.stage,
     this.missingPrerequisite,
+    this.startupAttemptId = '',
     this.message = '',
   });
 
@@ -1229,6 +1251,20 @@ class PlatformTunnelStartResult {
         'ready platform tunnel startup result unexpectedly reports missing_prerequisite',
       );
     }
+    final startupAttemptId = (json['startup_attempt_id'] as String? ?? '')
+        .trim();
+    if (ready && startupAttemptId.isNotEmpty) {
+      throw const FormatException(
+        'ready platform tunnel startup result unexpectedly reports startup_attempt_id',
+      );
+    }
+    if (startupAttemptId.isNotEmpty &&
+        (stage != PlatformTunnelStartupStage.permissionAcquire ||
+            missingPrerequisite != PlatformTunnelPrerequisite.permission)) {
+      throw const FormatException(
+        'platform tunnel startup result reports startup_attempt_id outside permission prerequisite',
+      );
+    }
     return PlatformTunnelStartResult(
       mode: mode,
       ready: ready,
@@ -1239,6 +1275,7 @@ class PlatformTunnelStartResult {
           : null,
       stage: stage,
       missingPrerequisite: missingPrerequisite,
+      startupAttemptId: startupAttemptId,
       message: json['message'] as String? ?? '',
     );
   }
@@ -1248,6 +1285,7 @@ class PlatformTunnelStartResult {
   final RuntimeExecutionPlan? executionPlan;
   final PlatformTunnelStartupStage? stage;
   final PlatformTunnelPrerequisite? missingPrerequisite;
+  final String startupAttemptId;
   final String message;
 
   Map<String, dynamic> toJson() {
@@ -1257,6 +1295,7 @@ class PlatformTunnelStartResult {
       'execution_plan': executionPlan?.toJson(),
       'stage': stage?.value,
       'missing_prerequisite': missingPrerequisite?.value,
+      'startup_attempt_id': startupAttemptId.isEmpty ? null : startupAttemptId,
       'message': message.isEmpty ? null : message,
     });
   }

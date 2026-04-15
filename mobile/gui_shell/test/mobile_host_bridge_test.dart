@@ -600,6 +600,10 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
   Future<PlatformTunnelStartResult> startPlatformTunnel({
     required PlatformTunnelMode mode,
     RuntimeExecutionPlan? executionPlan,
+    PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
+        PlatformTunnelApplicationRoutingPolicy.allApps,
+    List<String> allowedPackages = const <String>[],
+    List<String> disallowedPackages = const <String>[],
   }) async {
     return const PlatformTunnelStartResult(
       mode: PlatformTunnelMode.appleNetworkExtension,
@@ -607,6 +611,20 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
       stage: PlatformTunnelStartupStage.capabilityCheck,
       missingPrerequisite: PlatformTunnelPrerequisite.hostImplementation,
       message: 'native bridge does not implement tunnel startup yet',
+    );
+  }
+
+  @override
+  Future<PlatformTunnelStartResult> resumePlatformTunnel({
+    required String startupAttemptId,
+  }) async {
+    return PlatformTunnelStartResult(
+      mode: PlatformTunnelMode.appleNetworkExtension,
+      ready: false,
+      stage: PlatformTunnelStartupStage.permissionAcquire,
+      missingPrerequisite: PlatformTunnelPrerequisite.permission,
+      startupAttemptId: startupAttemptId,
+      message: 'native bridge does not implement tunnel resume yet',
     );
   }
 
