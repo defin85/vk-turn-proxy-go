@@ -102,6 +102,21 @@ void main() {
             );
             await request.response.close();
             return;
+          case '/v1/platform-tunnels/stop':
+            final payload =
+                jsonDecode(await utf8.decoder.bind(request).join())
+                    as Map<String, dynamic>;
+            expect(payload['mode'], 'windows_wintun');
+            request.response.headers.contentType = ContentType.json;
+            request.response.write(
+              jsonEncode(<String, dynamic>{
+                'mode': 'windows_wintun',
+                'stopped': true,
+                'message': 'Windows Wintun disconnected.',
+              }),
+            );
+            await request.response.close();
+            return;
           case '/v1/events':
             request.response.headers.contentType = ContentType(
               'application',
@@ -270,6 +285,11 @@ void main() {
         startResult.executionPlan?.engineFamily,
         RuntimeEngineFamily.wireguardNative,
       );
+
+      final stopResult = await client.stopPlatformTunnel(
+        mode: PlatformTunnelMode.windowsWintun,
+      );
+      expect(stopResult.stopped, isTrue);
 
       final events = await client.events().toList();
       expect(events, hasLength(1));

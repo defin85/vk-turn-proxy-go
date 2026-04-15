@@ -938,6 +938,39 @@ func TestHandlerPlatformTunnelResumeRejectsUnknownAttempt(t *testing.T) {
 	}
 }
 
+func TestHandlerPlatformTunnelStopReturnsTypedResult(t *testing.T) {
+	host := New(
+		WithBuildIdentity(testBuildIdentity()),
+		WithPlatformTunnelStopper(func(_ context.Context, req PlatformTunnelStopRequest) (PlatformTunnelStopResult, error) {
+			return PlatformTunnelStopResult{
+				Mode:    req.Mode,
+				Stopped: true,
+				Message: "Linux TUN disconnected.",
+			}, nil
+		}),
+	)
+	handler := Handler(host)
+
+	body, _ := json.Marshal(PlatformTunnelStopRequest{Mode: PlatformTunnelModeLinuxTun})
+	req := httptest.NewRequest(http.MethodPost, "/v1/platform-tunnels/stop", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /v1/platform-tunnels/stop code = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var result PlatformTunnelStopResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode platform tunnel stop result: %v", err)
+	}
+	if result.Mode != PlatformTunnelModeLinuxTun {
+		t.Fatalf("platform tunnel stop mode = %q, want %q", result.Mode, PlatformTunnelModeLinuxTun)
+	}
+	if !result.Stopped {
+		t.Fatal("platform tunnel stop result stopped = false, want true")
+	}
+}
+
 func TestHandlerPlatformTunnelStartRejectsInvalidTypedFailureResult(t *testing.T) {
 	host := New(
 		WithBuildIdentity(testBuildIdentity()),

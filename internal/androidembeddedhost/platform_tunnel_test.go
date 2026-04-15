@@ -387,6 +387,34 @@ func TestManagerPlatformTunnelStartRuntimeAttachFailureCleansUp(t *testing.T) {
 	assertAndroidVPNExecutionPlan(t, result.ExecutionPlan)
 }
 
+func TestManagerPlatformTunnelStopCleansUpActiveAndroidVPNService(t *testing.T) {
+	t.Parallel()
+
+	lifecycle := &fakeAndroidVPNServiceLifecycle{}
+	manager := New(withPlatformTunnelController(newAndroidVPNServiceController(
+		supportedAndroidVPNServiceCapability(""),
+		lifecycle,
+	)))
+	baseURL := ensureStartedManager(t, manager)
+
+	result := stopPlatformTunnel(t, baseURL, clientcontrol.PlatformTunnelStopRequest{
+		Mode: clientcontrol.PlatformTunnelModeAndroidVPNService,
+	})
+
+	if result.Mode != clientcontrol.PlatformTunnelModeAndroidVPNService {
+		t.Fatalf("platform tunnel stop mode = %q, want %q", result.Mode, clientcontrol.PlatformTunnelModeAndroidVPNService)
+	}
+	if !result.Stopped {
+		t.Fatal("platform tunnel stop stopped = false, want true")
+	}
+	if lifecycle.cleanupCalls != 1 {
+		t.Fatalf("cleanup calls = %d, want 1", lifecycle.cleanupCalls)
+	}
+	if got := strings.Join(lifecycle.calls, ","); got != "cleanup" {
+		t.Fatalf("lifecycle calls = %q, want %q", got, "cleanup")
+	}
+}
+
 func TestAndroidVPNServiceControllerPassesMaterializedLeaseToRuntimeAttach(t *testing.T) {
 	t.Parallel()
 
@@ -526,6 +554,7 @@ func testHostFactory(
 				}),
 				clientcontrol.WithPlatformTunnelStarter(controller.Start),
 				clientcontrol.WithPlatformTunnelResumer(controller.Resume),
+				clientcontrol.WithPlatformTunnelStopper(controller.Stop),
 			)
 		}
 		return clientcontrol.New(opts...)
@@ -603,6 +632,36 @@ func resumePlatformTunnel(
 	var result clientcontrol.PlatformTunnelStartResult
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		t.Fatalf("decode platform tunnel resume result: %v", err)
+	}
+	return result
+}
+
+func stopPlatformTunnel(
+	t *testing.T,
+	baseURL string,
+	req clientcontrol.PlatformTunnelStopRequest,
+) clientcontrol.PlatformTunnelStopResult {
+	t.Helper()
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Post(baseURL+"/v1/platform-tunnels/stop", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST /v1/platform-tunnels/stop error = %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("POST /v1/platform-tunnels/stop status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	var result clientcontrol.PlatformTunnelStopResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode platform tunnel stop result: %v", err)
 	}
 	return result
 }

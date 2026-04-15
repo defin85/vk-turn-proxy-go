@@ -1480,6 +1480,8 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   final List<ResolutionRecord> _resolutions;
   final List<PlatformTunnelMode> startedPlatformTunnels =
       <PlatformTunnelMode>[];
+  final List<PlatformTunnelMode> stoppedPlatformTunnels =
+      <PlatformTunnelMode>[];
   final List<String> cancelChallengeCalls = <String>[];
   final List<String> continueChallengeCalls = <String>[];
   final List<ChallengeContinuationSubmission?> continueChallengePayloads =
@@ -1601,6 +1603,18 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       missingPrerequisite: PlatformTunnelPrerequisite.permission,
       startupAttemptId: startupAttemptId,
       message: 'embedded mobile host does not implement tunnel resume yet',
+    );
+  }
+
+  @override
+  Future<PlatformTunnelStopResult> stopPlatformTunnel({
+    required PlatformTunnelMode mode,
+  }) async {
+    stoppedPlatformTunnels.add(mode);
+    return PlatformTunnelStopResult(
+      mode: mode,
+      stopped: true,
+      message: '${mode.label} disconnected.',
     );
   }
 

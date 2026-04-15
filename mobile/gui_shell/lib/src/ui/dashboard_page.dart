@@ -1142,7 +1142,7 @@ class _SystemTunnelBanner extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'This mobile slice still does not yet claim device-wide tunnel capture as supported. Instead, it renders typed host capability and startup-stage results for the reported platform modes.',
+                    'This mobile slice renders typed host capability and startup-stage results for the reported platform modes. Use the controls below to start or disconnect supported system-tunnel paths.',
                     style: theme.textTheme.bodyMedium,
                   ),
                 ),
@@ -1167,6 +1167,8 @@ class _SystemTunnelBanner extends StatelessWidget {
                     ready: controller.hostConnection?.isReady == true,
                     onStart: () =>
                         controller.startPlatformTunnel(capability.mode),
+                    onStop: () =>
+                        controller.stopPlatformTunnel(capability.mode),
                   ),
                 );
               }),
@@ -1184,6 +1186,7 @@ class _PlatformTunnelCard extends StatelessWidget {
     required this.busy,
     required this.ready,
     required this.onStart,
+    required this.onStop,
   });
 
   final PlatformTunnelCapability capability;
@@ -1191,6 +1194,7 @@ class _PlatformTunnelCard extends StatelessWidget {
   final bool busy;
   final bool ready;
   final Future<void> Function() onStart;
+  final Future<void> Function() onStop;
 
   @override
   Widget build(BuildContext context) {
@@ -1251,10 +1255,16 @@ class _PlatformTunnelCard extends StatelessWidget {
             Text(capability.message, style: theme.textTheme.bodySmall),
           ],
           const SizedBox(height: 12),
-          FilledButton.tonal(
-            onPressed: busy || !ready ? null : () => unawaited(onStart()),
-            child: const Text('Request startup'),
-          ),
+          if (result?.ready == true)
+            OutlinedButton(
+              onPressed: busy || !ready ? null : () => unawaited(onStop()),
+              child: const Text('Disconnect VPN'),
+            )
+          else
+            FilledButton.tonal(
+              onPressed: busy || !ready ? null : () => unawaited(onStart()),
+              child: const Text('Request startup'),
+            ),
           const SizedBox(height: 10),
           Text(
             result == null

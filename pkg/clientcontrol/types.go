@@ -402,6 +402,10 @@ type PlatformTunnelResumeRequest struct {
 	StartupAttemptID string `json:"startup_attempt_id"`
 }
 
+type PlatformTunnelStopRequest struct {
+	Mode PlatformTunnelMode `json:"mode"`
+}
+
 type PlatformTunnelStartResult struct {
 	Mode                PlatformTunnelMode         `json:"mode"`
 	ExecutionPlan       *RuntimeExecutionPlan      `json:"execution_plan,omitempty"`
@@ -410,4 +414,10 @@ type PlatformTunnelStartResult struct {
 	MissingPrerequisite PlatformTunnelPrerequisite `json:"missing_prerequisite,omitempty"`
 	StartupAttemptID    string                     `json:"startup_attempt_id,omitempty"`
 	Message             string                     `json:"message,omitempty"`
+}
+
+type PlatformTunnelStopResult struct {
+	Mode    PlatformTunnelMode `json:"mode"`
+	Stopped bool               `json:"stopped"`
+	Message string             `json:"message,omitempty"`
 }

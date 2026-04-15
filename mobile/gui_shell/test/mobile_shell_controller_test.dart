@@ -1543,6 +1543,52 @@ void main() {
     },
   );
 
+  test('controller clears ready platform tunnel state after stop', () async {
+    final bridge = _FakeMobileHostBridge(
+      startPlatformTunnelResult: const PlatformTunnelStartResult(
+        mode: PlatformTunnelMode.androidVpnService,
+        ready: true,
+      ),
+      stopPlatformTunnelResult: const PlatformTunnelStopResult(
+        mode: PlatformTunnelMode.androidVpnService,
+        stopped: true,
+        message: 'Android VPN Service disconnected.',
+      ),
+    );
+    final controller = MobileShellController(
+      bridge: bridge,
+      stateStore: _InMemoryStateStore(
+        MobileShellState(
+          profiles: const <ProfileRecord>[],
+          providerConfigs: const <ProviderConfigRecord>[],
+          draft: ProfileDraft.defaults(),
+        ),
+      ),
+      appBuild: _testGuiBuild,
+    );
+    addTearDown(controller.dispose);
+
+    await controller.initialize();
+    await controller.startPlatformTunnel(PlatformTunnelMode.androidVpnService);
+    expect(
+      controller
+          .platformTunnelResultFor(PlatformTunnelMode.androidVpnService)
+          ?.ready,
+      isTrue,
+    );
+
+    await controller.stopPlatformTunnel(PlatformTunnelMode.androidVpnService);
+
+    expect(bridge.stoppedPlatformTunnels, <PlatformTunnelMode>[
+      PlatformTunnelMode.androidVpnService,
+    ]);
+    expect(
+      controller.platformTunnelResultFor(PlatformTunnelMode.androidVpnService),
+      isNull,
+    );
+    expect(controller.notice, 'Android VPN Service disconnected.');
+  });
+
   test(
     'controller clears platform tunnel startup results when the bridge later fails closed',
     () async {
@@ -1682,6 +1728,11 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       startupAttemptId: 'attempt-android-1',
       message: 'mobile host does not implement tunnel resume yet',
     ),
+    this.stopPlatformTunnelResult = const PlatformTunnelStopResult(
+      mode: PlatformTunnelMode.androidVpnService,
+      stopped: true,
+      message: 'Android VPN Service disconnected.',
+    ),
     DiagnosticsBundle? diagnosticsBundle,
   }) : diagnosticsBundle =
            diagnosticsBundle ??
@@ -1721,6 +1772,7 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   final ControlPlaneError? startSessionError;
   final PlatformTunnelStartResult startPlatformTunnelResult;
   final PlatformTunnelStartResult resumePlatformTunnelResult;
+  final PlatformTunnelStopResult stopPlatformTunnelResult;
   final DiagnosticsBundle diagnosticsBundle;
   final List<ResolutionRecord> _resolutions;
 
@@ -1746,6 +1798,8 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   final List<PlatformTunnelMode> requestedPlatformTunnelPermissions =
       <PlatformTunnelMode>[];
   final List<String> resumedPlatformTunnelAttemptIDs = <String>[];
+  final List<PlatformTunnelMode> stoppedPlatformTunnels =
+      <PlatformTunnelMode>[];
   int ensureReadyCalls = 0;
   int startSessionCalls = 0;
   final StreamController<EventRecord> _events =
@@ -1877,6 +1931,14 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   }) async {
     resumedPlatformTunnelAttemptIDs.add(startupAttemptId);
     return resumePlatformTunnelResult;
+  }
+
+  @override
+  Future<PlatformTunnelStopResult> stopPlatformTunnel({
+    required PlatformTunnelMode mode,
+  }) async {
+    stoppedPlatformTunnels.add(mode);
+    return stopPlatformTunnelResult;
   }
 
   @override

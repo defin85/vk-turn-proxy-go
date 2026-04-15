@@ -23,6 +23,9 @@ abstract class ControlPlaneApi {
   Future<PlatformTunnelStartResult> resumePlatformTunnel({
     required String startupAttemptId,
   });
+  Future<PlatformTunnelStopResult> stopPlatformTunnel({
+    required PlatformTunnelMode mode,
+  });
   Future<List<ProviderDescriptor>> providers();
   Future<List<ProviderConfigRecord>> providerConfigs();
   Future<ProviderConfigRecord> upsertProviderConfig(
@@ -149,6 +152,18 @@ class ControlPlaneClient implements ControlPlaneApi {
       body: <String, dynamic>{'startup_attempt_id': startupAttemptId},
     );
     return PlatformTunnelStartResult.fromJson(payload);
+  }
+
+  @override
+  Future<PlatformTunnelStopResult> stopPlatformTunnel({
+    required PlatformTunnelMode mode,
+  }) async {
+    final payload = await _jsonRequest(
+      'POST',
+      '/v1/platform-tunnels/stop',
+      body: <String, dynamic>{'mode': mode.value},
+    );
+    return PlatformTunnelStopResult.fromJson(payload);
   }
 
   @override

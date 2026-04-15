@@ -522,6 +522,13 @@ class HttpMobileHostBridge implements MobileHostBridge {
   }
 
   @override
+  Future<PlatformTunnelStopResult> stopPlatformTunnel({
+    required PlatformTunnelMode mode,
+  }) {
+    return _client.stopPlatformTunnel(mode: mode);
+  }
+
+  @override
   Future<bool> requestPlatformTunnelPermission({
     required PlatformTunnelMode mode,
   }) {
@@ -593,6 +600,11 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
 
   @override
   Future<ResolutionRecord> cancelResolution(String resolutionId) => _fail();
+
+  @override
+  Future<PlatformTunnelStopResult> stopPlatformTunnel({
+    required PlatformTunnelMode mode,
+  }) => _fail();
 
   @override
   Future<DiagnosticsBundle> diagnostics(String sessionId) => _fail();

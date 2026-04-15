@@ -93,6 +93,7 @@ type hostConfig struct {
 	wireGuardTurnMaterializer WireGuardTurnMaterializer
 	startTunnel               func(context.Context, PlatformTunnelStartRequest) (PlatformTunnelStartResult, error)
 	resumeTunnel              func(context.Context, PlatformTunnelResumeRequest) (PlatformTunnelStartResult, error)
+	stopTunnel                func(context.Context, PlatformTunnelStopRequest) (PlatformTunnelStopResult, error)
 }
 
 type Host struct {
@@ -115,6 +116,7 @@ type Host struct {
 	wireGuardTurnMaterializer WireGuardTurnMaterializer
 	startTunnel               func(context.Context, PlatformTunnelStartRequest) (PlatformTunnelStartResult, error)
 	resumeTunnel              func(context.Context, PlatformTunnelResumeRequest) (PlatformTunnelStartResult, error)
+	stopTunnel                func(context.Context, PlatformTunnelStopRequest) (PlatformTunnelStopResult, error)
 
 	profiles        map[string]Profile
 	providerConfigs map[string]ProviderConfig
@@ -238,6 +240,7 @@ func New(opts ...Option) *Host {
 		wireGuardTurnMaterializer: cfg.wireGuardTurnMaterializer,
 		startTunnel:               cfg.startTunnel,
 		resumeTunnel:              cfg.resumeTunnel,
+		stopTunnel:                cfg.stopTunnel,
 		profiles:                  make(map[string]Profile),
 		providerConfigs:           make(map[string]ProviderConfig),
 		resolutions:               make(map[string]*managedResolution),
@@ -437,6 +440,37 @@ func (h *Host) ResumePlatformTunnel(ctx context.Context, req PlatformTunnelResum
 	}
 	if validateErr := validatePlatformTunnelStartResult(PlatformTunnelStartRequest{Mode: result.Mode}, result); validateErr != nil {
 		return PlatformTunnelStartResult{}, fmt.Errorf("invalid platform tunnel startup result: %w", validateErr)
+	}
+	return result, nil
+}
+
+func (h *Host) StopPlatformTunnel(ctx context.Context, req PlatformTunnelStopRequest) (PlatformTunnelStopResult, error) {
+	normalizedReq, err := normalizePlatformTunnelStopRequest(req)
+	if err != nil {
+		return PlatformTunnelStopResult{}, err
+	}
+	if h.stopTunnel == nil {
+		return PlatformTunnelStopResult{}, fmt.Errorf("platform tunnel stopper is not configured")
+	}
+	result, err := h.stopTunnel(ctx, normalizedReq)
+	if err != nil {
+		return PlatformTunnelStopResult{}, err
+	}
+	if strings.TrimSpace(string(result.Mode)) == "" {
+		result.Mode = normalizedReq.Mode
+	}
+	if result.Mode != normalizedReq.Mode {
+		return PlatformTunnelStopResult{}, fmt.Errorf(
+			"invalid platform tunnel stop result: mode %s does not match requested mode %s",
+			result.Mode,
+			normalizedReq.Mode,
+		)
+	}
+	if !result.Stopped {
+		return PlatformTunnelStopResult{}, fmt.Errorf(
+			"invalid platform tunnel stop result: mode %s did not confirm stop",
+			result.Mode,
+		)
 	}
 	return result, nil
 }

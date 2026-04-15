@@ -14,6 +14,7 @@ type platformTunnelController interface {
 	Capability() clientcontrol.PlatformTunnelCapability
 	Start(context.Context, clientcontrol.PlatformTunnelStartRequest) (clientcontrol.PlatformTunnelStartResult, error)
 	Resume(context.Context, clientcontrol.PlatformTunnelResumeRequest) (clientcontrol.PlatformTunnelStartResult, error)
+	Stop(context.Context, clientcontrol.PlatformTunnelStopRequest) (clientcontrol.PlatformTunnelStopResult, error)
 }
 
 type AndroidVPNServiceLifecycle interface {
@@ -207,6 +208,34 @@ func (c *androidVPNServiceController) Resume(
 	return c.finishStartup(ctx, attempt.req, attempt.plan)
 }
 
+func (c *androidVPNServiceController) Stop(
+	ctx context.Context,
+	req clientcontrol.PlatformTunnelStopRequest,
+) (clientcontrol.PlatformTunnelStopResult, error) {
+	capability := c.Capability()
+	if req.Mode != capability.Mode {
+		return clientcontrol.PlatformTunnelStopResult{}, fmt.Errorf(
+			"android embedded host does not publish platform tunnel mode %s",
+			req.Mode,
+		)
+	}
+	if c.lifecycle == nil {
+		return clientcontrol.PlatformTunnelStopResult{}, fmt.Errorf(
+			"android embedded host does not implement stop for %s",
+			req.Mode,
+		)
+	}
+	if err := c.lifecycle.Cleanup(ctx); err != nil {
+		return clientcontrol.PlatformTunnelStopResult{}, err
+	}
+	c.clearStartupAttempts()
+	return clientcontrol.PlatformTunnelStopResult{
+		Mode:    req.Mode,
+		Stopped: true,
+		Message: "Android VPN Service disconnected.",
+	}, nil
+}
+
 func (c *androidVPNServiceController) finishStartup(
 	ctx context.Context,
 	req clientcontrol.PlatformTunnelStartRequest,
@@ -321,6 +350,12 @@ func (c *androidVPNServiceController) takeStartupAttempt(startupAttemptID string
 	}
 	delete(c.attempts, strings.TrimSpace(startupAttemptID))
 	return attempt, true
+}
+
+func (c *androidVPNServiceController) clearStartupAttempts() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	clear(c.attempts)
 }
 
 func capabilityCheckFailure(

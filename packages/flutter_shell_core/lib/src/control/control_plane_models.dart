@@ -1301,6 +1301,41 @@ class PlatformTunnelStartResult {
   }
 }
 
+class PlatformTunnelStopResult {
+  const PlatformTunnelStopResult({
+    required this.mode,
+    required this.stopped,
+    this.message = '',
+  });
+
+  factory PlatformTunnelStopResult.fromJson(Map<String, dynamic> json) {
+    final mode = _requirePlatformTunnelMode(json['mode']);
+    final stopped = json['stopped'] as bool? ?? false;
+    if (!stopped) {
+      throw const FormatException(
+        'platform tunnel stop result missing stopped=true',
+      );
+    }
+    return PlatformTunnelStopResult(
+      mode: mode,
+      stopped: stopped,
+      message: json['message'] as String? ?? '',
+    );
+  }
+
+  final PlatformTunnelMode mode;
+  final bool stopped;
+  final String message;
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{
+      'mode': mode.value,
+      'stopped': stopped,
+      'message': message.isEmpty ? null : message,
+    });
+  }
+}
+
 class FailureInfo {
   const FailureInfo({this.stage, this.message, this.notImplemented = false});
 

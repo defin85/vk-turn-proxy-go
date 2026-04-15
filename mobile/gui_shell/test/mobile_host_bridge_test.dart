@@ -238,6 +238,26 @@ void main() {
   );
 
   test(
+    'mobile host bridge forwards typed platform tunnel stop results',
+    () async {
+      final api = _ReadyControlPlaneApi();
+      final bridge = await MobileHostBridgeFactory.fromEnvironment(
+        configuredBaseUrl: 'http://127.0.0.1:7777',
+        clientFactory: (_) => api,
+      );
+
+      final result = await bridge.stopPlatformTunnel(
+        mode: PlatformTunnelMode.appleNetworkExtension,
+      );
+
+      expect(result.stopped, isTrue);
+      expect(api.stopPlatformTunnelModes, <PlatformTunnelMode>[
+        PlatformTunnelMode.appleNetworkExtension,
+      ]);
+    },
+  );
+
+  test(
     'mobile host bridge requests native platform tunnel permission',
     () async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -582,6 +602,8 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
   final List<String?> startPlatformTunnelResolutionIDs = <String?>[];
   final List<RuntimeDefaults?> startPlatformTunnelRuntimeDefaults =
       <RuntimeDefaults?>[];
+  final List<PlatformTunnelMode> stopPlatformTunnelModes =
+      <PlatformTunnelMode>[];
 
   @override
   Future<ChallengeRecord> cancelChallenge(String challengeId) {
@@ -673,6 +695,18 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
       missingPrerequisite: PlatformTunnelPrerequisite.permission,
       startupAttemptId: startupAttemptId,
       message: 'native bridge does not implement tunnel resume yet',
+    );
+  }
+
+  @override
+  Future<PlatformTunnelStopResult> stopPlatformTunnel({
+    required PlatformTunnelMode mode,
+  }) async {
+    stopPlatformTunnelModes.add(mode);
+    return PlatformTunnelStopResult(
+      mode: mode,
+      stopped: true,
+      message: '${mode.label} disconnected.',
     );
   }
 

@@ -341,6 +341,29 @@ func Handler(host *Host) http.Handler {
 		}
 		writeJSON(w, http.StatusOK, result)
 	})
+	mux.HandleFunc("/v1/platform-tunnels/stop", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeMethodNotAllowed(w, r.Method)
+			return
+		}
+		var req PlatformTunnelStopRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_json", err)
+			return
+		}
+		result, err := host.StopPlatformTunnel(context.WithoutCancel(r.Context()), req)
+		if err != nil {
+			switch {
+			case errors.Is(err, ErrPlatformTunnelModeRequired),
+				errors.Is(err, ErrPlatformTunnelModeUnknown):
+				writeError(w, http.StatusBadRequest, "platform_tunnel_invalid", err)
+			default:
+				writeError(w, http.StatusInternalServerError, "platform_tunnel_stop_failed", err)
+			}
+			return
+		}
+		writeJSON(w, http.StatusOK, result)
+	})
 	mux.HandleFunc("/v1/sessions/", func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/v1/sessions/")
 		if path == "" {

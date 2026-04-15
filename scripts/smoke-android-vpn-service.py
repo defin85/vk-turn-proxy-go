@@ -234,8 +234,13 @@ def ensure_vpn_visible(adb: str, serial: str, app_uid: int) -> str:
     output = adb_shell(adb, serial, "dumpsys connectivity")
     if "type: VPN[" not in output:
         raise ToolError("android_vpn_service returned ready=true but dumpsys connectivity does not show VPN[]")
-    if f"OwnerUid: {app_uid}" not in output:
-        raise ToolError(f"android_vpn_service returned ready=true but VPN owner uid is not {app_uid}")
+    owner_uid = f"OwnerUid: {app_uid}"
+    establishing_uid = f"EstablishingAppUid: {app_uid}"
+    if owner_uid not in output and establishing_uid not in output:
+        raise ToolError(
+            "android_vpn_service returned ready=true but dumpsys connectivity "
+            f"does not attribute the VPN to uid {app_uid}"
+        )
     return output
 
 

@@ -53,6 +53,12 @@ func WithPlatformTunnelResumer(resume func(context.Context, PlatformTunnelResume
 	}
 }
 
+func WithPlatformTunnelStopper(stop func(context.Context, PlatformTunnelStopRequest) (PlatformTunnelStopResult, error)) Option {
+	return func(cfg *hostConfig) {
+		cfg.stopTunnel = stop
+	}
+}
+
 func normalizePlatformTunnelCapabilities(capabilities []PlatformTunnelCapability, build BuildIdentity) ([]PlatformTunnelCapability, error) {
 	snapshot := clonePlatformTunnelCapabilities(capabilities)
 	if len(snapshot) == 0 {
@@ -409,6 +415,18 @@ func normalizePlatformTunnelResumeRequest(req PlatformTunnelResumeRequest) (Plat
 	normalized.StartupAttemptID = strings.TrimSpace(normalized.StartupAttemptID)
 	if normalized.StartupAttemptID == "" {
 		return PlatformTunnelResumeRequest{}, ErrPlatformTunnelStartupAttemptRequired
+	}
+	return normalized, nil
+}
+
+func normalizePlatformTunnelStopRequest(req PlatformTunnelStopRequest) (PlatformTunnelStopRequest, error) {
+	normalized := req
+	normalized.Mode = PlatformTunnelMode(strings.TrimSpace(string(normalized.Mode)))
+	if normalized.Mode == "" {
+		return PlatformTunnelStopRequest{}, ErrPlatformTunnelModeRequired
+	}
+	if !isKnownPlatformTunnelMode(normalized.Mode) {
+		return PlatformTunnelStopRequest{}, ErrPlatformTunnelModeUnknown
 	}
 	return normalized, nil
 }

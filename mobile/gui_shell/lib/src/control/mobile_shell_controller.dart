@@ -877,6 +877,15 @@ class MobileShellController extends ChangeNotifier {
     });
   }
 
+  Future<void> stopPlatformTunnel(PlatformTunnelMode mode) async {
+    await _runBridgeMutation(() async {
+      final result = await bridge.stopPlatformTunnel(mode: mode);
+      _platformTunnelResults.remove(mode);
+      final message = result.message.trim();
+      notice = message.isEmpty ? '${mode.label} disconnected.' : message;
+    });
+  }
+
   ChallengeRecord? activeChallengeFor(SessionRecord session) {
     final challengeID = session.activeChallengeId;
     return _activeChallengeById(challengeID);
