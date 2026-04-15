@@ -41,3 +41,32 @@ The system SHALL validate Android route exclusion and DNS bypass policy before c
 - **THEN** startup returns `ready=false`
 - **AND** it reports `runtime_attach` as the failing stage
 - **AND** the host tears down the partial Android VPN resources before returning failure
+
+### Requirement: Android `android_vpn_service` app-routing policy is explicit and fail-closed
+
+The system SHALL treat Android app-routing scope as an explicit startup policy
+for the first `android_vpn_service` path instead of assuming that every Android
+VPN mode captures all apps equally.
+
+#### Scenario: Packaged Android host starts with an explicit selected-app policy
+
+- **GIVEN** a packaged Android host starting `android_vpn_service`
+- **AND** the documented startup request chooses one supported
+  `application_routing_policy` such as `all_apps`, `allowed_packages`, or
+  `disallowed_packages`
+- **WHEN** startup validates route and package policy together
+- **THEN** the host applies that documented app-scope policy before claiming
+  readiness
+- **AND** the mobile shell can report whether the mode covers all apps or only
+  the selected app set
+
+#### Scenario: Android app-routing policy is invalid or mixed
+
+- **GIVEN** a startup request for `android_vpn_service`
+- **AND** the request mixes allowlist and denylist package semantics, or names
+  one or more invalid packages
+- **WHEN** the packaged Android host validates startup prerequisites
+- **THEN** startup returns `ready=false`
+- **AND** it reports `route_validate` as the failing stage
+- **AND** it reports `app_routing_policy` as the missing prerequisite
+- **AND** the host does not silently widen the scope to full-device routing

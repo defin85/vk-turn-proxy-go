@@ -63,14 +63,15 @@ func (e *ResolutionActionError) Unwrap() error {
 }
 
 type managedResolution struct {
-	snapshot   Resolution
-	secret     provider.Resolution
-	descriptor ProviderDescriptor
-	cancel     context.CancelFunc
-	done       chan struct{}
-	input      StartResolutionRequest
-	events     []Event
-	challenges []Challenge
+	snapshot           Resolution
+	secret             provider.Resolution
+	wireGuardTurnLease *WireGuardTurnExecutionLease
+	descriptor         ProviderDescriptor
+	cancel             context.CancelFunc
+	done               chan struct{}
+	input              StartResolutionRequest
+	events             []Event
+	challenges         []Challenge
 }
 
 func (h *Host) StartResolution(ctx context.Context, req StartResolutionRequest) (Resolution, error) {
@@ -309,6 +310,35 @@ func (h *Host) MaterializeResolutionWithPlan(
 		selectedPlan.Plan.CarrierFamily != RuntimeCarrierFamilyTURNDTLSOverlay ||
 		selectedPlan.Plan.AccessMethod != RuntimeAccessMethodTURNCredentials ||
 		strings.TrimSpace(string(selectedPlan.Plan.HostAdapter)) != "" {
+		if isStrictWireGuardTurnExecutionPlan(selectedPlan.Plan) {
+			lease, materializeErr := h.materializeWireGuardTurnLease(
+				ctx,
+				resolutionID,
+				*selectedPlan,
+				secret.Credentials,
+				defaults,
+			)
+			if materializeErr != nil {
+				return Session{}, &ResolutionActionError{
+					Action: ArtifactActionStartOnThisDevice,
+					Plan:   cloneRuntimeExecutionPlan(&selectedPlan.Plan),
+					Err:    materializeErr,
+				}
+			}
+			h.mu.Lock()
+			if managed, ok := h.resolutions[resolutionID]; ok {
+				managed.wireGuardTurnLease = cloneWireGuardTurnExecutionLease(lease)
+			}
+			h.mu.Unlock()
+			return Session{}, &ResolutionActionError{
+				Action: ArtifactActionStartOnThisDevice,
+				Plan:   cloneRuntimeExecutionPlan(&selectedPlan.Plan),
+				Err: fmt.Errorf(
+					"%w: strict TURN datagram WireGuard carrier lease materialized but this host does not yet implement same-device startup for that execution plan",
+					errRuntimeExecutionPlanUnavailable,
+				),
+			}
+		}
 		return Session{}, &ResolutionActionError{
 			Action: ArtifactActionStartOnThisDevice,
 			Plan:   cloneRuntimeExecutionPlan(&selectedPlan.Plan),
@@ -387,6 +417,7 @@ func (h *Host) finishResolutionSuccess(resolutionID string, resolved provider.Re
 		return
 	}
 	managed.secret = resolved
+	managed.wireGuardTurnLease = nil
 	managed.snapshot.Provider = firstNonEmpty(strings.TrimSpace(resolved.Metadata["provider"]), managed.snapshot.Provider)
 	managed.snapshot.ResolutionMethod = strings.TrimSpace(resolved.Metadata["resolution_method"])
 	managed.snapshot.Input.LinkRedacted = firstNonEmpty(redactedLinkFromArtifact(resolved.Artifact), managed.snapshot.Input.LinkRedacted)
@@ -537,6 +568,7 @@ func (h *Host) expireResolutionLocked(managed *managedResolution) *Event {
 	managed.snapshot.ActiveChallengeID = ""
 	managed.snapshot.UpdatedAt = now
 	managed.snapshot.ExpiredAt = &now
+	managed.wireGuardTurnLease = nil
 	if managed.snapshot.Artifact != nil {
 		managed.snapshot.Artifact.Actions = nil
 	}

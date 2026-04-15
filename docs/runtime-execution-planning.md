@@ -33,6 +33,35 @@ It remains distinct from packaged system-tunnel work.
 Current desktop and mobile hosts may report these documented `wireguard_native` plans as unavailable for their target mode.
 That is intentional: the contract says which packaged path is in scope, not that it already works.
 
+## Strict TURN-datagram WireGuard carrier boundary
+
+- The host now treats the strict TURN-backed `wireguard_native` path as a
+  separate internal carrier/materialization boundary instead of as a synonym
+  for the current DTLS overlay runtime.
+- Ordinary resolution reads may advertise the strict planning tuple, but they do
+  not expose a startable carrier lease or raw WireGuard material.
+- A strict carrier lease stays host-owned and secret-bearing. Private keys,
+  peer keys, and carrier-secret material must not appear in ordinary reads,
+  events, diagnostics, or persisted shell state.
+- Packaged `wireguard_native` mode reports are fail-closed: a host adapter is
+  not enough on its own. If the strict carrier/materializer is absent, packaged
+  host modes must keep that execution plan unavailable.
+- The explicit remote role for this path remains under the `turn_server`
+  endpoint family, but it is a distinct WireGuard-over-TURN datagram role, not
+  proof that the current DTLS overlay server already satisfies the packaged
+  path.
+
+## Evidence bar for support claims
+
+Support claims for the strict TURN-backed `wireguard_native` path need repo-owned
+evidence for all of the following:
+
+- host-owned lease materialization without leaking raw WireGuard or carrier
+  secrets through ordinary shell-facing state
+- fail-closed startup when the carrier/materializer or remote role is missing
+- explicit carrier truth rather than inferred DTLS overlay compatibility
+- real WireGuard payload traffic over the strict `turn_datagram` path
+
 ## Remote endpoint ownership
 
 - TURN-backed carriers keep using the current `turn_server` family.
@@ -55,3 +84,8 @@ The current `turn-server` role is not a universal backend for all future executi
 2. `add-18-desktop-platform-tunnel-ready-paths`: ship one desktop packaged host path that turns the documented TURN-backed `wireguard_native` plan into a real desktop adapter ready path.
 3. Experimental `webrtc_datachannel`: define a real remote endpoint, framing, and lifecycle verification path before any host advertises it as startable.
 4. Foreign-core engines: add packaging, lifecycle ownership, and verification evidence before any host advertises `proxy_core_adapter` or `trusttunnel_native` as startable.
+
+Android and desktop follow-on work must consume this prerequisite carrier
+boundary instead of replacing it with the current
+`turn_dtls_overlay + custom_packet_overlay` runtime or with external WireGuard
+compatibility workflows.

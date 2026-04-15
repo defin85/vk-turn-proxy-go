@@ -71,43 +71,45 @@ const (
 )
 
 type hostConfig struct {
-	logger                   *slog.Logger
-	registry                 *provider.Registry
-	build                    BuildIdentity
-	now                      func() time.Time
-	newID                    func() string
-	newSessionID             func() string
-	newRunner                session.RunnerFactory
-	resolveChallengeMetadata func(provider.InteractiveChallenge) provider.InteractiveChallengeMetadata
-	startContinuation        func(context.Context, provider.InteractiveChallenge) (browserContinuation, error)
-	historyLimit             int
-	mode                     challengeMode
-	cliStdin                 io.Reader
-	cliStderr                io.Writer
-	promptOpts               providerprompt.Options
-	platformTunnels          []PlatformTunnelCapability
-	tunnelsConfigured        bool
-	startTunnel              func(context.Context, PlatformTunnelStartRequest) (PlatformTunnelStartResult, error)
+	logger                    *slog.Logger
+	registry                  *provider.Registry
+	build                     BuildIdentity
+	now                       func() time.Time
+	newID                     func() string
+	newSessionID              func() string
+	newRunner                 session.RunnerFactory
+	resolveChallengeMetadata  func(provider.InteractiveChallenge) provider.InteractiveChallengeMetadata
+	startContinuation         func(context.Context, provider.InteractiveChallenge) (browserContinuation, error)
+	historyLimit              int
+	mode                      challengeMode
+	cliStdin                  io.Reader
+	cliStderr                 io.Writer
+	promptOpts                providerprompt.Options
+	platformTunnels           []PlatformTunnelCapability
+	tunnelsConfigured         bool
+	wireGuardTurnMaterializer WireGuardTurnMaterializer
+	startTunnel               func(context.Context, PlatformTunnelStartRequest) (PlatformTunnelStartResult, error)
 }
 
 type Host struct {
-	mu                       sync.Mutex
-	logger                   *slog.Logger
-	registry                 *provider.Registry
-	build                    BuildIdentity
-	now                      func() time.Time
-	newID                    func() string
-	newSessionID             func() string
-	newRunner                session.RunnerFactory
-	resolveChallengeMetadata func(provider.InteractiveChallenge) provider.InteractiveChallengeMetadata
-	startContinuation        func(context.Context, provider.InteractiveChallenge) (browserContinuation, error)
-	historyLimit             int
-	mode                     challengeMode
-	cliStdin                 io.Reader
-	cliStderr                io.Writer
-	promptOpts               providerprompt.Options
-	platformTunnels          []PlatformTunnelCapability
-	startTunnel              func(context.Context, PlatformTunnelStartRequest) (PlatformTunnelStartResult, error)
+	mu                        sync.Mutex
+	logger                    *slog.Logger
+	registry                  *provider.Registry
+	build                     BuildIdentity
+	now                       func() time.Time
+	newID                     func() string
+	newSessionID              func() string
+	newRunner                 session.RunnerFactory
+	resolveChallengeMetadata  func(provider.InteractiveChallenge) provider.InteractiveChallengeMetadata
+	startContinuation         func(context.Context, provider.InteractiveChallenge) (browserContinuation, error)
+	historyLimit              int
+	mode                      challengeMode
+	cliStdin                  io.Reader
+	cliStderr                 io.Writer
+	promptOpts                providerprompt.Options
+	platformTunnels           []PlatformTunnelCapability
+	wireGuardTurnMaterializer WireGuardTurnMaterializer
+	startTunnel               func(context.Context, PlatformTunnelStartRequest) (PlatformTunnelStartResult, error)
 
 	profiles        map[string]Profile
 	providerConfigs map[string]ProviderConfig
@@ -203,34 +205,39 @@ func New(opts ...Option) *Host {
 	if platformTunnelWarn != nil {
 		cfg.logger.Warn("invalid platform_tunnels contract configured; failing closed", "error", platformTunnelWarn)
 	}
-	cfg.platformTunnels = normalizedPlatformTunnels
+	cfg.platformTunnels = applyWireGuardTurnCarrierAvailability(
+		normalizedPlatformTunnels,
+		cfg.build,
+		cfg.wireGuardTurnMaterializer,
+	)
 	if cfg.startTunnel == nil {
 		cfg.startTunnel = defaultPlatformTunnelStarter(cfg.platformTunnels)
 	}
 
 	return &Host{
-		logger:                   cfg.logger,
-		registry:                 cfg.registry,
-		build:                    cfg.build,
-		now:                      cfg.now,
-		newID:                    cfg.newID,
-		newSessionID:             cfg.newSessionID,
-		newRunner:                cfg.newRunner,
-		resolveChallengeMetadata: cfg.resolveChallengeMetadata,
-		startContinuation:        cfg.startContinuation,
-		historyLimit:             cfg.historyLimit,
-		mode:                     cfg.mode,
-		cliStdin:                 cfg.cliStdin,
-		cliStderr:                cfg.cliStderr,
-		promptOpts:               cfg.promptOpts,
-		platformTunnels:          cfg.platformTunnels,
-		startTunnel:              cfg.startTunnel,
-		profiles:                 make(map[string]Profile),
-		providerConfigs:          make(map[string]ProviderConfig),
-		resolutions:              make(map[string]*managedResolution),
-		sessions:                 make(map[string]*managedSession),
-		challenges:               make(map[string]*managedChallenge),
-		subscribers:              make(map[uint64]chan Event),
+		logger:                    cfg.logger,
+		registry:                  cfg.registry,
+		build:                     cfg.build,
+		now:                       cfg.now,
+		newID:                     cfg.newID,
+		newSessionID:              cfg.newSessionID,
+		newRunner:                 cfg.newRunner,
+		resolveChallengeMetadata:  cfg.resolveChallengeMetadata,
+		startContinuation:         cfg.startContinuation,
+		historyLimit:              cfg.historyLimit,
+		mode:                      cfg.mode,
+		cliStdin:                  cfg.cliStdin,
+		cliStderr:                 cfg.cliStderr,
+		promptOpts:                cfg.promptOpts,
+		platformTunnels:           cfg.platformTunnels,
+		wireGuardTurnMaterializer: cfg.wireGuardTurnMaterializer,
+		startTunnel:               cfg.startTunnel,
+		profiles:                  make(map[string]Profile),
+		providerConfigs:           make(map[string]ProviderConfig),
+		resolutions:               make(map[string]*managedResolution),
+		sessions:                  make(map[string]*managedSession),
+		challenges:                make(map[string]*managedChallenge),
+		subscribers:               make(map[uint64]chan Event),
 	}
 }
 

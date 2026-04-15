@@ -15,8 +15,9 @@ That means:
 
 - Deliver the first real `ready=true` platform tunnel mode through Android `VpnService`
 - Reuse the existing typed control-plane capability and startup result surface instead of inventing an Android-only tunnel protocol
-- Keep route preparation, packet capture, and Android-specific DNS or bypass logic inside the packaged Android host boundary
+- Keep route preparation, packet capture, Android-specific DNS or bypass logic, and application-routing policy inside the packaged Android host boundary
 - Preserve fail-closed behavior for denied permission, invalid route policy, and runtime-attach failures
+- Support explicit app-routing scope for the first Android path without silently widening from selected apps to full-device routing
 - Require repo-owned smoke and failure evidence before the repository claims Android system tunnel support
 
 ## Non-Goals
@@ -25,6 +26,7 @@ That means:
 - A generic mobile platform tunnel abstraction that hides Android-specific constraints
 - Mixing Android tunnel lifecycle logic into provider or transport packages
 - Claiming background-lifecycle parity beyond the documented supported Android tunnel workflow
+- Attempting to hide `VpnService` usage from Android platform APIs, system diagnostics, or third-party VPN-detection heuristics
 
 ## Decisions
 
@@ -35,7 +37,7 @@ Using that existing path minimizes new packaging unknowns and keeps the first su
 
 ### Decision: Keep the ready path packaged-host-owned
 
-The packaged Android host and `VpnService` layer must own permission handling, route preparation, DNS bypass behavior, packet capture, and teardown.
+The packaged Android host and `VpnService` layer must own permission handling, route preparation, DNS bypass behavior, packet capture, application-routing policy, and teardown.
 The Flutter shell remains a typed consumer of capability and startup results instead of a second tunnel orchestrator.
 
 ### Decision: Capability reporting stays typed, while startup remains stage-aware
@@ -48,6 +50,28 @@ Startup must still name the failing stage and prerequisite explicitly for permis
 The supported Android mode must define which control-plane, provider-challenge, and underlay flows bypass the VPN path so startup and challenge continuation do not deadlock themselves.
 If those exclusions or DNS bypass rules cannot be applied safely, startup must fail before claiming readiness.
 
+### Decision: App-routing policy is explicit, validated, and fail-closed
+
+The first Android path must support explicit operator-chosen app scope instead
+of assuming that `VpnService` always captures all apps.
+The packaged host should own that scope through one documented policy:
+
+- `all_apps`
+- `allowed_packages`
+- `disallowed_packages`
+
+Mixed allowlist and denylist semantics must be rejected.
+If a referenced package is invalid, missing, or cannot be applied to the VPN
+builder safely, startup must fail before claiming readiness.
+
+### Decision: Android `VpnService` support stays honest about detection surface
+
+This change delivers a real Android system-tunnel path, not a stealth path.
+If Android platform APIs, routes, DNS state, or other diagnostics can observe
+that a VPN is active, the repository must not claim otherwise.
+Any future work that needs a smaller or different detection surface belongs to a
+separate execution-mode change instead of being smuggled into `add-17`.
+
 ### Decision: Ready state requires host bring-up and runtime attach proof
 
 The repository must not claim Android system tunnel support merely because a `VpnService` instance starts.
@@ -57,13 +81,14 @@ The first supported ready path is only complete when the Android host has finish
 
 - Android `VpnService` lifecycle and permission prompts can make startup sequencing more fragile than the current loopback-host path
 - Route exclusion mistakes can break challenge continuation, control-plane access, or required underlay traffic
+- App-scoped routing can widen split-routing and leak risk if package policy and underlay exclusions are not validated together
 - A narrow first Android path may expose product pressure to generalize too early to iOS or desktop modes
 - If the Android host boundary becomes too wide, platform-specific hacks can leak into the shared runtime contract
 
 ## Validation Plan
 
 - Host and bridge tests for typed Android capability reporting and stage-aware startup results
-- Android-specific fail-closed coverage for permission denial, invalid exclusion or DNS policy, and runtime-attach cleanup
+- Android-specific fail-closed coverage for permission denial, invalid exclusion or DNS policy, invalid app-routing policy, and runtime-attach cleanup
 - At least one repo-owned packaged Android smoke that proves `android_vpn_service` can return `ready=true` on the documented supported target
-- Updated runtime and operator docs that describe only the verified Android mode and its evidence requirements
+- Updated runtime and operator docs that describe only the verified Android mode, its app-scope policy, and its evidence requirements
 - `openspec validate add-17-android-vpn-service-ready-path --strict --no-interactive`

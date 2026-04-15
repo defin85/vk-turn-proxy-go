@@ -744,6 +744,51 @@ func TestHostNormalizesAvailablePlatformTunnelWithoutSatisfiedPrerequisitesToFai
 	}
 }
 
+func TestHostDowngradesSupportedWireGuardPlatformTunnelWithoutCarrierMaterializer(t *testing.T) {
+	host := New(
+		WithBuildIdentity(testBuildIdentity()),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{{
+			Mode:      PlatformTunnelModeLinuxTun,
+			Available: true,
+			SatisfiedPrerequisites: []PlatformTunnelPrerequisite{
+				PlatformTunnelPrerequisiteRouteExclusion,
+			},
+		}}),
+	)
+
+	info := host.Info()
+	if len(info.PlatformTunnels) != 1 {
+		t.Fatalf("platform_tunnels len = %d, want 1", len(info.PlatformTunnels))
+	}
+	capability := info.PlatformTunnels[0]
+	if capability.Available {
+		t.Fatal("platform_tunnels[0].available = true, want false without carrier materializer")
+	}
+	if capability.MissingPrerequisite != PlatformTunnelPrerequisiteHostImplementation {
+		t.Fatalf(
+			"platform_tunnels[0].missing_prerequisite = %q, want %q",
+			capability.MissingPrerequisite,
+			PlatformTunnelPrerequisiteHostImplementation,
+		)
+	}
+	if len(capability.ExecutionPlans) != 1 {
+		t.Fatalf("platform_tunnels[0].execution_plans len = %d, want 1", len(capability.ExecutionPlans))
+	}
+	if capability.ExecutionPlans[0].SupportState != RuntimeExecutionPlanSupportStateUnavailable {
+		t.Fatalf(
+			"platform_tunnels[0].execution_plans[0].support_state = %q, want %q",
+			capability.ExecutionPlans[0].SupportState,
+			RuntimeExecutionPlanSupportStateUnavailable,
+		)
+	}
+	if !strings.Contains(strings.ToLower(capability.ExecutionPlans[0].Message), "carrier/materializer") {
+		t.Fatalf(
+			"platform_tunnels[0].execution_plans[0].message = %q, want carrier/materializer detail",
+			capability.ExecutionPlans[0].Message,
+		)
+	}
+}
+
 func TestHostStartPlatformTunnelRejectsInvalidStartupResult(t *testing.T) {
 	host := New(
 		WithBuildIdentity(testBuildIdentity()),
@@ -1266,6 +1311,140 @@ func TestHostStartsResolvesExportsAndMaterializesResolution(t *testing.T) {
 	}
 	if _, err := host.WaitSession(context.Background(), ready.ID); err != nil {
 		t.Fatalf("WaitSession() error = %v", err)
+	}
+}
+
+func TestHostMaterializesWireGuardLeaseInternallyWithoutLeakingOrdinaryReads(t *testing.T) {
+	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
+	host := New(
+		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+		WithBuildIdentity(testBuildIdentity()),
+		withNow(func() time.Time { return now }),
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name: "vk",
+			descriptor: provider.ProviderDescriptor{
+				ID:               "vk",
+				DisplayName:      "VK Calls",
+				InputKind:        provider.ProviderInputKindLink,
+				BrowserPolicy:    provider.ProviderBrowserPolicyExternalRequired,
+				ArtifactFamilies: []provider.ArtifactFamily{provider.ArtifactFamilyGenericTURN},
+				CapabilityHints: provider.ProviderCapabilityHints{
+					PotentialActions: []provider.ArtifactAction{
+						provider.ArtifactActionStartOnThisDevice,
+					},
+					RedactionPolicy: provider.SummaryOnlyArtifactRedactionPolicy(),
+				},
+			},
+			resolve: func(ctx context.Context, link string) (provider.Resolution, error) {
+				return provider.Resolution{
+					Credentials: provider.Credentials{
+						Username: "turn-user",
+						Password: "turn-pass",
+						Address:  "turn.example.test:3478",
+						TTL:      30 * time.Minute,
+					},
+					Metadata: map[string]string{
+						"provider":          "vk",
+						"resolution_method": "staged_http",
+					},
+				}, nil
+			},
+		})),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{{
+			Mode:      PlatformTunnelModeLinuxTun,
+			Available: true,
+			SatisfiedPrerequisites: []PlatformTunnelPrerequisite{
+				PlatformTunnelPrerequisiteRouteExclusion,
+			},
+		}}),
+		WithWireGuardTurnMaterializer(func(ctx context.Context, req WireGuardTurnMaterializeRequest) (*WireGuardTurnExecutionLease, error) {
+			expiresAt := now.Add(30 * time.Minute)
+			return &WireGuardTurnExecutionLease{
+				ResolutionID:         req.ResolutionID,
+				AccessMethod:         req.Descriptor.Plan.AccessMethod,
+				CarrierFamily:        req.Descriptor.Plan.CarrierFamily,
+				EngineFamily:         req.Descriptor.Plan.EngineFamily,
+				RemoteEndpointFamily: req.Descriptor.RemoteEndpointFamily,
+				RemoteEndpointRole:   WireGuardTurnRemoteEndpointRoleDatagramTermination,
+				TURNServerAddress:    req.Credentials.Address,
+				TURNUsername:         req.Credentials.Username,
+				TURNPassword:         req.Credentials.Password,
+				ClientPrivateKey:     "privkey-test-123",
+				ClientAddresses:      []string{"10.99.0.2/32"},
+				PeerPublicKey:        "peerpub-test-123",
+				AllowedIPs:           []string{"0.0.0.0/0"},
+				DNSServers:           []string{"1.1.1.1"},
+				MTU:                  1280,
+				ExpiresAt:            &expiresAt,
+			}, nil
+		}),
+	)
+
+	resolutionState, err := host.StartResolution(context.Background(), StartResolutionRequest{
+		Provider: "vk",
+		Input: &ProviderInputEnvelope{
+			Kind: ProviderInputKindLink,
+			Link: "https://vk.com/call/join/test-token",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartResolution() error = %v", err)
+	}
+
+	resolved := waitForResolutionState(t, host, resolutionState.ID, ResolutionStateResolved)
+	selectedPlan := resolved.Artifact.Actions[0].ExecutionPlans[1].Plan
+
+	_, err = host.MaterializeResolutionWithPlan(context.Background(), resolved.ID, RuntimeDefaults{
+		ListenAddr:  reserveUDPAddr(t),
+		PeerAddr:    "127.0.0.1:56000",
+		Connections: 1,
+		Mode:        TransportModeAuto,
+		UseDTLS:     boolRef(true),
+	}, &selectedPlan)
+	if err == nil {
+		t.Fatal("MaterializeResolutionWithPlan() error = nil, want unavailable strict carrier startup")
+	}
+	var actionErr *ResolutionActionError
+	if !errors.As(err, &actionErr) {
+		t.Fatalf("MaterializeResolutionWithPlan() error = %v, want ResolutionActionError", err)
+	}
+	if !errors.Is(err, errRuntimeExecutionPlanUnavailable) {
+		t.Fatalf("MaterializeResolutionWithPlan() error = %v, want errRuntimeExecutionPlanUnavailable", err)
+	}
+
+	host.mu.Lock()
+	managed := host.resolutions[resolved.ID]
+	lease := cloneWireGuardTurnExecutionLease(managed.wireGuardTurnLease)
+	host.mu.Unlock()
+	if lease == nil {
+		t.Fatal("managed resolution wireGuardTurnLease = nil, want internal lease")
+	}
+	if lease.ClientPrivateKey != "privkey-test-123" {
+		t.Fatalf("managed resolution lease client_private_key = %q, want privkey-test-123", lease.ClientPrivateKey)
+	}
+	if lease.RemoteEndpointRole != WireGuardTurnRemoteEndpointRoleDatagramTermination {
+		t.Fatalf("managed resolution lease remote_endpoint_role = %q, want %q", lease.RemoteEndpointRole, WireGuardTurnRemoteEndpointRoleDatagramTermination)
+	}
+
+	ordinary, err := host.Resolution(resolved.ID)
+	if err != nil {
+		t.Fatalf("Resolution() error = %v", err)
+	}
+	payload, err := json.Marshal(ordinary)
+	if err != nil {
+		t.Fatalf("json.Marshal(Resolution()) error = %v", err)
+	}
+	if strings.Contains(string(payload), "privkey-test-123") {
+		t.Fatalf("ordinary resolution payload leaked client private key: %s", payload)
+	}
+	if strings.Contains(string(payload), "peerpub-test-123") {
+		t.Fatalf("ordinary resolution payload leaked peer public key: %s", payload)
+	}
+	if ordinary.Artifact == nil || ordinary.Artifact.Summary.GenericTURN == nil {
+		t.Fatal("ordinary resolution artifact summary missing")
+	}
+	if ordinary.Artifact.Summary.GenericTURN.Address != "turn.example.test:3478" {
+		t.Fatalf("ordinary resolution address = %q, want turn.example.test:3478", ordinary.Artifact.Summary.GenericTURN.Address)
 	}
 }
 
