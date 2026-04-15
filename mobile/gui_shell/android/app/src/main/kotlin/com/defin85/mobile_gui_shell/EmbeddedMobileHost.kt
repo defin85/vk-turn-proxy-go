@@ -8,6 +8,8 @@ internal object EmbeddedMobileHostNative {
     external fun ensureStarted(): String?
     external fun lastError(): String?
     external fun stopEmbeddedHost()
+    external fun registerPlatformTunnelBridge(bridge: Any)
+    external fun clearPlatformTunnelBridge()
 }
 
 internal object EmbeddedMobileHost {
@@ -25,5 +27,13 @@ internal object EmbeddedMobileHost {
 
     fun stop() {
         EmbeddedMobileHostNative.stopEmbeddedHost()
+    }
+
+    fun registerPlatformTunnelBridge(bridge: Any) {
+        EmbeddedMobileHostNative.registerPlatformTunnelBridge(bridge)
+    }
+
+    fun clearPlatformTunnelBridge() {
+        EmbeddedMobileHostNative.clearPlatformTunnelBridge()
     }
 }

@@ -25,6 +25,9 @@ class MainActivity : FlutterActivity() {
     private var browserReturnSignalSink: EventChannel.EventSink? = null
     private val pendingBrowserReturnSignals = mutableListOf<Map<String, Any>>()
     private var pendingPlatformTunnelPermissionResult: MethodChannel.Result? = null
+    private val platformTunnelBridge by lazy {
+        AndroidPlatformTunnelBridge(applicationContext)
+    }
     private val platformTunnelPermissionLauncher: ActivityResultLauncher<Intent> =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             finishPlatformTunnelPermissionRequest(result.resultCode == Activity.RESULT_OK)
@@ -75,11 +78,13 @@ class MainActivity : FlutterActivity() {
                 },
             )
         }
+        EmbeddedMobileHost.registerPlatformTunnelBridge(platformTunnelBridge)
         emitBrowserReturnSignalFromIntent(intent)
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
         finishPlatformTunnelPermissionRequest(null)
+        EmbeddedMobileHost.clearPlatformTunnelBridge()
         EmbeddedMobileHost.stop()
         mobileHostBridgeChannel?.setMethodCallHandler(null)
         mobileHostBridgeChannel = null

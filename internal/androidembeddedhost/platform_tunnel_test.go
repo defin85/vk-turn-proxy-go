@@ -357,27 +357,27 @@ type fakeAndroidVPNServiceLifecycle struct {
 	cleanupCalls int
 }
 
-func (f *fakeAndroidVPNServiceLifecycle) AcquirePermission(_ context.Context) error {
+func (f *fakeAndroidVPNServiceLifecycle) AcquirePermission(_ context.Context, _ clientcontrol.PlatformTunnelStartRequest) error {
 	f.calls = append(f.calls, "acquire_permission")
 	return f.acquirePermissionErr
 }
 
-func (f *fakeAndroidVPNServiceLifecycle) ResumeAfterPermission(_ context.Context, _ string) error {
+func (f *fakeAndroidVPNServiceLifecycle) ResumeAfterPermission(_ context.Context, _ string, _ clientcontrol.PlatformTunnelStartRequest) error {
 	f.calls = append(f.calls, "resume_after_permission")
 	return f.resumePermissionErr
 }
 
-func (f *fakeAndroidVPNServiceLifecycle) ValidateRoutePolicy(_ context.Context) error {
+func (f *fakeAndroidVPNServiceLifecycle) ValidateRoutePolicy(_ context.Context, _ clientcontrol.PlatformTunnelStartRequest) error {
 	f.calls = append(f.calls, "validate_route_policy")
 	return f.validateRouteErr
 }
 
-func (f *fakeAndroidVPNServiceLifecycle) BringupHost(_ context.Context) error {
+func (f *fakeAndroidVPNServiceLifecycle) BringupHost(_ context.Context, _ clientcontrol.PlatformTunnelStartRequest) error {
 	f.calls = append(f.calls, "bringup_host")
 	return f.bringupErr
 }
 
-func (f *fakeAndroidVPNServiceLifecycle) AttachRuntime(_ context.Context) error {
+func (f *fakeAndroidVPNServiceLifecycle) AttachRuntime(_ context.Context, _ clientcontrol.PlatformTunnelStartRequest, _ *clientcontrol.RuntimeExecutionPlan) error {
 	f.calls = append(f.calls, "attach_runtime")
 	return f.attachErr
 }
@@ -461,19 +461,6 @@ func resumePlatformTunnel(
 		t.Fatalf("decode platform tunnel resume result: %v", err)
 	}
 	return result
-}
-
-func supportedAndroidVPNServiceCapability(message string) clientcontrol.PlatformTunnelCapability {
-	return clientcontrol.PlatformTunnelCapability{
-		Mode:      clientcontrol.PlatformTunnelModeAndroidVPNService,
-		Available: true,
-		SatisfiedPrerequisites: []clientcontrol.PlatformTunnelPrerequisite{
-			clientcontrol.PlatformTunnelPrerequisiteRouteExclusion,
-			clientcontrol.PlatformTunnelPrerequisiteDNSBypass,
-		},
-		ExecutionPlans: androidVPNServiceExecutionPlans(true, message),
-		Message:        strings.TrimSpace(message),
-	}
 }
 
 func assertAndroidVPNExecutionPlan(t *testing.T, plan *clientcontrol.RuntimeExecutionPlan) {

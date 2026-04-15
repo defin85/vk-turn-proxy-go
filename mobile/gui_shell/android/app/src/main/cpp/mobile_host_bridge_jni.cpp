@@ -11,6 +11,8 @@ using ensure_started_fn = char *(*)();
 using last_error_fn = char *(*)();
 using stop_fn = void (*)();
 using free_string_fn = void (*)(char *);
+using register_platform_tunnel_bridge_fn = void (*)(void *, void *);
+using clear_platform_tunnel_bridge_fn = void (*)(void *);
 
 struct HostLibrary {
     void *handle = nullptr;
@@ -18,6 +20,8 @@ struct HostLibrary {
     last_error_fn last_error = nullptr;
     stop_fn stop = nullptr;
     free_string_fn free_string = nullptr;
+    register_platform_tunnel_bridge_fn register_platform_tunnel_bridge = nullptr;
+    clear_platform_tunnel_bridge_fn clear_platform_tunnel_bridge = nullptr;
     std::string load_error;
 };
 
@@ -39,6 +43,12 @@ HostLibrary loadHostLibrary() {
         dlsym(library.handle, "AndroidEmbeddedHostStop"));
     library.free_string = reinterpret_cast<free_string_fn>(
         dlsym(library.handle, "AndroidEmbeddedHostFreeString"));
+    library.register_platform_tunnel_bridge =
+        reinterpret_cast<register_platform_tunnel_bridge_fn>(
+            dlsym(library.handle, "AndroidEmbeddedHostRegisterPlatformTunnelBridge"));
+    library.clear_platform_tunnel_bridge =
+        reinterpret_cast<clear_platform_tunnel_bridge_fn>(
+            dlsym(library.handle, "AndroidEmbeddedHostClearPlatformTunnelBridge"));
 
     if (library.ensure_started == nullptr || library.last_error == nullptr ||
         library.stop == nullptr || library.free_string == nullptr) {
@@ -99,5 +109,28 @@ Java_com_defin85_mobile_1gui_1shell_EmbeddedMobileHostNative_stopEmbeddedHost(JN
     HostLibrary &library = hostLibrary();
     if (library.stop != nullptr) {
         library.stop();
+    }
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_defin85_mobile_1gui_1shell_EmbeddedMobileHostNative_registerPlatformTunnelBridge(
+    JNIEnv *env,
+    jclass /*clazz*/,
+    jobject bridge
+) {
+    HostLibrary &library = hostLibrary();
+    if (library.register_platform_tunnel_bridge != nullptr && bridge != nullptr) {
+        library.register_platform_tunnel_bridge(env, bridge);
+    }
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_defin85_mobile_1gui_1shell_EmbeddedMobileHostNative_clearPlatformTunnelBridge(
+    JNIEnv *env,
+    jclass /*clazz*/
+) {
+    HostLibrary &library = hostLibrary();
+    if (library.clear_platform_tunnel_bridge != nullptr) {
+        library.clear_platform_tunnel_bridge(env);
     }
 }

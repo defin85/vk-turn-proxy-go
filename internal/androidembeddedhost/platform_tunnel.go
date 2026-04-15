@@ -16,18 +16,18 @@ type platformTunnelController interface {
 	Resume(context.Context, clientcontrol.PlatformTunnelResumeRequest) (clientcontrol.PlatformTunnelStartResult, error)
 }
 
-type androidVPNServiceLifecycle interface {
-	AcquirePermission(context.Context) error
-	ResumeAfterPermission(context.Context, string) error
-	ValidateRoutePolicy(context.Context) error
-	BringupHost(context.Context) error
-	AttachRuntime(context.Context) error
+type AndroidVPNServiceLifecycle interface {
+	AcquirePermission(context.Context, clientcontrol.PlatformTunnelStartRequest) error
+	ResumeAfterPermission(context.Context, string, clientcontrol.PlatformTunnelStartRequest) error
+	ValidateRoutePolicy(context.Context, clientcontrol.PlatformTunnelStartRequest) error
+	BringupHost(context.Context, clientcontrol.PlatformTunnelStartRequest) error
+	AttachRuntime(context.Context, clientcontrol.PlatformTunnelStartRequest, *clientcontrol.RuntimeExecutionPlan) error
 	Cleanup(context.Context) error
 }
 
 type androidVPNServiceController struct {
 	capability clientcontrol.PlatformTunnelCapability
-	lifecycle  androidVPNServiceLifecycle
+	lifecycle  AndroidVPNServiceLifecycle
 	mu         sync.Mutex
 	nextID     uint64
 	attempts   map[string]androidVPNServiceStartupAttempt
@@ -84,7 +84,7 @@ func defaultAndroidVPNServiceController(build clientcontrol.BuildIdentity) platf
 
 func newAndroidVPNServiceController(
 	capability clientcontrol.PlatformTunnelCapability,
-	lifecycle androidVPNServiceLifecycle,
+	lifecycle AndroidVPNServiceLifecycle,
 ) platformTunnelController {
 	normalized := capability
 	if normalized.Mode == "" {
@@ -151,7 +151,7 @@ func (c *androidVPNServiceController) Start(
 		), nil
 	}
 
-	if err := c.lifecycle.AcquirePermission(ctx); err != nil {
+	if err := c.lifecycle.AcquirePermission(ctx, req); err != nil {
 		var pending *androidVPNServicePermissionPendingError
 		if errors.As(err, &pending) {
 			attemptID := c.storeStartupAttempt(pending.attemptID, req, selectedPlanPtr)
@@ -174,7 +174,7 @@ func (c *androidVPNServiceController) Start(
 		)
 	}
 
-	return c.finishStartup(ctx, req.Mode, selectedPlanPtr)
+	return c.finishStartup(ctx, req, selectedPlanPtr)
 }
 
 func (c *androidVPNServiceController) Resume(
@@ -188,7 +188,7 @@ func (c *androidVPNServiceController) Resume(
 	if !ok {
 		return clientcontrol.PlatformTunnelStartResult{}, clientcontrol.ErrPlatformTunnelStartupAttemptNotFound
 	}
-	if err := c.lifecycle.ResumeAfterPermission(ctx, req.StartupAttemptID); err != nil {
+	if err := c.lifecycle.ResumeAfterPermission(ctx, req.StartupAttemptID, attempt.req); err != nil {
 		return startFailureResult(
 			attempt.req.Mode,
 			attempt.plan,
@@ -197,36 +197,36 @@ func (c *androidVPNServiceController) Resume(
 			err.Error(),
 		)
 	}
-	return c.finishStartup(ctx, attempt.req.Mode, attempt.plan)
+	return c.finishStartup(ctx, attempt.req, attempt.plan)
 }
 
 func (c *androidVPNServiceController) finishStartup(
 	ctx context.Context,
-	mode clientcontrol.PlatformTunnelMode,
+	req clientcontrol.PlatformTunnelStartRequest,
 	selectedPlanPtr *clientcontrol.RuntimeExecutionPlan,
 ) (clientcontrol.PlatformTunnelStartResult, error) {
 	cleanupRequired := true
-	if err := c.lifecycle.ValidateRoutePolicy(ctx); err != nil {
+	if err := c.lifecycle.ValidateRoutePolicy(ctx, req); err != nil {
 		return startFailureResult(
-			mode,
+			req.Mode,
 			selectedPlanPtr,
 			clientcontrol.PlatformTunnelStartupStageRouteValidate,
 			routePolicyPrerequisite(err),
 			withCleanupMessage(ctx, c.lifecycle, cleanupRequired, err.Error()),
 		)
 	}
-	if err := c.lifecycle.BringupHost(ctx); err != nil {
+	if err := c.lifecycle.BringupHost(ctx, req); err != nil {
 		return startFailureResult(
-			mode,
+			req.Mode,
 			selectedPlanPtr,
 			clientcontrol.PlatformTunnelStartupStageHostBringup,
 			clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
 			withCleanupMessage(ctx, c.lifecycle, cleanupRequired, err.Error()),
 		)
 	}
-	if err := c.lifecycle.AttachRuntime(ctx); err != nil {
+	if err := c.lifecycle.AttachRuntime(ctx, req, selectedPlanPtr); err != nil {
 		return startFailureResult(
-			mode,
+			req.Mode,
 			selectedPlanPtr,
 			clientcontrol.PlatformTunnelStartupStageRuntimeAttach,
 			clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
@@ -235,7 +235,7 @@ func (c *androidVPNServiceController) finishStartup(
 	}
 
 	return clientcontrol.PlatformTunnelStartResult{
-		Mode:          mode,
+		Mode:          req.Mode,
 		ExecutionPlan: selectedPlanPtr,
 		Ready:         true,
 	}, nil
@@ -312,7 +312,7 @@ func startFailureResult(
 
 func withCleanupMessage(
 	ctx context.Context,
-	lifecycle androidVPNServiceLifecycle,
+	lifecycle AndroidVPNServiceLifecycle,
 	cleanupRequired bool,
 	message string,
 ) string {
@@ -436,11 +436,19 @@ func newAndroidRouteExclusionError(message string) error {
 	}
 }
 
+func NewAndroidRouteExclusionError(message string) error {
+	return newAndroidRouteExclusionError(message)
+}
+
 func newAndroidDNSBypassError(message string) error {
 	return &androidVPNServiceRoutePolicyError{
 		prerequisite: clientcontrol.PlatformTunnelPrerequisiteDNSBypass,
 		message:      strings.TrimSpace(message),
 	}
+}
+
+func NewAndroidDNSBypassError(message string) error {
+	return newAndroidDNSBypassError(message)
 }
 
 func newAndroidAppRoutingPolicyError(message string) error {
@@ -450,10 +458,18 @@ func newAndroidAppRoutingPolicyError(message string) error {
 	}
 }
 
+func NewAndroidAppRoutingPolicyError(message string) error {
+	return newAndroidAppRoutingPolicyError(message)
+}
+
 func newAndroidPermissionPendingError(message string) error {
 	return &androidVPNServicePermissionPendingError{
 		message: strings.TrimSpace(message),
 	}
+}
+
+func NewAndroidPermissionPendingError(message string) error {
+	return newAndroidPermissionPendingError(message)
 }
 
 func firstNonEmpty(values ...string) string {
@@ -463,4 +479,17 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func supportedAndroidVPNServiceCapability(message string) clientcontrol.PlatformTunnelCapability {
+	return clientcontrol.PlatformTunnelCapability{
+		Mode:      clientcontrol.PlatformTunnelModeAndroidVPNService,
+		Available: true,
+		Message:   strings.TrimSpace(message),
+		SatisfiedPrerequisites: []clientcontrol.PlatformTunnelPrerequisite{
+			clientcontrol.PlatformTunnelPrerequisiteRouteExclusion,
+			clientcontrol.PlatformTunnelPrerequisiteDNSBypass,
+		},
+		ExecutionPlans: androidVPNServiceExecutionPlans(true, message),
+	}
 }

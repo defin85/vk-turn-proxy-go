@@ -87,6 +87,13 @@ func withPlatformTunnelController(controller platformTunnelController) Option {
 	}
 }
 
+func WithAndroidVPNServiceLifecycle(lifecycle AndroidVPNServiceLifecycle) Option {
+	return withPlatformTunnelController(newAndroidVPNServiceController(
+		supportedAndroidVPNServiceCapability(""),
+		lifecycle,
+	))
+}
+
 func (m *Manager) EnsureStarted() (string, error) {
 	m.mu.Lock()
 	if m.server != nil && m.listener != nil && m.baseURL != "" {

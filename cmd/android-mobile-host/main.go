@@ -10,12 +10,17 @@ import (
 	"unsafe"
 
 	"github.com/defin85/vk-turn-proxy-go/internal/androidembeddedhost"
+	"github.com/defin85/vk-turn-proxy-go/internal/androidplatformbridge"
 )
 
 var (
-	hostManager = androidembeddedhost.New()
-	stateMu     sync.Mutex
-	lastError   string
+	hostManager = androidembeddedhost.New(
+		androidembeddedhost.WithAndroidVPNServiceLifecycle(
+			androidplatformbridge.NewVPNServiceLifecycle(),
+		),
+	)
+	stateMu   sync.Mutex
+	lastError string
 )
 
 func main() {}
@@ -51,6 +56,16 @@ func AndroidEmbeddedHostStop() {
 //export AndroidEmbeddedHostFreeString
 func AndroidEmbeddedHostFreeString(value *C.char) {
 	C.free(unsafe.Pointer(value))
+}
+
+//export AndroidEmbeddedHostRegisterPlatformTunnelBridge
+func AndroidEmbeddedHostRegisterPlatformTunnelBridge(env unsafe.Pointer, bridge unsafe.Pointer) {
+	androidplatformbridge.Register(env, bridge)
+}
+
+//export AndroidEmbeddedHostClearPlatformTunnelBridge
+func AndroidEmbeddedHostClearPlatformTunnelBridge(env unsafe.Pointer) {
+	androidplatformbridge.Clear(env)
 }
 
 func setLastError(value string) {
