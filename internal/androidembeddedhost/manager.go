@@ -2,10 +2,12 @@ package androidembeddedhost
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -182,6 +184,7 @@ func currentBuildIdentity() clientcontrol.BuildIdentity {
 
 func newHostFactory(controller platformTunnelController) func(*slog.Logger) *clientcontrol.Host {
 	return func(logger *slog.Logger) *clientcontrol.Host {
+		materializer := defaultAndroidWireGuardTurnMaterializer()
 		opts := []clientcontrol.Option{
 			clientcontrol.WithLogger(logger),
 			clientcontrol.WithBuildIdentity(currentBuildIdentity()),
@@ -189,6 +192,9 @@ func newHostFactory(controller platformTunnelController) func(*slog.Logger) *cli
 			clientcontrol.WithInteractiveChallengeMetadataResolver(
 				mobileChallengeMetadata,
 			),
+		}
+		if materializer != nil {
+			opts = append(opts, clientcontrol.WithWireGuardTurnMaterializer(materializer))
 		}
 		if controller != nil {
 			opts = append(opts,
@@ -199,6 +205,32 @@ func newHostFactory(controller platformTunnelController) func(*slog.Logger) *cli
 				clientcontrol.WithPlatformTunnelResumer(controller.Resume),
 			)
 		}
-		return clientcontrol.New(opts...)
+		host := clientcontrol.New(opts...)
+		if androidController, ok := controller.(*androidVPNServiceController); ok {
+			androidController.setWireGuardTurnLeaseProvider(
+				func(
+					ctx context.Context,
+					req clientcontrol.PlatformTunnelStartRequest,
+					plan *clientcontrol.RuntimeExecutionPlan,
+				) (*clientcontrol.WireGuardTurnExecutionLease, error) {
+					if plan == nil {
+						return nil, fmt.Errorf("android platform tunnel runtime attach is missing an execution plan")
+					}
+					if strings.TrimSpace(req.ResolutionID) == "" {
+						return nil, fmt.Errorf("android platform tunnel startup requires resolution_id")
+					}
+					if req.RuntimeDefaults == nil {
+						return nil, fmt.Errorf("android platform tunnel startup requires runtime_defaults")
+					}
+					return host.MaterializeWireGuardTurnExecutionLease(
+						ctx,
+						req.ResolutionID,
+						*req.RuntimeDefaults,
+						plan,
+					)
+				},
+			)
+		}
+		return host
 	}
 }

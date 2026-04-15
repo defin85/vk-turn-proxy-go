@@ -68,6 +68,15 @@ func AndroidEmbeddedHostClearPlatformTunnelBridge(env unsafe.Pointer) {
 	androidplatformbridge.Clear(env)
 }
 
+//export AndroidEmbeddedHostSetAndroidWireGuardProfilePath
+func AndroidEmbeddedHostSetAndroidWireGuardProfilePath(value *C.char) {
+	if value == nil {
+		androidembeddedhost.SetAndroidWireGuardProfilePath("")
+		return
+	}
+	androidembeddedhost.SetAndroidWireGuardProfilePath(C.GoString(value))
+}
+
 func setLastError(value string) {
 	stateMu.Lock()
 	lastError = value

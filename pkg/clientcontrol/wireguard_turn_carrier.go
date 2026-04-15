@@ -31,6 +31,7 @@ type WireGuardTurnExecutionLease struct {
 	TURNServerAddress    string
 	TURNUsername         string
 	TURNPassword         string
+	PeerEndpointAddress  string
 	ClientPrivateKey     string
 	ClientAddresses      []string
 	PeerPublicKey        string
@@ -168,6 +169,9 @@ func validateWireGuardTurnExecutionLease(
 	if strings.TrimSpace(lease.TURNUsername) == "" || strings.TrimSpace(lease.TURNPassword) == "" {
 		return fmt.Errorf("%w: TURN credentials are incomplete", errWireGuardTurnCarrierLeaseInvalid)
 	}
+	if strings.TrimSpace(lease.PeerEndpointAddress) == "" {
+		return fmt.Errorf("%w: peer_endpoint_address is missing", errWireGuardTurnCarrierLeaseInvalid)
+	}
 	if strings.TrimSpace(lease.ClientPrivateKey) == "" {
 		return fmt.Errorf("%w: client_private_key is missing", errWireGuardTurnCarrierLeaseInvalid)
 	}
@@ -214,5 +218,87 @@ func (h *Host) materializeWireGuardTurnLease(
 	if err := validateWireGuardTurnExecutionLease(request, lease); err != nil {
 		return nil, fmt.Errorf("%w: %v", errRuntimeExecutionPlanUnavailable, err)
 	}
+	return cloneWireGuardTurnExecutionLease(lease), nil
+}
+
+func (h *Host) MaterializeWireGuardTurnExecutionLease(
+	ctx context.Context,
+	resolutionID string,
+	defaults RuntimeDefaults,
+	requestedPlan *RuntimeExecutionPlan,
+) (*WireGuardTurnExecutionLease, error) {
+	h.mu.Lock()
+	managed, ok := h.resolutions[resolutionID]
+	if !ok {
+		h.mu.Unlock()
+		return nil, ErrResolutionNotFound
+	}
+	event := h.expireResolutionLocked(managed)
+	snapshot := managed.snapshot
+	secret := managed.secret
+	h.mu.Unlock()
+
+	if event != nil {
+		h.publishEvent(*event)
+	}
+
+	if snapshot.State == ResolutionStateExpired {
+		return nil, errResolutionExpired
+	}
+	if snapshot.State != ResolutionStateResolved {
+		return nil, errResolutionNotTransportReady
+	}
+	if !resolutionSupportsAction(snapshot, ArtifactActionStartOnThisDevice) {
+		return nil, &ResolutionActionError{
+			Action: ArtifactActionStartOnThisDevice,
+			Plan:   cloneRuntimeExecutionPlan(requestedPlan),
+			Err:    errResolutionNotTransportReady,
+		}
+	}
+
+	selectedPlan, err := selectResolutionExecutionPlan(
+		snapshot,
+		ArtifactActionStartOnThisDevice,
+		requestedPlan,
+	)
+	if err != nil {
+		return nil, &ResolutionActionError{
+			Action: ArtifactActionStartOnThisDevice,
+			Plan:   cloneRuntimeExecutionPlan(requestedPlan),
+			Err:    err,
+		}
+	}
+	if !isStrictWireGuardTurnExecutionPlan(selectedPlan.Plan) {
+		return nil, &ResolutionActionError{
+			Action: ArtifactActionStartOnThisDevice,
+			Plan:   cloneRuntimeExecutionPlan(&selectedPlan.Plan),
+			Err: fmt.Errorf(
+				"%w: host runtime execution lease is only available for the strict TURN datagram WireGuard execution plan",
+				errRuntimeExecutionPlanUnsupported,
+			),
+		}
+	}
+
+	lease, err := h.materializeWireGuardTurnLease(
+		ctx,
+		resolutionID,
+		*selectedPlan,
+		secret.Credentials,
+		defaults,
+	)
+	if err != nil {
+		return nil, &ResolutionActionError{
+			Action: ArtifactActionStartOnThisDevice,
+			Plan:   cloneRuntimeExecutionPlan(&selectedPlan.Plan),
+			Err:    err,
+		}
+	}
+
+	h.mu.Lock()
+	if managed, ok := h.resolutions[resolutionID]; ok {
+		managed.wireGuardTurnLease = cloneWireGuardTurnExecutionLease(lease)
+	}
+	h.mu.Unlock()
+
 	return cloneWireGuardTurnExecutionLease(lease), nil
 }

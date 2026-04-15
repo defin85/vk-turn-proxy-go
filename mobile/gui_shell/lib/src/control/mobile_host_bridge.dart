@@ -495,6 +495,8 @@ class HttpMobileHostBridge implements MobileHostBridge {
   @override
   Future<PlatformTunnelStartResult> startPlatformTunnel({
     required PlatformTunnelMode mode,
+    String? resolutionId,
+    RuntimeDefaults? runtimeDefaults,
     RuntimeExecutionPlan? executionPlan,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
@@ -503,6 +505,8 @@ class HttpMobileHostBridge implements MobileHostBridge {
   }) {
     return _client.startPlatformTunnel(
       mode: mode,
+      resolutionId: resolutionId,
+      runtimeDefaults: runtimeDefaults,
       executionPlan: executionPlan,
       applicationRoutingPolicy: applicationRoutingPolicy,
       allowedPackages: allowedPackages,
@@ -624,6 +628,8 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
   @override
   Future<PlatformTunnelStartResult> startPlatformTunnel({
     required PlatformTunnelMode mode,
+    String? resolutionId,
+    RuntimeDefaults? runtimeDefaults,
     RuntimeExecutionPlan? executionPlan,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,

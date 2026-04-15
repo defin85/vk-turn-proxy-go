@@ -354,14 +354,28 @@ func hostTargetLabel(build BuildIdentity) string {
 }
 
 func normalizePlatformTunnelStartRequest(req PlatformTunnelStartRequest) (PlatformTunnelStartRequest, error) {
-	if req.Mode != PlatformTunnelModeAndroidVPNService {
-		if strings.TrimSpace(string(req.ApplicationRoutingPolicy)) != "" || len(req.AllowedPackages) > 0 || len(req.DisallowedPackages) > 0 {
-			return PlatformTunnelStartRequest{}, fmt.Errorf("%w: mode %s does not accept application routing policy", ErrPlatformTunnelAppRoutingPolicyInvalid, req.Mode)
-		}
-		return req, nil
+	normalized := req
+	normalized.ResolutionID = strings.TrimSpace(normalized.ResolutionID)
+	if normalized.RuntimeDefaults != nil {
+		defaults := *normalized.RuntimeDefaults
+		defaults.ListenAddr = strings.TrimSpace(defaults.ListenAddr)
+		defaults.PeerAddr = strings.TrimSpace(defaults.PeerAddr)
+		defaults.TURNServer = strings.TrimSpace(defaults.TURNServer)
+		defaults.TURNPort = strings.TrimSpace(defaults.TURNPort)
+		defaults.BindInterface = strings.TrimSpace(defaults.BindInterface)
+		defaults.LogLevel = strings.TrimSpace(defaults.LogLevel)
+		normalized.RuntimeDefaults = &defaults
 	}
 
-	normalized := req
+	if req.Mode != PlatformTunnelModeAndroidVPNService {
+		if strings.TrimSpace(string(req.ApplicationRoutingPolicy)) != "" ||
+			len(req.AllowedPackages) > 0 ||
+			len(req.DisallowedPackages) > 0 {
+			return PlatformTunnelStartRequest{}, fmt.Errorf("%w: mode %s does not accept application routing policy", ErrPlatformTunnelAppRoutingPolicyInvalid, req.Mode)
+		}
+		return normalized, nil
+	}
+
 	if strings.TrimSpace(string(normalized.ApplicationRoutingPolicy)) == "" {
 		normalized.ApplicationRoutingPolicy = PlatformTunnelApplicationRoutingPolicyAllApps
 	}

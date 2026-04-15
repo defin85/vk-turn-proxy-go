@@ -4,8 +4,6 @@ import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.VpnService
-import androidx.activity.result.ActivityResultLauncher
-import androidx.activity.result.contract.ActivityResultContracts
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -18,6 +16,7 @@ private const val MOBILE_HOST_BRIDGE_BROWSER_RETURN_SIGNAL_CHANNEL =
     "com.defin85.vk_turn_proxy_go/mobile_host_bridge/browser_return_signals"
 private const val MOBILE_HOST_URL_META_DATA =
     "com.defin85.vk_turn_proxy_go.MOBILE_HOST_URL"
+private const val PLATFORM_TUNNEL_PERMISSION_REQUEST_CODE = 1001
 
 class MainActivity : FlutterActivity() {
     private var mobileHostBridgeChannel: MethodChannel? = null
@@ -28,10 +27,6 @@ class MainActivity : FlutterActivity() {
     private val platformTunnelBridge by lazy {
         AndroidPlatformTunnelBridge(applicationContext)
     }
-    private val platformTunnelPermissionLauncher: ActivityResultLauncher<Intent> =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            finishPlatformTunnelPermissionRequest(result.resultCode == Activity.RESULT_OK)
-        }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -101,6 +96,18 @@ class MainActivity : FlutterActivity() {
         emitBrowserReturnSignalFromIntent(intent)
     }
 
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(
+        requestCode: Int,
+        resultCode: Int,
+        data: Intent?,
+    ) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == PLATFORM_TUNNEL_PERMISSION_REQUEST_CODE) {
+            finishPlatformTunnelPermissionRequest(resultCode == Activity.RESULT_OK)
+        }
+    }
+
     private fun resolveHostConfiguration(): Map<String, String> {
         val configured = resolveConfiguredHostUrl()
         if (!configured.isNullOrBlank()) {
@@ -109,7 +116,7 @@ class MainActivity : FlutterActivity() {
                 "description" to "android manifest $MOBILE_HOST_URL_META_DATA",
             )
         }
-        val embeddedBaseUrl = EmbeddedMobileHost.ensureStarted()
+        val embeddedBaseUrl = EmbeddedMobileHost.ensureStarted(applicationContext)
         return mapOf(
             "base_url" to embeddedBaseUrl,
             "description" to "android embedded mobile host",
@@ -187,7 +194,8 @@ class MainActivity : FlutterActivity() {
         }
 
         pendingPlatformTunnelPermissionResult = result
-        platformTunnelPermissionLauncher.launch(prepareIntent)
+        @Suppress("DEPRECATION")
+        startActivityForResult(prepareIntent, PLATFORM_TUNNEL_PERMISSION_REQUEST_CODE)
     }
 
     private fun finishPlatformTunnelPermissionRequest(granted: Boolean?) {

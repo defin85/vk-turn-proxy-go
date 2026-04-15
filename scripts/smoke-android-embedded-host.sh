@@ -128,13 +128,13 @@ if role != "android_embedded_host":
 if start_result.get("ready") is not False:
     raise SystemExit(f"unexpected platform tunnel start readiness: {start_result}")
 
-if start_result.get("stage") != "capability_check":
+if start_result.get("stage") != "permission_acquire":
     raise SystemExit(
         "unexpected platform tunnel start stage: "
         + str(start_result.get("stage"))
     )
 
-if start_result.get("missing_prerequisite") != "host_implementation":
+if start_result.get("missing_prerequisite") != "permission":
     raise SystemExit(
         "unexpected platform tunnel missing_prerequisite: "
         + str(start_result.get("missing_prerequisite"))

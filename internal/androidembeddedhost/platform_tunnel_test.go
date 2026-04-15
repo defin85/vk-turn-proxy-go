@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
@@ -152,7 +153,7 @@ func TestManagerPlatformTunnelStartReturnsResumablePermissionAttempt(t *testing.
 	assertAndroidVPNExecutionPlan(t, result.ExecutionPlan)
 }
 
-func TestManagerPlatformTunnelResumeContinuesAfterPermissionGrant(t *testing.T) {
+func TestManagerPlatformTunnelResumeContinuesAfterPermissionGrantAndFailsWithoutMaterializedRuntime(t *testing.T) {
 	t.Parallel()
 
 	lifecycle := &fakeAndroidVPNServiceLifecycle{
@@ -165,7 +166,12 @@ func TestManagerPlatformTunnelResumeContinuesAfterPermissionGrant(t *testing.T) 
 	baseURL := ensureStartedManager(t, manager)
 
 	startResult := startPlatformTunnel(t, baseURL, clientcontrol.PlatformTunnelStartRequest{
-		Mode: clientcontrol.PlatformTunnelModeAndroidVPNService,
+		Mode:         clientcontrol.PlatformTunnelModeAndroidVPNService,
+		ResolutionID: "resolution-android-1",
+		RuntimeDefaults: &clientcontrol.RuntimeDefaults{
+			ListenAddr: "127.0.0.1:7777",
+			PeerAddr:   "relay.example.test:3478",
+		},
 	})
 	if strings.TrimSpace(startResult.StartupAttemptID) == "" {
 		t.Fatal("startup attempt id = empty, want resumable attempt")
@@ -174,14 +180,27 @@ func TestManagerPlatformTunnelResumeContinuesAfterPermissionGrant(t *testing.T) 
 	resumeResult := resumePlatformTunnel(t, baseURL, clientcontrol.PlatformTunnelResumeRequest{
 		StartupAttemptID: startResult.StartupAttemptID,
 	})
-	if !resumeResult.Ready {
-		t.Fatalf("platform tunnel resume result ready = false, want true: %+v", resumeResult)
+	if resumeResult.Ready {
+		t.Fatalf("platform tunnel resume result ready = true, want false: %+v", resumeResult)
 	}
-	if got := strings.Join(lifecycle.calls, ","); got != "acquire_permission,resume_after_permission,validate_route_policy,bringup_host,attach_runtime" {
+	if resumeResult.Stage != clientcontrol.PlatformTunnelStartupStageRuntimeAttach {
+		t.Fatalf("platform tunnel resume stage = %q, want %q", resumeResult.Stage, clientcontrol.PlatformTunnelStartupStageRuntimeAttach)
+	}
+	if resumeResult.MissingPrerequisite != clientcontrol.PlatformTunnelPrerequisiteHostImplementation {
+		t.Fatalf(
+			"platform tunnel resume missing_prerequisite = %q, want %q",
+			resumeResult.MissingPrerequisite,
+			clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+		)
+	}
+	if !strings.Contains(strings.ToLower(resumeResult.Message), "resolution") {
+		t.Fatalf("platform tunnel resume message = %q, want resolution-related failure", resumeResult.Message)
+	}
+	if got := strings.Join(lifecycle.calls, ","); got != "acquire_permission,resume_after_permission,validate_route_policy,cleanup" {
 		t.Fatalf(
 			"lifecycle calls = %q, want %q",
 			got,
-			"acquire_permission,resume_after_permission,validate_route_policy,bringup_host,attach_runtime",
+			"acquire_permission,resume_after_permission,validate_route_policy,cleanup",
 		)
 	}
 	assertAndroidVPNExecutionPlan(t, resumeResult.ExecutionPlan)
@@ -267,14 +286,24 @@ func TestManagerPlatformTunnelStartHostBringupFailureCleansUp(t *testing.T) {
 	lifecycle := &fakeAndroidVPNServiceLifecycle{
 		bringupErr: errors.New("android VpnService interface setup failed"),
 	}
-	manager := New(withPlatformTunnelController(newAndroidVPNServiceController(
+	controller, ok := newAndroidVPNServiceController(
 		supportedAndroidVPNServiceCapability(""),
 		lifecycle,
-	)))
+	).(*androidVPNServiceController)
+	if !ok {
+		t.Fatal("newAndroidVPNServiceController() type assertion failed")
+	}
+	controller.setWireGuardTurnLeaseProvider(testWireGuardTurnLeaseProvider())
+	manager := New(WithHostFactory(testHostFactory(controller, nil)))
 	baseURL := ensureStartedManager(t, manager)
 
 	result := startPlatformTunnel(t, baseURL, clientcontrol.PlatformTunnelStartRequest{
-		Mode: clientcontrol.PlatformTunnelModeAndroidVPNService,
+		Mode:         clientcontrol.PlatformTunnelModeAndroidVPNService,
+		ResolutionID: "resolution-android-1",
+		RuntimeDefaults: &clientcontrol.RuntimeDefaults{
+			ListenAddr: "127.0.0.1:7777",
+			PeerAddr:   "relay.example.test:3478",
+		},
 	})
 
 	if result.Ready {
@@ -307,16 +336,26 @@ func TestManagerPlatformTunnelStartRuntimeAttachFailureCleansUp(t *testing.T) {
 	t.Parallel()
 
 	lifecycle := &fakeAndroidVPNServiceLifecycle{
-		attachErr: errors.New("shared runtime could not attach to Android VpnService"),
+		attachErr: errors.New("android shared runtime attach failed"),
 	}
-	manager := New(withPlatformTunnelController(newAndroidVPNServiceController(
+	controller, ok := newAndroidVPNServiceController(
 		supportedAndroidVPNServiceCapability(""),
 		lifecycle,
-	)))
+	).(*androidVPNServiceController)
+	if !ok {
+		t.Fatal("newAndroidVPNServiceController() type assertion failed")
+	}
+	controller.setWireGuardTurnLeaseProvider(testWireGuardTurnLeaseProvider())
+	manager := New(WithHostFactory(testHostFactory(controller, nil)))
 	baseURL := ensureStartedManager(t, manager)
 
 	result := startPlatformTunnel(t, baseURL, clientcontrol.PlatformTunnelStartRequest{
-		Mode: clientcontrol.PlatformTunnelModeAndroidVPNService,
+		Mode:         clientcontrol.PlatformTunnelModeAndroidVPNService,
+		ResolutionID: "resolution-android-1",
+		RuntimeDefaults: &clientcontrol.RuntimeDefaults{
+			ListenAddr: "127.0.0.1:7777",
+			PeerAddr:   "relay.example.test:3478",
+		},
 	})
 
 	if result.Ready {
@@ -332,6 +371,9 @@ func TestManagerPlatformTunnelStartRuntimeAttachFailureCleansUp(t *testing.T) {
 			clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
 		)
 	}
+	if !strings.Contains(strings.ToLower(result.Message), "runtime attach") {
+		t.Fatalf("platform tunnel start message = %q, want runtime-attach-related failure", result.Message)
+	}
 	if lifecycle.cleanupCalls != 1 {
 		t.Fatalf("cleanup calls = %d, want 1", lifecycle.cleanupCalls)
 	}
@@ -345,6 +387,48 @@ func TestManagerPlatformTunnelStartRuntimeAttachFailureCleansUp(t *testing.T) {
 	assertAndroidVPNExecutionPlan(t, result.ExecutionPlan)
 }
 
+func TestAndroidVPNServiceControllerPassesMaterializedLeaseToRuntimeAttach(t *testing.T) {
+	t.Parallel()
+
+	lifecycle := &fakeAndroidVPNServiceLifecycle{}
+	controller, ok := newAndroidVPNServiceController(
+		supportedAndroidVPNServiceCapability(""),
+		lifecycle,
+	).(*androidVPNServiceController)
+	if !ok {
+		t.Fatal("newAndroidVPNServiceController() type assertion failed")
+	}
+	controller.setWireGuardTurnLeaseProvider(testWireGuardTurnLeaseProvider())
+
+	result, err := controller.Start(context.Background(), clientcontrol.PlatformTunnelStartRequest{
+		Mode:         clientcontrol.PlatformTunnelModeAndroidVPNService,
+		ResolutionID: "resolution-android-1",
+		RuntimeDefaults: &clientcontrol.RuntimeDefaults{
+			ListenAddr: "127.0.0.1:7777",
+			PeerAddr:   "relay.example.test:3478",
+		},
+	})
+	if err != nil {
+		t.Fatalf("controller.Start() error = %v", err)
+	}
+	if !result.Ready {
+		t.Fatalf("controller.Start() ready = false, want true: %+v", result)
+	}
+	if got := strings.Join(lifecycle.calls, ","); got != "acquire_permission,validate_route_policy,bringup_host,attach_runtime" {
+		t.Fatalf(
+			"lifecycle calls = %q, want %q",
+			got,
+			"acquire_permission,validate_route_policy,bringup_host,attach_runtime",
+		)
+	}
+	if len(lifecycle.attachedLeasePresence) != 1 || !lifecycle.attachedLeasePresence[0] {
+		t.Fatalf("attached lease presence = %+v, want [true]", lifecycle.attachedLeasePresence)
+	}
+	if len(lifecycle.attachedLeaseIDs) != 1 || lifecycle.attachedLeaseIDs[0] != "resolution-android-1" {
+		t.Fatalf("attached lease ids = %+v, want [resolution-android-1]", lifecycle.attachedLeaseIDs)
+	}
+}
+
 type fakeAndroidVPNServiceLifecycle struct {
 	acquirePermissionErr error
 	resumePermissionErr  error
@@ -353,8 +437,10 @@ type fakeAndroidVPNServiceLifecycle struct {
 	attachErr            error
 	cleanupErr           error
 
-	calls        []string
-	cleanupCalls int
+	calls                 []string
+	cleanupCalls          int
+	attachedLeaseIDs      []string
+	attachedLeasePresence []bool
 }
 
 func (f *fakeAndroidVPNServiceLifecycle) AcquirePermission(_ context.Context, _ clientcontrol.PlatformTunnelStartRequest) error {
@@ -372,13 +458,19 @@ func (f *fakeAndroidVPNServiceLifecycle) ValidateRoutePolicy(_ context.Context, 
 	return f.validateRouteErr
 }
 
-func (f *fakeAndroidVPNServiceLifecycle) BringupHost(_ context.Context, _ clientcontrol.PlatformTunnelStartRequest) error {
+func (f *fakeAndroidVPNServiceLifecycle) BringupHost(_ context.Context, _ clientcontrol.PlatformTunnelStartRequest, _ *clientcontrol.RuntimeExecutionPlan, _ *clientcontrol.WireGuardTurnExecutionLease) error {
 	f.calls = append(f.calls, "bringup_host")
 	return f.bringupErr
 }
 
-func (f *fakeAndroidVPNServiceLifecycle) AttachRuntime(_ context.Context, _ clientcontrol.PlatformTunnelStartRequest, _ *clientcontrol.RuntimeExecutionPlan) error {
+func (f *fakeAndroidVPNServiceLifecycle) AttachRuntime(_ context.Context, _ clientcontrol.PlatformTunnelStartRequest, _ *clientcontrol.RuntimeExecutionPlan, lease *clientcontrol.WireGuardTurnExecutionLease) error {
 	f.calls = append(f.calls, "attach_runtime")
+	f.attachedLeasePresence = append(f.attachedLeasePresence, lease != nil)
+	if lease != nil {
+		f.attachedLeaseIDs = append(f.attachedLeaseIDs, lease.ResolutionID)
+	} else {
+		f.attachedLeaseIDs = append(f.attachedLeaseIDs, "")
+	}
 	return f.attachErr
 }
 
@@ -386,6 +478,58 @@ func (f *fakeAndroidVPNServiceLifecycle) Cleanup(_ context.Context) error {
 	f.calls = append(f.calls, "cleanup")
 	f.cleanupCalls++
 	return f.cleanupErr
+}
+
+func testWireGuardTurnLeaseProvider() androidVPNServiceLeaseProvider {
+	return func(
+		_ context.Context,
+		req clientcontrol.PlatformTunnelStartRequest,
+		plan *clientcontrol.RuntimeExecutionPlan,
+	) (*clientcontrol.WireGuardTurnExecutionLease, error) {
+		return &clientcontrol.WireGuardTurnExecutionLease{
+			ResolutionID:         req.ResolutionID,
+			AccessMethod:         plan.AccessMethod,
+			CarrierFamily:        plan.CarrierFamily,
+			EngineFamily:         plan.EngineFamily,
+			RemoteEndpointFamily: clientcontrol.RuntimeRemoteEndpointFamilyTURNServer,
+			RemoteEndpointRole:   clientcontrol.WireGuardTurnRemoteEndpointRoleDatagramTermination,
+			TURNServerAddress:    "turn.example.test:3478",
+			TURNUsername:         "turn-user",
+			TURNPassword:         "turn-pass",
+			PeerEndpointAddress:  "176.109.104.105:51871",
+			ClientPrivateKey:     "privkey-test-123",
+			ClientAddresses:      []string{"10.99.0.2/32"},
+			PeerPublicKey:        "peerpub-test-123",
+			AllowedIPs:           []string{"0.0.0.0/0"},
+		}, nil
+	}
+}
+
+func testHostFactory(
+	controller platformTunnelController,
+	materializer clientcontrol.WireGuardTurnMaterializer,
+) func(*slog.Logger) *clientcontrol.Host {
+	return func(logger *slog.Logger) *clientcontrol.Host {
+		opts := []clientcontrol.Option{
+			clientcontrol.WithLogger(logger),
+			clientcontrol.WithBuildIdentity(currentBuildIdentity()),
+			clientcontrol.WithRegistry(mobileProviderRegistry()),
+			clientcontrol.WithInteractiveChallengeMetadataResolver(mobileChallengeMetadata),
+		}
+		if materializer != nil {
+			opts = append(opts, clientcontrol.WithWireGuardTurnMaterializer(materializer))
+		}
+		if controller != nil {
+			opts = append(opts,
+				clientcontrol.WithPlatformTunnelCapabilities([]clientcontrol.PlatformTunnelCapability{
+					controller.Capability(),
+				}),
+				clientcontrol.WithPlatformTunnelStarter(controller.Start),
+				clientcontrol.WithPlatformTunnelResumer(controller.Resume),
+			)
+		}
+		return clientcontrol.New(opts...)
+	}
 }
 
 func ensureStartedManager(t *testing.T, manager *Manager) string {

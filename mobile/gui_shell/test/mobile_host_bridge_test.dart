@@ -203,13 +203,21 @@ void main() {
   test(
     'mobile host bridge forwards typed platform tunnel startup results',
     () async {
+      final api = _ReadyControlPlaneApi();
       final bridge = await MobileHostBridgeFactory.fromEnvironment(
         configuredBaseUrl: 'http://127.0.0.1:7777',
-        clientFactory: (_) => _ReadyControlPlaneApi(),
+        clientFactory: (_) => api,
       );
 
       final result = await bridge.startPlatformTunnel(
         mode: PlatformTunnelMode.appleNetworkExtension,
+        resolutionId: 'resolution-bridge-1',
+        runtimeDefaults: const RuntimeDefaults(
+          listenAddress: '127.0.0.1:7777',
+          peerAddress: 'peer.example.test:443',
+          turnServer: 'turn.example.test',
+          turnPort: '3478',
+        ),
       );
 
       expect(result.ready, isFalse);
@@ -217,6 +225,14 @@ void main() {
       expect(
         result.missingPrerequisite,
         PlatformTunnelPrerequisite.hostImplementation,
+      );
+      expect(api.startPlatformTunnelResolutionIDs, <String?>[
+        'resolution-bridge-1',
+      ]);
+      expect(api.startPlatformTunnelRuntimeDefaults, hasLength(1));
+      expect(
+        api.startPlatformTunnelRuntimeDefaults.single?.turnServer,
+        'turn.example.test',
       );
     },
   );
@@ -563,6 +579,9 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
   );
 
   final List<List<Capability>> negotiateCalls = <List<Capability>>[];
+  final List<String?> startPlatformTunnelResolutionIDs = <String?>[];
+  final List<RuntimeDefaults?> startPlatformTunnelRuntimeDefaults =
+      <RuntimeDefaults?>[];
 
   @override
   Future<ChallengeRecord> cancelChallenge(String challengeId) {
@@ -624,12 +643,16 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
   @override
   Future<PlatformTunnelStartResult> startPlatformTunnel({
     required PlatformTunnelMode mode,
+    String? resolutionId,
+    RuntimeDefaults? runtimeDefaults,
     RuntimeExecutionPlan? executionPlan,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
     List<String> allowedPackages = const <String>[],
     List<String> disallowedPackages = const <String>[],
   }) async {
+    startPlatformTunnelResolutionIDs.add(resolutionId);
+    startPlatformTunnelRuntimeDefaults.add(runtimeDefaults);
     return const PlatformTunnelStartResult(
       mode: PlatformTunnelMode.appleNetworkExtension,
       ready: false,

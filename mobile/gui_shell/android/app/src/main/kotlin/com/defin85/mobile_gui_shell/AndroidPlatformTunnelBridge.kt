@@ -24,20 +24,13 @@ internal class AndroidPlatformTunnelBridge(
         )
     }
 
-    fun bringupAndroidVpnHost(
-        policy: String,
-        allowedPackages: String,
-        disallowedPackages: String,
-    ): String? {
-        val allowed = splitPackageList(allowedPackages)
-        val disallowed = splitPackageList(disallowedPackages)
-        return AndroidPlatformTunnelService.bringup(
-            appContext,
-            policy = policy,
-            allowedPackages = allowed,
-            disallowedPackages = disallowed,
-        )
-    }
+    fun bringupAndroidVpnHost(configJson: String): String? =
+        AndroidPlatformTunnelService.bringup(appContext, configJson)
+
+    fun protectAndroidVpnSocket(fd: Int): String? =
+        AndroidPlatformTunnelService.protectSocket(fd)
+
+    fun duplicateAndroidVpnTunFd(): Int = AndroidPlatformTunnelService.duplicateTunFd()
 
     fun cleanupAndroidVpnHost(): String? = AndroidPlatformTunnelService.cleanup()
 

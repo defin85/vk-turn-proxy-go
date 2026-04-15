@@ -13,6 +13,8 @@ static jclass vktp_bridge_class = NULL;
 static jmethodID vktp_mid_is_permission_granted = NULL;
 static jmethodID vktp_mid_validate_route_policy = NULL;
 static jmethodID vktp_mid_bringup_host = NULL;
+static jmethodID vktp_mid_protect_socket = NULL;
+static jmethodID vktp_mid_duplicate_tun_fd = NULL;
 static jmethodID vktp_mid_cleanup_host = NULL;
 
 static char* vktp_strdup_or_null(const char* value) {
@@ -50,6 +52,8 @@ static void vktp_clear_registered_bridge(JNIEnv* env) {
 	vktp_mid_is_permission_granted = NULL;
 	vktp_mid_validate_route_policy = NULL;
 	vktp_mid_bringup_host = NULL;
+	vktp_mid_protect_socket = NULL;
+	vktp_mid_duplicate_tun_fd = NULL;
 	vktp_mid_cleanup_host = NULL;
 }
 
@@ -125,10 +129,13 @@ void vktp_register_platform_tunnel_bridge(void *env_ptr, void *bridge_ptr) {
 
 	vktp_mid_is_permission_granted = (*env)->GetMethodID(env, vktp_bridge_class, "isAndroidVpnPermissionGranted", "()Z");
 	vktp_mid_validate_route_policy = (*env)->GetMethodID(env, vktp_bridge_class, "validateAndroidVpnRoutePolicy", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;");
-	vktp_mid_bringup_host = (*env)->GetMethodID(env, vktp_bridge_class, "bringupAndroidVpnHost", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;");
+	vktp_mid_bringup_host = (*env)->GetMethodID(env, vktp_bridge_class, "bringupAndroidVpnHost", "(Ljava/lang/String;)Ljava/lang/String;");
+	vktp_mid_protect_socket = (*env)->GetMethodID(env, vktp_bridge_class, "protectAndroidVpnSocket", "(I)Ljava/lang/String;");
+	vktp_mid_duplicate_tun_fd = (*env)->GetMethodID(env, vktp_bridge_class, "duplicateAndroidVpnTunFd", "()I");
 	vktp_mid_cleanup_host = (*env)->GetMethodID(env, vktp_bridge_class, "cleanupAndroidVpnHost", "()Ljava/lang/String;");
 	if (vktp_mid_is_permission_granted == NULL || vktp_mid_validate_route_policy == NULL ||
-		vktp_mid_bringup_host == NULL || vktp_mid_cleanup_host == NULL) {
+		vktp_mid_bringup_host == NULL || vktp_mid_protect_socket == NULL ||
+		vktp_mid_duplicate_tun_fd == NULL || vktp_mid_cleanup_host == NULL) {
 		vktp_clear_exception(env);
 		vktp_clear_registered_bridge(env);
 	}
@@ -203,6 +210,33 @@ static char* vktp_call_string3(
 	return out;
 }
 
+static char* vktp_call_string1(jmethodID method, const char* value1) {
+	if (vktp_bridge_object == NULL || method == NULL) {
+		return vktp_strdup_or_null("android platform tunnel bridge is not registered");
+	}
+	int attached = 0;
+	JNIEnv *env = vktp_attach_env(&attached);
+	if (env == NULL) {
+		return vktp_strdup_or_null("android platform tunnel bridge could not attach to the JVM");
+	}
+
+	jstring arg1 = (*env)->NewStringUTF(env, value1 == NULL ? "" : value1);
+	jstring result = (jstring)(*env)->CallObjectMethod(env, vktp_bridge_object, method, arg1);
+	char* out = NULL;
+	if ((*env)->ExceptionCheck(env)) {
+		vktp_clear_exception(env);
+		out = vktp_strdup_or_null("android platform tunnel bridge method threw an exception");
+	} else {
+		out = vktp_jstring_to_error(env, result);
+	}
+	if (result != NULL) {
+		(*env)->DeleteLocalRef(env, result);
+	}
+	(*env)->DeleteLocalRef(env, arg1);
+	vktp_detach_env(attached);
+	return out;
+}
+
 static char* vktp_call_string0(jmethodID method) {
 	if (vktp_bridge_object == NULL || method == NULL) {
 		return vktp_strdup_or_null("android platform tunnel bridge is not registered");
@@ -227,31 +261,99 @@ static char* vktp_call_string0(jmethodID method) {
 	return out;
 }
 
+static int vktp_call_int0(jmethodID method) {
+	if (vktp_bridge_object == NULL || method == NULL) {
+		return -1;
+	}
+	int attached = 0;
+	JNIEnv *env = vktp_attach_env(&attached);
+	if (env == NULL) {
+		return -1;
+	}
+	jint result = (*env)->CallIntMethod(env, vktp_bridge_object, method);
+	if ((*env)->ExceptionCheck(env)) {
+		vktp_clear_exception(env);
+		vktp_detach_env(attached);
+		return -1;
+	}
+	vktp_detach_env(attached);
+	return (int)result;
+}
+
+static char* vktp_call_string_int1(jmethodID method, int value1) {
+	if (vktp_bridge_object == NULL || method == NULL) {
+		return vktp_strdup_or_null("android platform tunnel bridge is not registered");
+	}
+	int attached = 0;
+	JNIEnv *env = vktp_attach_env(&attached);
+	if (env == NULL) {
+		return vktp_strdup_or_null("android platform tunnel bridge could not attach to the JVM");
+	}
+	jstring result = (jstring)(*env)->CallObjectMethod(env, vktp_bridge_object, method, (jint)value1);
+	char* out = NULL;
+	if ((*env)->ExceptionCheck(env)) {
+		vktp_clear_exception(env);
+		out = vktp_strdup_or_null("android platform tunnel bridge method threw an exception");
+	} else {
+		out = vktp_jstring_to_error(env, result);
+	}
+	if (result != NULL) {
+		(*env)->DeleteLocalRef(env, result);
+	}
+	vktp_detach_env(attached);
+	return out;
+}
+
 char* vktp_android_vpn_validate_route_policy(const char* policy, const char* allowed, const char* disallowed) {
 	return vktp_call_string3(vktp_mid_validate_route_policy, policy, allowed, disallowed);
 }
 
-char* vktp_android_vpn_bringup_host(const char* policy, const char* allowed, const char* disallowed) {
-	return vktp_call_string3(vktp_mid_bringup_host, policy, allowed, disallowed);
+char* vktp_android_vpn_bringup_host(const char* config_json) {
+	return vktp_call_string1(vktp_mid_bringup_host, config_json);
+}
+
+char* vktp_android_vpn_protect_socket(int fd) {
+	return vktp_call_string_int1(vktp_mid_protect_socket, fd);
 }
 
 char* vktp_android_vpn_cleanup() {
 	return vktp_call_string0(vktp_mid_cleanup_host);
+}
+
+int vktp_android_vpn_duplicate_tun_fd() {
+	return vktp_call_int0(vktp_mid_duplicate_tun_fd);
 }
 */
 import "C"
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"unsafe"
 
 	"github.com/defin85/vk-turn-proxy-go/internal/androidembeddedhost"
+	"github.com/defin85/vk-turn-proxy-go/internal/wireguardturnruntime"
 	"github.com/defin85/vk-turn-proxy-go/pkg/clientcontrol"
 )
 
-type VPNServiceLifecycle struct{}
+type androidVPNHostConfig struct {
+	Policy             string   `json:"policy"`
+	AllowedPackages    []string `json:"allowed_packages,omitempty"`
+	DisallowedPackages []string `json:"disallowed_packages,omitempty"`
+	ClientAddresses    []string `json:"client_addresses"`
+	DNSServers         []string `json:"dns_servers,omitempty"`
+	IncludedRoutes     []string `json:"included_routes"`
+	MTU                int      `json:"mtu,omitempty"`
+}
+
+type VPNServiceLifecycle struct {
+	mu      sync.Mutex
+	runtime *wireguardturnruntime.Runtime
+}
 
 func NewVPNServiceLifecycle() *VPNServiceLifecycle {
 	return &VPNServiceLifecycle{}
@@ -305,27 +407,66 @@ func (l *VPNServiceLifecycle) ValidateRoutePolicy(
 func (l *VPNServiceLifecycle) BringupHost(
 	_ context.Context,
 	req clientcontrol.PlatformTunnelStartRequest,
+	_ *clientcontrol.RuntimeExecutionPlan,
+	lease *clientcontrol.WireGuardTurnExecutionLease,
 ) error {
-	return callBridgeString3Value(
-		func(cValue1, cValue2, cValue3 *C.char) *C.char {
-			return C.vktp_android_vpn_bringup_host(cValue1, cValue2, cValue3)
+	config, err := androidVPNHostConfigFrom(req, lease)
+	if err != nil {
+		return err
+	}
+	payload, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("marshal Android VPN host config: %w", err)
+	}
+	return callBridgeString1Value(
+		func(value *C.char) *C.char {
+			return C.vktp_android_vpn_bringup_host(value)
 		},
-		string(req.ApplicationRoutingPolicy),
-		joinPackages(req.AllowedPackages),
-		joinPackages(req.DisallowedPackages),
+		string(payload),
 	)
 }
 
 func (l *VPNServiceLifecycle) AttachRuntime(
-	_ context.Context,
-	_ clientcontrol.PlatformTunnelStartRequest,
+	ctx context.Context,
+	req clientcontrol.PlatformTunnelStartRequest,
 	_ *clientcontrol.RuntimeExecutionPlan,
+	lease *clientcontrol.WireGuardTurnExecutionLease,
 ) error {
-	return fmt.Errorf("shared runtime could not attach to Android VpnService because the repo-owned strict WireGuard runtime is not implemented yet")
+	if strings.TrimSpace(req.ResolutionID) == "" {
+		return fmt.Errorf("android runtime attach requires resolution_id")
+	}
+	if req.RuntimeDefaults == nil {
+		return fmt.Errorf("android runtime attach requires runtime_defaults")
+	}
+	if lease == nil {
+		return fmt.Errorf("android runtime attach requires a strict TURN datagram WireGuard execution lease")
+	}
+	tunFD, err := duplicateAndroidVPNTUNFD()
+	if err != nil {
+		return err
+	}
+	runtime, err := wireguardturnruntime.Start(
+		ctx,
+		wireguardturnruntime.Config{
+			Lease: lease,
+			TUNFD: tunFD,
+			ProtectSocket: func(fd int) error {
+				return bridgeError(C.vktp_android_vpn_protect_socket(C.int(fd)))
+			},
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("start Android strict WireGuard runtime: %w", err)
+	}
+	if err := l.replaceRuntime(runtime); err != nil {
+		_ = runtime.Close()
+		return fmt.Errorf("replace Android strict WireGuard runtime: %w", err)
+	}
+	return nil
 }
 
 func (l *VPNServiceLifecycle) Cleanup(_ context.Context) error {
-	return bridgeError(C.vktp_android_vpn_cleanup())
+	return errors.Join(l.closeRuntime(), bridgeError(C.vktp_android_vpn_cleanup()))
 }
 
 func joinPackages(packages []string) string {
@@ -356,6 +497,72 @@ func callBridgeString3Value(
 
 	errValue := fn(cValue1, cValue2, cValue3)
 	return bridgeError(errValue)
+}
+
+func callBridgeString1Value(fn func(*C.char) *C.char, value string) error {
+	cValue := C.CString(value)
+	defer C.free(unsafe.Pointer(cValue))
+
+	errValue := fn(cValue)
+	return bridgeError(errValue)
+}
+
+func duplicateAndroidVPNTUNFD() (int, error) {
+	fd := int(C.vktp_android_vpn_duplicate_tun_fd())
+	if fd <= 0 {
+		return 0, fmt.Errorf("android platform tunnel bridge could not duplicate the active VpnService TUN file descriptor")
+	}
+	return fd, nil
+}
+
+func androidVPNHostConfigFrom(
+	req clientcontrol.PlatformTunnelStartRequest,
+	lease *clientcontrol.WireGuardTurnExecutionLease,
+) (*androidVPNHostConfig, error) {
+	if lease == nil {
+		return nil, fmt.Errorf("android vpn host bring-up requires a strict TURN datagram WireGuard execution lease")
+	}
+	config := &androidVPNHostConfig{
+		Policy:             string(req.ApplicationRoutingPolicy),
+		AllowedPackages:    append([]string(nil), req.AllowedPackages...),
+		DisallowedPackages: append([]string(nil), req.DisallowedPackages...),
+		ClientAddresses:    append([]string(nil), lease.ClientAddresses...),
+		DNSServers:         append([]string(nil), lease.DNSServers...),
+		IncludedRoutes:     append([]string(nil), lease.AllowedIPs...),
+		MTU:                lease.MTU,
+	}
+	if len(config.ClientAddresses) == 0 {
+		return nil, fmt.Errorf("android vpn host bring-up requires at least one client address")
+	}
+	if len(config.IncludedRoutes) == 0 {
+		return nil, fmt.Errorf("android vpn host bring-up requires at least one included route")
+	}
+	if strings.TrimSpace(config.Policy) == "" {
+		config.Policy = string(clientcontrol.PlatformTunnelApplicationRoutingPolicyAllApps)
+	}
+	return config, nil
+}
+
+func (l *VPNServiceLifecycle) replaceRuntime(runtime *wireguardturnruntime.Runtime) error {
+	l.mu.Lock()
+	previous := l.runtime
+	l.runtime = runtime
+	l.mu.Unlock()
+	if previous == nil {
+		return nil
+	}
+	return previous.Close()
+}
+
+func (l *VPNServiceLifecycle) closeRuntime() error {
+	l.mu.Lock()
+	runtime := l.runtime
+	l.runtime = nil
+	l.mu.Unlock()
+	if runtime == nil {
+		return nil
+	}
+	return runtime.Close()
 }
 
 func bridgeError(value *C.char) error {

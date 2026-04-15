@@ -1432,7 +1432,11 @@ void main() {
   test(
     'controller consumes typed platform tunnel reports and startup-stage results',
     () async {
-      final bridge = _FakeMobileHostBridge();
+      final bridge = _FakeMobileHostBridge(
+        resolutionsList: <ResolutionRecord>[
+          _resolutionRecord(id: 'resolution-android-1'),
+        ],
+      );
       final controller = MobileShellController(
         bridge: bridge,
         stateStore: _InMemoryStateStore(
@@ -1454,6 +1458,20 @@ void main() {
       expect(bridge.startedPlatformTunnels, <PlatformTunnelMode>[
         PlatformTunnelMode.androidVpnService,
       ]);
+      expect(bridge.startedPlatformTunnelResolutionIDs, <String?>[
+        'resolution-android-1',
+      ]);
+      expect(bridge.startedPlatformTunnelRuntimeDefaults, hasLength(1));
+      final runtimeDefaults =
+          bridge.startedPlatformTunnelRuntimeDefaults.single;
+      final expectedDefaults = RuntimeDefaults.fromProfileSpec(
+        ProfileDraft.defaults().spec,
+      );
+      expect(runtimeDefaults, isNotNull);
+      expect(runtimeDefaults?.listenAddress, expectedDefaults.listenAddress);
+      expect(runtimeDefaults?.peerAddress, expectedDefaults.peerAddress);
+      expect(runtimeDefaults?.turnServer, expectedDefaults.turnServer);
+      expect(runtimeDefaults?.turnPort, expectedDefaults.turnPort);
       expect(
         controller.platformTunnels.single.mode,
         PlatformTunnelMode.androidVpnService,
@@ -1472,6 +1490,9 @@ void main() {
     'controller requests Android VPN permission and resumes the same startup attempt',
     () async {
       final bridge = _FakeMobileHostBridge(
+        resolutionsList: <ResolutionRecord>[
+          _resolutionRecord(id: 'resolution-android-1'),
+        ],
         startPlatformTunnelResult: const PlatformTunnelStartResult(
           mode: PlatformTunnelMode.androidVpnService,
           ready: false,
@@ -1719,6 +1740,9 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       <RuntimeDefaults>[];
   final List<PlatformTunnelMode> startedPlatformTunnels =
       <PlatformTunnelMode>[];
+  final List<String?> startedPlatformTunnelResolutionIDs = <String?>[];
+  final List<RuntimeDefaults?> startedPlatformTunnelRuntimeDefaults =
+      <RuntimeDefaults?>[];
   final List<PlatformTunnelMode> requestedPlatformTunnelPermissions =
       <PlatformTunnelMode>[];
   final List<String> resumedPlatformTunnelAttemptIDs = <String>[];
@@ -1833,6 +1857,8 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   @override
   Future<PlatformTunnelStartResult> startPlatformTunnel({
     required PlatformTunnelMode mode,
+    String? resolutionId,
+    RuntimeDefaults? runtimeDefaults,
     RuntimeExecutionPlan? executionPlan,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
@@ -1840,6 +1866,8 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     List<String> disallowedPackages = const <String>[],
   }) async {
     startedPlatformTunnels.add(mode);
+    startedPlatformTunnelResolutionIDs.add(resolutionId);
+    startedPlatformTunnelRuntimeDefaults.add(runtimeDefaults);
     return startPlatformTunnelResult;
   }
 

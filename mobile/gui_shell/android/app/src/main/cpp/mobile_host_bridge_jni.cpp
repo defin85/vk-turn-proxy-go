@@ -13,6 +13,7 @@ using stop_fn = void (*)();
 using free_string_fn = void (*)(char *);
 using register_platform_tunnel_bridge_fn = void (*)(void *, void *);
 using clear_platform_tunnel_bridge_fn = void (*)(void *);
+using set_android_wireguard_profile_path_fn = void (*)(const char *);
 
 struct HostLibrary {
     void *handle = nullptr;
@@ -22,6 +23,7 @@ struct HostLibrary {
     free_string_fn free_string = nullptr;
     register_platform_tunnel_bridge_fn register_platform_tunnel_bridge = nullptr;
     clear_platform_tunnel_bridge_fn clear_platform_tunnel_bridge = nullptr;
+    set_android_wireguard_profile_path_fn set_android_wireguard_profile_path = nullptr;
     std::string load_error;
 };
 
@@ -49,6 +51,9 @@ HostLibrary loadHostLibrary() {
     library.clear_platform_tunnel_bridge =
         reinterpret_cast<clear_platform_tunnel_bridge_fn>(
             dlsym(library.handle, "AndroidEmbeddedHostClearPlatformTunnelBridge"));
+    library.set_android_wireguard_profile_path =
+        reinterpret_cast<set_android_wireguard_profile_path_fn>(
+            dlsym(library.handle, "AndroidEmbeddedHostSetAndroidWireGuardProfilePath"));
 
     if (library.ensure_started == nullptr || library.last_error == nullptr ||
         library.stop == nullptr || library.free_string == nullptr) {
@@ -132,5 +137,22 @@ Java_com_defin85_mobile_1gui_1shell_EmbeddedMobileHostNative_clearPlatformTunnel
     HostLibrary &library = hostLibrary();
     if (library.clear_platform_tunnel_bridge != nullptr) {
         library.clear_platform_tunnel_bridge(env);
+    }
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_defin85_mobile_1gui_1shell_EmbeddedMobileHostNative_setAndroidWireGuardProfilePath(
+    JNIEnv *env,
+    jclass /*clazz*/,
+    jstring value
+) {
+    HostLibrary &library = hostLibrary();
+    if (library.set_android_wireguard_profile_path == nullptr) {
+        return;
+    }
+    const char *utf = value == nullptr ? nullptr : env->GetStringUTFChars(value, nullptr);
+    library.set_android_wireguard_profile_path(utf);
+    if (utf != nullptr) {
+        env->ReleaseStringUTFChars(value, utf);
     }
 }

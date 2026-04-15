@@ -12,6 +12,8 @@ abstract class ControlPlaneApi {
   });
   Future<PlatformTunnelStartResult> startPlatformTunnel({
     required PlatformTunnelMode mode,
+    String? resolutionId,
+    RuntimeDefaults? runtimeDefaults,
     RuntimeExecutionPlan? executionPlan,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
@@ -106,6 +108,8 @@ class ControlPlaneClient implements ControlPlaneApi {
   @override
   Future<PlatformTunnelStartResult> startPlatformTunnel({
     required PlatformTunnelMode mode,
+    String? resolutionId,
+    RuntimeDefaults? runtimeDefaults,
     RuntimeExecutionPlan? executionPlan,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
@@ -116,6 +120,10 @@ class ControlPlaneClient implements ControlPlaneApi {
       'POST',
       '/v1/platform-tunnels/start',
       body: <String, dynamic>{
+        if (resolutionId != null && resolutionId.trim().isNotEmpty)
+          'resolution_id': resolutionId.trim(),
+        if (runtimeDefaults != null)
+          'runtime_defaults': runtimeDefaults.toJson(),
         'mode': mode.value,
         if (executionPlan != null) 'execution_plan': executionPlan.toJson(),
         if (mode == PlatformTunnelMode.androidVpnService)

@@ -1428,6 +1428,7 @@ func TestHostMaterializesWireGuardLeaseInternallyWithoutLeakingOrdinaryReads(t *
 				TURNServerAddress:    req.Credentials.Address,
 				TURNUsername:         req.Credentials.Username,
 				TURNPassword:         req.Credentials.Password,
+				PeerEndpointAddress:  "176.109.104.105:51871",
 				ClientPrivateKey:     "privkey-test-123",
 				ClientAddresses:      []string{"10.99.0.2/32"},
 				PeerPublicKey:        "peerpub-test-123",
@@ -1452,14 +1453,34 @@ func TestHostMaterializesWireGuardLeaseInternallyWithoutLeakingOrdinaryReads(t *
 
 	resolved := waitForResolutionState(t, host, resolutionState.ID, ResolutionStateResolved)
 	selectedPlan := resolved.Artifact.Actions[0].ExecutionPlans[1].Plan
-
-	_, err = host.MaterializeResolutionWithPlan(context.Background(), resolved.ID, RuntimeDefaults{
+	runtimeDefaults := RuntimeDefaults{
 		ListenAddr:  reserveUDPAddr(t),
 		PeerAddr:    "127.0.0.1:56000",
 		Connections: 1,
 		Mode:        TransportModeAuto,
 		UseDTLS:     boolRef(true),
-	}, &selectedPlan)
+	}
+
+	lease, err := host.MaterializeWireGuardTurnExecutionLease(
+		context.Background(),
+		resolved.ID,
+		runtimeDefaults,
+		&selectedPlan,
+	)
+	if err != nil {
+		t.Fatalf("MaterializeWireGuardTurnExecutionLease() error = %v", err)
+	}
+	if lease == nil {
+		t.Fatal("MaterializeWireGuardTurnExecutionLease() lease = nil, want lease")
+	}
+	if lease.ResolutionID != resolved.ID {
+		t.Fatalf("lease resolution_id = %q, want %q", lease.ResolutionID, resolved.ID)
+	}
+	if lease.ClientPrivateKey != "privkey-test-123" {
+		t.Fatalf("lease client_private_key = %q, want privkey-test-123", lease.ClientPrivateKey)
+	}
+
+	_, err = host.MaterializeResolutionWithPlan(context.Background(), resolved.ID, runtimeDefaults, &selectedPlan)
 	if err == nil {
 		t.Fatal("MaterializeResolutionWithPlan() error = nil, want unavailable strict carrier startup")
 	}
@@ -1473,16 +1494,16 @@ func TestHostMaterializesWireGuardLeaseInternallyWithoutLeakingOrdinaryReads(t *
 
 	host.mu.Lock()
 	managed := host.resolutions[resolved.ID]
-	lease := cloneWireGuardTurnExecutionLease(managed.wireGuardTurnLease)
+	storedLease := cloneWireGuardTurnExecutionLease(managed.wireGuardTurnLease)
 	host.mu.Unlock()
-	if lease == nil {
+	if storedLease == nil {
 		t.Fatal("managed resolution wireGuardTurnLease = nil, want internal lease")
 	}
-	if lease.ClientPrivateKey != "privkey-test-123" {
-		t.Fatalf("managed resolution lease client_private_key = %q, want privkey-test-123", lease.ClientPrivateKey)
+	if storedLease.ClientPrivateKey != "privkey-test-123" {
+		t.Fatalf("managed resolution lease client_private_key = %q, want privkey-test-123", storedLease.ClientPrivateKey)
 	}
-	if lease.RemoteEndpointRole != WireGuardTurnRemoteEndpointRoleDatagramTermination {
-		t.Fatalf("managed resolution lease remote_endpoint_role = %q, want %q", lease.RemoteEndpointRole, WireGuardTurnRemoteEndpointRoleDatagramTermination)
+	if storedLease.RemoteEndpointRole != WireGuardTurnRemoteEndpointRoleDatagramTermination {
+		t.Fatalf("managed resolution lease remote_endpoint_role = %q, want %q", storedLease.RemoteEndpointRole, WireGuardTurnRemoteEndpointRoleDatagramTermination)
 	}
 
 	ordinary, err := host.Resolution(resolved.ID)

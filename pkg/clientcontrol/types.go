@@ -389,6 +389,8 @@ type MaterializeResolutionRequest struct {
 }
 
 type PlatformTunnelStartRequest struct {
+	ResolutionID             string                                 `json:"resolution_id,omitempty"`
+	RuntimeDefaults          *RuntimeDefaults                       `json:"runtime_defaults,omitempty"`
 	Mode                     PlatformTunnelMode                     `json:"mode"`
 	ExecutionPlan            *RuntimeExecutionPlan                  `json:"execution_plan,omitempty"`
 	ApplicationRoutingPolicy PlatformTunnelApplicationRoutingPolicy `json:"application_routing_policy,omitempty"`

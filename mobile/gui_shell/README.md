@@ -34,12 +34,13 @@ dart pub get
 cd mobile/gui_shell
 flutter analyze
 flutter test
-flutter run -d android
+flutter run -d <android-device>
 ```
 
 The pinned Flutter SDK version for this project is stored in `mobile/gui_shell/.flutter-version`.
 The canonical product version source remains `version.json` at the repository root.
 The repository-root Dart workspace owns dependency resolution for this shell: keep using the root `pubspec.lock`, and rerun `dart pub get` from the repo root after dependency changes or a fresh checkout.
+The primary Android debug loop now assumes a Linux Android SDK/NDK inside WSL plus a physical device connected through `adb` from WSL, rather than the Windows mirror or an Android emulator.
 
 ## Host bridge contract
 
@@ -75,20 +76,38 @@ If native bridge discovery fails during startup, the shell stays blocked in-app 
 On Android, default/release packaging keeps cleartext HTTP limited to the local bridge path, while `debug` and `profile` variants keep broader cleartext enabled for explicit development bridge overrides.
 Host metadata may also include a typed `platform_tunnels` report for `android_vpn_service` or `apple_network_extension`.
 When the host also advertises `runtime-execution-planning`, host-owned same-device actions and platform-tunnel reports expose typed execution plans instead of one implicit mobile VPN mode.
-Current repo-owned mobile startup still defaults to the documented TURN-backed `custom_packet_overlay` plan, while packaged Android `VpnService` and Apple Network Extension plans stay explicitly scoped to TURN-backed `wireguard_native` and fail closed until those host adapters ship.
+Current repo-owned mobile startup still defaults to the documented TURN-backed `custom_packet_overlay` plan for ordinary host-owned sessions, while packaged Android `VpnService` startup is now implemented as the first supported TURN-backed `wireguard_native` platform-tunnel path.
+Apple Network Extension planning remains explicitly scoped but unavailable until that host adapter ships.
 The mobile shell renders that report in-app and uses the typed `/v1/platform-tunnels/start` result instead of guessing device-wide tunnel support from the OS alone.
-Operators can request startup for the reported mode directly from the shell to inspect the stage-aware fail-closed result before any future platform host claims support.
-Current repo-owned mobile hosts still fail closed for those modes until an Android `VpnService` or Apple Network Extension path is implemented inside the native host boundary.
+Operators can request startup for the reported mode directly from the shell and now get the documented packaged Android `ready=true` path when the host reports `android_vpn_service` as supported.
 
 ## Android packaging
 
-From the repository root on WSL, build the packaged Android app with:
+From the repository root on WSL, build the packaged Android app with the Linux-native SDK/NDK path:
 
 ```bash
-bash ./scripts/build-android-gui-from-wsl.sh
+make build-gui-android
 ```
 
-That wrapper mirrors the repository into `E:\Projects\vk-turn-proxy-go`, rebuilds the embedded Android host, writes Windows-native `android/local.properties`, builds the debug APK with the pinned Flutter SDK, and stages the result under `dist/mobile/android-gui-shell/`.
+That workflow:
+1. uses the Linux Android SDK/NDK from WSL
+2. rebuilds the packaged Android embedded host in-place
+3. writes Linux-native `android/local.properties`
+4. optionally stages the local Android WireGuard dev profile from
+   `VKTP_ANDROID_WIREGUARD_PROFILE` or
+   `~/.local/state/vk-turn-proxy-go/wg/phone1.conf` into the debug APK assets
+   for the packaged `android_vpn_service` dev path
+5. builds the debug APK with the pinned Flutter SDK
+5. validates that the APK contains the packaged JNI and embedded-host `.so` files
+6. stages the result under `dist/mobile/android-gui-shell/`
+
+The WSL shell environment should expose:
+
+- `ANDROID_HOME` / `ANDROID_SDK_ROOT`
+- `JAVA_HOME`
+- `platform-tools`, `cmdline-tools/latest/bin`, and the required `build-tools` on `PATH`
+
+The current repo-owned setup expects the Linux Android SDK at `~/.local/share/android-sdk`.
 
 For a repo-owned smoke that proves the packaged-host shared-library path reaches `ready` without an external `clientd` or `VKTP_MOBILE_HOST_URL`:
 
@@ -96,10 +115,23 @@ For a repo-owned smoke that proves the packaged-host shared-library path reaches
 make smoke-android-embedded-host
 ```
 
+For a repo-owned physical-device smoke that proves the packaged
+`android_vpn_service` path can return `ready=true`:
+
+```bash
+TURN_LINK='generic-turn://...' make smoke-android-vpn-service
+```
+
 For a Windows-native build from the mirror:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File E:\Projects\vk-turn-proxy-go\scripts\build-gui-android.ps1
+```
+
+For the older WSL wrapper that still mirrors into `E:\Projects\vk-turn-proxy-go`, use:
+
+```bash
+make build-gui-android-windows-mirror
 ```
 
 ## Local state

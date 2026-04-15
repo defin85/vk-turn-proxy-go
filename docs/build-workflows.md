@@ -120,6 +120,11 @@ flutter analyze
 flutter test
 ```
 
+For the primary Android debug loop on WSL, keep a Linux Android SDK/NDK inside
+WSL and target a physical device through Linux `adb` rather than depending on a
+Windows-hosted emulator. The current repo-owned setup expects that SDK root at
+`~/.local/share/android-sdk`.
+
 For development against an HTTP bridge:
 
 ```bash
@@ -139,27 +144,42 @@ Android `main` packaging limits cleartext HTTP to the loopback bridge path; `deb
 
 ## Android GUI packaging from WSL
 
-The Android packaged-host workflow is standardized through the Windows mirror at `E:\Projects\vk-turn-proxy-go`.
+The primary Android packaged-host workflow is now Linux-native from the WSL
+checkout.
 
-Run the repo-owned wrapper from WSL:
+Run the repo-owned build entrypoint from WSL:
 
 ```bash
-bash ./scripts/build-android-gui-from-wsl.sh
+make build-gui-android
 ```
 
 That workflow:
 1. synchronizes Flutter version assets from `version.json`
-2. mirrors the repository into `E:\Projects\vk-turn-proxy-go`
-3. rebuilds the packaged Android embedded host in the mirror
-4. writes Windows-native `android/local.properties` with the active Android SDK and Flutter SDK roots
-5. builds the debug APK through the pinned Windows Flutter SDK with stamped build identity
+2. rebuilds the packaged Android embedded host against the Linux Android NDK in
+   WSL
+3. writes Linux-native `android/local.properties` with the active Android SDK
+   and Flutter SDK roots
+4. optionally stages the local Android WireGuard dev profile from
+   `VKTP_ANDROID_WIREGUARD_PROFILE` or
+   `~/.local/state/vk-turn-proxy-go/wg/phone1.conf` into the packaged app
+   assets for the debug `android_vpn_service` path
+5. builds the debug APK through the pinned Linux Flutter SDK with stamped build
+   identity
+5. stages the final APK under `dist/mobile/android-gui-shell/`
 6. validates that the APK contains the packaged JNI and embedded-host `.so` files
-7. stages the final APK under `dist/mobile/android-gui-shell/`
 
 The staged directory includes:
 - `app-debug.apk`
 - `app-debug.apk.sha1`
 - `build-metadata.json`
+
+The Linux Android SDK/NDK path currently required by the repo-owned scripts is:
+
+- `platform-tools`
+- `platforms;android-36`
+- `build-tools;36.0.0`
+- `cmake;3.22.1`
+- `ndk;28.2.13676358`
 
 For a repo-owned smoke of the packaged-host shared-library path reaching control-plane `ready` without an external `clientd` or `VKTP_MOBILE_HOST_URL`:
 
@@ -167,9 +187,28 @@ For a repo-owned smoke of the packaged-host shared-library path reaching control
 make smoke-android-embedded-host
 ```
 
-For the validated physical-device Android PoC that keeps device-wide VPN in the
-external `WireGuard` app and uses the packaged mobile shell only as the local
-transport ingress, follow `docs/android-wg-phone-poc.md`.
+For the repo-owned physical-device smoke that proves the packaged
+`android_vpn_service` path can reach `ready=true` on a connected Android
+device, use:
+
+```bash
+TURN_LINK='generic-turn://...' make smoke-android-vpn-service
+```
+
+Optional environment and args:
+
+- `ANDROID_SERIAL=<adb-serial>` when more than one device is connected
+- `ADB=/mnt/c/Users/Egor/AppData/Local/Android/Sdk/platform-tools/adb.exe` to
+  override the adb binary
+- `python3 ./scripts/smoke-android-vpn-service.py --policy allowed_packages --allowed-package com.google.android.youtube`
+  to verify the typed per-app path instead of `all_apps`
+
+When the Linux Android toolchain is unavailable or a Windows-native packaging
+comparison is needed, the previous mirror workflow remains available:
+
+```bash
+make build-gui-android-windows-mirror
+```
 
 ## Native Android GUI build
 

@@ -37,6 +37,7 @@ android {
     sourceSets {
         getByName("main") {
             jniLibs.srcDir("../../../../dist/mobile/android-embedded-host/jniLibs")
+            assets.srcDir("../../../../dist/mobile/android-embedded-host/assets")
         }
     }
 

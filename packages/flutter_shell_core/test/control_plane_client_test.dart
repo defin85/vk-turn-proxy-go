@@ -77,6 +77,13 @@ void main() {
                 jsonDecode(await utf8.decoder.bind(request).join())
                     as Map<String, dynamic>;
             expect(payload['mode'], 'windows_wintun');
+            expect(payload['resolution_id'], 'resolution-1');
+            final runtimeDefaults =
+                payload['runtime_defaults'] as Map<String, dynamic>;
+            expect(runtimeDefaults['listen_addr'], '127.0.0.1:7777');
+            expect(runtimeDefaults['peer_addr'], 'peer.example.test:443');
+            expect(runtimeDefaults['turn_server'], 'turn.example.test');
+            expect(runtimeDefaults['turn_port'], '3478');
             request.response.headers.contentType = ContentType.json;
             request.response.write(
               jsonEncode(<String, dynamic>{
@@ -249,6 +256,13 @@ void main() {
 
       final startResult = await client.startPlatformTunnel(
         mode: PlatformTunnelMode.windowsWintun,
+        resolutionId: 'resolution-1',
+        runtimeDefaults: const RuntimeDefaults(
+          listenAddress: '127.0.0.1:7777',
+          peerAddress: 'peer.example.test:443',
+          turnServer: 'turn.example.test',
+          turnPort: '3478',
+        ),
       );
       expect(startResult.ready, isFalse);
       expect(startResult.stage, PlatformTunnelStartupStage.capabilityCheck);
@@ -754,6 +768,13 @@ void main() {
                 jsonDecode(await utf8.decoder.bind(request).join())
                     as Map<String, dynamic>;
             expect(payload['mode'], 'android_vpn_service');
+            expect(payload['resolution_id'], 'resolution-android-1');
+            final runtimeDefaults =
+                payload['runtime_defaults'] as Map<String, dynamic>;
+            expect(runtimeDefaults['listen_addr'], '127.0.0.1:7777');
+            expect(runtimeDefaults['peer_addr'], 'relay.example.test:3478');
+            expect(runtimeDefaults['turn_server'], 'turn.example.test');
+            expect(runtimeDefaults['turn_port'], '3478');
             expect(payload['application_routing_policy'], 'allowed_packages');
             expect(payload['allowed_packages'], <dynamic>[
               'com.example.youtube',
@@ -802,6 +823,13 @@ void main() {
 
       final startResult = await client.startPlatformTunnel(
         mode: PlatformTunnelMode.androidVpnService,
+        resolutionId: 'resolution-android-1',
+        runtimeDefaults: const RuntimeDefaults(
+          listenAddress: '127.0.0.1:7777',
+          peerAddress: 'relay.example.test:3478',
+          turnServer: 'turn.example.test',
+          turnPort: '3478',
+        ),
         applicationRoutingPolicy:
             PlatformTunnelApplicationRoutingPolicy.allowedPackages,
         allowedPackages: const <String>['com.example.youtube'],

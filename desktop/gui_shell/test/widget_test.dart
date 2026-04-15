@@ -1804,6 +1804,8 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   @override
   Future<PlatformTunnelStartResult> startPlatformTunnel({
     required PlatformTunnelMode mode,
+    String? resolutionId,
+    RuntimeDefaults? runtimeDefaults,
     RuntimeExecutionPlan? executionPlan,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,

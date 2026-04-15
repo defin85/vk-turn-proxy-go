@@ -858,7 +858,14 @@ class MobileShellController extends ChangeNotifier {
 
   Future<void> startPlatformTunnel(PlatformTunnelMode mode) async {
     await _runBridgeMutation(() async {
-      var result = await bridge.startPlatformTunnel(mode: mode);
+      final resolutionId = selectedResolutionId?.trim();
+      var result = await bridge.startPlatformTunnel(
+        mode: mode,
+        resolutionId: resolutionId == null || resolutionId.isEmpty
+            ? null
+            : resolutionId,
+        runtimeDefaults: RuntimeDefaults.fromProfileSpec(draft.spec),
+      );
       if (_requiresPlatformTunnelPermissionResume(mode, result)) {
         await bridge.requestPlatformTunnelPermission(mode: mode);
         result = await bridge.resumePlatformTunnel(

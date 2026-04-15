@@ -20,14 +20,21 @@ type AndroidVPNServiceLifecycle interface {
 	AcquirePermission(context.Context, clientcontrol.PlatformTunnelStartRequest) error
 	ResumeAfterPermission(context.Context, string, clientcontrol.PlatformTunnelStartRequest) error
 	ValidateRoutePolicy(context.Context, clientcontrol.PlatformTunnelStartRequest) error
-	BringupHost(context.Context, clientcontrol.PlatformTunnelStartRequest) error
-	AttachRuntime(context.Context, clientcontrol.PlatformTunnelStartRequest, *clientcontrol.RuntimeExecutionPlan) error
+	BringupHost(context.Context, clientcontrol.PlatformTunnelStartRequest, *clientcontrol.RuntimeExecutionPlan, *clientcontrol.WireGuardTurnExecutionLease) error
+	AttachRuntime(context.Context, clientcontrol.PlatformTunnelStartRequest, *clientcontrol.RuntimeExecutionPlan, *clientcontrol.WireGuardTurnExecutionLease) error
 	Cleanup(context.Context) error
 }
+
+type androidVPNServiceLeaseProvider func(
+	context.Context,
+	clientcontrol.PlatformTunnelStartRequest,
+	*clientcontrol.RuntimeExecutionPlan,
+) (*clientcontrol.WireGuardTurnExecutionLease, error)
 
 type androidVPNServiceController struct {
 	capability clientcontrol.PlatformTunnelCapability
 	lifecycle  AndroidVPNServiceLifecycle
+	leaseFn    androidVPNServiceLeaseProvider
 	mu         sync.Mutex
 	nextID     uint64
 	attempts   map[string]androidVPNServiceStartupAttempt
@@ -215,7 +222,39 @@ func (c *androidVPNServiceController) finishStartup(
 			withCleanupMessage(ctx, c.lifecycle, cleanupRequired, err.Error()),
 		)
 	}
-	if err := c.lifecycle.BringupHost(ctx, req); err != nil {
+	var lease *clientcontrol.WireGuardTurnExecutionLease
+	if selectedPlanPtr != nil &&
+		selectedPlanPtr.AccessMethod == clientcontrol.RuntimeAccessMethodTURNCredentials &&
+		selectedPlanPtr.CarrierFamily == clientcontrol.RuntimeCarrierFamilyTURNDatagram &&
+		selectedPlanPtr.EngineFamily == clientcontrol.RuntimeEngineFamilyWireGuardNative &&
+		strings.TrimSpace(string(selectedPlanPtr.HostAdapter)) != "" {
+		if c.leaseFn == nil {
+			return startFailureResult(
+				req.Mode,
+				selectedPlanPtr,
+				clientcontrol.PlatformTunnelStartupStageRuntimeAttach,
+				clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+				withCleanupMessage(
+					ctx,
+					c.lifecycle,
+					cleanupRequired,
+					"android embedded host cannot materialize the strict TURN datagram WireGuard runtime lease",
+				),
+			)
+		}
+		var err error
+		lease, err = c.leaseFn(ctx, req, selectedPlanPtr)
+		if err != nil {
+			return startFailureResult(
+				req.Mode,
+				selectedPlanPtr,
+				clientcontrol.PlatformTunnelStartupStageRuntimeAttach,
+				clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+				withCleanupMessage(ctx, c.lifecycle, cleanupRequired, err.Error()),
+			)
+		}
+	}
+	if err := c.lifecycle.BringupHost(ctx, req, selectedPlanPtr, lease); err != nil {
 		return startFailureResult(
 			req.Mode,
 			selectedPlanPtr,
@@ -224,7 +263,7 @@ func (c *androidVPNServiceController) finishStartup(
 			withCleanupMessage(ctx, c.lifecycle, cleanupRequired, err.Error()),
 		)
 	}
-	if err := c.lifecycle.AttachRuntime(ctx, req, selectedPlanPtr); err != nil {
+	if err := c.lifecycle.AttachRuntime(ctx, req, selectedPlanPtr, lease); err != nil {
 		return startFailureResult(
 			req.Mode,
 			selectedPlanPtr,
@@ -239,6 +278,17 @@ func (c *androidVPNServiceController) finishStartup(
 		ExecutionPlan: selectedPlanPtr,
 		Ready:         true,
 	}, nil
+}
+
+func (c *androidVPNServiceController) setWireGuardTurnLeaseProvider(
+	leaseFn androidVPNServiceLeaseProvider,
+) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.leaseFn = leaseFn
 }
 
 func (c *androidVPNServiceController) storeStartupAttempt(
