@@ -108,6 +108,10 @@ void main() {
         api.negotiateCalls.single,
         contains(Capability.providerRuntimeArtifacts),
       );
+      expect(
+        api.negotiateCalls.single,
+        contains(Capability.runtimeExecutionPlanning),
+      );
     },
   );
 
@@ -238,6 +242,7 @@ void main() {
               'platform_tunnels',
               'profiles',
               'provider-runtime-artifacts',
+              'runtime-execution-planning',
               'sessions',
               'challenges',
               'diagnostics',
@@ -328,6 +333,7 @@ void main() {
               'platform_tunnels',
               'profiles',
               'provider-runtime-artifacts',
+              'runtime-execution-planning',
               'sessions',
               'challenges',
               'diagnostics',
@@ -515,6 +521,7 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
       Capability.profiles,
       Capability.providerConfigs,
       Capability.providerRuntimeArtifacts,
+      Capability.runtimeExecutionPlanning,
       Capability.sessions,
       Capability.challenges,
       Capability.diagnostics,
@@ -592,6 +599,7 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
   @override
   Future<PlatformTunnelStartResult> startPlatformTunnel({
     required PlatformTunnelMode mode,
+    RuntimeExecutionPlan? executionPlan,
   }) async {
     return const PlatformTunnelStartResult(
       mode: PlatformTunnelMode.appleNetworkExtension,
@@ -634,6 +642,7 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
   Future<SessionRecord> materializeResolution({
     required String resolutionId,
     required RuntimeDefaults runtimeDefaults,
+    RuntimeExecutionPlan? executionPlan,
   }) {
     throw UnimplementedError();
   }

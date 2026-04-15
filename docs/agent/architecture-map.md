@@ -7,6 +7,7 @@ Use this map to find the owning package before changing code or making claims ab
 
 1. `cmd/*` parses flags, builds dependencies, and maps runtime errors to process exit behavior.
 2. `cmd/clientd` and `pkg/clientcontrol` expose the local client control plane for desktop and embedded hosts.
+   That surface now includes runtime-execution-planning metadata between resolved artifacts and host-owned same-device startup.
 3. `cmd/android-mobile-host` and `internal/androidembeddedhost` package that same host contract for Android embedded-host delivery.
 4. `desktop/gui_shell`, `mobile/gui_shell`, and `packages/flutter_shell_core` implement Flutter-shell surfaces over the typed host semantics.
 5. `internal/provider/*` resolves provider credentials and probe artifacts.
@@ -26,6 +27,7 @@ Use this map to find the owning package before changing code or making claims ab
 | `cmd/turn-expiry-check`, `internal/turnrest` | TURN REST expiry parsing and post-expiry Allocate probes | Investigating short-lived TURN usernames or generic-turn expiry behavior | `go test ./internal/turnrest ./cmd/turn-expiry-check` |
 | `cmd/android-mobile-host`, `internal/androidembeddedhost` | packaged Android embedded-host bootstrap and native bridge export | Changing mobile packaged-host startup, bridge wiring, or owned-browser host policy | `go test ./internal/androidembeddedhost` |
 | `pkg/clientcontrol` | local profile/session/challenge API, event streaming, diagnostics export | Adding GUI-facing control-plane behavior or host wiring | `go test ./pkg/clientcontrol` |
+| `docs/runtime-execution-planning.md` | documented compatibility matrix between access methods, carriers, engines, host adapters, and remote endpoint families | Checking whether a same-device execution claim is actually in scope before changing code or docs | `openspec validate --strict --no-interactive --all` |
 | `packages/flutter_shell_core` | shared Flutter shell core modules and workspace anchor | Extracting app-neutral shell code out of desktop/mobile apps | `dart pub get`; `cd packages/flutter_shell_core && flutter analyze && flutter test` |
 | `desktop/gui_shell` | Flutter desktop shell, sidecar supervision, desktop-only UX, diagnostics export workflow | Changing the GUI, sidecar discovery, or desktop lifecycle assumptions | `flutter analyze && flutter test` |
 | `mobile/gui_shell` | Flutter mobile shell, secure local state, browser handoff, mobile host bridge lifecycle | Changing the mobile GUI, secure storage behavior, or bridge lifecycle assumptions | `flutter analyze && flutter test` |

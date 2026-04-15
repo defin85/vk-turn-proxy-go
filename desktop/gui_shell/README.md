@@ -108,6 +108,7 @@ The required host capabilities for this shell are:
 - `platform_tunnels`
 - `profiles`
 - `provider-runtime-artifacts`
+- `runtime-execution-planning`
 - `sessions`
 - `challenges`
 - `diagnostics`
@@ -116,6 +117,8 @@ The required host capabilities for this shell are:
 If negotiation fails because the host is missing one of those capabilities or reports an incompatible version, the shell blocks session management and reports the incompatibility explicitly.
 When host metadata is available, the banner shows the local GUI build identity, the connected host build identity, and the control-plane contract version as distinct values.
 Host metadata may also include `platform_tunnels`, a typed per-mode report for `windows_wintun`, `linux_tun`, or `apple_network_extension` depending on the packaged host target.
+When the host also advertises `runtime-execution-planning`, host-owned same-device actions and per-mode tunnel reports expose typed execution plans instead of one implicit desktop-VPN mode string.
+Current repo-owned desktop startup still defaults to the documented TURN-backed `custom_packet_overlay` plan, while packaged system-tunnel plans stay explicitly scoped to TURN-backed `wireguard_native` and fail closed until a platform sidecar implements them.
 The shell renders that report in the dashboard and uses the typed `/v1/platform-tunnels/start` result instead of inferring system-tunnel support from OS or bundle heuristics.
 Operators can request startup for the reported mode directly from the shell to inspect the stage-aware fail-closed result in-app.
 Current repo-owned desktop hosts still fail closed for those modes until a platform-specific sidecar implements the privileged tunnel path.

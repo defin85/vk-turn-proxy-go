@@ -238,4 +238,92 @@ void main() {
     expect(restored.target, 'linux/amd64');
     expect(restored.builtAt, '2026-04-12T09:30:00Z');
   });
+
+  test('runtime execution plans round-trip through json', () {
+    const plan = RuntimeExecutionPlan(
+      accessMethod: RuntimeAccessMethod.turnCredentials,
+      carrierFamily: RuntimeCarrierFamily.turnDtlsOverlay,
+      engineFamily: RuntimeEngineFamily.wireguardNative,
+      hostAdapter: RuntimeHostAdapter.windowsWintun,
+    );
+
+    final restored = RuntimeExecutionPlan.fromJson(plan.toJson());
+
+    expect(restored.accessMethod, RuntimeAccessMethod.turnCredentials);
+    expect(restored.carrierFamily, RuntimeCarrierFamily.turnDtlsOverlay);
+    expect(restored.engineFamily, RuntimeEngineFamily.wireguardNative);
+    expect(restored.hostAdapter, RuntimeHostAdapter.windowsWintun);
+  });
+
+  test('runtime execution plans omit host adapter when absent', () {
+    const plan = RuntimeExecutionPlan(
+      accessMethod: RuntimeAccessMethod.webrtcCallAttach,
+      carrierFamily: RuntimeCarrierFamily.webrtcDataChannel,
+      engineFamily: RuntimeEngineFamily.proxyCoreAdapter,
+    );
+
+    expect(plan.toJson().containsKey('host_adapter'), isFalse);
+  });
+
+  test(
+    'runtime execution plan descriptors and artifact access methods parse',
+    () {
+      final artifact = ResolutionArtifactRecord.fromJson(<String, dynamic>{
+        'family': 'generic_turn',
+        'access_methods': <String>['turn_credentials'],
+        'actions': <Map<String, dynamic>>[
+          <String, dynamic>{
+            'id': 'start_on_this_device',
+            'execution_owner': 'host',
+            'execution_plans': <Map<String, dynamic>>[
+              <String, dynamic>{
+                'plan': <String, dynamic>{
+                  'access_method': 'turn_credentials',
+                  'carrier_family': 'turn_dtls_overlay',
+                  'engine_family': 'custom_packet_overlay',
+                },
+                'support_state': 'supported',
+                'remote_endpoint_family': 'turn_server',
+                'default': true,
+              },
+              <String, dynamic>{
+                'plan': <String, dynamic>{
+                  'access_method': 'turn_credentials',
+                  'carrier_family': 'turn_datagram',
+                  'engine_family': 'wireguard_native',
+                  'host_adapter': 'windows_wintun',
+                },
+                'support_state': 'unavailable',
+                'remote_endpoint_family': 'turn_server',
+                'message': 'packaged host missing tunnel implementation',
+              },
+            ],
+          },
+        ],
+      });
+
+      expect(artifact.accessMethods, const <RuntimeAccessMethod>[
+        RuntimeAccessMethod.turnCredentials,
+      ]);
+      expect(
+        artifact.executionPlansForAction(ArtifactAction.startOnThisDevice),
+        hasLength(2),
+      );
+      expect(
+        artifact
+            .executionPlansForAction(ArtifactAction.startOnThisDevice)
+            .first
+            .isSelectable,
+        isTrue,
+      );
+      expect(
+        artifact
+            .executionPlansForAction(ArtifactAction.startOnThisDevice)
+            .last
+            .plan
+            .engineFamily,
+        RuntimeEngineFamily.wireguardNative,
+      );
+    },
+  );
 }

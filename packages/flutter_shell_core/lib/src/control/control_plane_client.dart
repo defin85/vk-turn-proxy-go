@@ -12,6 +12,7 @@ abstract class ControlPlaneApi {
   });
   Future<PlatformTunnelStartResult> startPlatformTunnel({
     required PlatformTunnelMode mode,
+    RuntimeExecutionPlan? executionPlan,
   });
   Future<List<ProviderDescriptor>> providers();
   Future<List<ProviderConfigRecord>> providerConfigs();
@@ -36,6 +37,7 @@ abstract class ControlPlaneApi {
   Future<SessionRecord> materializeResolution({
     required String resolutionId,
     required RuntimeDefaults runtimeDefaults,
+    RuntimeExecutionPlan? executionPlan,
   });
   Future<List<SessionRecord>> sessions();
   Future<SessionRecord> startSession({String? profileId, ProfileSpec? spec});
@@ -97,11 +99,15 @@ class ControlPlaneClient implements ControlPlaneApi {
   @override
   Future<PlatformTunnelStartResult> startPlatformTunnel({
     required PlatformTunnelMode mode,
+    RuntimeExecutionPlan? executionPlan,
   }) async {
     final payload = await _jsonRequest(
       'POST',
       '/v1/platform-tunnels/start',
-      body: <String, dynamic>{'mode': mode.value},
+      body: <String, dynamic>{
+        'mode': mode.value,
+        if (executionPlan != null) 'execution_plan': executionPlan.toJson(),
+      },
     );
     return PlatformTunnelStartResult.fromJson(payload);
   }
@@ -214,11 +220,15 @@ class ControlPlaneClient implements ControlPlaneApi {
   Future<SessionRecord> materializeResolution({
     required String resolutionId,
     required RuntimeDefaults runtimeDefaults,
+    RuntimeExecutionPlan? executionPlan,
   }) async {
     final payload = await _jsonRequest(
       'POST',
       '/v1/resolutions/$resolutionId/materialize',
-      body: <String, dynamic>{'runtime_defaults': runtimeDefaults.toJson()},
+      body: <String, dynamic>{
+        'runtime_defaults': runtimeDefaults.toJson(),
+        if (executionPlan != null) 'execution_plan': executionPlan.toJson(),
+      },
     );
     return SessionRecord.fromJson(payload);
   }
@@ -409,6 +419,12 @@ class ControlPlaneClient implements ControlPlaneApi {
             code: decoded['code'] as String? ?? 'request_failed',
             message: decoded['message'] as String? ?? body,
             action: decoded['action'] as String?,
+            requestedExecutionPlan:
+                decoded['requested_execution_plan'] is Map<String, dynamic>
+                ? RuntimeExecutionPlan.fromJson(
+                    decoded['requested_execution_plan'] as Map<String, dynamic>,
+                  )
+                : null,
             field: decoded['field'] as String?,
             violation: decoded['violation'] as String?,
             stage: decoded['stage'] as String?,

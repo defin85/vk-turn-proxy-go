@@ -49,7 +49,13 @@ func WithPlatformTunnelStarter(start func(context.Context, PlatformTunnelStartRe
 func normalizePlatformTunnelCapabilities(capabilities []PlatformTunnelCapability, build BuildIdentity) ([]PlatformTunnelCapability, error) {
 	snapshot := clonePlatformTunnelCapabilities(capabilities)
 	if len(snapshot) == 0 {
-		return defaultPlatformTunnelCapabilities(build), nil
+		snapshot = defaultPlatformTunnelCapabilities(build)
+	} else {
+		for index := range snapshot {
+			if len(snapshot[index].ExecutionPlans) == 0 {
+				snapshot[index].ExecutionPlans = defaultRuntimeExecutionPlansForPlatformTunnel(snapshot[index])
+			}
+		}
 	}
 	if err := validatePlatformTunnelCapabilities(snapshot); err != nil {
 		return defaultPlatformTunnelCapabilities(build), err
@@ -67,6 +73,7 @@ func clonePlatformTunnelCapabilities(capabilities []PlatformTunnelCapability) []
 		if len(capability.SatisfiedPrerequisites) > 0 {
 			copyCapability.SatisfiedPrerequisites = append([]PlatformTunnelPrerequisite(nil), capability.SatisfiedPrerequisites...)
 		}
+		copyCapability.ExecutionPlans = cloneRuntimeExecutionPlanDescriptors(capability.ExecutionPlans)
 		out = append(out, copyCapability)
 	}
 	return out
@@ -75,19 +82,23 @@ func clonePlatformTunnelCapabilities(capabilities []PlatformTunnelCapability) []
 func defaultPlatformTunnelCapabilities(build BuildIdentity) []PlatformTunnelCapability {
 	mode, ok := defaultPlatformTunnelMode(build)
 	if !ok {
-		return []PlatformTunnelCapability{{
+		capabilities := []PlatformTunnelCapability{{
 			Mode:                PlatformTunnelModeLinuxTun,
 			Available:           false,
 			MissingPrerequisite: PlatformTunnelPrerequisiteHostImplementation,
 			Message:             "This host does not publish a platform tunnel implementation for its current build target.",
 		}}
+		capabilities[0].ExecutionPlans = defaultRuntimeExecutionPlansForPlatformTunnel(capabilities[0])
+		return capabilities
 	}
-	return []PlatformTunnelCapability{{
+	capabilities := []PlatformTunnelCapability{{
 		Mode:                mode,
 		Available:           false,
 		MissingPrerequisite: PlatformTunnelPrerequisiteHostImplementation,
 		Message:             fmt.Sprintf("The %s host does not yet implement platform tunnel startup for mode %s.", hostTargetLabel(build), mode),
 	}}
+	capabilities[0].ExecutionPlans = defaultRuntimeExecutionPlansForPlatformTunnel(capabilities[0])
+	return capabilities
 }
 
 func defaultPlatformTunnelMode(build BuildIdentity) (PlatformTunnelMode, bool) {
@@ -145,6 +156,27 @@ func validatePlatformTunnelCapability(capability PlatformTunnelCapability) error
 		}
 		seenPrerequisites[prerequisite] = struct{}{}
 	}
+	if len(capability.ExecutionPlans) == 0 {
+		capability.ExecutionPlans = defaultRuntimeExecutionPlansForPlatformTunnel(capability)
+	}
+	supportedDefaults := 0
+	for _, plan := range capability.ExecutionPlans {
+		if err := validateRuntimeExecutionPlanDescriptor(plan); err != nil {
+			return fmt.Errorf("mode %s reports invalid execution plan: %w", capability.Mode, err)
+		}
+		if plan.Plan.HostAdapter != runtimeHostAdapterForPlatformTunnelMode(capability.Mode) {
+			return fmt.Errorf("mode %s reports execution plan for mismatched host_adapter %q", capability.Mode, plan.Plan.HostAdapter)
+		}
+		if plan.SupportState == RuntimeExecutionPlanSupportStateSupported && !capability.Available {
+			return fmt.Errorf("mode %s is unavailable but reports a supported execution plan", capability.Mode)
+		}
+		if plan.Default && plan.SupportState == RuntimeExecutionPlanSupportStateSupported {
+			supportedDefaults++
+		}
+	}
+	if supportedDefaults > 1 {
+		return fmt.Errorf("mode %s reports multiple default supported execution plans", capability.Mode)
+	}
 	if capability.Available {
 		if len(capability.SatisfiedPrerequisites) == 0 {
 			return fmt.Errorf("mode %s is available but satisfied_prerequisites is empty", capability.Mode)
@@ -173,6 +205,11 @@ func validatePlatformTunnelStartResult(req PlatformTunnelStartRequest, result Pl
 	if strings.TrimSpace(string(result.MissingPrerequisite)) != "" && !isKnownPlatformTunnelPrerequisite(result.MissingPrerequisite) {
 		return fmt.Errorf("startup result for mode %s reports unknown missing_prerequisite %q", result.Mode, result.MissingPrerequisite)
 	}
+	if result.ExecutionPlan != nil {
+		if err := validateRuntimeExecutionPlan(*result.ExecutionPlan); err != nil {
+			return fmt.Errorf("startup result for mode %s reports invalid execution_plan: %w", result.Mode, err)
+		}
+	}
 	if result.Ready {
 		if strings.TrimSpace(string(result.MissingPrerequisite)) != "" {
 			return fmt.Errorf("startup result for mode %s is ready but still reports missing_prerequisite %q", result.Mode, result.MissingPrerequisite)
@@ -195,26 +232,40 @@ func defaultPlatformTunnelStarter(capabilities []PlatformTunnelCapability) func(
 			if capability.Mode != req.Mode {
 				continue
 			}
-			if !capability.Available {
+			selectedPlan, err := selectPlatformTunnelExecutionPlanDescriptor(capability.ExecutionPlans, req.ExecutionPlan)
+			if err != nil {
 				return PlatformTunnelStartResult{
 					Mode:                req.Mode,
+					ExecutionPlan:       cloneRuntimeExecutionPlan(req.ExecutionPlan),
+					Ready:               false,
+					Stage:               PlatformTunnelStartupStageCapabilityCheck,
+					MissingPrerequisite: PlatformTunnelPrerequisiteHostImplementation,
+					Message:             err.Error(),
+				}, nil
+			}
+			if selectedPlan.SupportState != RuntimeExecutionPlanSupportStateSupported || !capability.Available {
+				return PlatformTunnelStartResult{
+					Mode:                req.Mode,
+					ExecutionPlan:       cloneRuntimeExecutionPlan(&selectedPlan.Plan),
 					Ready:               false,
 					Stage:               PlatformTunnelStartupStageCapabilityCheck,
 					MissingPrerequisite: capability.MissingPrerequisite,
-					Message:             capability.Message,
+					Message:             firstNonEmpty(selectedPlan.Message, capability.Message),
 				}, nil
 			}
 			return PlatformTunnelStartResult{
 				Mode:                req.Mode,
+				ExecutionPlan:       cloneRuntimeExecutionPlan(&selectedPlan.Plan),
 				Ready:               false,
 				Stage:               PlatformTunnelStartupStageHostBringup,
 				MissingPrerequisite: PlatformTunnelPrerequisiteHostImplementation,
-				Message:             fmt.Sprintf("Platform tunnel mode %s is declared but this host does not implement startup yet.", req.Mode),
+				Message:             fmt.Sprintf("Platform tunnel mode %s documents execution plan %s/%s/%s/%s but this host does not implement startup yet.", req.Mode, selectedPlan.Plan.AccessMethod, selectedPlan.Plan.CarrierFamily, selectedPlan.Plan.EngineFamily, selectedPlan.Plan.HostAdapter),
 			}, nil
 		}
 
 		return PlatformTunnelStartResult{
 			Mode:                req.Mode,
+			ExecutionPlan:       cloneRuntimeExecutionPlan(req.ExecutionPlan),
 			Ready:               false,
 			Stage:               PlatformTunnelStartupStageCapabilityCheck,
 			MissingPrerequisite: PlatformTunnelPrerequisiteHostImplementation,

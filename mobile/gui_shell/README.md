@@ -50,6 +50,7 @@ Required capabilities for the first slice are:
 - `platform_tunnels`
 - `profiles`
 - `provider-runtime-artifacts`
+- `runtime-execution-planning`
 - `sessions`
 - `challenges`
 - `diagnostics`
@@ -73,6 +74,8 @@ If the bridge is missing or incompatible, the app fails closed for session contr
 If native bridge discovery fails during startup, the shell stays blocked in-app and reports that resolver error instead of crashing before the first screen.
 On Android, default/release packaging keeps cleartext HTTP limited to the local bridge path, while `debug` and `profile` variants keep broader cleartext enabled for explicit development bridge overrides.
 Host metadata may also include a typed `platform_tunnels` report for `android_vpn_service` or `apple_network_extension`.
+When the host also advertises `runtime-execution-planning`, host-owned same-device actions and platform-tunnel reports expose typed execution plans instead of one implicit mobile VPN mode.
+Current repo-owned mobile startup still defaults to the documented TURN-backed `custom_packet_overlay` plan, while packaged Android `VpnService` and Apple Network Extension plans stay explicitly scoped to TURN-backed `wireguard_native` and fail closed until those host adapters ship.
 The mobile shell renders that report in-app and uses the typed `/v1/platform-tunnels/start` result instead of guessing device-wide tunnel support from the OS alone.
 Operators can request startup for the reported mode directly from the shell to inspect the stage-aware fail-closed result before any future platform host claims support.
 Current repo-owned mobile hosts still fail closed for those modes until an Android `VpnService` or Apple Network Extension path is implemented inside the native host boundary.

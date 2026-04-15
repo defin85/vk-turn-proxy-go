@@ -323,6 +323,7 @@ func (h *Host) Info() HostInfo {
 			CapabilityProfiles,
 			CapabilityProviderConfigs,
 			CapabilityProviderRuntimeArtifacts,
+			CapabilityRuntimeExecutionPlanning,
 			CapabilitySessions,
 		},
 		PlatformTunnels: clonePlatformTunnelCapabilities(h.platformTunnels),

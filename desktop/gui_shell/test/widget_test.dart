@@ -40,6 +40,7 @@ const HostInfo _readyHostInfo = HostInfo(
     Capability.profiles,
     Capability.providerConfigs,
     Capability.providerRuntimeArtifacts,
+    Capability.runtimeExecutionPlanning,
     Capability.sessions,
     Capability.challenges,
     Capability.diagnostics,
@@ -1586,14 +1587,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(
-        find.widgetWithText(ChoiceChip, 'Saved record'),
-        findsOneWidget,
-      );
-      expect(
-        find.widgetWithText(ChoiceChip, 'Direct input'),
-        findsOneWidget,
-      );
+      expect(find.widgetWithText(ChoiceChip, 'Saved record'), findsOneWidget);
+      expect(find.widgetWithText(ChoiceChip, 'Direct input'), findsOneWidget);
       expect(
         find.byKey(const ValueKey<String>('profile-provider-descriptor-card')),
         findsOneWidget,
@@ -1783,6 +1778,7 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   Future<SessionRecord> materializeResolution({
     required String resolutionId,
     required RuntimeDefaults runtimeDefaults,
+    RuntimeExecutionPlan? executionPlan,
   }) async {
     return _sessions.first;
   }
@@ -1808,6 +1804,7 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   @override
   Future<PlatformTunnelStartResult> startPlatformTunnel({
     required PlatformTunnelMode mode,
+    RuntimeExecutionPlan? executionPlan,
   }) async {
     startedPlatformTunnels.add(mode);
     return const PlatformTunnelStartResult(

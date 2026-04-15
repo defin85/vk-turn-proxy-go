@@ -153,6 +153,9 @@ func TestHostInfoExposesContractVersionAndBuildIdentity(t *testing.T) {
 	if !containsCapability(info.Capabilities, CapabilityProviderRuntimeArtifacts) {
 		t.Fatalf("capabilities = %v, want provider-runtime-artifacts", info.Capabilities)
 	}
+	if !containsCapability(info.Capabilities, CapabilityRuntimeExecutionPlanning) {
+		t.Fatalf("capabilities = %v, want runtime-execution-planning", info.Capabilities)
+	}
 	if len(info.PlatformTunnels) != 1 {
 		t.Fatalf("platform_tunnels len = %d, want 1", len(info.PlatformTunnels))
 	}
@@ -1152,6 +1155,9 @@ func TestHostStartsResolvesExportsAndMaterializesResolution(t *testing.T) {
 	if resolved.Artifact.Family != ArtifactFamilyGenericTURN {
 		t.Fatalf("resolved artifact family = %q, want %q", resolved.Artifact.Family, ArtifactFamilyGenericTURN)
 	}
+	if len(resolved.Artifact.AccessMethods) != 1 || resolved.Artifact.AccessMethods[0] != RuntimeAccessMethodTURNCredentials {
+		t.Fatalf("resolved artifact access_methods = %#v, want turn_credentials only", resolved.Artifact.AccessMethods)
+	}
 	if len(resolved.Artifact.Actions) != 2 {
 		t.Fatalf("resolved artifact actions len = %d, want 2", len(resolved.Artifact.Actions))
 	}
@@ -1160,6 +1166,18 @@ func TestHostStartsResolvesExportsAndMaterializesResolution(t *testing.T) {
 	}
 	if resolved.Artifact.Actions[0].ExecutionOwner != ActionExecutionOwnerHost {
 		t.Fatalf("resolved artifact action[0].execution_owner = %q, want %q", resolved.Artifact.Actions[0].ExecutionOwner, ActionExecutionOwnerHost)
+	}
+	if len(resolved.Artifact.Actions[0].ExecutionPlans) != 2 {
+		t.Fatalf("resolved artifact action[0].execution_plans len = %d, want 2", len(resolved.Artifact.Actions[0].ExecutionPlans))
+	}
+	if resolved.Artifact.Actions[0].ExecutionPlans[0].Plan.EngineFamily != RuntimeEngineFamilyCustomPacketOverlay {
+		t.Fatalf("resolved artifact action[0].execution_plans[0].engine_family = %q, want %q", resolved.Artifact.Actions[0].ExecutionPlans[0].Plan.EngineFamily, RuntimeEngineFamilyCustomPacketOverlay)
+	}
+	if resolved.Artifact.Actions[0].ExecutionPlans[1].Plan.EngineFamily != RuntimeEngineFamilyWireGuardNative {
+		t.Fatalf("resolved artifact action[0].execution_plans[1].engine_family = %q, want %q", resolved.Artifact.Actions[0].ExecutionPlans[1].Plan.EngineFamily, RuntimeEngineFamilyWireGuardNative)
+	}
+	if resolved.Artifact.Actions[0].ExecutionPlans[1].SupportState != RuntimeExecutionPlanSupportStateUnavailable {
+		t.Fatalf("resolved artifact action[0].execution_plans[1].support_state = %q, want %q", resolved.Artifact.Actions[0].ExecutionPlans[1].SupportState, RuntimeExecutionPlanSupportStateUnavailable)
 	}
 	if resolved.Artifact.Actions[1].ID != ArtifactActionExportHandoff {
 		t.Fatalf("resolved artifact action[1] = %q, want %q", resolved.Artifact.Actions[1].ID, ArtifactActionExportHandoff)
@@ -1745,12 +1763,16 @@ func TestResolutionArtifactFromNonTURNFamilyKeepsSummaryRedacted(t *testing.T) {
 		descriptor,
 		resolved,
 		ResolutionExportStatus{Supported: false},
+		nil,
 	)
 	if artifact == nil {
 		t.Fatal("resolution artifact = nil, want conference_room artifact")
 	}
 	if artifact.Family != ArtifactFamilyConferenceRoom {
 		t.Fatalf("resolution artifact family = %q, want %q", artifact.Family, ArtifactFamilyConferenceRoom)
+	}
+	if len(artifact.AccessMethods) != 0 {
+		t.Fatalf("resolution artifact access_methods = %#v, want empty", artifact.AccessMethods)
 	}
 	if len(artifact.Actions) != 1 || artifact.Actions[0].ID != ArtifactActionOpenRoom {
 		t.Fatalf("resolution artifact actions = %#v, want open_room only", artifact.Actions)
@@ -1836,6 +1858,7 @@ func TestResolutionArtifactFromCameraStreamFamilyExposesTypedExternalTargets(t *
 		descriptor,
 		resolved,
 		ResolutionExportStatus{Supported: false},
+		nil,
 	)
 	if artifact == nil {
 		t.Fatal("resolution artifact = nil, want camera_stream artifact")
@@ -2080,6 +2103,9 @@ func TestHostResolutionExportFailsWithoutAuthoritativeExpiry(t *testing.T) {
 	if current.Artifact.Actions[0].ExecutionOwner != ActionExecutionOwnerHost {
 		t.Fatalf("resolution artifact action execution_owner = %q, want %q", current.Artifact.Actions[0].ExecutionOwner, ActionExecutionOwnerHost)
 	}
+	if len(current.Artifact.Actions[0].ExecutionPlans) != 2 {
+		t.Fatalf("resolution artifact execution_plans = %#v, want current and packaged plans", current.Artifact.Actions[0].ExecutionPlans)
+	}
 
 	_, err = host.ExportResolution(resolutionState.ID)
 	if !errors.Is(err, errResolutionExportUnavailable) {
@@ -2167,6 +2193,9 @@ func TestHostMaterializeResolutionFailsWhenArtifactDoesNotAdvertiseStartAction(t
 	}
 	if actionErr.Action != ArtifactActionStartOnThisDevice {
 		t.Fatalf("MaterializeResolution() action = %q, want %q", actionErr.Action, ArtifactActionStartOnThisDevice)
+	}
+	if actionErr.Plan != nil {
+		t.Fatalf("MaterializeResolution() requested plan = %#v, want nil default selection", actionErr.Plan)
 	}
 }
 

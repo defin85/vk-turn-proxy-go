@@ -109,6 +109,7 @@ class MobileShellController extends ChangeNotifier {
     Capability.platformTunnels,
     Capability.profiles,
     Capability.providerRuntimeArtifacts,
+    Capability.runtimeExecutionPlanning,
     Capability.sessions,
     Capability.challenges,
     Capability.diagnostics,

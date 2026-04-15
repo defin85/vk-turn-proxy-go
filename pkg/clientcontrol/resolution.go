@@ -30,6 +30,7 @@ var (
 
 type ResolutionActionError struct {
 	Action ArtifactAction
+	Plan   *RuntimeExecutionPlan
 	Err    error
 }
 
@@ -39,6 +40,17 @@ func (e *ResolutionActionError) Error() string {
 	}
 	if e.Err == nil {
 		return fmt.Sprintf("resolution action %q is unavailable", e.Action)
+	}
+	if e.Plan != nil {
+		return fmt.Sprintf(
+			"resolution action %q is unavailable for execution plan %s/%s/%s/%s: %v",
+			e.Action,
+			e.Plan.AccessMethod,
+			e.Plan.CarrierFamily,
+			e.Plan.EngineFamily,
+			e.Plan.HostAdapter,
+			e.Err,
+		)
 	}
 	return fmt.Sprintf("resolution action %q is unavailable: %v", e.Action, e.Err)
 }
@@ -249,6 +261,15 @@ func (h *Host) ExportResolution(resolutionID string) (ResolutionExportResult, er
 }
 
 func (h *Host) MaterializeResolution(ctx context.Context, resolutionID string, defaults RuntimeDefaults) (Session, error) {
+	return h.MaterializeResolutionWithPlan(ctx, resolutionID, defaults, nil)
+}
+
+func (h *Host) MaterializeResolutionWithPlan(
+	ctx context.Context,
+	resolutionID string,
+	defaults RuntimeDefaults,
+	requestedPlan *RuntimeExecutionPlan,
+) (Session, error) {
 	h.mu.Lock()
 	managed, ok := h.resolutions[resolutionID]
 	if !ok {
@@ -274,6 +295,24 @@ func (h *Host) MaterializeResolution(ctx context.Context, resolutionID string, d
 		return Session{}, &ResolutionActionError{
 			Action: ArtifactActionStartOnThisDevice,
 			Err:    errResolutionNotTransportReady,
+		}
+	}
+	selectedPlan, err := selectResolutionExecutionPlan(snapshot, ArtifactActionStartOnThisDevice, requestedPlan)
+	if err != nil {
+		return Session{}, &ResolutionActionError{
+			Action: ArtifactActionStartOnThisDevice,
+			Plan:   cloneRuntimeExecutionPlan(requestedPlan),
+			Err:    err,
+		}
+	}
+	if selectedPlan.Plan.EngineFamily != RuntimeEngineFamilyCustomPacketOverlay ||
+		selectedPlan.Plan.CarrierFamily != RuntimeCarrierFamilyTURNDTLSOverlay ||
+		selectedPlan.Plan.AccessMethod != RuntimeAccessMethodTURNCredentials ||
+		strings.TrimSpace(string(selectedPlan.Plan.HostAdapter)) != "" {
+		return Session{}, &ResolutionActionError{
+			Action: ArtifactActionStartOnThisDevice,
+			Plan:   cloneRuntimeExecutionPlan(&selectedPlan.Plan),
+			Err:    fmt.Errorf("%w: host runtime does not yet implement the requested execution plan", errRuntimeExecutionPlanUnavailable),
 		}
 	}
 
@@ -341,7 +380,7 @@ func (h *Host) finishResolutionSuccess(resolutionID string, resolved provider.Re
 		h.mu.Unlock()
 		return
 	}
-	credentials, export, artifact, err := resolvedSnapshotContract(managed.descriptor, resolved, now)
+	credentials, export, artifact, err := resolvedSnapshotContract(managed.descriptor, resolved, now, h.platformTunnels)
 	if err != nil {
 		h.mu.Unlock()
 		h.finishResolutionFailure(resolutionID, err)
@@ -387,7 +426,12 @@ func (h *Host) finishResolutionSuccess(resolutionID string, resolved provider.Re
 	h.publishEvent(event)
 }
 
-func resolvedSnapshotContract(descriptor ProviderDescriptor, resolved provider.Resolution, now time.Time) (*ResolutionCredentials, ResolutionExportStatus, *ResolutionArtifact, error) {
+func resolvedSnapshotContract(
+	descriptor ProviderDescriptor,
+	resolved provider.Resolution,
+	now time.Time,
+	platformTunnels []PlatformTunnelCapability,
+) (*ResolutionCredentials, ResolutionExportStatus, *ResolutionArtifact, error) {
 	family := resolutionArtifactFamily(descriptor, resolved)
 	if family == "" {
 		return nil, ResolutionExportStatus{}, nil, errors.New("provider resolution returned no supported runtime artifact")
@@ -399,19 +443,19 @@ func resolvedSnapshotContract(descriptor ProviderDescriptor, resolved provider.R
 			return nil, ResolutionExportStatus{}, nil, errors.New("provider resolution returned incomplete TURN credentials")
 		}
 		export := resolutionExportStatus(resolved, now)
-		artifact := resolutionArtifactFromResolution(descriptor, resolved, export)
+		artifact := resolutionArtifactFromResolution(descriptor, resolved, export, platformTunnels)
 		if artifact == nil {
 			return nil, ResolutionExportStatus{}, nil, errors.New("provider resolution returned incomplete generic_turn runtime artifact")
 		}
 		return redactedResolutionCredentials(resolved), export, artifact, nil
 	case ArtifactFamilyConferenceRoom:
-		artifact := resolutionArtifactFromResolution(descriptor, resolved, ResolutionExportStatus{})
+		artifact := resolutionArtifactFromResolution(descriptor, resolved, ResolutionExportStatus{}, platformTunnels)
 		if artifact == nil {
 			return nil, ResolutionExportStatus{}, nil, errors.New("provider resolution returned incomplete conference_room runtime artifact")
 		}
 		return nil, ResolutionExportStatus{Supported: false}, artifact, nil
 	case ArtifactFamilyCameraStream:
-		artifact := resolutionArtifactFromResolution(descriptor, resolved, ResolutionExportStatus{})
+		artifact := resolutionArtifactFromResolution(descriptor, resolved, ResolutionExportStatus{}, platformTunnels)
 		if artifact == nil {
 			return nil, ResolutionExportStatus{}, nil, errors.New("provider resolution returned incomplete camera_stream runtime artifact")
 		}
@@ -770,7 +814,12 @@ func resolutionSnapshotEvent(snapshot Resolution, eventType EventType, message s
 	}
 }
 
-func resolutionArtifactFromResolution(descriptor ProviderDescriptor, resolved provider.Resolution, export ResolutionExportStatus) *ResolutionArtifact {
+func resolutionArtifactFromResolution(
+	descriptor ProviderDescriptor,
+	resolved provider.Resolution,
+	export ResolutionExportStatus,
+	platformTunnels []PlatformTunnelCapability,
+) *ResolutionArtifact {
 	family := resolutionArtifactFamily(descriptor, resolved)
 	if family == "" {
 		return nil
@@ -781,9 +830,10 @@ func resolutionArtifactFromResolution(descriptor ProviderDescriptor, resolved pr
 	}
 
 	artifact := &ResolutionArtifact{
-		Family:  family,
-		Actions: resolutionArtifactActions(descriptor, family, export, summary),
-		Summary: summary,
+		Family:        family,
+		AccessMethods: resolutionArtifactAccessMethods(family),
+		Actions:       resolutionArtifactActions(descriptor, family, export, summary, platformTunnels),
+		Summary:       summary,
 	}
 	return artifact
 }
@@ -850,7 +900,13 @@ func resolutionArtifactSummary(family ArtifactFamily, resolved provider.Resoluti
 	}
 }
 
-func resolutionArtifactActions(descriptor ProviderDescriptor, family ArtifactFamily, export ResolutionExportStatus, summary ResolutionArtifactSummary) []ResolutionAction {
+func resolutionArtifactActions(
+	descriptor ProviderDescriptor,
+	family ArtifactFamily,
+	export ResolutionExportStatus,
+	summary ResolutionArtifactSummary,
+	platformTunnels []PlatformTunnelCapability,
+) []ResolutionAction {
 	actions := make([]ResolutionAction, 0, len(descriptor.CapabilityHints.PotentialActions))
 	for _, action := range descriptor.CapabilityHints.PotentialActions {
 		if !artifactActionSupported(action, family, export, summary) {
@@ -859,6 +915,7 @@ func resolutionArtifactActions(descriptor ProviderDescriptor, family ArtifactFam
 		actions = append(actions, ResolutionAction{
 			ID:             action,
 			ExecutionOwner: artifactActionExecutionOwner(action),
+			ExecutionPlans: resolutionExecutionPlansForAction(action, family, platformTunnels),
 		})
 	}
 	return actions
@@ -917,6 +974,29 @@ func resolutionSupportsAction(snapshot Resolution, action ArtifactAction) bool {
 		}
 	}
 	return false
+}
+
+func selectResolutionExecutionPlan(
+	snapshot Resolution,
+	action ArtifactAction,
+	requested *RuntimeExecutionPlan,
+) (*RuntimeExecutionPlanDescriptor, error) {
+	if snapshot.Artifact == nil {
+		if requested == nil {
+			return nil, errRuntimeExecutionPlanUnavailable
+		}
+		return nil, errRuntimeExecutionPlanUnsupported
+	}
+	for _, candidate := range snapshot.Artifact.Actions {
+		if candidate.ID != action {
+			continue
+		}
+		return selectRuntimeExecutionPlanDescriptor(candidate.ExecutionPlans, requested)
+	}
+	if requested == nil {
+		return nil, errRuntimeExecutionPlanUnavailable
+	}
+	return nil, errRuntimeExecutionPlanUnsupported
 }
 
 func hasTransportReadyTURNCredentials(resolved provider.Resolution) bool {

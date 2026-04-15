@@ -17,6 +17,7 @@ const (
 	CapabilityMobileHostBridge         Capability = "mobile_host_bridge"
 	CapabilityPlatformTunnels          Capability = "platform_tunnels"
 	CapabilityProviderRuntimeArtifacts Capability = "provider-runtime-artifacts"
+	CapabilityRuntimeExecutionPlanning Capability = "runtime-execution-planning"
 )
 
 type TransportMode string
@@ -134,11 +135,12 @@ const (
 )
 
 type PlatformTunnelCapability struct {
-	Mode                   PlatformTunnelMode           `json:"mode"`
-	Available              bool                         `json:"available"`
-	SatisfiedPrerequisites []PlatformTunnelPrerequisite `json:"satisfied_prerequisites,omitempty"`
-	MissingPrerequisite    PlatformTunnelPrerequisite   `json:"missing_prerequisite,omitempty"`
-	Message                string                       `json:"message,omitempty"`
+	Mode                   PlatformTunnelMode               `json:"mode"`
+	Available              bool                             `json:"available"`
+	SatisfiedPrerequisites []PlatformTunnelPrerequisite     `json:"satisfied_prerequisites,omitempty"`
+	ExecutionPlans         []RuntimeExecutionPlanDescriptor `json:"execution_plans,omitempty"`
+	MissingPrerequisite    PlatformTunnelPrerequisite       `json:"missing_prerequisite,omitempty"`
+	Message                string                           `json:"message,omitempty"`
 }
 
 type HostInfo struct {
@@ -373,15 +375,18 @@ type RuntimeDefaults struct {
 }
 
 type MaterializeResolutionRequest struct {
-	RuntimeDefaults RuntimeDefaults `json:"runtime_defaults"`
+	RuntimeDefaults RuntimeDefaults       `json:"runtime_defaults"`
+	ExecutionPlan   *RuntimeExecutionPlan `json:"execution_plan,omitempty"`
 }
 
 type PlatformTunnelStartRequest struct {
-	Mode PlatformTunnelMode `json:"mode"`
+	Mode          PlatformTunnelMode    `json:"mode"`
+	ExecutionPlan *RuntimeExecutionPlan `json:"execution_plan,omitempty"`
 }
 
 type PlatformTunnelStartResult struct {
 	Mode                PlatformTunnelMode         `json:"mode"`
+	ExecutionPlan       *RuntimeExecutionPlan      `json:"execution_plan,omitempty"`
 	Ready               bool                       `json:"ready"`
 	Stage               PlatformTunnelStartupStage `json:"stage,omitempty"`
 	MissingPrerequisite PlatformTunnelPrerequisite `json:"missing_prerequisite,omitempty"`

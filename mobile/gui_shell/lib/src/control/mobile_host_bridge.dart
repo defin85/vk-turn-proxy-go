@@ -245,6 +245,7 @@ class HttpMobileHostBridge implements MobileHostBridge {
       Capability.platformTunnels,
       Capability.profiles,
       Capability.providerRuntimeArtifacts,
+      Capability.runtimeExecutionPlanning,
       Capability.sessions,
       Capability.challenges,
       Capability.diagnostics,
@@ -349,10 +350,12 @@ class HttpMobileHostBridge implements MobileHostBridge {
   Future<SessionRecord> materializeResolution({
     required String resolutionId,
     required RuntimeDefaults runtimeDefaults,
+    RuntimeExecutionPlan? executionPlan,
   }) {
     return _client.materializeResolution(
       resolutionId: resolutionId,
       runtimeDefaults: runtimeDefaults,
+      executionPlan: executionPlan,
     );
   }
 
@@ -437,8 +440,12 @@ class HttpMobileHostBridge implements MobileHostBridge {
   @override
   Future<PlatformTunnelStartResult> startPlatformTunnel({
     required PlatformTunnelMode mode,
+    RuntimeExecutionPlan? executionPlan,
   }) {
-    return _client.startPlatformTunnel(mode: mode);
+    return _client.startPlatformTunnel(
+      mode: mode,
+      executionPlan: executionPlan,
+    );
   }
 
   @override
@@ -541,6 +548,7 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
   @override
   Future<PlatformTunnelStartResult> startPlatformTunnel({
     required PlatformTunnelMode mode,
+    RuntimeExecutionPlan? executionPlan,
   }) => _fail();
 
   @override
@@ -578,6 +586,7 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
   Future<SessionRecord> materializeResolution({
     required String resolutionId,
     required RuntimeDefaults runtimeDefaults,
+    RuntimeExecutionPlan? executionPlan,
   }) => _fail();
 
   @override

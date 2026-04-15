@@ -1,7 +1,7 @@
 # mobile-webview-provider-continuation Specification
 
 ## Purpose
-TBD - created by archiving change add-15-mobile-webview-provider-continuation. Update Purpose after archive.
+Define the provider-gated mobile WebView continuation contract for app-owned embedded browser flows and fail-closed fallback behavior.
 ## Requirements
 ### Requirement: Owned mobile WebView continuation is optional and provider-gated
 
@@ -42,4 +42,3 @@ The system SHALL fail closed when the embedded continuation flow cannot be compl
 - **WHEN** the embedded flow is blocked by provider behavior, missing completion signals, or platform policy constraints
 - **THEN** the session reports an explicit challenge or `provider_resolve` failure
 - **AND** it does not silently claim success from the incomplete embedded browser flow
-

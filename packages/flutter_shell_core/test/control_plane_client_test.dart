@@ -43,11 +43,27 @@ void main() {
                   'event_stream',
                   'desktop_sidecar',
                   'platform_tunnels',
+                  'runtime-execution-planning',
                 ],
                 'platform_tunnels': <Map<String, dynamic>>[
                   <String, dynamic>{
                     'mode': 'windows_wintun',
                     'available': false,
+                    'execution_plans': <Map<String, dynamic>>[
+                      <String, dynamic>{
+                        'plan': <String, dynamic>{
+                          'access_method': 'turn_credentials',
+                          'carrier_family': 'turn_datagram',
+                          'engine_family': 'wireguard_native',
+                          'host_adapter': 'windows_wintun',
+                        },
+                        'support_state': 'unavailable',
+                        'remote_endpoint_family': 'turn_server',
+                        'default': true,
+                        'message':
+                            'packaged host missing tunnel implementation',
+                      },
+                    ],
                     'missing_prerequisite': 'host_implementation',
                     'message': 'packaged host missing tunnel implementation',
                   },
@@ -65,6 +81,12 @@ void main() {
             request.response.write(
               jsonEncode(<String, dynamic>{
                 'mode': 'windows_wintun',
+                'execution_plan': <String, dynamic>{
+                  'access_method': 'turn_credentials',
+                  'carrier_family': 'turn_datagram',
+                  'engine_family': 'wireguard_native',
+                  'host_adapter': 'windows_wintun',
+                },
                 'ready': false,
                 'stage': 'capability_check',
                 'missing_prerequisite': 'host_implementation',
@@ -205,6 +227,7 @@ void main() {
       expect(info.contractVersion, '1');
       expect(info.build.version, '0.1.0');
       expect(info.capabilities, contains(Capability.desktopSidecar));
+      expect(info.capabilities, contains(Capability.runtimeExecutionPlanning));
       expect(info.platformTunnels, hasLength(1));
       expect(
         info.platformTunnels.single.mode,
@@ -214,12 +237,25 @@ void main() {
         info.platformTunnels.single.missingPrerequisite,
         PlatformTunnelPrerequisite.hostImplementation,
       );
+      expect(info.platformTunnels.single.executionPlans, hasLength(1));
+      expect(
+        info.platformTunnels.single.executionPlans.single.plan.engineFamily,
+        RuntimeEngineFamily.wireguardNative,
+      );
+      expect(
+        info.platformTunnels.single.executionPlans.single.supportState,
+        RuntimeExecutionPlanSupportState.unavailable,
+      );
 
       final startResult = await client.startPlatformTunnel(
         mode: PlatformTunnelMode.windowsWintun,
       );
       expect(startResult.ready, isFalse);
       expect(startResult.stage, PlatformTunnelStartupStage.capabilityCheck);
+      expect(
+        startResult.executionPlan?.engineFamily,
+        RuntimeEngineFamily.wireguardNative,
+      );
 
       final events = await client.events().toList();
       expect(events, hasLength(1));
@@ -328,6 +364,12 @@ void main() {
             'message':
                 'resolution action "start_on_this_device" is unavailable: resolution is not transport-ready',
             'action': 'start_on_this_device',
+            'requested_execution_plan': <String, dynamic>{
+              'access_method': 'turn_credentials',
+              'carrier_family': 'turn_datagram',
+              'engine_family': 'wireguard_native',
+              'host_adapter': 'windows_wintun',
+            },
             'stage': 'runtime_attach',
             'not_implemented': true,
           }),
@@ -358,6 +400,12 @@ void main() {
                 (ControlPlaneError error) => error.action,
                 'action',
                 'start_on_this_device',
+              )
+              .having(
+                (ControlPlaneError error) =>
+                    error.requestedExecutionPlan?.engineFamily,
+                'requestedExecutionPlan.engineFamily',
+                RuntimeEngineFamily.wireguardNative,
               )
               .having(
                 (ControlPlaneError error) => error.stage,

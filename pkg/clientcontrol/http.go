@@ -250,12 +250,21 @@ func Handler(host *Host) http.Handler {
 				writeError(w, http.StatusBadRequest, "invalid_json", err)
 				return
 			}
-			session, err := host.MaterializeResolution(context.WithoutCancel(r.Context()), resolutionID, req.RuntimeDefaults)
+			session, err := host.MaterializeResolutionWithPlan(
+				context.WithoutCancel(r.Context()),
+				resolutionID,
+				req.RuntimeDefaults,
+				req.ExecutionPlan,
+			)
 			if err != nil {
 				switch {
 				case errors.Is(err, ErrResolutionNotFound):
 					writeNotFound(w, err)
-				case errors.Is(err, errResolutionNotTransportReady), errors.Is(err, errResolutionExpired):
+				case errors.Is(err, errResolutionNotTransportReady),
+					errors.Is(err, errResolutionExpired),
+					errors.Is(err, errRuntimeExecutionPlanUnavailable),
+					errors.Is(err, errRuntimeExecutionPlanUnsupported),
+					errors.Is(err, errRuntimeExecutionPlanSelectionRequired):
 					writeError(w, http.StatusConflict, "resolution_materialize_unavailable", err)
 				default:
 					writeError(w, http.StatusBadRequest, "resolution_materialize_failed", err)
@@ -472,13 +481,14 @@ func decodeContinueChallengeRequest(
 }
 
 type errorResponse struct {
-	Code           string `json:"code"`
-	Message        string `json:"message"`
-	Action         string `json:"action,omitempty"`
-	Field          string `json:"field,omitempty"`
-	Violation      string `json:"violation,omitempty"`
-	Stage          string `json:"stage,omitempty"`
-	NotImplemented bool   `json:"not_implemented,omitempty"`
+	Code                   string                `json:"code"`
+	Message                string                `json:"message"`
+	Action                 string                `json:"action,omitempty"`
+	RequestedExecutionPlan *RuntimeExecutionPlan `json:"requested_execution_plan,omitempty"`
+	Field                  string                `json:"field,omitempty"`
+	Violation              string                `json:"violation,omitempty"`
+	Stage                  string                `json:"stage,omitempty"`
+	NotImplemented         bool                  `json:"not_implemented,omitempty"`
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {
@@ -496,6 +506,7 @@ func writeError(w http.ResponseWriter, status int, code string, err error) {
 	var actionErr *ResolutionActionError
 	if errors.As(err, &actionErr) {
 		response.Action = string(actionErr.Action)
+		response.RequestedExecutionPlan = cloneRuntimeExecutionPlan(actionErr.Plan)
 	}
 	var settingsErr *ProviderSettingsValidationError
 	if errors.As(err, &settingsErr) {

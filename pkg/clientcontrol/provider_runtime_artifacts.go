@@ -87,8 +87,9 @@ type ProviderInputEnvelope struct {
 }
 
 type ResolutionAction struct {
-	ID             ArtifactAction       `json:"id"`
-	ExecutionOwner ActionExecutionOwner `json:"execution_owner"`
+	ID             ArtifactAction                   `json:"id"`
+	ExecutionOwner ActionExecutionOwner             `json:"execution_owner"`
+	ExecutionPlans []RuntimeExecutionPlanDescriptor `json:"execution_plans,omitempty"`
 }
 
 type ConferenceRoomArtifactSummary struct {
@@ -107,9 +108,10 @@ type ResolutionArtifactSummary struct {
 }
 
 type ResolutionArtifact struct {
-	Family  ArtifactFamily            `json:"family"`
-	Actions []ResolutionAction        `json:"actions,omitempty"`
-	Summary ResolutionArtifactSummary `json:"summary,omitempty"`
+	Family        ArtifactFamily            `json:"family"`
+	AccessMethods []RuntimeAccessMethod     `json:"access_methods,omitempty"`
+	Actions       []ResolutionAction        `json:"actions,omitempty"`
+	Summary       ResolutionArtifactSummary `json:"summary,omitempty"`
 }
 
 type ActionExecutionOwner string
@@ -221,7 +223,8 @@ func cloneResolutionArtifact(artifact *ResolutionArtifact) *ResolutionArtifact {
 	}
 
 	clone := &ResolutionArtifact{
-		Family: artifact.Family,
+		Family:        artifact.Family,
+		AccessMethods: append([]RuntimeAccessMethod(nil), artifact.AccessMethods...),
 		Summary: ResolutionArtifactSummary{
 			GenericTURN:    cloneResolutionCredentials(artifact.Summary.GenericTURN),
 			ConferenceRoom: cloneConferenceRoomArtifactSummary(artifact.Summary.ConferenceRoom),
@@ -229,7 +232,12 @@ func cloneResolutionArtifact(artifact *ResolutionArtifact) *ResolutionArtifact {
 		},
 	}
 	if len(artifact.Actions) > 0 {
-		clone.Actions = append([]ResolutionAction(nil), artifact.Actions...)
+		clone.Actions = make([]ResolutionAction, 0, len(artifact.Actions))
+		for _, action := range artifact.Actions {
+			copyAction := action
+			copyAction.ExecutionPlans = cloneRuntimeExecutionPlanDescriptors(action.ExecutionPlans)
+			clone.Actions = append(clone.Actions, copyAction)
+		}
 	}
 	return clone
 }

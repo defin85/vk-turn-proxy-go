@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'runtime_execution_planning.dart';
+
 enum Capability {
   profiles('profiles'),
   providerConfigs('provider_configs'),
@@ -10,7 +12,8 @@ enum Capability {
   desktopSidecar('desktop_sidecar'),
   mobileHostBridge('mobile_host_bridge'),
   platformTunnels('platform_tunnels'),
-  providerRuntimeArtifacts('provider-runtime-artifacts');
+  providerRuntimeArtifacts('provider-runtime-artifacts'),
+  runtimeExecutionPlanning('runtime-execution-planning');
 
   const Capability(this.value);
 
@@ -1125,6 +1128,7 @@ class PlatformTunnelCapability {
     required this.mode,
     required this.available,
     this.satisfiedPrerequisites = const <PlatformTunnelPrerequisite>[],
+    this.executionPlans = const <RuntimeExecutionPlanDescriptor>[],
     this.missingPrerequisite,
     this.message = '',
   });
@@ -1153,6 +1157,14 @@ class PlatformTunnelCapability {
       mode: mode,
       available: available,
       satisfiedPrerequisites: satisfiedPrerequisites,
+      executionPlans:
+          (json['execution_plans'] as List<dynamic>? ?? const <dynamic>[])
+              .map(
+                (dynamic entry) => RuntimeExecutionPlanDescriptor.fromJson(
+                  entry as Map<String, dynamic>,
+                ),
+              )
+              .toList(growable: false),
       missingPrerequisite: missingPrerequisite,
       message: json['message'] as String? ?? '',
     );
@@ -1161,6 +1173,7 @@ class PlatformTunnelCapability {
   final PlatformTunnelMode mode;
   final bool available;
   final List<PlatformTunnelPrerequisite> satisfiedPrerequisites;
+  final List<RuntimeExecutionPlanDescriptor> executionPlans;
   final PlatformTunnelPrerequisite? missingPrerequisite;
   final String message;
 
@@ -1170,6 +1183,9 @@ class PlatformTunnelCapability {
       'available': available,
       'satisfied_prerequisites': satisfiedPrerequisites
           .map((PlatformTunnelPrerequisite prerequisite) => prerequisite.value)
+          .toList(growable: false),
+      'execution_plans': executionPlans
+          .map((RuntimeExecutionPlanDescriptor plan) => plan.toJson())
           .toList(growable: false),
       'missing_prerequisite': missingPrerequisite?.value,
       'message': message.isEmpty ? null : message,
@@ -1181,6 +1197,7 @@ class PlatformTunnelStartResult {
   const PlatformTunnelStartResult({
     required this.mode,
     required this.ready,
+    this.executionPlan,
     this.stage,
     this.missingPrerequisite,
     this.message = '',
@@ -1215,6 +1232,11 @@ class PlatformTunnelStartResult {
     return PlatformTunnelStartResult(
       mode: mode,
       ready: ready,
+      executionPlan: json['execution_plan'] is Map<String, dynamic>
+          ? RuntimeExecutionPlan.fromJson(
+              json['execution_plan'] as Map<String, dynamic>,
+            )
+          : null,
       stage: stage,
       missingPrerequisite: missingPrerequisite,
       message: json['message'] as String? ?? '',
@@ -1223,6 +1245,7 @@ class PlatformTunnelStartResult {
 
   final PlatformTunnelMode mode;
   final bool ready;
+  final RuntimeExecutionPlan? executionPlan;
   final PlatformTunnelStartupStage? stage;
   final PlatformTunnelPrerequisite? missingPrerequisite;
   final String message;
@@ -1231,6 +1254,7 @@ class PlatformTunnelStartResult {
     return _compact(<String, dynamic>{
       'mode': mode.value,
       'ready': ready,
+      'execution_plan': executionPlan?.toJson(),
       'stage': stage?.value,
       'missing_prerequisite': missingPrerequisite?.value,
       'message': message.isEmpty ? null : message,
@@ -1971,6 +1995,7 @@ class ResolutionActionRecord {
   const ResolutionActionRecord({
     required this.id,
     required this.executionOwner,
+    this.executionPlans = const <RuntimeExecutionPlanDescriptor>[],
   });
 
   factory ResolutionActionRecord.fromJson(Map<String, dynamic> json) {
@@ -1981,17 +2006,29 @@ class ResolutionActionRecord {
       executionOwner: ActionExecutionOwner.fromJson(
         json['execution_owner'] as String?,
       ),
+      executionPlans:
+          (json['execution_plans'] as List<dynamic>? ?? const <dynamic>[])
+              .map(
+                (dynamic entry) => RuntimeExecutionPlanDescriptor.fromJson(
+                  entry as Map<String, dynamic>,
+                ),
+              )
+              .toList(growable: false),
     );
   }
 
   final ArtifactAction id;
   final ActionExecutionOwner executionOwner;
+  final List<RuntimeExecutionPlanDescriptor> executionPlans;
 
   Map<String, dynamic> toJson() {
-    return <String, dynamic>{
+    return _compact(<String, dynamic>{
       'id': id.value,
       'execution_owner': executionOwner.value,
-    };
+      'execution_plans': executionPlans
+          .map((RuntimeExecutionPlanDescriptor plan) => plan.toJson())
+          .toList(growable: false),
+    });
   }
 }
 
@@ -2078,6 +2115,7 @@ class ResolutionArtifactSummary {
 class ResolutionArtifactRecord {
   const ResolutionArtifactRecord({
     required this.family,
+    this.accessMethods = const <RuntimeAccessMethod>[],
     this.actions = const <ResolutionActionRecord>[],
     this.summary = const ResolutionArtifactSummary(),
   });
@@ -2087,6 +2125,13 @@ class ResolutionArtifactRecord {
       family:
           ArtifactFamily.fromJson(json['family'] as String?) ??
           ArtifactFamily.genericTurn,
+      accessMethods:
+          (json['access_methods'] as List<dynamic>? ?? const <dynamic>[])
+              .map(
+                (dynamic raw) => RuntimeAccessMethod.fromJson(raw as String?),
+              )
+              .whereType<RuntimeAccessMethod>()
+              .toList(growable: false),
       actions: (json['actions'] as List<dynamic>? ?? const <dynamic>[])
           .map(
             (dynamic entry) =>
@@ -2102,6 +2147,7 @@ class ResolutionArtifactRecord {
   }
 
   final ArtifactFamily family;
+  final List<RuntimeAccessMethod> accessMethods;
   final List<ResolutionActionRecord> actions;
   final ResolutionArtifactSummary summary;
 
@@ -2117,6 +2163,13 @@ class ResolutionArtifactRecord {
     return null;
   }
 
+  List<RuntimeExecutionPlanDescriptor> executionPlansForAction(
+    ArtifactAction action,
+  ) {
+    return this.action(action)?.executionPlans ??
+        const <RuntimeExecutionPlanDescriptor>[];
+  }
+
   String? externalTargetUrl(ArtifactAction action) {
     return switch (action) {
       ArtifactAction.openRoom => _nonEmpty(summary.conferenceRoom?.roomUrl),
@@ -2129,6 +2182,9 @@ class ResolutionArtifactRecord {
   Map<String, dynamic> toJson() {
     return _compact(<String, dynamic>{
       'family': family.value,
+      'access_methods': accessMethods
+          .map((RuntimeAccessMethod method) => method.value)
+          .toList(growable: false),
       'actions': actions
           .map((ResolutionActionRecord item) => item.toJson())
           .toList(growable: false),
@@ -2784,6 +2840,7 @@ class ControlPlaneError implements Exception {
     required this.code,
     required this.message,
     this.action,
+    this.requestedExecutionPlan,
     this.field,
     this.violation,
     this.stage,
@@ -2794,6 +2851,7 @@ class ControlPlaneError implements Exception {
   final String code;
   final String message;
   final String? action;
+  final RuntimeExecutionPlan? requestedExecutionPlan;
   final String? field;
   final String? violation;
   final String? stage;
@@ -2803,7 +2861,7 @@ class ControlPlaneError implements Exception {
 
   @override
   String toString() {
-    return 'ControlPlaneError(status=$statusCode, code=$code, message=$message, action=$action, field=$field, violation=$violation, stage=$stage, notImplemented=$notImplemented)';
+    return 'ControlPlaneError(status=$statusCode, code=$code, message=$message, action=$action, requestedExecutionPlan=$requestedExecutionPlan, field=$field, violation=$violation, stage=$stage, notImplemented=$notImplemented)';
   }
 }
 

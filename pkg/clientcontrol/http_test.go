@@ -57,11 +57,20 @@ func TestHandlerHostAndNegotiate(t *testing.T) {
 	if !containsCapability(info.Capabilities, CapabilityProviderConfigs) {
 		t.Fatalf("capabilities = %v, want provider_configs", info.Capabilities)
 	}
+	if !containsCapability(info.Capabilities, CapabilityRuntimeExecutionPlanning) {
+		t.Fatalf("capabilities = %v, want runtime-execution-planning", info.Capabilities)
+	}
 	if len(info.PlatformTunnels) != 1 {
 		t.Fatalf("platform_tunnels len = %d, want 1", len(info.PlatformTunnels))
 	}
 	if info.PlatformTunnels[0].Mode != PlatformTunnelModeLinuxTun {
 		t.Fatalf("platform_tunnels[0].mode = %q, want %q", info.PlatformTunnels[0].Mode, PlatformTunnelModeLinuxTun)
+	}
+	if len(info.PlatformTunnels[0].ExecutionPlans) != 1 {
+		t.Fatalf("platform_tunnels[0].execution_plans len = %d, want 1", len(info.PlatformTunnels[0].ExecutionPlans))
+	}
+	if info.PlatformTunnels[0].ExecutionPlans[0].Plan.EngineFamily != RuntimeEngineFamilyWireGuardNative {
+		t.Fatalf("platform_tunnels[0].execution_plans[0].engine_family = %q, want %q", info.PlatformTunnels[0].ExecutionPlans[0].Plan.EngineFamily, RuntimeEngineFamilyWireGuardNative)
 	}
 
 	body, _ := json.Marshal(NegotiateRequest{
@@ -72,6 +81,7 @@ func TestHandlerHostAndNegotiate(t *testing.T) {
 			CapabilityProfiles,
 			CapabilityProviderConfigs,
 			CapabilityProviderRuntimeArtifacts,
+			CapabilityRuntimeExecutionPlanning,
 			CapabilitySessions,
 			CapabilityChallenges,
 			CapabilityDiagnostics,
@@ -118,6 +128,9 @@ func TestHandlerHostAndNegotiate(t *testing.T) {
 	}
 	if startResult.Ready {
 		t.Fatal("platform tunnel start result ready = true, want false")
+	}
+	if startResult.ExecutionPlan == nil {
+		t.Fatal("platform tunnel start result execution_plan = nil, want documented plan")
 	}
 	if startResult.Stage != PlatformTunnelStartupStageCapabilityCheck {
 		t.Fatalf("platform tunnel start stage = %q, want %q", startResult.Stage, PlatformTunnelStartupStageCapabilityCheck)
@@ -1286,5 +1299,99 @@ func TestHandlerResolutionMaterializeFailureIncludesTypedAction(t *testing.T) {
 	}
 	if payloadBody["action"] != string(ArtifactActionStartOnThisDevice) {
 		t.Fatalf("error action = %#v, want %q", payloadBody["action"], ArtifactActionStartOnThisDevice)
+	}
+}
+
+func TestHandlerResolutionMaterializeFailureIncludesRequestedExecutionPlan(t *testing.T) {
+	host := New(
+		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+		WithBuildIdentity(testBuildIdentity()),
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name: "vk",
+			descriptor: provider.ProviderDescriptor{
+				ID:               "vk",
+				DisplayName:      "VK Calls",
+				InputKind:        provider.ProviderInputKindLink,
+				BrowserPolicy:    provider.ProviderBrowserPolicyExternalRequired,
+				ArtifactFamilies: []provider.ArtifactFamily{provider.ArtifactFamilyGenericTURN},
+				CapabilityHints: provider.ProviderCapabilityHints{
+					PotentialActions: []provider.ArtifactAction{
+						provider.ArtifactActionStartOnThisDevice,
+					},
+					RedactionPolicy: provider.SummaryOnlyArtifactRedactionPolicy(),
+				},
+			},
+			resolve: func(ctx context.Context, link string) (provider.Resolution, error) {
+				return provider.Resolution{
+					Credentials: provider.Credentials{
+						Username: "turn-user",
+						Password: "turn-pass",
+						Address:  "turn.example.test:3478",
+					},
+					Metadata: map[string]string{
+						"provider":          "vk",
+						"resolution_method": "staged_http",
+					},
+				}, nil
+			},
+		})),
+	)
+	handler := Handler(host)
+
+	payload, _ := json.Marshal(StartResolutionRequest{
+		Provider: "vk",
+		Input: &ProviderInputEnvelope{
+			Kind: ProviderInputKindLink,
+			Link: "https://vk.com/call/join/test-token",
+		},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/resolutions", bytes.NewReader(payload))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("POST /v1/resolutions code = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resolutionState Resolution
+	if err := json.Unmarshal(rec.Body.Bytes(), &resolutionState); err != nil {
+		t.Fatalf("decode resolution response: %v", err)
+	}
+	resolutionState = waitForResolutionState(t, host, resolutionState.ID, ResolutionStateResolved)
+
+	payload, _ = json.Marshal(MaterializeResolutionRequest{
+		RuntimeDefaults: RuntimeDefaults{
+			ListenAddr:  reserveUDPAddr(t),
+			PeerAddr:    "127.0.0.1:56000",
+			Connections: 1,
+			Mode:        TransportModeAuto,
+			UseDTLS:     boolRef(true),
+		},
+		ExecutionPlan: &RuntimeExecutionPlan{
+			AccessMethod:  RuntimeAccessMethodTURNCredentials,
+			CarrierFamily: RuntimeCarrierFamilyTURNDatagram,
+			EngineFamily:  RuntimeEngineFamilyWireGuardNative,
+			HostAdapter:   RuntimeHostAdapterLinuxTun,
+		},
+	})
+	req = httptest.NewRequest(http.MethodPost, "/v1/resolutions/"+resolutionState.ID+"/materialize", bytes.NewReader(payload))
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest && rec.Code != http.StatusConflict {
+		t.Fatalf("POST /v1/resolutions/{id}/materialize code = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payloadBody map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payloadBody); err != nil {
+		t.Fatalf("decode materialize error response: %v", err)
+	}
+	if payloadBody["action"] != string(ArtifactActionStartOnThisDevice) {
+		t.Fatalf("error action = %#v, want %q", payloadBody["action"], ArtifactActionStartOnThisDevice)
+	}
+	requestedPlan, ok := payloadBody["requested_execution_plan"].(map[string]any)
+	if !ok {
+		t.Fatalf("requested_execution_plan = %#v, want object", payloadBody["requested_execution_plan"])
+	}
+	if requestedPlan["engine_family"] != string(RuntimeEngineFamilyWireGuardNative) {
+		t.Fatalf("requested_execution_plan.engine_family = %#v, want %q", requestedPlan["engine_family"], RuntimeEngineFamilyWireGuardNative)
 	}
 }

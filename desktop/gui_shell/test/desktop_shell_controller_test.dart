@@ -38,6 +38,7 @@ const HostInfo _readyHostInfo = HostInfo(
     Capability.profiles,
     Capability.providerConfigs,
     Capability.providerRuntimeArtifacts,
+    Capability.runtimeExecutionPlanning,
     Capability.sessions,
     Capability.challenges,
     Capability.diagnostics,
@@ -1213,6 +1214,7 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   Future<SessionRecord> materializeResolution({
     required String resolutionId,
     required RuntimeDefaults runtimeDefaults,
+    RuntimeExecutionPlan? executionPlan,
   }) async {
     materializeResolutionCalls.add(resolutionId);
     materializeResolutionDefaults.add(runtimeDefaults);
@@ -1259,6 +1261,7 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   @override
   Future<PlatformTunnelStartResult> startPlatformTunnel({
     required PlatformTunnelMode mode,
+    RuntimeExecutionPlan? executionPlan,
   }) async {
     startPlatformTunnelCalls.add(mode);
     return const PlatformTunnelStartResult(
