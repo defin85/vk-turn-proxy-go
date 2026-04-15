@@ -1603,6 +1603,13 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   }
 
   @override
+  Future<bool> requestPlatformTunnelPermission({
+    required PlatformTunnelMode mode,
+  }) async {
+    return true;
+  }
+
+  @override
   Future<List<ProviderDescriptor>> providers() async => _providers;
 
   @override

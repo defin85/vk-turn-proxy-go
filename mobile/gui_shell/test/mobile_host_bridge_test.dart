@@ -222,6 +222,31 @@ void main() {
   );
 
   test(
+    'mobile host bridge requests native platform tunnel permission',
+    () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall call) async {
+            expect(call.method, 'requestPlatformTunnelPermission');
+            expect(call.arguments, <String, dynamic>{
+              'mode': 'android_vpn_service',
+            });
+            return true;
+          });
+
+      final bridge = HttpMobileHostBridge(
+        baseUri: Uri.parse('http://127.0.0.1:7777'),
+        client: _ReadyControlPlaneApi(),
+      );
+
+      final granted = await bridge.requestPlatformTunnelPermission(
+        mode: PlatformTunnelMode.androidVpnService,
+      );
+
+      expect(granted, isTrue);
+    },
+  );
+
+  test(
     'mobile control plane client fails closed on invalid platform modes',
     () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);

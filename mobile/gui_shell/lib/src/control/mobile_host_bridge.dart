@@ -46,6 +46,15 @@ class MobileHostConfigResolutionError implements Exception {
   String toString() => message;
 }
 
+class MobileHostPlatformActionError implements Exception {
+  const MobileHostPlatformActionError(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 class MobileBrowserReturnSignal {
   const MobileBrowserReturnSignal({required this.kind, this.uri});
 
@@ -108,6 +117,10 @@ abstract class MobileHostConfigResolver {
   Future<ResolvedMobileHostConfig?> resolve();
 }
 
+abstract class MobilePlatformTunnelPermissionRequester {
+  Future<bool> requestPermission({required PlatformTunnelMode mode});
+}
+
 class PlatformMobileHostConfigResolver implements MobileHostConfigResolver {
   PlatformMobileHostConfigResolver({MethodChannel? methodChannel})
     : _methodChannel = methodChannel ?? const MethodChannel(_bridgeChannelName);
@@ -163,9 +176,45 @@ class PlatformMobileHostConfigResolver implements MobileHostConfigResolver {
   }
 }
 
+class PlatformMobilePlatformTunnelPermissionRequester
+    implements MobilePlatformTunnelPermissionRequester {
+  PlatformMobilePlatformTunnelPermissionRequester({
+    MethodChannel? methodChannel,
+  }) : _methodChannel =
+           methodChannel ?? const MethodChannel(_bridgeChannelName);
+
+  final MethodChannel _methodChannel;
+
+  @override
+  Future<bool> requestPermission({required PlatformTunnelMode mode}) async {
+    try {
+      final granted = await _methodChannel.invokeMethod<bool>(
+        'requestPlatformTunnelPermission',
+        <String, dynamic>{'mode': mode.value},
+      );
+      return granted ?? false;
+    } on MissingPluginException {
+      throw const MobileHostPlatformActionError(
+        'Native mobile host bridge plugin is unavailable for platform tunnel permission requests.',
+      );
+    } on PlatformException catch (error) {
+      throw MobileHostPlatformActionError(
+        'Failed to request native platform tunnel permission: ${error.message ?? error.code}',
+      );
+    } catch (error) {
+      throw MobileHostPlatformActionError(
+        'Failed to request native platform tunnel permission: $error',
+      );
+    }
+  }
+}
+
 abstract class MobileHostBridge implements ControlPlaneApi {
   Stream<MobileBrowserReturnSignal> get browserReturnSignals;
   Future<MobileHostConnectionResult> ensureReady();
+  Future<bool> requestPlatformTunnelPermission({
+    required PlatformTunnelMode mode,
+  });
   Future<void> dispose();
 }
 
@@ -238,6 +287,7 @@ class HttpMobileHostBridge implements MobileHostBridge {
     required this.baseUri,
     ControlPlaneApi? client,
     MobileBrowserReturnSignalSource? browserReturnSignalSource,
+    MobilePlatformTunnelPermissionRequester? platformTunnelPermissionRequester,
     this.description = '',
     this.supportedVersions = const <String>[ControlPlaneClient.contractVersion],
     this.requiredCapabilities = const <Capability>[
@@ -254,11 +304,16 @@ class HttpMobileHostBridge implements MobileHostBridge {
   }) : _client = client ?? ControlPlaneClient(baseUri: baseUri),
        _browserReturnSignalSource =
            browserReturnSignalSource ??
-           const _EmptyMobileBrowserReturnSignalSource();
+           const _EmptyMobileBrowserReturnSignalSource(),
+       _platformTunnelPermissionRequester =
+           platformTunnelPermissionRequester ??
+           PlatformMobilePlatformTunnelPermissionRequester();
 
   final Uri baseUri;
   final ControlPlaneApi _client;
   final MobileBrowserReturnSignalSource _browserReturnSignalSource;
+  final MobilePlatformTunnelPermissionRequester
+  _platformTunnelPermissionRequester;
   final String description;
   final List<String> supportedVersions;
   final List<Capability> requiredCapabilities;
@@ -463,6 +518,13 @@ class HttpMobileHostBridge implements MobileHostBridge {
   }
 
   @override
+  Future<bool> requestPlatformTunnelPermission({
+    required PlatformTunnelMode mode,
+  }) {
+    return _platformTunnelPermissionRequester.requestPermission(mode: mode);
+  }
+
+  @override
   Future<List<ProfileRecord>> profiles() => _client.profiles();
 
   @override
@@ -572,6 +634,11 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
   @override
   Future<PlatformTunnelStartResult> resumePlatformTunnel({
     required String startupAttemptId,
+  }) => _fail();
+
+  @override
+  Future<bool> requestPlatformTunnelPermission({
+    required PlatformTunnelMode mode,
   }) => _fail();
 
   @override

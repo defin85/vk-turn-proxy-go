@@ -1,10 +1,15 @@
 package com.defin85.mobile_gui_shell
 
+import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.VpnService
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
+import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
 private const val MOBILE_HOST_BRIDGE_CHANNEL =
@@ -19,6 +24,11 @@ class MainActivity : FlutterActivity() {
     private var browserReturnSignalChannel: EventChannel? = null
     private var browserReturnSignalSink: EventChannel.EventSink? = null
     private val pendingBrowserReturnSignals = mutableListOf<Map<String, Any>>()
+    private var pendingPlatformTunnelPermissionResult: MethodChannel.Result? = null
+    private val platformTunnelPermissionLauncher: ActivityResultLauncher<Intent> =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            finishPlatformTunnelPermissionRequest(result.resultCode == Activity.RESULT_OK)
+        }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -39,6 +49,8 @@ class MainActivity : FlutterActivity() {
                                 null,
                             )
                         }
+                    "requestPlatformTunnelPermission" ->
+                        requestPlatformTunnelPermission(call, result)
                     else -> result.notImplemented()
                 }
             }
@@ -67,6 +79,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        finishPlatformTunnelPermissionRequest(null)
         EmbeddedMobileHost.stop()
         mobileHostBridgeChannel?.setMethodCallHandler(null)
         mobileHostBridgeChannel = null
@@ -138,5 +151,51 @@ class MainActivity : FlutterActivity() {
             sink.success(payload)
         }
         pendingBrowserReturnSignals.clear()
+    }
+
+    private fun requestPlatformTunnelPermission(
+        call: MethodCall,
+        result: MethodChannel.Result,
+    ) {
+        val mode = call.argument<String>("mode")?.trim().orEmpty()
+        if (mode != "android_vpn_service") {
+            result.error(
+                "unsupported_platform_tunnel_mode",
+                "Native Android permission flow supports only android_vpn_service.",
+                null,
+            )
+            return
+        }
+        if (pendingPlatformTunnelPermissionResult != null) {
+            result.error(
+                "platform_tunnel_permission_in_progress",
+                "An Android VPN permission request is already in progress.",
+                null,
+            )
+            return
+        }
+
+        val prepareIntent = VpnService.prepare(this)
+        if (prepareIntent == null) {
+            result.success(true)
+            return
+        }
+
+        pendingPlatformTunnelPermissionResult = result
+        platformTunnelPermissionLauncher.launch(prepareIntent)
+    }
+
+    private fun finishPlatformTunnelPermissionRequest(granted: Boolean?) {
+        val pending = pendingPlatformTunnelPermissionResult ?: return
+        pendingPlatformTunnelPermissionResult = null
+        when (granted) {
+            null ->
+                pending.error(
+                    "platform_tunnel_permission_cancelled",
+                    "The Android VPN permission request was cancelled before completion.",
+                    null,
+                )
+            else -> pending.success(granted)
+        }
     }
 }

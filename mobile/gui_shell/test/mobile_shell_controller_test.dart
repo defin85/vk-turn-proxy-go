@@ -1469,6 +1469,60 @@ void main() {
   );
 
   test(
+    'controller requests Android VPN permission and resumes the same startup attempt',
+    () async {
+      final bridge = _FakeMobileHostBridge(
+        startPlatformTunnelResult: const PlatformTunnelStartResult(
+          mode: PlatformTunnelMode.androidVpnService,
+          ready: false,
+          stage: PlatformTunnelStartupStage.permissionAcquire,
+          missingPrerequisite: PlatformTunnelPrerequisite.permission,
+          startupAttemptId: 'attempt-android-1',
+          message: 'Android VPN permission is required.',
+        ),
+        resumePlatformTunnelResult: const PlatformTunnelStartResult(
+          mode: PlatformTunnelMode.androidVpnService,
+          ready: false,
+          stage: PlatformTunnelStartupStage.runtimeAttach,
+          missingPrerequisite: PlatformTunnelPrerequisite.hostImplementation,
+          message: 'Runtime attach is still unavailable in this fixture.',
+        ),
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: const <ProfileRecord>[],
+            providerConfigs: const <ProviderConfigRecord>[],
+            draft: ProfileDraft.defaults(),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.startPlatformTunnel(
+        PlatformTunnelMode.androidVpnService,
+      );
+
+      expect(bridge.requestedPlatformTunnelPermissions, <PlatformTunnelMode>[
+        PlatformTunnelMode.androidVpnService,
+      ]);
+      expect(bridge.resumedPlatformTunnelAttemptIDs, <String>[
+        'attempt-android-1',
+      ]);
+      expect(
+        controller
+            .platformTunnelResultFor(PlatformTunnelMode.androidVpnService)
+            ?.stage,
+        PlatformTunnelStartupStage.runtimeAttach,
+      );
+      expect(controller.notice, contains('Runtime attach'));
+    },
+  );
+
+  test(
     'controller clears platform tunnel startup results when the bridge later fails closed',
     () async {
       final bridge = _FakeMobileHostBridge(
@@ -1592,6 +1646,21 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     this.sessionsList = const <SessionRecord>[],
     this.challengeMap = const <String, ChallengeRecord>{},
     this.startSessionError,
+    this.startPlatformTunnelResult = const PlatformTunnelStartResult(
+      mode: PlatformTunnelMode.androidVpnService,
+      ready: false,
+      stage: PlatformTunnelStartupStage.capabilityCheck,
+      missingPrerequisite: PlatformTunnelPrerequisite.hostImplementation,
+      message: 'mobile host does not implement tunnel startup yet',
+    ),
+    this.resumePlatformTunnelResult = const PlatformTunnelStartResult(
+      mode: PlatformTunnelMode.androidVpnService,
+      ready: false,
+      stage: PlatformTunnelStartupStage.permissionAcquire,
+      missingPrerequisite: PlatformTunnelPrerequisite.permission,
+      startupAttemptId: 'attempt-android-1',
+      message: 'mobile host does not implement tunnel resume yet',
+    ),
     DiagnosticsBundle? diagnosticsBundle,
   }) : diagnosticsBundle =
            diagnosticsBundle ??
@@ -1629,6 +1698,8 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   final List<SessionRecord> sessionsList;
   final Map<String, ChallengeRecord> challengeMap;
   final ControlPlaneError? startSessionError;
+  final PlatformTunnelStartResult startPlatformTunnelResult;
+  final PlatformTunnelStartResult resumePlatformTunnelResult;
   final DiagnosticsBundle diagnosticsBundle;
   final List<ResolutionRecord> _resolutions;
 
@@ -1648,6 +1719,9 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       <RuntimeDefaults>[];
   final List<PlatformTunnelMode> startedPlatformTunnels =
       <PlatformTunnelMode>[];
+  final List<PlatformTunnelMode> requestedPlatformTunnelPermissions =
+      <PlatformTunnelMode>[];
+  final List<String> resumedPlatformTunnelAttemptIDs = <String>[];
   int ensureReadyCalls = 0;
   int startSessionCalls = 0;
   final StreamController<EventRecord> _events =
@@ -1766,27 +1840,23 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     List<String> disallowedPackages = const <String>[],
   }) async {
     startedPlatformTunnels.add(mode);
-    return const PlatformTunnelStartResult(
-      mode: PlatformTunnelMode.androidVpnService,
-      ready: false,
-      stage: PlatformTunnelStartupStage.capabilityCheck,
-      missingPrerequisite: PlatformTunnelPrerequisite.hostImplementation,
-      message: 'mobile host does not implement tunnel startup yet',
-    );
+    return startPlatformTunnelResult;
   }
 
   @override
   Future<PlatformTunnelStartResult> resumePlatformTunnel({
     required String startupAttemptId,
   }) async {
-    return PlatformTunnelStartResult(
-      mode: PlatformTunnelMode.androidVpnService,
-      ready: false,
-      stage: PlatformTunnelStartupStage.permissionAcquire,
-      missingPrerequisite: PlatformTunnelPrerequisite.permission,
-      startupAttemptId: startupAttemptId,
-      message: 'mobile host does not implement tunnel resume yet',
-    );
+    resumedPlatformTunnelAttemptIDs.add(startupAttemptId);
+    return resumePlatformTunnelResult;
+  }
+
+  @override
+  Future<bool> requestPlatformTunnelPermission({
+    required PlatformTunnelMode mode,
+  }) async {
+    requestedPlatformTunnelPermissions.add(mode);
+    return true;
   }
 
   @override

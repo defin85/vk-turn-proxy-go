@@ -858,7 +858,13 @@ class MobileShellController extends ChangeNotifier {
 
   Future<void> startPlatformTunnel(PlatformTunnelMode mode) async {
     await _runBridgeMutation(() async {
-      final result = await bridge.startPlatformTunnel(mode: mode);
+      var result = await bridge.startPlatformTunnel(mode: mode);
+      if (_requiresPlatformTunnelPermissionResume(mode, result)) {
+        await bridge.requestPlatformTunnelPermission(mode: mode);
+        result = await bridge.resumePlatformTunnel(
+          startupAttemptId: result.startupAttemptId,
+        );
+      }
       _platformTunnelResults[mode] = result;
       notice = _platformTunnelNotice(result);
     });
@@ -1482,6 +1488,17 @@ class MobileShellController extends ChangeNotifier {
 
   void _clearPlatformTunnelResults() {
     _platformTunnelResults.clear();
+  }
+
+  bool _requiresPlatformTunnelPermissionResume(
+    PlatformTunnelMode mode,
+    PlatformTunnelStartResult result,
+  ) {
+    return mode == PlatformTunnelMode.androidVpnService &&
+        !result.ready &&
+        result.stage == PlatformTunnelStartupStage.permissionAcquire &&
+        result.missingPrerequisite == PlatformTunnelPrerequisite.permission &&
+        result.startupAttemptId.isNotEmpty;
   }
 
   String _platformTunnelNotice(PlatformTunnelStartResult result) {
