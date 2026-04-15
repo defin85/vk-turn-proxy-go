@@ -2,6 +2,7 @@
 
 `add-05-platform-tunnel-integrations` established a typed platform tunnel contract, but every repo-owned host still fails closed with `stage=capability_check` and `missing_prerequisite=host_implementation`.
 `add-14-android-embedded-mobile-host` then gave the Android app a packaged host and bridge, which makes Android the first target where a real platform tunnel path can be introduced without inventing a second runtime contract.
+`add-26-android-vpnservice-host-boundary` later fixed the ownership split between Flutter, the Kotlin `VpnService` adapter, and the embedded Go host, so this change can focus on the first ready path instead of redefining that boundary.
 
 The first ready path should prove one concrete end-to-end mode instead of broad multi-platform ambition.
 That means:
@@ -50,7 +51,7 @@ Startup must still name the failing stage and prerequisite explicitly for permis
 The supported Android mode must define which control-plane, provider-challenge, and underlay flows bypass the VPN path so startup and challenge continuation do not deadlock themselves.
 If those exclusions or DNS bypass rules cannot be applied safely, startup must fail before claiming readiness.
 
-### Decision: App-routing policy is explicit, validated, and fail-closed
+### Decision: App-routing policy is explicit, validated, fail-closed, and startup-time only
 
 The first Android path must support explicit operator-chosen app scope instead
 of assuming that `VpnService` always captures all apps.
@@ -63,6 +64,19 @@ The packaged host should own that scope through one documented policy:
 Mixed allowlist and denylist semantics must be rejected.
 If a referenced package is invalid, missing, or cannot be applied to the VPN
 builder safely, startup must fail before claiming readiness.
+Because Android `VpnService.Builder` requires package allow/deny lists to be
+set before the VPN connection is established, changing that scope later must be
+treated as a new startup attempt and VPN connection instead of a live mutation
+inside an already ready path.
+
+### Decision: Permission acquisition and app-scope startup stay under the canonical control plane
+
+The first Android path may still need shell assistance to launch the Android
+permission prompt or collect selected package sets, but it must remain governed
+by the canonical versioned client-control-plane contract.
+The repository must not introduce a second shell-visible Android tunnel startup
+API just to cross the `VpnService.prepare()` boundary or pass app-scope policy
+into the packaged host.
 
 ### Decision: Android `VpnService` support stays honest about detection surface
 
@@ -82,6 +96,7 @@ The first supported ready path is only complete when the Android host has finish
 - Android `VpnService` lifecycle and permission prompts can make startup sequencing more fragile than the current loopback-host path
 - Route exclusion mistakes can break challenge continuation, control-plane access, or required underlay traffic
 - App-scoped routing can widen split-routing and leak risk if package policy and underlay exclusions are not validated together
+- Android permission prompts and foreground-service requirements can outlive the current short shell request timeout unless the startup contract is designed to survive user-driven continuation cleanly
 - A narrow first Android path may expose product pressure to generalize too early to iOS or desktop modes
 - If the Android host boundary becomes too wide, platform-specific hacks can leak into the shared runtime contract
 

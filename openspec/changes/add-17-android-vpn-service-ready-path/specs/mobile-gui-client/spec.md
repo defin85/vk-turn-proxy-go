@@ -43,3 +43,14 @@ mode always captures all apps.
 - **THEN** the app presents it as a documented Android system tunnel workflow
 - **AND** it does not describe that mode as hidden from Android diagnostics or
   platform-visible VPN state
+
+#### Scenario: Mobile GUI treats Android app-scope changes as reconnect-required
+
+- **GIVEN** a production Android package whose packaged host reports a
+  supported `android_vpn_service` mode
+- **AND** the operator has already started that mode with one explicit
+  app-scope selection
+- **WHEN** the operator changes the requested app-scope policy or selected
+  package set
+- **THEN** the app treats that change as reconnect-required startup input
+- **AND** it does not claim that the running Android VPN scope mutated in place

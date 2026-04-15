@@ -70,3 +70,13 @@ VPN mode captures all apps equally.
 - **AND** it reports `route_validate` as the failing stage
 - **AND** it reports `app_routing_policy` as the missing prerequisite
 - **AND** the host does not silently widen the scope to full-device routing
+
+#### Scenario: Operator changes Android app scope after readiness
+
+- **GIVEN** an Android packaged host whose `android_vpn_service` path is already
+  ready with one documented `application_routing_policy`
+- **WHEN** the operator changes the requested package scope for that mode
+- **THEN** the repository treats that change as a new startup attempt and VPN
+  connection instead of a live mutation of the existing ready path
+- **AND** the shell does not imply that the running Android VPN scope changed
+  without that reconnect
