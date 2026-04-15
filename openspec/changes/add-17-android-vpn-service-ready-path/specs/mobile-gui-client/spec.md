@@ -54,3 +54,16 @@ mode always captures all apps.
   package set
 - **THEN** the app treats that change as reconnect-required startup input
 - **AND** it does not claim that the running Android VPN scope mutated in place
+
+#### Scenario: Mobile GUI resumes Android startup after permission grant
+
+- **GIVEN** a production Android package whose packaged host reports the
+  documented `android_vpn_service` mode
+- **AND** the host returned a resumable startup attempt waiting on Android VPN
+  permission
+- **WHEN** the operator grants that permission from the documented Android
+  prompt
+- **THEN** the app resumes that startup attempt through the canonical control
+  plane
+- **AND** it does not replace that flow with a separate shell-local Android VPN
+  startup protocol

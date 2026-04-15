@@ -78,6 +78,24 @@ The repository must not introduce a second shell-visible Android tunnel startup
 API just to cross the `VpnService.prepare()` boundary or pass app-scope policy
 into the packaged host.
 
+### Decision: Android startup uses `start -> permission required -> resume`
+
+The first Android path should not rely on one long-running startup request that
+waits for the user to finish the Android VPN permission dialog.
+Instead, startup must be modeled as a typed resumable flow under the canonical
+control plane:
+
+- the shell starts Android tunnel startup with the requested app-scope policy
+- the host may return a typed `permission` prerequisite plus a resumable startup
+  attempt identifier
+- the shell drives the Android permission prompt
+- the shell resumes that same startup attempt through the canonical control
+  plane after permission succeeds
+
+This keeps the contract explicit, fits Android user-driven permission timing
+better than a short request timeout, and avoids introducing a second
+Flutter-only or Android-only startup API.
+
 ### Decision: Android `VpnService` support stays honest about detection surface
 
 This change delivers a real Android system-tunnel path, not a stealth path.
@@ -97,6 +115,7 @@ The first supported ready path is only complete when the Android host has finish
 - Route exclusion mistakes can break challenge continuation, control-plane access, or required underlay traffic
 - App-scoped routing can widen split-routing and leak risk if package policy and underlay exclusions are not validated together
 - Android permission prompts and foreground-service requirements can outlive the current short shell request timeout unless the startup contract is designed to survive user-driven continuation cleanly
+- A resumable startup flow adds attempt bookkeeping and timeout/cleanup semantics that the host must define clearly to avoid orphaned Android startup attempts
 - A narrow first Android path may expose product pressure to generalize too early to iOS or desktop modes
 - If the Android host boundary becomes too wide, platform-specific hacks can leak into the shared runtime contract
 

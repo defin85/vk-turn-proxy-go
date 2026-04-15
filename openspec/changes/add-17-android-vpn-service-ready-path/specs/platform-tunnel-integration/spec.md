@@ -20,6 +20,17 @@ The system SHALL support one concrete platform tunnel ready path for packaged An
 - **AND** it reports `permission_acquire` as the failing stage
 - **AND** it reports `permission` as the missing prerequisite
 
+#### Scenario: Android startup resumes after permission grant
+
+- **GIVEN** a packaged Android host that paused `android_vpn_service` startup
+  at the VPN permission prerequisite
+- **WHEN** the operator grants that permission and the shell resumes the
+  documented startup attempt
+- **THEN** the packaged host continues the same startup flow instead of asking
+  the shell to rebuild Android tunnel state from scratch
+- **AND** readiness still depends on later route validation, host bring-up, and
+  runtime attach success
+
 ### Requirement: Android `android_vpn_service` startup protects control traffic and cleans up on failure
 
 The system SHALL validate Android route exclusion and DNS bypass policy before claiming readiness, and SHALL tear down partial Android VPN resources when startup fails after partial progress.
