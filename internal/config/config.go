@@ -24,10 +24,18 @@ const (
 	AdapterTCP AdapterKind = "tcp"
 )
 
+type ServerPeerMode string
+
+const (
+	ServerPeerModeDTLS  ServerPeerMode = "dtls"
+	ServerPeerModePlain ServerPeerMode = "plain"
+)
+
 type ServerConfig struct {
 	ListenAddr       string
 	UpstreamAddr     string
 	Egress           AdapterKind
+	PeerMode         ServerPeerMode
 	HandshakeTimeout time.Duration
 	IdleTimeout      time.Duration
 }
@@ -60,6 +68,7 @@ func DefaultServerConfig() ServerConfig {
 	return ServerConfig{
 		ListenAddr:       "0.0.0.0:56000",
 		Egress:           AdapterUDP,
+		PeerMode:         ServerPeerModeDTLS,
 		HandshakeTimeout: 30 * time.Second,
 		IdleTimeout:      30 * time.Minute,
 	}
@@ -90,6 +99,11 @@ func (c ServerConfig) Validate() error {
 	}
 	if err := overlay.ValidateAdapter(overlay.AdapterKind(normalizeAdapterKind(c.Egress)), "server egress"); err != nil {
 		return err
+	}
+	switch c.PeerMode {
+	case "", ServerPeerModeDTLS, ServerPeerModePlain:
+	default:
+		return fmt.Errorf("unsupported server peer mode %q", c.PeerMode)
 	}
 	if c.HandshakeTimeout <= 0 {
 		return errors.New("handshake timeout must be positive")

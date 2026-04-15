@@ -28,6 +28,9 @@ type Server struct {
 
 func New(cfg config.ServerConfig, logger *slog.Logger) (*Server, error) {
 	cfg.Egress = config.AdapterKind(overlay.NormalizeAdapter(overlay.AdapterKind(cfg.Egress)))
+	if cfg.PeerMode == "" {
+		cfg.PeerMode = config.ServerPeerModeDTLS
+	}
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
@@ -51,19 +54,47 @@ func (s *Server) SetMetrics(metrics *observe.Metrics) {
 }
 
 func (s *Server) Run(ctx context.Context) error {
-	listener, err := s.Listen()
-	if err != nil {
-		s.observer().RecordTransportFailure("listen")
-		s.observer().RecordSessionFailure("listen", true)
-		s.observer().Emit(ctx, slog.LevelError, "runtime_failure",
-			"stage", "listen",
-			"result", "failed",
-			"error", err,
-		)
-		return err
-	}
+	switch s.cfg.PeerMode {
+	case config.ServerPeerModePlain:
+		packetConn, err := s.listenPacket()
+		if err != nil {
+			s.observer().RecordTransportFailure("listen")
+			s.observer().RecordSessionFailure("listen", true)
+			s.observer().Emit(ctx, slog.LevelError, "runtime_failure",
+				"stage", "listen",
+				"result", "failed",
+				"error", err,
+			)
+			return err
+		}
+		return s.ServePlain(ctx, packetConn)
+	default:
+		listener, err := s.Listen()
+		if err != nil {
+			s.observer().RecordTransportFailure("listen")
+			s.observer().RecordSessionFailure("listen", true)
+			s.observer().Emit(ctx, slog.LevelError, "runtime_failure",
+				"stage", "listen",
+				"result", "failed",
+				"error", err,
+			)
+			return err
+		}
 
-	return s.Serve(ctx, listener)
+		return s.Serve(ctx, listener)
+	}
+}
+
+func (s *Server) listenPacket() (net.PacketConn, error) {
+	listenAddr, err := net.ResolveUDPAddr("udp", s.cfg.ListenAddr)
+	if err != nil {
+		return nil, fmt.Errorf("resolve listen addr: %w", err)
+	}
+	packetConn, err := net.ListenUDP("udp", listenAddr)
+	if err != nil {
+		return nil, fmt.Errorf("listen udp: %w", err)
+	}
+	return packetConn, nil
 }
 
 func (s *Server) Listen() (net.Listener, error) {
@@ -253,6 +284,6 @@ func (s *Server) observer() *observe.Observer {
 	return observe.NewObserver(observe.RuntimeServer, s.logger, s.metrics, observe.Metadata{
 		SessionID: s.sessionID,
 		Provider:  "none",
-		PeerMode:  "dtls",
+		PeerMode:  string(s.cfg.PeerMode),
 	})
 }

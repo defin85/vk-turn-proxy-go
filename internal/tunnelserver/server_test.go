@@ -225,6 +225,90 @@ func TestServerRejectsUnsupportedOverlayPairing(t *testing.T) {
 	}
 }
 
+func TestServerPlainPeerModeRelaysUDPDatagrams(t *testing.T) {
+	upstreamConn, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen upstream: %v", err)
+	}
+	defer upstreamConn.Close()
+
+	upstreamCtx, cancelUpstream := context.WithCancel(context.Background())
+	defer cancelUpstream()
+	go runUDPEcho(upstreamCtx, upstreamConn)
+
+	handler := newServerCaptureHandler()
+	metrics := observe.NewMetrics()
+	server, err := New(config.ServerConfig{
+		ListenAddr:       "127.0.0.1:0",
+		UpstreamAddr:     upstreamConn.LocalAddr().String(),
+		Egress:           config.AdapterUDP,
+		PeerMode:         config.ServerPeerModePlain,
+		HandshakeTimeout: 5 * time.Second,
+		IdleTimeout:      5 * time.Second,
+	}, slog.New(handler))
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	server.SetMetrics(metrics)
+
+	packetConn, err := server.listenPacket()
+	if err != nil {
+		t.Fatalf("listenPacket() error = %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- server.ServePlain(ctx, packetConn)
+	}()
+
+	clientConn, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	if err != nil {
+		cancel()
+		t.Fatalf("listen client: %v", err)
+	}
+	defer clientConn.Close()
+
+	payload := []byte("plain-wg-datagram")
+	if _, err := clientConn.WriteTo(payload, packetConn.LocalAddr()); err != nil {
+		cancel()
+		t.Fatalf("write plain datagram: %v", err)
+	}
+
+	buf := make([]byte, 1600)
+	_ = clientConn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	n, _, err := clientConn.ReadFrom(buf)
+	if err != nil {
+		cancel()
+		t.Fatalf("read plain echo: %v", err)
+	}
+	if got := string(buf[:n]); got != string(payload) {
+		cancel()
+		t.Fatalf("echo payload = %q, want %q", got, payload)
+	}
+
+	cancel()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("ServePlain() error = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("ServePlain() did not stop")
+	}
+
+	text := metrics.Prometheus()
+	for _, expected := range []string{
+		`vk_turn_proxy_runtime_session_starts_total{peer_mode="plain",provider="none",runtime="server"} 1`,
+		`vk_turn_proxy_runtime_forwarded_packets_total{direction="client_to_upstream",provider="none",runtime="server"} 1`,
+		`vk_turn_proxy_runtime_forwarded_packets_total{direction="upstream_to_client",provider="none",runtime="server"} 1`,
+	} {
+		if !strings.Contains(text, expected) {
+			t.Fatalf("metrics output missing %q:\n%s", expected, text)
+		}
+	}
+}
+
 func runUDPEcho(ctx context.Context, conn net.PacketConn) {
 	buf := make([]byte, 1600)
 	for {

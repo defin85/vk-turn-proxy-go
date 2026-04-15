@@ -222,7 +222,8 @@ func (r *Runtime) Close() error {
 
 type turnDatagramBind struct {
 	packetConn net.PacketConn
-	closeOnce  sync.Once
+	mu         sync.Mutex
+	closeCh    chan struct{}
 }
 
 type turnDatagramEndpoint struct {
@@ -233,10 +234,16 @@ func newTurnDatagramBind(packetConn net.PacketConn) (*turnDatagramBind, error) {
 	if packetConn == nil {
 		return nil, fmt.Errorf("TURN datagram bind requires an allocated PacketConn")
 	}
-	return &turnDatagramBind{packetConn: packetConn}, nil
+	return &turnDatagramBind{
+		packetConn: packetConn,
+		closeCh:    make(chan struct{}),
+	}, nil
 }
 
 func (b *turnDatagramBind) Open(_ uint16) ([]conn.ReceiveFunc, uint16, error) {
+	b.mu.Lock()
+	b.closeCh = make(chan struct{})
+	b.mu.Unlock()
 	actualPort := uint16(0)
 	if port, err := localAddrPort(b.packetConn.LocalAddr()); err == nil {
 		actualPort = port
@@ -245,11 +252,14 @@ func (b *turnDatagramBind) Open(_ uint16) ([]conn.ReceiveFunc, uint16, error) {
 }
 
 func (b *turnDatagramBind) Close() error {
-	var closeErr error
-	b.closeOnce.Do(func() {
-		closeErr = b.packetConn.Close()
-	})
-	return closeErr
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	select {
+	case <-b.closeCh:
+	default:
+		close(b.closeCh)
+	}
+	return nil
 }
 
 func (b *turnDatagramBind) SetMark(uint32) error { return nil }
@@ -283,17 +293,39 @@ func (b *turnDatagramBind) receive(
 	sizes []int,
 	eps []conn.Endpoint,
 ) (int, error) {
-	n, addr, err := b.packetConn.ReadFrom(packets[0])
-	if err != nil {
-		return 0, err
+	closeCh := b.currentCloseCh()
+	for {
+		select {
+		case <-closeCh:
+			return 0, net.ErrClosed
+		default:
+		}
+
+		if err := b.packetConn.SetReadDeadline(time.Now().Add(100 * time.Millisecond)); err != nil {
+			return 0, err
+		}
+		n, addr, err := b.packetConn.ReadFrom(packets[0])
+		if err != nil {
+			var netErr net.Error
+			if errors.As(err, &netErr) && netErr.Timeout() {
+				continue
+			}
+			return 0, err
+		}
+		addrPort, err := udpAddrPort(addr)
+		if err != nil {
+			return 0, err
+		}
+		sizes[0] = n
+		eps[0] = &turnDatagramEndpoint{AddrPort: addrPort}
+		return 1, nil
 	}
-	addrPort, err := udpAddrPort(addr)
-	if err != nil {
-		return 0, err
-	}
-	sizes[0] = n
-	eps[0] = &turnDatagramEndpoint{AddrPort: addrPort}
-	return 1, nil
+}
+
+func (b *turnDatagramBind) currentCloseCh() <-chan struct{} {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.closeCh
 }
 
 func (e *turnDatagramEndpoint) ClearSrc() {}

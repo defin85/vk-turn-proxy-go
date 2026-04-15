@@ -11,6 +11,16 @@ func TestServerConfigValidate(t *testing.T) {
 	}
 }
 
+func TestServerConfigValidateAllowsPlainPeerMode(t *testing.T) {
+	cfg := DefaultServerConfig()
+	cfg.UpstreamAddr = "127.0.0.1:51820"
+	cfg.PeerMode = ServerPeerModePlain
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected plain peer mode to be valid, got %v", err)
+	}
+}
+
 func TestClientConfigValidateRejectsInvalidMode(t *testing.T) {
 	cfg := DefaultClientConfig()
 	cfg.Provider = "vk"
@@ -42,6 +52,16 @@ func TestServerConfigValidateRejectsInvalidEgress(t *testing.T) {
 
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected invalid egress error")
+	}
+}
+
+func TestServerConfigValidateRejectsInvalidPeerMode(t *testing.T) {
+	cfg := DefaultServerConfig()
+	cfg.UpstreamAddr = "127.0.0.1:51820"
+	cfg.PeerMode = ServerPeerMode("socks5")
+
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected invalid peer mode error")
 	}
 }
 

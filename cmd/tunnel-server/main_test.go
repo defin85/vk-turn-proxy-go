@@ -6,6 +6,8 @@ import (
 	"net"
 	"strings"
 	"testing"
+
+	"github.com/defin85/vk-turn-proxy-go/internal/config"
 )
 
 func TestRunServerEmitsStructuredPolicyValidateFailure(t *testing.T) {
@@ -50,5 +52,19 @@ func TestRunServerEmitsStructuredMetricsListenFailure(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "event=runtime_failure") || !strings.Contains(stdout.String(), "stage=metrics_listen") {
 		t.Fatalf("stdout missing structured metrics_listen event: %s", stdout.String())
+	}
+}
+
+func TestParseServerFlagsParsesPlainPeerMode(t *testing.T) {
+	cfg, _, _, err := parseServerFlags(&bytes.Buffer{}, []string{
+		"-listen", "127.0.0.1:0",
+		"-connect", "127.0.0.1:51820",
+		"-peer-mode", "plain",
+	})
+	if err != nil {
+		t.Fatalf("parseServerFlags() error = %v", err)
+	}
+	if cfg.PeerMode != config.ServerPeerModePlain {
+		t.Fatalf("peer mode = %q, want %q", cfg.PeerMode, config.ServerPeerModePlain)
 	}
 }

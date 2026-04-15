@@ -33,7 +33,7 @@ func runServer(ctx context.Context, stdout io.Writer, stderr io.Writer, args []s
 	observer := observe.NewObserver(observe.RuntimeServer, logger, metrics, observe.Metadata{
 		SessionID: observe.NewSessionID(),
 		Provider:  "none",
-		PeerMode:  "dtls",
+		PeerMode:  string(cfg.PeerMode),
 	})
 	if err := cfg.Validate(); err != nil {
 		observer.RecordSessionFailure("policy_validate", true)
@@ -87,6 +87,10 @@ func parseServerFlags(stderr io.Writer, args []string) (config.ServerConfig, str
 	flags.StringVar(&metricsListen, "metrics-listen", metricsListen, "optional metrics listen address")
 	flags.StringVar(&cfg.ListenAddr, "listen", cfg.ListenAddr, "listen on ip:port")
 	flags.StringVar(&cfg.UpstreamAddr, "connect", cfg.UpstreamAddr, "upstream address host:port for the selected egress adapter")
+	flags.Func("peer-mode", "peer mode: dtls|plain", func(value string) error {
+		cfg.PeerMode = config.ServerPeerMode(value)
+		return nil
+	})
 	flags.Func("egress", "overlay egress adapter: udp|tcp", func(value string) error {
 		cfg.Egress = config.AdapterKind(value)
 		return nil
