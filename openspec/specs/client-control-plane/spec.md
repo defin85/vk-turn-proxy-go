@@ -53,24 +53,30 @@ The system SHALL expose the local host capabilities and a versioned contract so 
 ### Requirement: Client control plane exposes provider catalog discovery
 
 The system SHALL expose a typed provider catalog through the local control
-plane so shells can render provider entry flows from host-reported metadata.
+plane so shells can discover runtime provider constraints without hard-coding
+workflow logic to provider identifiers.
 
 #### Scenario: Shell requests provider catalog from a compatible host
 
-- **GIVEN** a local shell connected to a compatible host
-- **WHEN** the shell requests the available providers
-- **THEN** the host returns typed provider descriptors and capability metadata
-- **AND** the shell does not need to hard-code provider-specific workflow rules
+- **GIVEN** a compatible host with one or more supported providers
+- **WHEN** a shell requests the provider catalog
+- **THEN** the host returns typed descriptors for each advertised provider
+- **AND** each descriptor includes the runtime metadata needed for validation,
+  availability, browser policy, and provider-specific UX
+- **AND** the shell may combine those descriptors with an app-owned supported
+  provider catalog instead of treating the host descriptor list as its only
+  operator-facing provider taxonomy
 
-#### Scenario: Provider descriptor exposes auth and browser policy
+#### Scenario: App-owned shell workflow does not require provider-config capability
 
-- **GIVEN** a provider whose supported flow depends on account auth, guest auth,
-  or a specific browser surface
-- **WHEN** a shell requests provider descriptors from the host
-- **THEN** the control plane returns typed auth and browser-policy metadata for
-  that provider
-- **AND** the shell can reject unsupported local continuation surfaces before
-  starting resolution
+- **GIVEN** a host that advertises typed provider descriptors but does not
+  expose `provider_configs` as a required capability
+- **WHEN** a desktop or mobile shell negotiates for the app-owned provider
+  workflow
+- **THEN** the shell can still treat that host as compatible for ordinary
+  managed-provider and profile workflows
+- **AND** host-managed provider-config CRUD remains an optional compatibility
+  surface rather than a required dependency
 
 ### Requirement: Client control plane negotiates multi-provider support explicitly
 
@@ -156,16 +162,18 @@ The system SHALL let providers declare reusable user-configurable settings as
 part of the provider entry contract without requiring shell-specific hard-coded
 fields.
 
-#### Scenario: Shell starts resolution with validated provider settings
+#### Scenario: Shell starts resolution from a managed-provider snapshot
 
-- **GIVEN** a provider descriptor that includes a `provider_settings_schema`
-- **WHEN** a shell starts resolution for that provider
-- **THEN** the request may include a `provider_settings` object in addition to
-  the typed input envelope
-- **AND** the host validates that object against the descriptor-declared schema
-  before resolution begins
-- **AND** the host rejects undeclared or invalid setting keys instead of
-  ignoring them
+- **GIVEN** a shell-managed provider record materialized into ordinary
+  `provider`, `link`, and `provider_settings` values
+- **WHEN** a shell starts resolution or session startup through the control
+  plane
+- **THEN** the host validates the resulting provider settings against the
+  descriptor-declared schema for that provider
+- **AND** the control-plane contract does not require a shell-managed provider
+  identifier
+- **AND** the host handles the materialized request the same way as an
+  equivalent custom operator-entered request
 
 ### Requirement: Saved profiles keep only profile-retained provider settings
 
@@ -198,65 +206,21 @@ errors that identify the failing field and rule.
 - **AND** the host does not silently coerce the invalid setting into a guessed
   value
 
-### Requirement: Client control plane manages reusable provider configs
+### Requirement: Client control plane exposes typed challenge completion and browser-return metadata
 
-The system SHALL expose reusable provider-config records for descriptor-retained
-non-secret provider settings independently from saved runtime profiles.
+The system SHALL expose machine-readable challenge completion and browser-return metadata so shells can distinguish manual confirmation, app-return-assisted continuation, and host-observed browser continuation without parsing provider text.
+For app-return-assisted continuation, the challenge record SHALL also declare the supported return-signal kinds for that challenge and whether one automatic continue attempt is allowed.
 
-#### Scenario: Shell creates a provider config
+#### Scenario: Challenge event advertises app-return-assisted continuation
 
-- **GIVEN** a provider descriptor that includes a supported
-  `provider_settings_schema`
-- **WHEN** a shell creates a provider config for that provider
-- **THEN** the control plane stores a named provider-config record with only
-  descriptor-retained provider settings
-- **AND** the shell can later list, edit, or delete that record without
-  editing a saved runtime profile
+- **GIVEN** a session whose provider challenge can resume through a documented mobile app-return path
+- **WHEN** the runtime surfaces that challenge through the control plane
+- **THEN** the challenge record includes a stable challenge identifier, a typed completion mode for app-return-assisted continuation, and typed return-signal metadata for that challenge
+- **AND** the shell can determine that one automatic continue attempt is allowed without inferring behavior from prompt text or generic lifecycle heuristics alone
 
-#### Scenario: Control plane rejects prompt-only settings in a provider config
+#### Scenario: Challenge event remains manual-only
 
-- **GIVEN** a provider settings schema that marks one or more fields as
-  `writeOnly` or `ephemeral`
-- **WHEN** a caller tries to persist those fields through provider-config CRUD
-- **THEN** the control plane rejects the request explicitly
-- **AND** it does not silently store prompt-only or secret-like values as a
-  reusable provider config
-
-### Requirement: Provider-config validation stays descriptor-driven
-
-The system SHALL validate provider-config records against the currently
-advertised provider descriptor instead of shell-local heuristics.
-
-#### Scenario: Caller submits undeclared or now-invalid provider settings
-
-- **GIVEN** a provider config create or update request
-- **WHEN** the request includes undeclared keys, type-invalid values, or values
-  that no longer satisfy the current descriptor schema
-- **THEN** the control plane rejects the request with a typed field-aware
-  validation failure
-- **AND** it does not coerce invalid settings into guessed defaults
-
-#### Scenario: Stored provider config becomes unavailable
-
-- **GIVEN** a previously valid provider config
-- **AND** the host no longer advertises that provider or no longer supports the
-  stored schema shape
-- **WHEN** a shell lists provider configs
-- **THEN** the control plane keeps the record explicit as unavailable or
-  incompatible metadata
-- **AND** shells can block apply/edit flows honestly instead of silently
-  guessing compatibility
-
-### Requirement: Profile apply from a provider config is snapshot-based
-
-The system SHALL keep saved profiles self-contained when a shell applies a
-provider config.
-
-#### Scenario: Shell applies a provider config before saving a profile
-
-- **GIVEN** a reusable provider config for one provider
-- **WHEN** a shell applies that config to an active profile draft and saves the
-  resulting profile
-- **THEN** the saved profile stores its own provider-settings snapshot
-- **AND** later edits to the original provider config do not silently mutate
-  the saved profile
+- **GIVEN** a session whose provider challenge still requires explicit user confirmation after the browser step
+- **WHEN** the runtime surfaces that challenge through the control plane
+- **THEN** the challenge record keeps the same stable challenge identifier model
+- **AND** it explicitly reports manual confirmation semantics instead of implying automatic resume support
