@@ -14,6 +14,9 @@ Android-only startup protocol.
   API surface
 - **AND** the host coordinates any native Android adapter work behind that
   contract instead of exposing a second tunnel startup API to the shell
+- **AND** any package-internal bridge to the Android adapter remains a
+  host-internal implementation detail rather than a second shell-visible
+  protocol
 
 ### Requirement: Shared startup semantics remain stage-oriented instead of Android-API-oriented
 
@@ -28,5 +31,7 @@ method names.
 - **WHEN** that host reuses the packaged startup contract
 - **THEN** the client-control-plane surface still uses typed stages,
   prerequisites, and ready/failure state
+- **AND** it may cross a different native process or extension boundary than
+  Android `VpnService`
 - **AND** it does not require Flutter shells or the embedded Go host to speak
   Android-specific `VpnService` APIs directly

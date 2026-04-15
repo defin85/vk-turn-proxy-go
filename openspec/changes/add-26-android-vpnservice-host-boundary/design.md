@@ -43,6 +43,8 @@ product uses.
 - Choosing the final low-level bridge transport if multiple package-internal
   implementations remain viable
 - Moving provider behavior or carrier materialization into Kotlin
+- Redefining runtime-execution planning or strict carrier materialization
+  semantics that are already fixed by `add-22` and `add-23`
 - Replacing the canonical `/v1/platform-tunnels/start` contract with a
   Flutter-only or Android-only tunnel API
 - Inventing one generic mobile VPN API that hides the real lifecycle
@@ -87,10 +89,13 @@ The embedded Go host continues to own:
 
 - typed host capability reporting
 - `/v1/platform-tunnels/start`
-- runtime-execution plan selection
-- strict TURN-datagram carrier materialization
 - runtime attach sequencing
 - typed stage-aware ready/failure output
+
+This change does not reopen or redefine the execution-plan and carrier
+semantics already fixed by `add-22` and `add-23`.
+Instead, it fixes which layer consumes those existing contracts when packaged
+Android system-tunnel startup crosses into native Android code.
 
 The native Android layer is therefore an adapter boundary, not a second
 independent control plane.
@@ -109,7 +114,8 @@ Android will use `VpnService`.
 Future iOS work may use `apple_network_extension`, entitlements, and an app +
 extension lifecycle.
 `add-26` should therefore preserve a reusable ownership pattern without
-pretending the native adapter mechanics are interchangeable.
+pretending the native adapter mechanics are interchangeable or that a future
+adapter must share Android's same-process service model.
 
 ### Decision: Android `VpnService` startup crosses a package-internal bridge
 
@@ -139,6 +145,9 @@ will differ.
 
 The implementation detail of that bridge may evolve, but the ownership model
 must stay the same.
+The shell-visible API stays the existing mobile host bridge plus versioned
+client-control contract; the package-internal bridge must not become a second
+Flutter-visible or Android-only startup protocol.
 
 ### Decision: Ready state requires both Android adapter success and Go runtime attach
 

@@ -60,5 +60,7 @@ contracts.
 - **THEN** Flutter still acts as a typed consumer and the embedded Go host
   still acts as the canonical orchestrator
 - **AND** only the native adapter implementation changes
+- **AND** a future adapter may use a different process or extension lifecycle
+  from Android `VpnService`
 - **AND** the shared boundary does not require Android `VpnService` types to be
   present in Flutter or Go code

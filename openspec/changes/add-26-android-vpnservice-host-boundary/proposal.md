@@ -40,14 +40,17 @@ pretending that Android and iOS share one native lifecycle.
   `VpnService`, `VpnService.Builder`, foreground-service requirements, package
   allow/deny policy application, and Android-specific teardown.
 - Define the embedded Go host as the canonical control-plane/runtime owner: it
-  owns typed `/v1/platform-tunnels/start`, runtime-execution planning, strict
-  TURN-datagram carrier materialization, and stage-aware ready/failure state.
+  owns typed `/v1/platform-tunnels/start`, consumes the already-documented
+  runtime-execution and carrier prerequisites through the canonical host
+  contract, and remains the authoritative source of stage-aware ready/failure
+  state.
 - Require a package-internal bridge between the Go embedded host and the Kotlin
   `VpnService` adapter instead of a second Flutter- or Android-only tunnel API.
 - Keep that boundary Android-first but reusable at the ownership level so a
   future `apple_network_extension` path can fit the same Flutter/native-adapter/Go
   split without leaking Android API names into shared shell or control-plane
-  contracts.
+  contracts, while still allowing the future native adapter to use a different
+  process or extension lifecycle from Android `VpnService`.
 - Extend Android embedded-host, mobile GUI, client-control-plane, and
   platform-tunnel specs so the first Android VPN path uses that boundary
   explicitly.

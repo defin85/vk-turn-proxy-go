@@ -14,6 +14,8 @@ Kotlin `VpnService` adapter while keeping one typed platform-tunnel contract.
 - **THEN** the repository does not claim `ready=true`
 - **AND** readiness remains governed by the typed startup result from the
   packaged host boundary as a whole
+- **AND** the cross-boundary startup path does not collapse that result into an
+  adapter-local success bit
 
 ### Requirement: Cross-boundary platform-tunnel semantics stay reusable across native adapters
 
@@ -27,5 +29,7 @@ Android API names.
   primitive from Android `VpnService`
 - **WHEN** that host reuses the same platform-tunnel contract shape
 - **THEN** readiness still depends on native bring-up plus runtime attach
+- **AND** that reuse does not require the future native adapter to share the
+  same process or service lifecycle as Android `VpnService`
 - **AND** the shared contract does not require Android-only API objects to
   appear outside the native adapter boundary

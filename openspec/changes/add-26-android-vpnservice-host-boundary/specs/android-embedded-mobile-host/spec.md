@@ -14,3 +14,6 @@ The system SHALL let the packaged Android embedded host coordinate the first
   through the documented package-internal bridge
 - **AND** the app does not require an external sidecar host or shell-local VPN
   orchestration to reach the typed startup result
+- **AND** the mobile shell still reaches that startup only through the
+  documented mobile host bridge and versioned control-plane contract rather
+  than a direct adapter-specific API
