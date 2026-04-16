@@ -1,0 +1,8 @@
+# Repo-specific Claude Context ignore patterns.
+.git/**
+.beads/**
+bin/**
+dist/**
+coverage.out
+*.log
+openspec/changes/**
