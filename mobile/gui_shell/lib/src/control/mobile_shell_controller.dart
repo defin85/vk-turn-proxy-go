@@ -7,6 +7,7 @@ import 'package:mobile_gui_shell/src/control/control_plane_client.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_models.dart';
 import 'package:mobile_gui_shell/src/control/mobile_handoff_adapter.dart';
 import 'package:mobile_gui_shell/src/control/mobile_host_bridge.dart';
+import 'package:mobile_gui_shell/src/control/mobile_platform_app_inventory.dart';
 import 'package:mobile_gui_shell/src/control/mobile_shell_state_store.dart';
 import 'package:mobile_gui_shell/src/control/profile_draft.dart';
 import 'package:path_provider/path_provider.dart';
@@ -44,12 +45,14 @@ class MobileShellController extends ChangeNotifier {
     required this.stateStore,
     BrowserLauncher? browserLauncher,
     MobileHandoffAdapter? handoffAdapter,
+    MobilePlatformAppInventory? appInventory,
     DirectoryProvider? diagnosticsDirectoryProvider,
     DateTime Function()? clock,
     IDFactory? idFactory,
     BuildIdentity? appBuild,
   }) : _browserLauncher = browserLauncher ?? ExternalBrowserLauncher(),
        _handoffAdapter = handoffAdapter ?? const SystemMobileHandoffAdapter(),
+       _appInventory = appInventory ?? PlatformMobilePlatformAppInventory(),
        _diagnosticsDirectoryProvider =
            diagnosticsDirectoryProvider ?? defaultDiagnosticsDirectory,
        _clock = clock ?? DateTime.now,
@@ -62,10 +65,13 @@ class MobileShellController extends ChangeNotifier {
   final MobileShellStateStore stateStore;
   final BrowserLauncher _browserLauncher;
   final MobileHandoffAdapter _handoffAdapter;
+  final MobilePlatformAppInventory _appInventory;
   final DirectoryProvider _diagnosticsDirectoryProvider;
   final DateTime Function() _clock;
   final IDFactory _idFactory;
   final BuildIdentity appBuild;
+
+  static const String _draftModePreferenceScope = '__draft__';
 
   ShellStatus status = ShellStatus.booting;
   MobileHostConnectionResult? hostConnection;
@@ -80,11 +86,17 @@ class MobileShellController extends ChangeNotifier {
   ManagedProviderDraft managedProviderDraft = ManagedProviderDraft.defaults();
   MobileWorkflowSurface workflowSurface = MobileWorkflowSurface.profile;
   String? selectedProfileId;
+  PlatformTunnelMode? selectedPlatformTunnelMode;
   String? selectedManagedProviderId;
   String? selectedResolutionId;
   String? selectedSessionId;
   Map<String, ProfileProviderBinding> profileBindings =
       <String, ProfileProviderBinding>{};
+  Map<String, MobilePlatformModePreferences> platformModePreferences =
+      <String, MobilePlatformModePreferences>{};
+  List<MobilePlatformApp> installedApps = const <MobilePlatformApp>[];
+  bool loadingInstalledApps = false;
+  String? installedAppsError;
   final Map<PlatformTunnelMode, PlatformTunnelStartResult>
   _platformTunnelResults = <PlatformTunnelMode, PlatformTunnelStartResult>{};
   String? notice;
@@ -122,6 +134,36 @@ class MobileShellController extends ChangeNotifier {
       hostConnection?.info?.platformTunnels ??
       const <PlatformTunnelCapability>[];
 
+  PlatformTunnelMode? get activePlatformTunnelMode {
+    final current = selectedPlatformTunnelMode;
+    if (current != null && capabilityForMode(current) != null) {
+      return current;
+    }
+    for (final capability in platformTunnels) {
+      if (capability.available) {
+        return capability.mode;
+      }
+    }
+    return platformTunnels.isEmpty ? null : platformTunnels.first.mode;
+  }
+
+  PlatformTunnelCapability? get activePlatformTunnelCapability =>
+      capabilityForMode(activePlatformTunnelMode);
+
+  MobilePlatformModePreferences get activePlatformModePreferences {
+    final mode = activePlatformTunnelMode;
+    if (mode == null) {
+      return const MobilePlatformModePreferences();
+    }
+    return modePreferencesFor(mode);
+  }
+
+  RuntimeExecutionPlan? get activeExecutionPlan =>
+      activePlatformModePreferences.executionPlan;
+
+  bool get activeModeSupportsAppRouting =>
+      _modeSupportsAppRouting(activePlatformTunnelMode);
+
   bool get systemTunnelSupported =>
       platformTunnels.any((PlatformTunnelCapability capability) {
         return capability.available;
@@ -129,6 +171,39 @@ class MobileShellController extends ChangeNotifier {
 
   PlatformTunnelStartResult? platformTunnelResultFor(PlatformTunnelMode mode) {
     return _platformTunnelResults[mode];
+  }
+
+  PlatformTunnelCapability? capabilityForMode(PlatformTunnelMode? mode) {
+    if (mode == null) {
+      return null;
+    }
+    for (final capability in platformTunnels) {
+      if (capability.mode == mode) {
+        return capability;
+      }
+    }
+    return null;
+  }
+
+  List<RuntimeExecutionPlanDescriptor> executionPlanOptionsForMode(
+    PlatformTunnelMode mode,
+  ) {
+    final capability = capabilityForMode(mode);
+    if (capability == null) {
+      return const <RuntimeExecutionPlanDescriptor>[];
+    }
+    return capability.executionPlans
+        .where((RuntimeExecutionPlanDescriptor descriptor) {
+          return descriptor.isSelectable;
+        })
+        .toList(growable: false);
+  }
+
+  MobilePlatformModePreferences modePreferencesFor(PlatformTunnelMode mode) {
+    return _normalizePlatformModePreferences(
+      mode,
+      platformModePreferences[_platformModePreferenceKey(mode)],
+    );
   }
 
   void publishNotice(String message) {
@@ -247,6 +322,7 @@ class MobileShellController extends ChangeNotifier {
           workflowSurface = MobileWorkflowSurface.profile;
         }
       }
+      _normalizeSelectedPlatformTunnelMode();
       _notify();
     } catch (error) {
       await _handleBridgeFailure(error);
@@ -267,6 +343,7 @@ class MobileShellController extends ChangeNotifier {
             profileBindings[profileId] ?? const ProfileProviderBinding(),
       ),
     );
+    _clearSelectedResolutionSelection();
     _scheduleStatePersist();
     notifyListeners();
   }
@@ -281,9 +358,114 @@ class MobileShellController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void selectPlatformTunnelMode(PlatformTunnelMode mode) {
+    if (capabilityForMode(mode) == null) {
+      return;
+    }
+    selectedPlatformTunnelMode = mode;
+    _storeModePreferences(mode, modePreferencesFor(mode));
+    _scheduleStatePersist();
+    notifyListeners();
+  }
+
+  void selectExecutionPlan(RuntimeExecutionPlan? plan) {
+    final mode = activePlatformTunnelMode;
+    if (mode == null) {
+      return;
+    }
+    final current = modePreferencesFor(mode);
+    _storeModePreferences(
+      mode,
+      current.copyWith(executionPlan: plan, replaceExecutionPlan: true),
+      notify: true,
+    );
+  }
+
+  void updateApplicationRoutingPolicy(
+    PlatformTunnelApplicationRoutingPolicy policy,
+  ) {
+    final mode = activePlatformTunnelMode;
+    if (mode == null) {
+      return;
+    }
+    final current = modePreferencesFor(mode);
+    _storeModePreferences(
+      mode,
+      current.copyWith(applicationRoutingPolicy: policy),
+      notify: true,
+    );
+  }
+
+  void updateRoutingPackageSelection({
+    required String packageName,
+    required bool selected,
+  }) {
+    final mode = activePlatformTunnelMode;
+    if (mode == null) {
+      return;
+    }
+    final normalizedPackage = packageName.trim();
+    if (normalizedPackage.isEmpty) {
+      return;
+    }
+    final current = modePreferencesFor(mode);
+    switch (current.applicationRoutingPolicy) {
+      case PlatformTunnelApplicationRoutingPolicy.allApps:
+        return;
+      case PlatformTunnelApplicationRoutingPolicy.allowedPackages:
+        _storeModePreferences(
+          mode,
+          current.copyWith(
+            allowedPackages: _togglePackage(
+              current.allowedPackages,
+              normalizedPackage,
+              selected,
+            ),
+          ),
+          notify: true,
+        );
+        return;
+      case PlatformTunnelApplicationRoutingPolicy.disallowedPackages:
+        _storeModePreferences(
+          mode,
+          current.copyWith(
+            disallowedPackages: _togglePackage(
+              current.disallowedPackages,
+              normalizedPackage,
+              selected,
+            ),
+          ),
+          notify: true,
+        );
+        return;
+    }
+  }
+
+  Future<void> ensureInstalledAppsLoaded({bool force = false}) async {
+    if (loadingInstalledApps) {
+      return;
+    }
+    if (!force && installedApps.isNotEmpty) {
+      return;
+    }
+    loadingInstalledApps = true;
+    installedAppsError = null;
+    _notify();
+    try {
+      installedApps = await _appInventory.listInstalledApps();
+    } catch (error) {
+      installedApps = const <MobilePlatformApp>[];
+      installedAppsError = '$error';
+    } finally {
+      loadingInstalledApps = false;
+      _notify();
+    }
+  }
+
   void updateDraft(ProfileDraft nextDraft) {
     workflowSurface = MobileWorkflowSurface.profile;
     draft = _normalizeDraft(nextDraft);
+    _clearSelectedResolutionSelection();
     _scheduleStatePersist();
     notifyListeners();
   }
@@ -292,6 +474,7 @@ class MobileShellController extends ChangeNotifier {
     workflowSurface = MobileWorkflowSurface.profile;
     draft = _normalizeDraft(draft.asCustomProvider());
     selectedManagedProviderId = null;
+    _clearSelectedResolutionSelection();
     _scheduleStatePersist();
     notifyListeners();
   }
@@ -316,6 +499,7 @@ class MobileShellController extends ChangeNotifier {
     workflowSurface = MobileWorkflowSurface.profile;
     selectedProfileId = null;
     draft = _defaultDraft();
+    _clearSelectedResolutionSelection();
     _scheduleStatePersist();
     notifyListeners();
   }
@@ -472,6 +656,7 @@ class MobileShellController extends ChangeNotifier {
     workflowSurface = MobileWorkflowSurface.profile;
     draft = _normalizeDraft(draft.applyManagedProvider(provider));
     selectedManagedProviderId = managedProviderId;
+    _clearSelectedResolutionSelection();
     notice =
         'Applied managed provider ${provider.name.isEmpty ? provider.id : provider.name} to the active mobile profile draft.';
     _scheduleStatePersist();
@@ -506,10 +691,14 @@ class MobileShellController extends ChangeNotifier {
       managedProviderDraft = ManagedProviderDraft.defaults();
       workflowSurface = MobileWorkflowSurface.profile;
       selectedProfileId = null;
+      selectedPlatformTunnelMode = null;
       selectedManagedProviderId = null;
       profileBindings = <String, ProfileProviderBinding>{};
+      platformModePreferences = <String, MobilePlatformModePreferences>{};
       selectedResolutionId = null;
       selectedSessionId = null;
+      installedApps = const <MobilePlatformApp>[];
+      installedAppsError = null;
       _persistedStateSignature = MobileShellState.empty().signature();
       _requiresLocalStateReset = false;
       _blockedLocalStateMessage = null;
@@ -532,6 +721,7 @@ class MobileShellController extends ChangeNotifier {
     busy = true;
     _notify();
     try {
+      final persistedDraftProfileId = selectedProfileId?.trim() ?? '';
       final descriptor = activeProviderDescriptor;
       if (descriptor == null) {
         notice =
@@ -555,6 +745,12 @@ class MobileShellController extends ChangeNotifier {
       }
       if (hostConnection?.isReady == true) {
         profile = await bridge.upsertProfile(profile);
+      }
+      if (persistedDraftProfileId.isEmpty) {
+        _moveModePreferences(
+          fromScope: _draftModePreferenceScope,
+          toScope: profile.id,
+        );
       }
       profileBindings = <String, ProfileProviderBinding>{
         ...profileBindings,
@@ -609,6 +805,7 @@ class MobileShellController extends ChangeNotifier {
         for (final entry in profileBindings.entries)
           if (entry.key != profileId) entry.key: entry.value,
       };
+      _dropModePreferencesForScope(profileId);
       if (hostConnection?.isReady == true) {
         try {
           await bridge.deleteProfile(profileId);
@@ -658,27 +855,10 @@ class MobileShellController extends ChangeNotifier {
             'The selected provider is not advertised by the connected mobile host.';
         return;
       }
-      if (descriptor.inputKind != ProviderInputKind.link) {
-        notice =
-            '${descriptor.displayName} expects ${descriptor.inputKind.value} input. This mobile shell currently supports link entry only.';
+      final resolution = await _startResolutionForCurrentDraft(descriptor);
+      if (resolution == null) {
         return;
       }
-      final blockReason = _providerSettingsBlockReason(descriptor);
-      if (blockReason != null) {
-        notice = blockReason;
-        return;
-      }
-      final resolution = await bridge.startResolution(
-        provider: descriptor.id,
-        input: ProviderInputEnvelope(
-          kind: descriptor.inputKind,
-          link: draft.spec.link,
-        ),
-        providerSettings: descriptor.normalizeProviderSettings(
-          draft.spec.providerSettings,
-          applyDefaults: false,
-        ),
-      );
       selectedResolutionId = resolution.id;
       notice = _resolutionStartedNotice(descriptor, resolution.id);
       await refresh();
@@ -858,13 +1038,38 @@ class MobileShellController extends ChangeNotifier {
 
   Future<void> startPlatformTunnel(PlatformTunnelMode mode) async {
     await _runBridgeMutation(() async {
-      final resolutionId = selectedResolutionId?.trim();
+      final executionPlan = _resolvedExecutionPlanForMode(mode);
+      if (executionPlan == null) {
+        notice = _executionPlanSelectionRequiredMessage(mode);
+        return;
+      }
+      final modePreferences = modePreferencesFor(mode);
+      final routingError = _routingSelectionBlockReason(mode, modePreferences);
+      if (routingError != null) {
+        notice = routingError;
+        return;
+      }
+      final resolutionId = await _ensureResolutionForPlatformTunnel(mode);
+      if (resolutionId == null) {
+        return;
+      }
       var result = await bridge.startPlatformTunnel(
         mode: mode,
-        resolutionId: resolutionId == null || resolutionId.isEmpty
-            ? null
-            : resolutionId,
+        resolutionId: resolutionId,
         runtimeDefaults: RuntimeDefaults.fromProfileSpec(draft.spec),
+        executionPlan: executionPlan,
+        applicationRoutingPolicy: _effectiveRoutingPolicyForMode(
+          mode,
+          modePreferences,
+        ),
+        allowedPackages: _effectiveAllowedPackagesForMode(
+          mode,
+          modePreferences,
+        ),
+        disallowedPackages: _effectiveDisallowedPackagesForMode(
+          mode,
+          modePreferences,
+        ),
       );
       if (_requiresPlatformTunnelPermissionResume(mode, result)) {
         await bridge.requestPlatformTunnelPermission(mode: mode);
@@ -924,6 +1129,99 @@ class MobileShellController extends ChangeNotifier {
       }
     }
     return null;
+  }
+
+  ResolutionRecord? _selectedResolutionRecord() {
+    final resolutionId = selectedResolutionId?.trim() ?? '';
+    if (resolutionId.isEmpty) {
+      return null;
+    }
+    return _resolutionById(resolutionId);
+  }
+
+  Future<ResolutionRecord?> _startResolutionForCurrentDraft(
+    ProviderDescriptor descriptor,
+  ) async {
+    if (descriptor.inputKind != ProviderInputKind.link) {
+      notice =
+          '${descriptor.displayName} expects ${descriptor.inputKind.value} input. This mobile shell currently supports link entry only.';
+      return null;
+    }
+    final blockReason = _providerSettingsBlockReason(descriptor);
+    if (blockReason != null) {
+      notice = blockReason;
+      return null;
+    }
+    return bridge.startResolution(
+      provider: descriptor.id,
+      input: ProviderInputEnvelope(
+        kind: descriptor.inputKind,
+        link: draft.spec.link,
+      ),
+      providerSettings: descriptor.normalizeProviderSettings(
+        draft.spec.providerSettings,
+        applyDefaults: false,
+      ),
+    );
+  }
+
+  Future<String?> _ensureResolutionForPlatformTunnel(
+    PlatformTunnelMode mode,
+  ) async {
+    final selectedResolution = _selectedResolutionRecord();
+    if (selectedResolution != null) {
+      switch (selectedResolution.state) {
+        case ResolutionState.resolved:
+          return selectedResolution.id;
+        case ResolutionState.challengeRequired:
+          notice =
+              'Complete the current provider challenge before starting ${mode.label}.';
+          return null;
+        case ResolutionState.starting:
+          notice =
+              'Wait for the current provider resolution before starting ${mode.label}.';
+          return null;
+        case ResolutionState.failed ||
+            ResolutionState.cancelled ||
+            ResolutionState.expired:
+          _clearSelectedResolutionSelection();
+          break;
+      }
+    }
+
+    final descriptor = activeProviderDescriptor;
+    if (descriptor == null) {
+      notice =
+          'The selected provider is not advertised by the connected mobile host.';
+      return null;
+    }
+    final resolution = await _startResolutionForCurrentDraft(descriptor);
+    if (resolution == null) {
+      return null;
+    }
+    selectedResolutionId = resolution.id;
+    await refresh();
+    final refreshedResolution = _resolutionById(resolution.id) ?? resolution;
+    switch (refreshedResolution.state) {
+      case ResolutionState.resolved:
+        return refreshedResolution.id;
+      case ResolutionState.challengeRequired:
+        notice =
+            '${_resolutionStartedNotice(descriptor, refreshedResolution.id)} Complete the current provider challenge before starting ${mode.label}.';
+        return null;
+      case ResolutionState.starting:
+        notice =
+            '${_resolutionStartedNotice(descriptor, refreshedResolution.id)} Wait for the resolution to finish before starting ${mode.label}.';
+        return null;
+      case ResolutionState.failed ||
+          ResolutionState.cancelled ||
+          ResolutionState.expired:
+        notice = _resolutionUnavailableForPlatformTunnelNotice(
+          mode,
+          refreshedResolution,
+        );
+        return null;
+    }
   }
 
   String _externalActionTargetLabel(ArtifactAction action) {
@@ -1015,6 +1313,7 @@ class MobileShellController extends ChangeNotifier {
     }
 
     _clearPlatformTunnelResults();
+    _normalizeSelectedPlatformTunnelMode();
 
     if (hostConnection?.isReady != true) {
       await _stopRuntimeMonitoring();
@@ -1023,6 +1322,7 @@ class MobileShellController extends ChangeNotifier {
       sessions = const <SessionRecord>[];
       selectedResolutionId = null;
       selectedSessionId = null;
+      installedAppsError = null;
       busy = false;
       status = ShellStatus.blocked;
       notice = hostConnection?.message;
@@ -1435,6 +1735,7 @@ class MobileShellController extends ChangeNotifier {
     sessions = const <SessionRecord>[];
     selectedResolutionId = null;
     selectedSessionId = null;
+    installedAppsError = null;
     status = ShellStatus.blocked;
     notice = message;
     busy = false;
@@ -1462,6 +1763,8 @@ class MobileShellController extends ChangeNotifier {
       managedProviders = state.managedProviders;
       profileBindings = state.profileBindings;
       selectedProfileId = state.selectedProfileId;
+      selectedPlatformTunnelMode = state.selectedPlatformTunnelMode;
+      platformModePreferences = state.platformModePreferences;
       draft = state.draft;
       managedProviderDraft = _defaultManagedProviderDraft();
       _persistedStateSignature = state.signature();
@@ -1486,6 +1789,8 @@ class MobileShellController extends ChangeNotifier {
       managedProviders: managedProviders,
       profileBindings: profileBindings,
       selectedProfileId: selectedProfileId,
+      selectedPlatformTunnelMode: selectedPlatformTunnelMode,
+      platformModePreferences: platformModePreferences,
       draft: draft,
     );
     final sanitized = next.sanitizedForPersistence(providerDescriptors);
@@ -1533,6 +1838,17 @@ class MobileShellController extends ChangeNotifier {
       buffer.write(' ${result.message}');
     }
     return buffer.toString();
+  }
+
+  String _resolutionUnavailableForPlatformTunnelNotice(
+    PlatformTunnelMode mode,
+    ResolutionRecord resolution,
+  ) {
+    final stage = resolution.failure?.stage ?? resolution.state.value;
+    final message =
+        resolution.failure?.message ??
+        'The provider did not return a startable artifact.';
+    return 'Cannot start ${mode.label} because resolution ${resolution.id} ended at $stage: $message';
   }
 
   String _resolutionStartedNotice(
@@ -1717,6 +2033,270 @@ class MobileShellController extends ChangeNotifier {
         .toList(growable: false);
   }
 
+  void _normalizeSelectedPlatformTunnelMode() {
+    final resolvedMode = activePlatformTunnelMode;
+    if (resolvedMode == null) {
+      if (selectedPlatformTunnelMode != null) {
+        selectedPlatformTunnelMode = null;
+        _scheduleStatePersist();
+      }
+      return;
+    }
+    final changed = selectedPlatformTunnelMode != resolvedMode;
+    selectedPlatformTunnelMode = resolvedMode;
+    _storeModePreferences(resolvedMode, modePreferencesFor(resolvedMode));
+    if (changed) {
+      _scheduleStatePersist();
+    }
+  }
+
+  String _platformModePreferenceScope() {
+    final selected = selectedProfileId?.trim() ?? '';
+    return selected.isEmpty ? _draftModePreferenceScope : selected;
+  }
+
+  String _platformModePreferenceKey(PlatformTunnelMode mode, {String? scope}) {
+    final candidate = (scope ?? _platformModePreferenceScope()).trim();
+    final normalizedScope = candidate.isEmpty
+        ? _draftModePreferenceScope
+        : candidate;
+    return '$normalizedScope::${mode.value}';
+  }
+
+  void _storeModePreferences(
+    PlatformTunnelMode mode,
+    MobilePlatformModePreferences next, {
+    bool notify = false,
+  }) {
+    final key = _platformModePreferenceKey(mode);
+    final normalized = _normalizePlatformModePreferences(mode, next);
+    final current = platformModePreferences[key];
+    if (current != null && _sameModePreferences(current, normalized)) {
+      return;
+    }
+    platformModePreferences = <String, MobilePlatformModePreferences>{
+      ...platformModePreferences,
+      key: normalized,
+    };
+    _scheduleStatePersist();
+    if (notify) {
+      _notify();
+    }
+  }
+
+  MobilePlatformModePreferences _normalizePlatformModePreferences(
+    PlatformTunnelMode mode,
+    MobilePlatformModePreferences? current,
+  ) {
+    final resolvedExecutionPlan = _resolveStoredExecutionPlan(
+      mode,
+      current?.executionPlan,
+    );
+    final allowedPackages = _normalizePackageNames(current?.allowedPackages);
+    final disallowedPackages = _normalizePackageNames(
+      current?.disallowedPackages,
+    );
+    if (!_modeSupportsAppRouting(mode)) {
+      return MobilePlatformModePreferences(
+        executionPlan: resolvedExecutionPlan,
+        applicationRoutingPolicy:
+            PlatformTunnelApplicationRoutingPolicy.allApps,
+      );
+    }
+    return MobilePlatformModePreferences(
+      executionPlan: resolvedExecutionPlan,
+      applicationRoutingPolicy:
+          current?.applicationRoutingPolicy ??
+          PlatformTunnelApplicationRoutingPolicy.allApps,
+      allowedPackages: allowedPackages,
+      disallowedPackages: disallowedPackages,
+    );
+  }
+
+  RuntimeExecutionPlan? _resolveStoredExecutionPlan(
+    PlatformTunnelMode mode,
+    RuntimeExecutionPlan? current,
+  ) {
+    if (current != null) {
+      for (final descriptor in executionPlanOptionsForMode(mode)) {
+        if (_sameExecutionPlan(descriptor.plan, current)) {
+          return current;
+        }
+      }
+    }
+    return _defaultExecutionPlanForMode(mode);
+  }
+
+  RuntimeExecutionPlan? _defaultExecutionPlanForMode(PlatformTunnelMode mode) {
+    final options = executionPlanOptionsForMode(mode);
+    for (final descriptor in options) {
+      if (descriptor.isDefault) {
+        return descriptor.plan;
+      }
+    }
+    if (options.length == 1) {
+      return options.first.plan;
+    }
+    return null;
+  }
+
+  RuntimeExecutionPlan? _resolvedExecutionPlanForMode(PlatformTunnelMode mode) {
+    return modePreferencesFor(mode).executionPlan;
+  }
+
+  PlatformTunnelApplicationRoutingPolicy _effectiveRoutingPolicyForMode(
+    PlatformTunnelMode mode,
+    MobilePlatformModePreferences preferences,
+  ) {
+    if (!_modeSupportsAppRouting(mode)) {
+      return PlatformTunnelApplicationRoutingPolicy.allApps;
+    }
+    return preferences.applicationRoutingPolicy;
+  }
+
+  List<String> _effectiveAllowedPackagesForMode(
+    PlatformTunnelMode mode,
+    MobilePlatformModePreferences preferences,
+  ) {
+    if (_effectiveRoutingPolicyForMode(mode, preferences) !=
+        PlatformTunnelApplicationRoutingPolicy.allowedPackages) {
+      return const <String>[];
+    }
+    return _normalizePackageNames(preferences.allowedPackages);
+  }
+
+  List<String> _effectiveDisallowedPackagesForMode(
+    PlatformTunnelMode mode,
+    MobilePlatformModePreferences preferences,
+  ) {
+    if (_effectiveRoutingPolicyForMode(mode, preferences) !=
+        PlatformTunnelApplicationRoutingPolicy.disallowedPackages) {
+      return const <String>[];
+    }
+    return _normalizePackageNames(preferences.disallowedPackages);
+  }
+
+  String? _routingSelectionBlockReason(
+    PlatformTunnelMode mode,
+    MobilePlatformModePreferences preferences,
+  ) {
+    switch (_effectiveRoutingPolicyForMode(mode, preferences)) {
+      case PlatformTunnelApplicationRoutingPolicy.allApps:
+        return null;
+      case PlatformTunnelApplicationRoutingPolicy.allowedPackages:
+        return _effectiveAllowedPackagesForMode(mode, preferences).isEmpty
+            ? 'Select at least one app before starting ${mode.label} in included-apps mode.'
+            : null;
+      case PlatformTunnelApplicationRoutingPolicy.disallowedPackages:
+        return _effectiveDisallowedPackagesForMode(mode, preferences).isEmpty
+            ? 'Select at least one app before starting ${mode.label} in excluded-apps mode.'
+            : null;
+    }
+  }
+
+  String _executionPlanSelectionRequiredMessage(PlatformTunnelMode mode) {
+    final capability = capabilityForMode(mode);
+    if (capability == null) {
+      return 'The selected mobile mode is not advertised by the connected host.';
+    }
+    if (capability.executionPlans.isEmpty) {
+      return '${mode.label} does not advertise a supported execution path yet.';
+    }
+    return 'Select an execution path before starting ${mode.label}.';
+  }
+
+  void _moveModePreferences({
+    required String fromScope,
+    required String toScope,
+  }) {
+    final normalizedFrom = fromScope.trim();
+    final normalizedTo = toScope.trim();
+    if (normalizedFrom.isEmpty ||
+        normalizedTo.isEmpty ||
+        normalizedFrom == normalizedTo) {
+      return;
+    }
+    final prefix = '$normalizedFrom::';
+    final next = <String, MobilePlatformModePreferences>{
+      ...platformModePreferences,
+    };
+    var changed = false;
+    for (final entry in platformModePreferences.entries) {
+      if (!entry.key.startsWith(prefix)) {
+        continue;
+      }
+      final modeSuffix = entry.key.substring(prefix.length);
+      next.remove(entry.key);
+      next['$normalizedTo::$modeSuffix'] = entry.value;
+      changed = true;
+    }
+    if (!changed) {
+      return;
+    }
+    platformModePreferences = next;
+    _scheduleStatePersist();
+  }
+
+  void _dropModePreferencesForScope(String scope) {
+    final normalized = scope.trim();
+    if (normalized.isEmpty) {
+      return;
+    }
+    final prefix = '$normalized::';
+    final next = <String, MobilePlatformModePreferences>{
+      for (final entry in platformModePreferences.entries)
+        if (!entry.key.startsWith(prefix)) entry.key: entry.value,
+    };
+    if (next.length == platformModePreferences.length) {
+      return;
+    }
+    platformModePreferences = next;
+    _scheduleStatePersist();
+  }
+
+  bool _sameModePreferences(
+    MobilePlatformModePreferences left,
+    MobilePlatformModePreferences right,
+  ) {
+    return _sameExecutionPlan(left.executionPlan, right.executionPlan) &&
+        left.applicationRoutingPolicy == right.applicationRoutingPolicy &&
+        _sameStringLists(left.allowedPackages, right.allowedPackages) &&
+        _sameStringLists(left.disallowedPackages, right.disallowedPackages);
+  }
+
+  bool _sameExecutionPlan(
+    RuntimeExecutionPlan? left,
+    RuntimeExecutionPlan? right,
+  ) {
+    if (left == null || right == null) {
+      return left == right;
+    }
+    return left.accessMethod == right.accessMethod &&
+        left.carrierFamily == right.carrierFamily &&
+        left.engineFamily == right.engineFamily &&
+        left.hostAdapter == right.hostAdapter;
+  }
+
+  bool _sameStringLists(List<String> left, List<String> right) {
+    if (left.length != right.length) {
+      return false;
+    }
+    for (var index = 0; index < left.length; index += 1) {
+      if (left[index] != right[index]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool _modeSupportsAppRouting(PlatformTunnelMode? mode) {
+    return mode == PlatformTunnelMode.androidVpnService;
+  }
+
+  void _clearSelectedResolutionSelection() {
+    selectedResolutionId = null;
+  }
+
   void _notify() {
     if (_disposed) {
       return;
@@ -1750,6 +2330,32 @@ Map<String, ProfileProviderBinding> _dropManagedProviderBindings(
     next[entry.key] = binding;
   }
   return next;
+}
+
+List<String> _normalizePackageNames(Iterable<String>? values) {
+  final normalized = (values ?? const <String>[])
+      .map((String value) => value.trim())
+      .where((String value) => value.isNotEmpty)
+      .toSet()
+      .toList(growable: false);
+  normalized.sort();
+  return normalized;
+}
+
+List<String> _togglePackage(
+  List<String> current,
+  String packageName,
+  bool selected,
+) {
+  final next = current.toSet();
+  if (selected) {
+    next.add(packageName);
+  } else {
+    next.remove(packageName);
+  }
+  final sorted = next.toList(growable: false);
+  sorted.sort();
+  return sorted;
 }
 
 Future<Directory> defaultDiagnosticsDirectory() async {

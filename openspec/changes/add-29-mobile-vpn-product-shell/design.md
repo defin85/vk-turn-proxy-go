@@ -52,13 +52,21 @@ The first-class phone-sized destination will show:
 
 It will no longer be dominated by inline profile and provider editors.
 
-### Decision: Profiles and routing become dedicated destinations
+### Decision: Profiles are primary, routing is dedicated but mode-aware
 
-Saved profiles, add/import flows, and app-routing selection are separate mobile
-surfaces, not sections embedded in the main home feed.
+Saved profiles and add/import flows are first-class product navigation
+surfaces.
+App-routing selection is still a dedicated surface, but on compact phones it
+should stay behind explicit navigation from home or profiles instead of being a
+permanently promoted top-level tab.
 
-This follows the pattern seen in Hiddify and v2rayNG and keeps the home screen
-short enough for ordinary operators.
+This follows the pattern seen in Hiddify and v2rayNG, keeps the home screen
+short enough for ordinary operators, and avoids implying that every Android
+mode exposes per-app routing.
+
+On wider tablet layouts, the shell may promote `Routing` into the
+`NavigationRail`, but only when the currently selected mode actually supports
+app-routing.
 
 ### Decision: Diagnostics stay explicit but secondary
 
@@ -68,6 +76,15 @@ links from the home surface.
 
 The primary home does not inline raw event panels, export controls, or large
 diagnostic matrices by default.
+
+### Decision: Compact phones collapse support into one destination
+
+On compact phone layouts, activity and diagnostics should share one explicit
+support destination with internal segments, tabs, or drill-down routes instead
+of consuming multiple peer top-level tabs.
+
+Wider layouts may expose support sub-surfaces more directly, but compact
+navigation should reserve first-class prominence for the product workflow.
 
 ### Decision: Runtime mode and scope stay explicit on home
 
@@ -79,6 +96,14 @@ The home surface must describe whether the app is using:
 
 That copy is product-critical because Android system VPN and future proxy-only
 or relay modes do not have the same user expectations or detection surface.
+
+### Decision: Primary tunnel control stays on home
+
+The fastest connect or disconnect action stays on `Home` across phone and
+tablet layouts.
+
+Support surfaces may show runtime details, failures, and drill-down actions,
+but operators should not need to enter support just to toggle the VPN state.
 
 ### Decision: Minimal user workflow and operator workflow coexist
 
@@ -107,12 +132,14 @@ and a minimal connect-oriented path.
 1. Rework mobile information architecture around dedicated destinations.
 2. Replace the current diagnostics-heavy home with a VPN-first home.
 3. Move profile management and per-app routing into dedicated screens.
-4. Keep support surfaces reachable and verify typed failure visibility.
-5. Validate the new shell on phone-sized layouts before widening the design.
+4. Collapse compact support navigation into one explicit support destination
+   while keeping activity/diagnostics drill-down intact.
+5. Keep support surfaces reachable and verify typed failure visibility.
+6. Validate the new shell on phone-sized layouts, then verify preserved state
+   across wider mobile/tablet breakpoints before widening the design.
 
 ## Open Questions
 
-- Whether `Routing` should be its own top-level destination on phones or a
-  child route under `Settings`.
-- Whether `Activity` and `Diagnostics` should remain separate destinations or
-  merge into one support surface with tabs.
+- When a generic support affordance opens the support workflow, whether the
+  initial sub-surface should stay pinned to `Activity` or remember the last
+  support view used by the operator.

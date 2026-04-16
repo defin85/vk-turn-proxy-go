@@ -6,6 +6,7 @@ import 'package:mobile_gui_shell/src/app.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_models.dart';
 import 'package:mobile_gui_shell/src/control/mobile_handoff_adapter.dart';
 import 'package:mobile_gui_shell/src/control/mobile_host_bridge.dart';
+import 'package:mobile_gui_shell/src/control/mobile_platform_app_inventory.dart';
 import 'package:mobile_gui_shell/src/control/mobile_shell_controller.dart';
 import 'package:mobile_gui_shell/src/control/mobile_shell_state_store.dart';
 import 'package:mobile_gui_shell/src/control/profile_draft.dart';
@@ -60,6 +61,32 @@ const ProviderDescriptor _supportedProviderWithUnsupportedSettingsDescriptor =
           ),
         },
       ),
+    );
+
+const RuntimeExecutionPlanDescriptor _androidVpnExecutionPlanDescriptor =
+    RuntimeExecutionPlanDescriptor(
+      plan: RuntimeExecutionPlan(
+        accessMethod: RuntimeAccessMethod.turnCredentials,
+        carrierFamily: RuntimeCarrierFamily.turnDatagram,
+        engineFamily: RuntimeEngineFamily.wireguardNative,
+        hostAdapter: RuntimeHostAdapter.androidVpnService,
+      ),
+      supportState: RuntimeExecutionPlanSupportState.supported,
+      remoteEndpointFamily: RuntimeRemoteEndpointFamily.turnServer,
+      isDefault: true,
+    );
+
+const RuntimeExecutionPlanDescriptor _appleNetworkExtensionExecutionPlanDescriptor =
+    RuntimeExecutionPlanDescriptor(
+      plan: RuntimeExecutionPlan(
+        accessMethod: RuntimeAccessMethod.turnCredentials,
+        carrierFamily: RuntimeCarrierFamily.turnDatagram,
+        engineFamily: RuntimeEngineFamily.wireguardNative,
+        hostAdapter: RuntimeHostAdapter.appleNetworkExtension,
+      ),
+      supportState: RuntimeExecutionPlanSupportState.supported,
+      remoteEndpointFamily: RuntimeRemoteEndpointFamily.turnServer,
+      isDefault: true,
     );
 
 void main() {
@@ -124,13 +151,11 @@ void main() {
     await tester.pumpWidget(MobileShellApp(controller: controller));
     await tester.pumpAndSettle();
 
-    expect(find.text('Workflow ready'), findsOneWidget);
+    expect(find.text('Home'), findsWidgets);
+    expect(find.text('Turn on VPN'), findsOneWidget);
     expect(find.text('Open activity'), findsOneWidget);
-    await tester.enterText(find.byType(TextField).first, 'vk mobile draft');
-    await tester.pump();
 
-    await tester.tap(find.text('Diagnostics'));
-    await tester.pumpAndSettle();
+    await _openSupportDiagnostics(tester);
 
     expect(
       find.text('Android VPN Service', skipOffstage: false),
@@ -149,8 +174,7 @@ void main() {
     );
     expect(find.textContaining('Capability check'), findsWidgets);
 
-    await tester.tap(find.text('Activity'));
-    await tester.pumpAndSettle();
+    await _openSupportTab(tester);
     await tester.tap(find.text('Sessions (1)'));
     await tester.pumpAndSettle();
 
@@ -158,10 +182,305 @@ void main() {
     expect(find.text("I've completed it", skipOffstage: false), findsOneWidget);
     expect(find.text('vk live'), findsWidgets);
 
-    await tester.tap(find.text('Workflow'));
+    await _openProfilesTab(tester);
+    await tester.enterText(find.byType(TextField).first, 'vk mobile draft');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Home').first);
+    await tester.pumpAndSettle();
+    await _openProfilesTab(tester);
     await tester.pumpAndSettle();
     expect(find.text('vk mobile draft'), findsOneWidget);
   });
+
+  testWidgets(
+    'home primary action resolves the selected profile and then disconnects from the same surface',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final profile = ProfileRecord(
+        id: 'profile-1',
+        name: 'vk live',
+        spec: _profileSpec(),
+      );
+      final bridge = _FakeMobileHostBridge(
+        startPlatformTunnelResult: const PlatformTunnelStartResult(
+          mode: PlatformTunnelMode.androidVpnService,
+          ready: true,
+        ),
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[profile],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: profile.id,
+            draft: ProfileDraft.fromProfile(profile),
+          ),
+        ),
+      );
+
+      await controller.initialize();
+      await tester.pumpWidget(MobileShellApp(controller: controller));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Turn on VPN'));
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(bridge.startResolutionCalls, hasLength(1));
+      expect(bridge.startResolutionCalls.single.provider, 'vk');
+      expect(
+        bridge.startResolutionCalls.single.input.link,
+        'https://vk.com/call/join/test',
+      );
+      expect(bridge.startedPlatformTunnelResolutionIDs, <String?>[
+        'resolution-1',
+      ]);
+      expect(find.text('Turn off VPN'), findsOneWidget);
+
+      await tester.tap(find.text('Turn off VPN'));
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(bridge.stoppedPlatformTunnels, <PlatformTunnelMode>[
+        PlatformTunnelMode.androidVpnService,
+      ]);
+    },
+  );
+
+  testWidgets(
+    'home keeps vpn-first runtime context when add profile clears the current selection',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final profile = ProfileRecord(
+        id: 'profile-1',
+        name: 'vk live',
+        spec: _profileSpec(),
+      );
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(),
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[profile],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: profile.id,
+            draft: ProfileDraft.fromProfile(profile),
+          ),
+        ),
+      );
+
+      await controller.initialize();
+      await tester.pumpWidget(MobileShellApp(controller: controller));
+      await tester.pumpAndSettle();
+
+      await _openProfilesTab(tester);
+      await tester.tap(find.text('Add profile'));
+      await tester.pumpAndSettle();
+
+      expect(controller.selectedProfileId, isNull);
+
+      await tester.tap(find.text('Home').first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Choose a profile'), findsOneWidget);
+      expect(find.text('Mode and scope'), findsOneWidget);
+      expect(find.text('Live status'), findsOneWidget);
+      expect(find.text('Continue in Profiles'), findsOneWidget);
+      expect(find.text('Open activity'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'home empty state offers add and import actions when no profiles exist',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(),
+        stateStore: _InMemoryStateStore(MobileShellState.empty()),
+      );
+
+      await controller.initialize();
+      await tester.pumpWidget(MobileShellApp(controller: controller));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No saved profiles yet'), findsOneWidget);
+      expect(find.text('Add profile'), findsOneWidget);
+      expect(find.text('Import invite'), findsOneWidget);
+      expect(find.text('Turn on VPN'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'mobile shell exposes dedicated routing surface for android vpn mode',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final profile = ProfileRecord(
+        id: 'profile-1',
+        name: 'vk live',
+        spec: _profileSpec(),
+      );
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(),
+        appInventory: _FakeMobilePlatformAppInventory(
+          apps: const <MobilePlatformApp>[
+            MobilePlatformApp(packageName: 'org.signal', label: 'Signal'),
+            MobilePlatformApp(
+              packageName: 'org.telegram.messenger',
+              label: 'Telegram',
+            ),
+          ],
+        ),
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[profile],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: profile.id,
+            draft: ProfileDraft.fromProfile(profile),
+          ),
+        ),
+      );
+
+      await controller.initialize();
+      await tester.pumpWidget(MobileShellApp(controller: controller));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Routing').first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Routing'), findsWidgets);
+      expect(find.text('Search apps'), findsNothing);
+
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Included apps').first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Search apps'), findsOneWidget);
+      await tester.tap(find.text('Signal').first);
+      await tester.pumpAndSettle();
+
+      expect(
+        controller.activePlatformModePreferences.allowedPackages,
+        contains('org.signal'),
+      );
+    },
+  );
+
+  testWidgets(
+    'mobile shell hides routing as a primary path for modes without app routing support',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final profile = ProfileRecord(
+        id: 'profile-1',
+        name: 'vk live',
+        spec: _profileSpec(),
+      );
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(
+          readyResult: const MobileHostConnectionResult(
+            state: MobileHostLifecycleState.ready,
+            message: 'Connected to non-routing mobile host bridge',
+            info: _nonRoutingReadyHostInfo,
+            description: 'fake-test-bridge',
+          ),
+        ),
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[profile],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: profile.id,
+            draft: ProfileDraft.fromProfile(profile),
+          ),
+        ),
+      );
+
+      await controller.initialize();
+      await tester.pumpWidget(MobileShellApp(controller: controller));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('Per-app routing is unavailable for this mobile mode.'),
+        findsOneWidget,
+      );
+      expect(find.text('Routing'), findsNothing);
+      expect(find.text('Open routing'), findsNothing);
+
+      await _openProfilesTab(tester);
+      expect(find.text('Routing'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'mobile shell preserves draft and routing state across width changes',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(700, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final profile = ProfileRecord(
+        id: 'profile-1',
+        name: 'vk live',
+        spec: _profileSpec(),
+      );
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(),
+        appInventory: _FakeMobilePlatformAppInventory(
+          apps: const <MobilePlatformApp>[
+            MobilePlatformApp(packageName: 'org.signal', label: 'Signal'),
+          ],
+        ),
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[profile],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: profile.id,
+            draft: ProfileDraft.fromProfile(profile),
+          ),
+        ),
+      );
+
+      await controller.initialize();
+      await tester.pumpWidget(MobileShellApp(controller: controller));
+      await tester.pumpAndSettle();
+
+      await _openProfilesTab(tester);
+      await tester.enterText(find.byType(TextField).first, 'resize draft');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Routing').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Included apps').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Signal').first);
+      await tester.pumpAndSettle();
+
+      tester.view.physicalSize = const Size(1200, 1600);
+      await tester.pumpAndSettle();
+
+      expect(
+        controller.activePlatformModePreferences.allowedPackages,
+        contains('org.signal'),
+      );
+      expect(find.text('Routing'), findsWidgets);
+
+      await _openProfilesTab(tester);
+      expect(find.text('resize draft'), findsOneWidget);
+    },
+  );
 
   testWidgets(
     'mobile shell renders owned-browser challenges in-app without manual fallback',
@@ -246,8 +565,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Activity'));
-      await tester.pumpAndSettle();
+      await _openSupportTab(tester);
       await tester.tap(find.text('Sessions (1)'));
       await tester.pumpAndSettle();
 
@@ -340,8 +658,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Activity'));
-      await tester.pumpAndSettle();
+      await _openSupportTab(tester);
       await tester.tap(find.text('Sessions (1)'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Continue in app', skipOffstage: false));
@@ -431,8 +748,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Activity'));
-      await tester.pumpAndSettle();
+      await _openSupportTab(tester);
       await tester.tap(find.text('Sessions (1)'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Continue in app', skipOffstage: false));
@@ -449,6 +765,10 @@ void main() {
   testWidgets('mobile shell exposes reset action for blocked local state', (
     WidgetTester tester,
   ) async {
+    tester.view.physicalSize = const Size(1200, 1800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
     final controller = MobileShellController(
       bridge: _FakeMobileHostBridge(),
       stateStore: _ThrowingStateStore(
@@ -461,15 +781,14 @@ void main() {
     await tester.pumpWidget(MobileShellApp(controller: controller));
     await tester.pumpAndSettle();
 
-    expect(find.text('Workflow blocked by host state'), findsOneWidget);
+    expect(find.text('Home'), findsWidgets);
     expect(find.text('Reset local state'), findsOneWidget);
     expect(
       find.textContaining('Secure profile secrets are unavailable'),
       findsWidgets,
     );
 
-    await tester.tap(find.text('Diagnostics'));
-    await tester.pumpAndSettle();
+    await _openSupportDiagnostics(tester);
     expect(find.text('Mobile host blocked'), findsOneWidget);
   });
 
@@ -531,11 +850,10 @@ void main() {
       await tester.pumpWidget(MobileShellApp(controller: controller));
       await tester.pumpAndSettle();
 
-      expect(find.text('Workflow blocked by host mismatch'), findsOneWidget);
+      expect(find.text('Home'), findsWidgets);
       expect(find.textContaining('contract mismatch'), findsWidgets);
 
-      await tester.tap(find.text('Diagnostics'));
-      await tester.pumpAndSettle();
+      await _openSupportDiagnostics(tester);
 
       expect(find.text('Mobile host incompatible'), findsOneWidget);
       expect(find.text('Contract 2'), findsOneWidget);
@@ -602,8 +920,7 @@ void main() {
     await controller.initialize();
     await tester.pumpWidget(MobileShellApp(controller: controller));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Activity'));
-    await tester.pumpAndSettle();
+    await _openSupportTab(tester);
     await tester.tap(find.text('Sessions (2)'));
     await tester.pumpAndSettle();
 
@@ -683,8 +1000,7 @@ void main() {
     await controller.initialize();
     await tester.pumpWidget(MobileShellApp(controller: controller));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Activity'));
-    await tester.pumpAndSettle();
+    await _openSupportTab(tester);
 
     expect(
       find.text('Start on this device', skipOffstage: false),
@@ -754,8 +1070,7 @@ void main() {
     await controller.initialize();
     await tester.pumpWidget(MobileShellApp(controller: controller));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Activity'));
-    await tester.pumpAndSettle();
+    await _openSupportTab(tester);
 
     final openRoomButton = find.text('Open room', skipOffstage: false);
     await tester.tap(openRoomButton);
@@ -813,8 +1128,7 @@ void main() {
     );
     await tester.pump();
 
-    await tester.tap(find.text('Diagnostics'));
-    await tester.pumpAndSettle();
+    await _openSupportDiagnostics(tester);
     await tester.tap(find.text('Events (1)'));
     await tester.pumpAndSettle();
 
@@ -849,6 +1163,7 @@ void main() {
     await controller.initialize();
     await tester.pumpWidget(MobileShellApp(controller: controller));
     await tester.pumpAndSettle();
+    await _openProfilesTab(tester);
 
     await tester.scrollUntilVisible(
       find.byKey(const ValueKey<String>('preset-card-generic-turn-default')),
@@ -899,6 +1214,7 @@ void main() {
     await controller.initialize();
     await tester.pumpWidget(MobileShellApp(controller: controller));
     await tester.pumpAndSettle();
+    await _openProfilesTab(tester);
 
     final workflowScrollable = _workflowScrollable();
     final wbPresetButton = find.byKey(
@@ -940,6 +1256,7 @@ void main() {
       await controller.initialize();
       await tester.pumpWidget(MobileShellApp(controller: controller));
       await tester.pumpAndSettle();
+      await _openProfilesTab(tester);
 
       final workflowScrollable = _workflowScrollable();
       await tester.scrollUntilVisible(
@@ -1061,6 +1378,7 @@ void main() {
     controller.selectProviderConfig('provider-config-1');
     await tester.pumpWidget(MobileShellApp(controller: controller));
     await tester.pumpAndSettle();
+    await _openProfilesTab(tester);
 
     expect(controller.workflowSurface, MobileWorkflowSurface.providerConfig);
     expect(
@@ -1116,6 +1434,7 @@ void main() {
       controller.selectProviderConfig('provider-config-1');
       await tester.pumpWidget(MobileShellApp(controller: controller));
       await tester.pumpAndSettle();
+      await _openProfilesTab(tester);
 
       final providerWorkspaceScrollable = _managedProviderWorkspaceScrollable();
       await tester.scrollUntilVisible(
@@ -1201,6 +1520,7 @@ void main() {
       controller.selectProviderConfig('provider-config-1');
       await tester.pumpWidget(MobileShellApp(controller: controller));
       await tester.pumpAndSettle();
+      await _openProfilesTab(tester);
 
       final applyButton = tester.widget<FilledButton>(
         find.byKey(const ValueKey<String>('managed-provider-apply-button')),
@@ -1276,6 +1596,7 @@ void main() {
       await controller.initialize();
       await tester.pumpWidget(MobileShellApp(controller: controller));
       await tester.pumpAndSettle();
+      await _openProfilesTab(tester);
 
       final profileWorkspaceScrollable = _profileWorkspaceScrollable();
       await tester.scrollUntilVisible(
@@ -1310,6 +1631,30 @@ void main() {
       expect(controller.draft.providerBinding.isManaged, isFalse);
     },
   );
+}
+
+Future<void> _openProfilesTab(WidgetTester tester) async {
+  await tester.tap(find.text('Profiles').first);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _openSupportTab(WidgetTester tester) async {
+  await tester.tap(find.text('Support').first);
+  await tester.pumpAndSettle();
+  final activityChip = find.widgetWithText(ChoiceChip, 'Activity');
+  if (activityChip.evaluate().isNotEmpty) {
+    await tester.tap(activityChip.first);
+    await tester.pumpAndSettle();
+  }
+}
+
+Future<void> _openSupportDiagnostics(WidgetTester tester) async {
+  await _openSupportTab(tester);
+  final diagnosticsChip = find.widgetWithText(ChoiceChip, 'Diagnostics');
+  if (diagnosticsChip.evaluate().isNotEmpty) {
+    await tester.tap(diagnosticsChip.first);
+    await tester.pumpAndSettle();
+  }
 }
 
 Finder _workflowScrollable() => find.byType(Scrollable).first;
@@ -1355,8 +1700,57 @@ const HostInfo _readyHostInfo = HostInfo(
     PlatformTunnelCapability(
       mode: PlatformTunnelMode.androidVpnService,
       available: false,
+      executionPlans: <RuntimeExecutionPlanDescriptor>[
+        _androidVpnExecutionPlanDescriptor,
+      ],
       missingPrerequisite: PlatformTunnelPrerequisite.hostImplementation,
       message: 'embedded mobile host does not implement tunnel startup yet',
+    ),
+  ],
+);
+
+const HostInfo _nonRoutingReadyHostInfo = HostInfo(
+  contractVersion: '1',
+  build: BuildIdentity(
+    product: 'vk-turn-proxy-go',
+    version: '0.1.0',
+    buildNumber: '1',
+    revision: 'mobilehost1234',
+    role: 'mobile_host',
+    target: 'ios/debug',
+  ),
+  capabilities: <Capability>[
+    Capability.mobileHostBridge,
+    Capability.platformTunnels,
+    Capability.profiles,
+    Capability.providerConfigs,
+    Capability.providerRuntimeArtifacts,
+    Capability.runtimeExecutionPlanning,
+    Capability.sessions,
+    Capability.challenges,
+    Capability.diagnostics,
+    Capability.eventStream,
+  ],
+  platformTunnels: <PlatformTunnelCapability>[
+    PlatformTunnelCapability(
+      mode: PlatformTunnelMode.appleNetworkExtension,
+      available: true,
+      satisfiedPrerequisites: <PlatformTunnelPrerequisite>[
+        PlatformTunnelPrerequisite.entitlement,
+      ],
+      executionPlans: <RuntimeExecutionPlanDescriptor>[
+        _appleNetworkExtensionExecutionPlanDescriptor,
+      ],
+      message: 'apple network extension mode is available on this host',
+    ),
+    PlatformTunnelCapability(
+      mode: PlatformTunnelMode.androidVpnService,
+      available: false,
+      executionPlans: <RuntimeExecutionPlanDescriptor>[
+        _androidVpnExecutionPlanDescriptor,
+      ],
+      missingPrerequisite: PlatformTunnelPrerequisite.hostImplementation,
+      message: 'android vpn service is unavailable on this host target',
     ),
   ],
 );
@@ -1450,6 +1844,13 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     MobileHostConnectionResult? readyResult,
     Stream<EventRecord>? eventStream,
     HostInfo? hostInfo,
+    this.startPlatformTunnelResult = const PlatformTunnelStartResult(
+      mode: PlatformTunnelMode.androidVpnService,
+      ready: false,
+      stage: PlatformTunnelStartupStage.capabilityCheck,
+      missingPrerequisite: PlatformTunnelPrerequisite.hostImplementation,
+      message: 'embedded mobile host does not implement tunnel startup yet',
+    ),
   }) : _providers = List<ProviderDescriptor>.of(
          providersList ?? _providerDescriptors,
        ),
@@ -1478,14 +1879,18 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   final Stream<EventRecord> _eventStream;
   final HostInfo _hostInfo;
   final List<ResolutionRecord> _resolutions;
+  final PlatformTunnelStartResult startPlatformTunnelResult;
   final List<PlatformTunnelMode> startedPlatformTunnels =
       <PlatformTunnelMode>[];
+  final List<String?> startedPlatformTunnelResolutionIDs = <String?>[];
   final List<PlatformTunnelMode> stoppedPlatformTunnels =
       <PlatformTunnelMode>[];
   final List<String> cancelChallengeCalls = <String>[];
   final List<String> continueChallengeCalls = <String>[];
   final List<ChallengeContinuationSubmission?> continueChallengePayloads =
       <ChallengeContinuationSubmission?>[];
+  final List<_StartResolutionCall> startResolutionCalls =
+      <_StartResolutionCall>[];
 
   @override
   Stream<MobileBrowserReturnSignal> get browserReturnSignals =>
@@ -1583,13 +1988,8 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     List<String> disallowedPackages = const <String>[],
   }) async {
     startedPlatformTunnels.add(mode);
-    return const PlatformTunnelStartResult(
-      mode: PlatformTunnelMode.androidVpnService,
-      ready: false,
-      stage: PlatformTunnelStartupStage.capabilityCheck,
-      missingPrerequisite: PlatformTunnelPrerequisite.hostImplementation,
-      message: 'embedded mobile host does not implement tunnel startup yet',
-    );
+    startedPlatformTunnelResolutionIDs.add(resolutionId);
+    return startPlatformTunnelResult;
   }
 
   @override
@@ -1611,10 +2011,10 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     required PlatformTunnelMode mode,
   }) async {
     stoppedPlatformTunnels.add(mode);
-    return PlatformTunnelStopResult(
-      mode: mode,
+    return const PlatformTunnelStopResult(
+      mode: PlatformTunnelMode.androidVpnService,
       stopped: true,
-      message: '${mode.label} disconnected.',
+      message: 'Android VPN Service disconnected.',
     );
   }
 
@@ -1644,7 +2044,14 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     required ProviderInputEnvelope input,
     Map<String, dynamic> providerSettings = const <String, dynamic>{},
   }) async {
-    return ResolutionRecord(
+    startResolutionCalls.add(
+      _StartResolutionCall(
+        provider: provider,
+        input: input,
+        providerSettings: providerSettings,
+      ),
+    );
+    final resolution = ResolutionRecord(
       id: 'resolution-1',
       provider: provider,
       input: ResolutionInput(
@@ -1671,6 +2078,10 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       startedAt: DateTime.utc(2026, 4, 10, 12, 0),
       updatedAt: DateTime.utc(2026, 4, 10, 12, 1),
     );
+    _resolutions
+      ..clear()
+      ..add(resolution);
+    return resolution;
   }
 
   @override
@@ -1751,6 +2162,29 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       (ProviderDescriptor descriptor) =>
           descriptor.id.trim().toLowerCase() == normalized,
     );
+  }
+}
+
+class _StartResolutionCall {
+  const _StartResolutionCall({
+    required this.provider,
+    required this.input,
+    required this.providerSettings,
+  });
+
+  final String provider;
+  final ProviderInputEnvelope input;
+  final Map<String, dynamic> providerSettings;
+}
+
+class _FakeMobilePlatformAppInventory implements MobilePlatformAppInventory {
+  const _FakeMobilePlatformAppInventory({required this.apps});
+
+  final List<MobilePlatformApp> apps;
+
+  @override
+  Future<List<MobilePlatformApp>> listInstalledApps() async {
+    return apps;
   }
 }
 

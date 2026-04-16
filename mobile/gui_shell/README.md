@@ -1,7 +1,8 @@
 # Mobile GUI Shell
 
 `mobile/gui_shell` is the first Flutter mobile shell for `vk-turn-proxy-go`.
-It is an app-owned shell over the local client-control semantics, not a second runtime contract and not a claim of device-wide VPN or tunnel integration.
+It is an app-owned shell over the local client-control semantics, not a second
+runtime contract.
 
 ## Scope
 
@@ -10,19 +11,24 @@ It is an app-owned shell over the local client-control semantics, not a second r
   provider input links from persisted shell state
 - connect to a compatible embedded or bridged mobile host
 - start and stop sessions through that mobile host bridge
+- start and stop typed platform tunnels, including packaged Android
+  `android_vpn_service` startup when the host advertises that mode
+- present a VPN-first `Home / Profiles / Support` shell, with `Routing` as a
+  dedicated mode-aware workflow instead of a permanently promoted phone tab
 - surface typed session state, challenge state, and diagnostics export
 - export resolved provider handoffs through explicit copy/share actions for another device
 - hand browser-oriented provider challenges off through platform-native URL launching
 
 ## Non-goals for this slice
 
-- Android `VpnService` or iOS Network Extension integration
-- device-wide capture or route management
+- iOS Network Extension integration
+- unsupported or implicit platform-tunnel startup outside the host-advertised
+  typed `platform_tunnels` contract
 - provider-specific mobile UI logic beyond typed challenge orchestration
 
-For the current operator-validated Android PoC that keeps device-wide VPN in an
-external `WireGuard` app and uses this shell only as the local transport
-ingress, see `docs/android-wg-phone-poc.md`.
+For the operator-validated Android PoC that keeps device-wide VPN in an
+external `WireGuard` app instead of the packaged `VpnService` path, see
+`docs/android-wg-phone-poc.md`.
 
 ## Local development
 
@@ -153,13 +159,16 @@ missing, the operator must use `Reset local state` before reconnecting.
 ## Workflow-first navigation
 
 The mobile shell no longer treats every surface as one long dashboard.
-The primary phone flow is now split into three destinations:
+The primary product shell is now split into:
 
-- `Workflow`: compact host/tunnel summary plus profile selection, editing,
-  save, resolve, and start actions
-- `Activity`: mobile-sized resolutions and sessions surfaces
-- `Diagnostics`: detailed host state, platform-tunnel reporting, and event
-  stream
+- `Home`: selected profile or empty state, current mode, scope summary,
+  compact live status, and one dominant connect or disconnect action
+- `Profiles`: saved profile selection, add, import, and edit entry points
+- `Support`: activity and diagnostics drill-down without making those surfaces
+  the default first impression
+- `Routing`: a dedicated searchable route for app-routing modes; shown as a
+  primary rail destination on wider layouts and opened as an explicit compact
+  workflow on phones
 
 Advanced runtime overrides, provider-specific settings, and secondary
 resolution/session actions stay reachable through explicit disclosure and

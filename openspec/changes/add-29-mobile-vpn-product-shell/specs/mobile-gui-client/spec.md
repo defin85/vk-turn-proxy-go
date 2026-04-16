@@ -17,12 +17,21 @@ workflow instead of a diagnostics-heavy stacked dashboard.
 #### Scenario: Operator moves between primary destinations
 
 - **GIVEN** the mobile GUI shell exposes multiple primary workflow
-  destinations
-- **WHEN** the operator navigates between home, profiles, routing, and support
   surfaces
+- **WHEN** the operator navigates between home and the dedicated profile,
+  routing, and support surfaces
 - **THEN** the shell preserves selected profile and current workflow context
 - **AND** it does not force the operator back into one large stacked dashboard
   just to reach another part of the mobile workflow
+
+#### Scenario: Wider layout promotes routing only when the current mode supports it
+
+- **GIVEN** the mobile GUI shell is running on a wider mobile or tablet layout
+- **AND** the current mobile mode supports per-app routing
+- **WHEN** the shell renders its primary navigation
+- **THEN** it may expose `Routing` as a dedicated rail destination
+- **AND** modes that do not support app-routing do not receive a misleading
+  first-class routing destination
 
 ### Requirement: Mobile GUI shell uses progressive disclosure for advanced and secondary actions
 
@@ -125,6 +134,16 @@ surface instead of an inline home or diagnostics widget.
 - **THEN** the shell shows a compact routing summary
 - **AND** the detailed package list remains in the dedicated routing surface
 
+#### Scenario: Current mode does not expose app routing
+
+- **GIVEN** the selected mobile mode does not support per-app routing or
+  selected-app scope
+- **WHEN** the operator views home or profile-related surfaces
+- **THEN** the shell does not present routing as if it were an available
+  primary workflow path
+- **AND** any routing affordance remains hidden or explicitly disabled with
+  mode-specific explanation
+
 ### Requirement: Mobile GUI shell presents runtime mode and scope honestly on the home surface
 
 The system SHALL describe the current mobile runtime mode and user-visible
@@ -159,6 +178,23 @@ available without making them the dominant first impression of the mobile app.
 - **THEN** the shell provides an explicit drill-down into support-oriented
   activity or diagnostics surfaces
 - **AND** returning from those surfaces preserves the primary home context
+
+#### Scenario: Support workflow does not own the primary VPN toggle
+
+- **GIVEN** the operator needs a fast start or disconnect action
+- **WHEN** they are using the mobile shell on phone or tablet
+- **THEN** the primary VPN toggle remains on the home surface
+- **AND** support surfaces focus on runtime details, failures, logs, and
+  diagnostics instead of becoming the required place to toggle VPN state
+
+#### Scenario: Compact phone layout opens support workflows
+
+- **GIVEN** the mobile shell is running on a compact phone-sized layout
+- **WHEN** the operator opens the explicit support destination from home
+- **THEN** activity and diagnostics stay within that support workflow instead
+  of consuming multiple peer top-level tabs
+- **AND** the home surface retains first-class prominence for connection
+  status and primary connection actions
 
 #### Scenario: Home avoids raw support controls by default
 

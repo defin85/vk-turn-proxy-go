@@ -28,6 +28,19 @@ const BuildIdentity _testHostBuild = BuildIdentity(
   target: 'android/debug',
 );
 
+const RuntimeExecutionPlanDescriptor _androidVpnExecutionPlanDescriptor =
+    RuntimeExecutionPlanDescriptor(
+      plan: RuntimeExecutionPlan(
+        accessMethod: RuntimeAccessMethod.turnCredentials,
+        carrierFamily: RuntimeCarrierFamily.turnDatagram,
+        engineFamily: RuntimeEngineFamily.wireguardNative,
+        hostAdapter: RuntimeHostAdapter.androidVpnService,
+      ),
+      supportState: RuntimeExecutionPlanSupportState.supported,
+      remoteEndpointFamily: RuntimeRemoteEndpointFamily.turnServer,
+      isDefault: true,
+    );
+
 const HostInfo _readyHostInfo = HostInfo(
   contractVersion: '1',
   build: _testHostBuild,
@@ -47,6 +60,9 @@ const HostInfo _readyHostInfo = HostInfo(
     PlatformTunnelCapability(
       mode: PlatformTunnelMode.androidVpnService,
       available: false,
+      executionPlans: <RuntimeExecutionPlanDescriptor>[
+        _androidVpnExecutionPlanDescriptor,
+      ],
       missingPrerequisite: PlatformTunnelPrerequisite.hostImplementation,
       message: 'mobile host does not implement tunnel startup yet',
     ),
@@ -1472,6 +1488,19 @@ void main() {
       expect(runtimeDefaults?.peerAddress, expectedDefaults.peerAddress);
       expect(runtimeDefaults?.turnServer, expectedDefaults.turnServer);
       expect(runtimeDefaults?.turnPort, expectedDefaults.turnPort);
+      expect(bridge.startedPlatformTunnelExecutionPlans, hasLength(1));
+      expect(
+        bridge.startedPlatformTunnelExecutionPlans.single?.engineFamily,
+        _androidVpnExecutionPlanDescriptor.plan.engineFamily,
+      );
+      expect(
+        bridge.startedPlatformTunnelRoutingPolicies,
+        <PlatformTunnelApplicationRoutingPolicy>[
+          PlatformTunnelApplicationRoutingPolicy.allApps,
+        ],
+      );
+      expect(bridge.startedPlatformTunnelAllowedPackages.single, isEmpty);
+      expect(bridge.startedPlatformTunnelDisallowedPackages.single, isEmpty);
       expect(
         controller.platformTunnels.single.mode,
         PlatformTunnelMode.androidVpnService,
@@ -1483,6 +1512,173 @@ void main() {
         PlatformTunnelStartupStage.capabilityCheck,
       );
       expect(controller.notice, contains('Capability check'));
+    },
+  );
+
+  test(
+    'controller resolves the active draft before platform tunnel startup when no resolution is selected',
+    () async {
+      final profile = ProfileRecord(
+        id: 'profile-1',
+        name: 'vk live',
+        spec: _profileSpec(),
+      );
+      final bridge = _FakeMobileHostBridge();
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[profile],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: profile.id,
+            draft: ProfileDraft.fromProfile(profile),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      expect(controller.selectedResolutionId, isNull);
+
+      await controller.startPlatformTunnel(
+        PlatformTunnelMode.androidVpnService,
+      );
+
+      expect(bridge.startResolutionCalls, hasLength(1));
+      expect(bridge.startResolutionCalls.single.provider, 'vk');
+      expect(
+        bridge.startResolutionCalls.single.input.link,
+        'https://vk.com/call/join/test',
+      );
+      expect(bridge.startedPlatformTunnels, <PlatformTunnelMode>[
+        PlatformTunnelMode.androidVpnService,
+      ]);
+      expect(bridge.startedPlatformTunnelResolutionIDs, <String?>[
+        'resolution-1',
+      ]);
+      expect(controller.selectedResolutionId, 'resolution-1');
+    },
+  );
+
+  test(
+    'controller keeps challenge-required resolutions explicit instead of starting a duplicate platform tunnel path',
+    () async {
+      final profile = ProfileRecord(
+        id: 'profile-1',
+        name: 'vk live',
+        spec: _profileSpec(),
+      );
+      final challenge = ChallengeRecord(
+        id: 'challenge-1',
+        sessionId: '',
+        resolutionId: 'resolution-challenge-1',
+        provider: 'vk',
+        stage: 'provider_resolve',
+        kind: 'browser',
+        prompt: 'Complete the browser step, then return here.',
+        openUrl: 'https://vk.com/call/join/test',
+        status: ChallengeStatus.pending,
+        createdAt: DateTime.utc(2026, 4, 10, 12, 0),
+        updatedAt: DateTime.utc(2026, 4, 10, 12, 1),
+      );
+      final bridge = _FakeMobileHostBridge(
+        resolutionsList: <ResolutionRecord>[
+          _resolutionRecord(
+            id: 'resolution-challenge-1',
+            state: ResolutionState.challengeRequired,
+            activeChallengeId: challenge.id,
+          ),
+        ],
+        challengeMap: <String, ChallengeRecord>{challenge.id: challenge},
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[profile],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: profile.id,
+            draft: ProfileDraft.fromProfile(profile),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      expect(controller.selectedResolutionId, 'resolution-challenge-1');
+
+      await controller.startPlatformTunnel(
+        PlatformTunnelMode.androidVpnService,
+      );
+
+      expect(bridge.startResolutionCalls, isEmpty);
+      expect(bridge.startedPlatformTunnels, isEmpty);
+      expect(
+        controller.notice,
+        contains('Complete the current provider challenge'),
+      );
+    },
+  );
+
+  test(
+    'controller forwards selected app-routing policy to platform tunnel startup',
+    () async {
+      final bridge = _FakeMobileHostBridge(
+        resolutionsList: <ResolutionRecord>[
+          _resolutionRecord(id: 'resolution-android-routing-1'),
+        ],
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: 'profile-1',
+            draft: ProfileDraft.fromProfile(
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      controller.updateApplicationRoutingPolicy(
+        PlatformTunnelApplicationRoutingPolicy.allowedPackages,
+      );
+      controller.updateRoutingPackageSelection(
+        packageName: 'org.signal',
+        selected: true,
+      );
+
+      await controller.startPlatformTunnel(
+        PlatformTunnelMode.androidVpnService,
+      );
+
+      expect(
+        bridge.startedPlatformTunnelRoutingPolicies,
+        <PlatformTunnelApplicationRoutingPolicy>[
+          PlatformTunnelApplicationRoutingPolicy.allowedPackages,
+        ],
+      );
+      expect(bridge.startedPlatformTunnelAllowedPackages.single, <String>[
+        'org.signal',
+      ]);
+      expect(bridge.startedPlatformTunnelDisallowedPackages.single, isEmpty);
     },
   );
 
@@ -1795,6 +1991,15 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   final List<String?> startedPlatformTunnelResolutionIDs = <String?>[];
   final List<RuntimeDefaults?> startedPlatformTunnelRuntimeDefaults =
       <RuntimeDefaults?>[];
+  final List<RuntimeExecutionPlan?> startedPlatformTunnelExecutionPlans =
+      <RuntimeExecutionPlan?>[];
+  final List<PlatformTunnelApplicationRoutingPolicy>
+  startedPlatformTunnelRoutingPolicies =
+      <PlatformTunnelApplicationRoutingPolicy>[];
+  final List<List<String>> startedPlatformTunnelAllowedPackages =
+      <List<String>>[];
+  final List<List<String>> startedPlatformTunnelDisallowedPackages =
+      <List<String>>[];
   final List<PlatformTunnelMode> requestedPlatformTunnelPermissions =
       <PlatformTunnelMode>[];
   final List<String> resumedPlatformTunnelAttemptIDs = <String>[];
@@ -1922,6 +2127,12 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     startedPlatformTunnels.add(mode);
     startedPlatformTunnelResolutionIDs.add(resolutionId);
     startedPlatformTunnelRuntimeDefaults.add(runtimeDefaults);
+    startedPlatformTunnelExecutionPlans.add(executionPlan);
+    startedPlatformTunnelRoutingPolicies.add(applicationRoutingPolicy);
+    startedPlatformTunnelAllowedPackages.add(List<String>.of(allowedPackages));
+    startedPlatformTunnelDisallowedPackages.add(
+      List<String>.of(disallowedPackages),
+    );
     return startPlatformTunnelResult;
   }
 

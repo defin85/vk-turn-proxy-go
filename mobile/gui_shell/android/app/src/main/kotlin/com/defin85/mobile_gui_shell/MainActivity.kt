@@ -2,6 +2,7 @@ package com.defin85.mobile_gui_shell
 
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.net.VpnService
 import io.flutter.embedding.android.FlutterActivity
@@ -49,6 +50,7 @@ class MainActivity : FlutterActivity() {
                         }
                     "requestPlatformTunnelPermission" ->
                         requestPlatformTunnelPermission(call, result)
+                    "listInstalledApps" -> result.success(listInstalledApps())
                     else -> result.notImplemented()
                 }
             }
@@ -210,5 +212,34 @@ class MainActivity : FlutterActivity() {
                 )
             else -> pending.success(granted)
         }
+    }
+
+    private fun listInstalledApps(): List<Map<String, Any>> {
+        @Suppress("DEPRECATION")
+        val installed = packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
+        return installed
+            .asSequence()
+            .filter { appInfo -> appInfo.packageName != packageName }
+            .map { appInfo ->
+                val label =
+                    packageManager.getApplicationLabel(appInfo)?.toString()?.trim().orEmpty()
+                mapOf(
+                    "package_name" to appInfo.packageName,
+                    "label" to if (label.isEmpty()) appInfo.packageName else label,
+                    "system_app" to isSystemApplication(appInfo),
+                )
+            }
+            .sortedWith(
+                compareBy<Map<String, Any>> { entry ->
+                    (entry["label"] as String).lowercase()
+                }.thenBy { entry -> entry["package_name"] as String },
+            )
+            .toList()
+    }
+
+    private fun isSystemApplication(appInfo: ApplicationInfo): Boolean {
+        val flags = appInfo.flags
+        return flags and ApplicationInfo.FLAG_SYSTEM != 0 ||
+            flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP != 0
     }
 }

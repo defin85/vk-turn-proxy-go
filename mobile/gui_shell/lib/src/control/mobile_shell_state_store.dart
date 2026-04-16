@@ -8,6 +8,69 @@ import 'package:shared_preferences/shared_preferences.dart';
 const String _prefsStateKey = 'mobile_gui_shell_state_v1';
 const String _secureSecretsKey = 'mobile_gui_shell_secure_state_v1';
 
+class MobilePlatformModePreferences {
+  const MobilePlatformModePreferences({
+    this.executionPlan,
+    this.applicationRoutingPolicy =
+        PlatformTunnelApplicationRoutingPolicy.allApps,
+    this.allowedPackages = const <String>[],
+    this.disallowedPackages = const <String>[],
+  });
+
+  factory MobilePlatformModePreferences.fromJson(Map<String, dynamic>? json) {
+    if (json == null) {
+      return const MobilePlatformModePreferences();
+    }
+    return MobilePlatformModePreferences(
+      executionPlan: json['execution_plan'] is Map<String, dynamic>
+          ? RuntimeExecutionPlan.fromJson(
+              json['execution_plan'] as Map<String, dynamic>,
+            )
+          : null,
+      applicationRoutingPolicy:
+          PlatformTunnelApplicationRoutingPolicy.fromJson(
+            json['application_routing_policy'] as String?,
+          ) ??
+          PlatformTunnelApplicationRoutingPolicy.allApps,
+      allowedPackages: _readPackageList(json['allowed_packages']),
+      disallowedPackages: _readPackageList(json['disallowed_packages']),
+    );
+  }
+
+  final RuntimeExecutionPlan? executionPlan;
+  final PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy;
+  final List<String> allowedPackages;
+  final List<String> disallowedPackages;
+
+  MobilePlatformModePreferences copyWith({
+    RuntimeExecutionPlan? executionPlan,
+    bool replaceExecutionPlan = false,
+    PlatformTunnelApplicationRoutingPolicy? applicationRoutingPolicy,
+    List<String>? allowedPackages,
+    List<String>? disallowedPackages,
+  }) {
+    return MobilePlatformModePreferences(
+      executionPlan: replaceExecutionPlan
+          ? executionPlan
+          : (executionPlan ?? this.executionPlan),
+      applicationRoutingPolicy:
+          applicationRoutingPolicy ?? this.applicationRoutingPolicy,
+      allowedPackages: allowedPackages ?? this.allowedPackages,
+      disallowedPackages: disallowedPackages ?? this.disallowedPackages,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      if (executionPlan != null) 'execution_plan': executionPlan!.toJson(),
+      'application_routing_policy': applicationRoutingPolicy.value,
+      if (allowedPackages.isNotEmpty) 'allowed_packages': allowedPackages,
+      if (disallowedPackages.isNotEmpty)
+        'disallowed_packages': disallowedPackages,
+    };
+  }
+}
+
 class MobileShellState {
   MobileShellState({
     required this.profiles,
@@ -16,6 +79,9 @@ class MobileShellState {
     required this.draft,
     this.profileBindings = const <String, ProfileProviderBinding>{},
     this.selectedProfileId,
+    this.selectedPlatformTunnelMode,
+    this.platformModePreferences =
+        const <String, MobilePlatformModePreferences>{},
   }) : managedProviders =
            managedProviders ??
            (providerConfigs ?? const <ProviderConfigRecord>[])
@@ -41,6 +107,12 @@ class MobileShellState {
       managedProviders: _readManagedProviders(json),
       profileBindings: _readProfileBindings(json['profile_bindings']),
       selectedProfileId: json['selected_profile_id'] as String?,
+      selectedPlatformTunnelMode: PlatformTunnelMode.fromJson(
+        json['selected_platform_tunnel_mode'] as String?,
+      ),
+      platformModePreferences: _readPlatformModePreferences(
+        json['platform_mode_preferences'],
+      ),
       draft: json['draft'] is Map<String, dynamic>
           ? ProfileDraft.fromJson(json['draft'] as Map<String, dynamic>)
           : ProfileDraft.defaults(),
@@ -51,6 +123,8 @@ class MobileShellState {
   final List<ManagedProviderRecord> managedProviders;
   final Map<String, ProfileProviderBinding> profileBindings;
   final String? selectedProfileId;
+  final PlatformTunnelMode? selectedPlatformTunnelMode;
+  final Map<String, MobilePlatformModePreferences> platformModePreferences;
   final ProfileDraft draft;
 
   List<ManagedProviderRecord> get providerConfigs => managedProviders;
@@ -68,6 +142,11 @@ class MobileShellState {
           entry.key: entry.value.toJson(),
       },
       'selected_profile_id': selectedProfileId,
+      'selected_platform_tunnel_mode': selectedPlatformTunnelMode?.value,
+      'platform_mode_preferences': <String, dynamic>{
+        for (final entry in platformModePreferences.entries)
+          entry.key: entry.value.toJson(),
+      },
       'draft': draft.toJson(),
     };
   }
@@ -105,6 +184,10 @@ class MobileShellState {
             profile.id: profileBindings[profile.id]!,
       },
       selectedProfileId: selectedProfileId,
+      selectedPlatformTunnelMode: selectedPlatformTunnelMode,
+      platformModePreferences: Map<String, MobilePlatformModePreferences>.from(
+        platformModePreferences,
+      ),
       draft: _sanitizeDraft(
         draft,
         descriptorById[draft.spec.provider.trim().toLowerCase()],
@@ -238,6 +321,8 @@ class SecureMobileShellStateStore implements MobileShellStateStore {
       managedProviders: sanitized.managedProviders,
       profileBindings: sanitized.profileBindings,
       selectedProfileId: sanitized.selectedProfileId,
+      selectedPlatformTunnelMode: sanitized.selectedPlatformTunnelMode,
+      platformModePreferences: sanitized.platformModePreferences,
       draft: ProfileDraft.fromJson(
         _draftFromSanitized(sanitized.draft.toJson(), draftSecrets),
       ),
@@ -403,4 +488,35 @@ Map<String, ProfileProviderBinding> _readProfileBindings(dynamic raw) {
     );
   });
   return bindings;
+}
+
+Map<String, MobilePlatformModePreferences> _readPlatformModePreferences(
+  dynamic raw,
+) {
+  if (raw is! Map<String, dynamic>) {
+    return const <String, MobilePlatformModePreferences>{};
+  }
+  final preferences = <String, MobilePlatformModePreferences>{};
+  raw.forEach((dynamic key, dynamic value) {
+    final preferenceKey = (key as String?)?.trim() ?? '';
+    if (preferenceKey.isEmpty) {
+      return;
+    }
+    preferences[preferenceKey] = MobilePlatformModePreferences.fromJson(
+      value as Map<String, dynamic>?,
+    );
+  });
+  return preferences;
+}
+
+List<String> _readPackageList(dynamic raw) {
+  final normalized =
+      (raw as List<dynamic>? ?? const <dynamic>[])
+          .whereType<String>()
+          .map((String value) => value.trim())
+          .where((String value) => value.isNotEmpty)
+          .toSet()
+          .toList(growable: false);
+  normalized.sort();
+  return normalized;
 }
