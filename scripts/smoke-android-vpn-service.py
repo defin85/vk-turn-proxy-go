@@ -7,6 +7,7 @@ import argparse
 import base64
 import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -14,10 +15,21 @@ import time
 from typing import Any
 
 
-DEFAULT_ADB = (
-    os.environ.get("ADB")
-    or "/mnt/c/Users/Egor/AppData/Local/Android/Sdk/platform-tools/adb.exe"
-)
+
+def default_adb_path() -> str:
+    explicit = os.environ.get("ADB", "").strip()
+    if explicit:
+        return explicit
+    path_adb = shutil.which("adb")
+    if path_adb:
+        return path_adb
+    linux_sdk_adb = os.path.expanduser("~/.local/share/android-sdk/platform-tools/adb")
+    if os.path.exists(linux_sdk_adb):
+        return linux_sdk_adb
+    return "/mnt/c/Users/Egor/AppData/Local/Android/Sdk/platform-tools/adb.exe"
+
+
+DEFAULT_ADB = default_adb_path()
 DEFAULT_APP_PACKAGE = "com.defin85.mobile_gui_shell"
 DEFAULT_LISTEN_ADDR = "127.0.0.1:39000"
 DEFAULT_PEER_ADDR = "176.109.104.105:56040"

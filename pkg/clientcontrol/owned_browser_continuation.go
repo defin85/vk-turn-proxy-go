@@ -33,6 +33,13 @@ func browserContinuationFromChallengeAction(
 		}
 		result.StageResults = append(result.StageResults, stageResults...)
 	}
+	if stageChallenge, ok := challenge.(provider.BrowserObservedStageChallenge); ok {
+		observedResults := providerprompt.BuildObservedStageResults(
+			stageChallenge.BrowserStageObservations(),
+			toObservedBrowserRequests(action.browserContinuation.ObservedRequests),
+		)
+		result.StageResults = append(result.StageResults, observedResults...)
+	}
 	if len(result.Cookies) == 0 && len(result.StageResults) == 0 {
 		return nil, errors.New("owned browser continuation did not provide cookies or stage results")
 	}
@@ -68,6 +75,53 @@ func toProviderCookies(cookies []BrowserCookie) []*http.Cookie {
 			httpCookie.Expires = cookie.Expires.UTC()
 		}
 		out = append(out, httpCookie)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func toObservedBrowserRequests(
+	requests []ObservedBrowserRequest,
+) []providerprompt.ObservedBrowserRequest {
+	if len(requests) == 0 {
+		return nil
+	}
+
+	out := make([]providerprompt.ObservedBrowserRequest, 0, len(requests))
+	for _, request := range requests {
+		method := strings.TrimSpace(request.Method)
+		rawURL := strings.TrimSpace(request.URL)
+		if method == "" || rawURL == "" || request.StatusCode == 0 || len(request.Body) == 0 {
+			continue
+		}
+		formValues := make(map[string]string, len(request.FormValues))
+		for key, value := range request.FormValues {
+			trimmedKey := strings.TrimSpace(key)
+			if trimmedKey == "" {
+				continue
+			}
+			formValues[trimmedKey] = value
+		}
+		body := make(map[string]any, len(request.Body))
+		for key, value := range request.Body {
+			trimmedKey := strings.TrimSpace(key)
+			if trimmedKey == "" {
+				continue
+			}
+			body[trimmedKey] = value
+		}
+		if len(body) == 0 {
+			continue
+		}
+		out = append(out, providerprompt.ObservedBrowserRequest{
+			Method:     method,
+			URL:        rawURL,
+			FormValues: formValues,
+			StatusCode: request.StatusCode,
+			Body:       body,
+		})
 	}
 	if len(out) == 0 {
 		return nil

@@ -289,7 +289,7 @@ func (r *resolver) resolveAnonymousToken(
 					ProbeArtifact: artifacts.artifact,
 				}
 			}
-			return r.resolveAnonymousTokenFromBrowserContinuation(artifacts, descriptor, continuation)
+			return r.resolveAnonymousTokenFromBrowserContinuation(ctx, artifacts, descriptor, joinToken, continuation)
 		}
 
 		anonymousToken, err := parseAnonymousToken(payload)
@@ -305,6 +305,51 @@ func (r *resolver) resolveAnonymousToken(
 
 		return anonymousTokenResolution{anonymousToken: anonymousToken}, nil
 	}
+}
+
+func (r *resolver) resolveAnonymousTokenWithBrowserAccessToken(
+	ctx context.Context,
+	artifacts *artifactBuilder,
+	descriptor stageDescriptor,
+	joinToken string,
+	browserAccessToken string,
+	cookies []*http.Cookie,
+) (anonymousTokenResolution, error) {
+	form := url.Values{
+		"vk_join_link": {"https://vk.com/call/join/" + joinToken},
+		"name":         {"123"},
+		"access_token": {browserAccessToken},
+	}
+
+	payload, stageArtifact, err := r.performStageWithCookies(ctx, descriptor, form, cookies)
+	if err != nil {
+		return anonymousTokenResolution{}, artifacts.wrapError(err, stageArtifact)
+	}
+
+	if _, challengeAgain := parseCaptchaChallenge(payload); challengeAgain {
+		return anonymousTokenResolution{}, artifacts.wrapError(
+			&stageError{
+				stage: stageGetAnonymousToken,
+				code:  browserContinuationFailedCode,
+				err:   errors.New("browser-access-token retry still requires captcha"),
+			},
+			withStageOutcome(stageArtifact, "provider_error", nil, browserContinuationFailedCode),
+		)
+	}
+
+	anonymousToken, err := parseAnonymousToken(payload)
+	if err != nil {
+		return anonymousTokenResolution{}, artifacts.wrapError(
+			&stageError{stage: stageGetAnonymousToken, code: browserContinuationFailedCode, err: err},
+			withStageOutcome(stageArtifact, "provider_error", nil, browserContinuationFailedCode),
+		)
+	}
+
+	artifacts.append(withStageOutcome(stageArtifact, "continue", map[string]any{
+		"anonym_token": placeholderAnonymousToken,
+	}, ""))
+
+	return anonymousTokenResolution{anonymousToken: anonymousToken}, nil
 }
 
 func stageArtifactFromBrowserResult(descriptor stageDescriptor, result provider.BrowserStageResult) (provider.ProbeArtifactStage, error) {

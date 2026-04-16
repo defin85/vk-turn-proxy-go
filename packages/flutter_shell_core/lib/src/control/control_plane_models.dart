@@ -840,9 +840,59 @@ class BrowserCookieRecord {
   }
 }
 
+class BrowserObservedRequestRecord {
+  const BrowserObservedRequestRecord({
+    required this.method,
+    required this.url,
+    this.formValues = const <String, String>{},
+    required this.statusCode,
+    this.body = const <String, dynamic>{},
+  });
+
+  factory BrowserObservedRequestRecord.fromJson(Map<String, dynamic> json) {
+    final rawFormValues =
+        json['form_values'] as Map<String, dynamic>? ??
+        const <String, dynamic>{};
+    final formValues = <String, String>{};
+    rawFormValues.forEach((String key, dynamic value) {
+      final trimmedKey = key.trim();
+      if (trimmedKey.isEmpty || value is! String) {
+        return;
+      }
+      formValues[trimmedKey] = value;
+    });
+    return BrowserObservedRequestRecord(
+      method: json['method'] as String? ?? '',
+      url: json['url'] as String? ?? '',
+      formValues: Map<String, String>.unmodifiable(formValues),
+      statusCode: json['status_code'] as int? ?? 0,
+      body: Map<String, dynamic>.unmodifiable(
+        (json['body'] as Map<String, dynamic>? ?? const <String, dynamic>{}),
+      ),
+    );
+  }
+
+  final String method;
+  final String url;
+  final Map<String, String> formValues;
+  final int statusCode;
+  final Map<String, dynamic> body;
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{
+      'method': method,
+      'url': url,
+      'form_values': formValues.isEmpty ? null : formValues,
+      'status_code': statusCode == 0 ? null : statusCode,
+      'body': body.isEmpty ? null : body,
+    });
+  }
+}
+
 class ChallengeContinuationSubmission {
   const ChallengeContinuationSubmission({
     this.cookies = const <BrowserCookieRecord>[],
+    this.observedRequests = const <BrowserObservedRequestRecord>[],
   });
 
   factory ChallengeContinuationSubmission.fromJson(Map<String, dynamic> json) {
@@ -851,17 +901,26 @@ class ChallengeContinuationSubmission {
           .whereType<Map<String, dynamic>>()
           .map(BrowserCookieRecord.fromJson)
           .toList(growable: false),
+      observedRequests:
+          (json['observed_requests'] as List<dynamic>? ?? const <dynamic>[])
+              .whereType<Map<String, dynamic>>()
+              .map(BrowserObservedRequestRecord.fromJson)
+              .toList(growable: false),
     );
   }
 
   final List<BrowserCookieRecord> cookies;
+  final List<BrowserObservedRequestRecord> observedRequests;
 
-  bool get isEmpty => cookies.isEmpty;
+  bool get isEmpty => cookies.isEmpty && observedRequests.isEmpty;
 
   Map<String, dynamic> toJson() {
     return _compact(<String, dynamic>{
       'cookies': cookies
           .map((BrowserCookieRecord cookie) => cookie.toJson())
+          .toList(growable: false),
+      'observed_requests': observedRequests
+          .map((BrowserObservedRequestRecord request) => request.toJson())
           .toList(growable: false),
     });
   }

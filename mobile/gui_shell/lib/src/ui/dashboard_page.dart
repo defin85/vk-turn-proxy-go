@@ -61,6 +61,12 @@ class _DashboardPageState extends State<DashboardPage> {
         challenge.id,
         browserContinuation,
       );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _destination = _DashboardDestination.home;
+      });
     } catch (error) {
       await widget.controller.cancelChallenge(
         challenge.id,
@@ -161,7 +167,6 @@ class _DashboardPageState extends State<DashboardPage> {
       ),
       _DashboardDestination.profiles => _ProfilesPage(
         controller: widget.controller,
-        onOpenHome: _openHome,
         onOpenRouting: _openRouting,
       ),
       _DashboardDestination.routing => _RoutingPage(
@@ -293,7 +298,9 @@ class _DashboardPageState extends State<DashboardPage> {
         }
 
         final compactDestinations = primaryDestinations
-            .where((destination) => destination != _DashboardDestination.routing)
+            .where(
+              (destination) => destination != _DashboardDestination.routing,
+            )
             .toList(growable: false);
         final selectedIndex = compactDestinations.indexOf(
           compactRoutingRoute ? _DashboardDestination.home : destination,
@@ -405,107 +412,443 @@ class _HomePage extends StatelessWidget {
 }
 
 class _ProfilesPage extends StatelessWidget {
-  const _ProfilesPage({
-    required this.controller,
-    required this.onOpenHome,
-    required this.onOpenRouting,
-  });
+  const _ProfilesPage({required this.controller, required this.onOpenRouting});
 
   final MobileShellController controller;
-  final VoidCallback onOpenHome;
   final VoidCallback onOpenRouting;
+
+  void _openProfileWorkspace(
+    BuildContext context, {
+    required String title,
+    bool resetDraft = false,
+    String? profileId,
+  }) {
+    if (resetDraft) {
+      controller.resetDraft();
+    } else if (profileId != null) {
+      controller.selectProfile(profileId);
+    }
+    controller.showProfileWorkspace();
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (BuildContext context) =>
+            _ProfileWorkspacePage(controller: controller, title: title),
+      ),
+    );
+  }
+
+  void _openProviderWorkspace(BuildContext context) {
+    controller.showProviderWorkspace();
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (BuildContext context) =>
+            _ProviderWorkspacePage(controller: controller),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final wide =
+        MediaQuery.sizeOf(context).width >= _compactNavigationBreakpoint;
+    final menuActions = <_CardActionEntry>[
+      _CardActionEntry(
+        id: 'import-invite',
+        label: 'Import invite',
+        onSelected: () async {
+          _openProfileWorkspace(
+            context,
+            title: 'Import invite',
+            resetDraft: true,
+          );
+        },
+      ),
+      _CardActionEntry(
+        id: 'manage-providers',
+        label: 'Manage providers',
+        onSelected: () async {
+          _openProviderWorkspace(context);
+        },
+      ),
+      if (!wide && controller.activeModeSupportsAppRouting)
+        _CardActionEntry(
+          id: 'routing',
+          label: 'Routing',
+          onSelected: () async {
+            onOpenRouting();
+          },
+        ),
+    ];
+
     return ListView(
       padding: const EdgeInsets.all(20),
       children: <Widget>[
-        const _PageHeader(
-          title: 'Profiles',
-          subtitle:
-              'Saved profiles and managed providers stay here so home can remain focused on one-tap VPN control.',
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Expanded(
+              child: const _PageHeader(
+                title: 'Profiles',
+                subtitle: 'Choose a saved profile or add a new one for Home.',
+              ),
+            ),
+            const SizedBox(width: 12),
+            _ActionOverflowButton(
+              tooltip: 'Profiles actions',
+              enabled: !controller.busy,
+              actions: menuActions,
+            ),
+          ],
         ),
         if (controller.notice != null) ...<Widget>[
           const SizedBox(height: 12),
           _NoticeBanner(message: controller.notice!),
         ],
         const SizedBox(height: 16),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: <Widget>[
-            FilledButton.tonal(
-              onPressed: controller.busy ? null : controller.resetDraft,
-              child: const Text('Add profile'),
-            ),
-            OutlinedButton(
-              onPressed: controller.busy ? null : controller.resetDraft,
-              child: const Text('Import invite'),
-            ),
-            OutlinedButton(
-              onPressed: controller.busy
-                  ? null
-                  : () => controller.showProviderWorkspace(),
-              child: const Text('Manage providers'),
-            ),
-            if (controller.activeModeSupportsAppRouting)
-              OutlinedButton(
-                onPressed: onOpenRouting,
-                child: const Text('Routing'),
-              ),
-            OutlinedButton(
-              onPressed: onOpenHome,
-              child: const Text('Back to home'),
-            ),
-          ],
+        Align(
+          alignment: Alignment.centerLeft,
+          child: FilledButton.icon(
+            onPressed: controller.busy
+                ? null
+                : () => _openProfileWorkspace(
+                    context,
+                    title: 'Add profile',
+                    resetDraft: true,
+                  ),
+            icon: const Icon(Icons.add),
+            label: const Text('Add profile'),
+          ),
         ),
         const SizedBox(height: 20),
-        _WorkflowSurfacePicker(controller: controller),
-        const SizedBox(height: 16),
-        _PresetLibrarySection(controller: controller),
-        const SizedBox(height: 16),
-        _ProviderConfigLibrarySection(controller: controller),
-        const SizedBox(height: 20),
-        if (controller.workflowSurface == MobileWorkflowSurface.profile)
-          ProfileEditorPanel(
-            profiles: controller.profiles,
-            providerDescriptors: controller.providerDescriptors,
-            managedProviders: controller.managedProviders,
-            initialManagedProviderId:
-                controller.draft.providerBinding.managedProviderId,
-            selectedProfileId: controller.selectedProfileId,
-            draft: controller.draft,
-            busy: controller.busy,
-            onSelectProfile: controller.selectProfile,
-            onDraftChanged: controller.updateDraft,
-            onActivateManagedProviderMode:
-                controller.activateManagedProviderMode,
-            onUseCustomProvider: controller.useCustomProviderForDraft,
-            onSave: controller.saveDraft,
-            onDelete: controller.deleteSelectedProfile,
-            onReset: controller.resetDraft,
-            onResolve: controller.startResolutionFromDraft,
-            onStart: controller.startSelectedProfile,
-          )
-        else
-          SizedBox(
-            height: 640,
-            child: ProviderConfigEditorPanel(
-              supportedProviders: controller.supportedProviderCatalog,
-              providerDescriptors: controller.providerDescriptors,
-              selectedManagedProviderId: controller.selectedManagedProviderId,
-              draft: controller.managedProviderDraft,
-              busy: controller.busy,
-              onDraftChanged: controller.updateManagedProviderDraft,
-              onSave: controller.saveManagedProviderDraft,
-              onDelete: controller.deleteSelectedManagedProvider,
-              onReset: controller.resetManagedProviderDraft,
-              onApplyToProfileDraft: controller.useManagedProviderForDraft,
-            ),
+        _ProfilesListSection(
+          controller: controller,
+          onEditProfile: (ProfileRecord profile) => _openProfileWorkspace(
+            context,
+            title: 'Edit profile',
+            profileId: profile.id,
           ),
+        ),
       ],
     );
   }
+}
+
+class _ProfilesListSection extends StatelessWidget {
+  const _ProfilesListSection({
+    required this.controller,
+    required this.onEditProfile,
+  });
+
+  final MobileShellController controller;
+  final ValueChanged<ProfileRecord> onEditProfile;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (controller.profiles.isEmpty) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                'No saved profiles yet',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Create or import a profile, then use Home for the one-tap VPN workflow.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          children: <Widget>[
+            for (
+              var index = 0;
+              index < controller.profiles.length;
+              index++
+            ) ...<Widget>[
+              _ProfileListItem(
+                profile: controller.profiles[index],
+                selected:
+                    controller.selectedProfileId ==
+                    controller.profiles[index].id,
+                onSelect: () =>
+                    controller.selectProfile(controller.profiles[index].id),
+                onEdit: () => onEditProfile(controller.profiles[index]),
+              ),
+              if (index != controller.profiles.length - 1)
+                const Divider(height: 1),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileListItem extends StatelessWidget {
+  const _ProfileListItem({
+    required this.profile,
+    required this.selected,
+    required this.onSelect,
+    required this.onEdit,
+  });
+
+  final ProfileRecord profile;
+  final bool selected;
+  final VoidCallback onSelect;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final title = profile.name.trim().isEmpty
+        ? profile.id
+        : profile.name.trim();
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      onTap: onSelect,
+      leading: CircleAvatar(
+        backgroundColor: selected
+            ? theme.colorScheme.primary
+            : theme.colorScheme.surfaceContainerHighest,
+        foregroundColor: selected
+            ? theme.colorScheme.onPrimary
+            : theme.colorScheme.onSurfaceVariant,
+        child: Text(_profileInitials(profile)),
+      ),
+      title: Text(
+        title,
+        style: theme.textTheme.titleMedium?.copyWith(
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const SizedBox(height: 4),
+          Text(
+            _profileSummary(profile),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          if (selected) ...<Widget>[
+            const SizedBox(height: 8),
+            _StatusChip(label: 'Selected for Home', accent: true),
+          ],
+        ],
+      ),
+      trailing: IconButton(
+        tooltip: 'Edit profile',
+        onPressed: onEdit,
+        icon: const Icon(Icons.edit_outlined),
+      ),
+    );
+  }
+}
+
+class _ProfileWorkspacePage extends StatelessWidget {
+  const _ProfileWorkspacePage({required this.controller, required this.title});
+
+  final MobileShellController controller;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (BuildContext context, _) {
+        final hasSavedProfile = controller.selectedProfileId != null;
+        return Scaffold(
+          appBar: AppBar(
+            title: Text(title),
+            actions: <Widget>[
+              IconButton(
+                key: const ValueKey<String>('profile-workspace-save-action'),
+                tooltip: 'Save profile',
+                onPressed: controller.busy
+                    ? null
+                    : () => unawaited(controller.saveDraft()),
+                icon: const Icon(Icons.save_outlined),
+              ),
+              if (hasSavedProfile)
+                IconButton(
+                  key: const ValueKey<String>(
+                    'profile-workspace-resolve-action',
+                  ),
+                  tooltip: 'Resolve invite',
+                  onPressed: controller.busy
+                      ? null
+                      : () => unawaited(controller.startResolutionFromDraft()),
+                  icon: const Icon(Icons.travel_explore_outlined),
+                ),
+              if (hasSavedProfile)
+                IconButton(
+                  key: const ValueKey<String>('profile-workspace-vpn-action'),
+                  tooltip: _profileWorkspaceVpnLabel(controller),
+                  onPressed: _profileWorkspaceVpnAction(controller),
+                  icon: Icon(
+                    _profileWorkspaceVpnIcon(controller),
+                  ),
+                ),
+            ],
+          ),
+          body: ListView(
+            padding: const EdgeInsets.all(20),
+            children: <Widget>[
+              if (controller.notice != null) ...<Widget>[
+                _NoticeBanner(message: controller.notice!),
+                const SizedBox(height: 12),
+              ],
+              ProfileEditorPanel(
+                profiles: controller.profiles,
+                providerDescriptors: controller.providerDescriptors,
+                managedProviders: controller.managedProviders,
+                initialManagedProviderId:
+                    controller.draft.providerBinding.managedProviderId,
+                selectedProfileId: controller.selectedProfileId,
+                draft: controller.draft,
+                busy: controller.busy,
+                onSelectProfile: controller.selectProfile,
+                onDraftChanged: controller.updateDraft,
+                onActivateManagedProviderMode:
+                    controller.activateManagedProviderMode,
+                onUseCustomProvider: controller.useCustomProviderForDraft,
+                onSave: controller.saveDraft,
+                onDelete: controller.deleteSelectedProfile,
+                onReset: controller.resetDraft,
+                onResolve: controller.startResolutionFromDraft,
+                onStart: controller.startSelectedProfile,
+                showTitleBar: false,
+                showSavedProfilesSection: false,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+String _profileWorkspaceVpnLabel(MobileShellController controller) {
+  final mode = controller.activePlatformTunnelMode;
+  if (mode == null) {
+    return 'Turn on VPN';
+  }
+  final ready = controller.platformTunnelResultFor(mode)?.ready == true;
+  return ready ? 'Turn off VPN' : 'Turn on VPN';
+}
+
+IconData _profileWorkspaceVpnIcon(MobileShellController controller) {
+  final mode = controller.activePlatformTunnelMode;
+  final ready =
+      mode != null && controller.platformTunnelResultFor(mode)?.ready == true;
+  return ready ? Icons.vpn_lock_outlined : Icons.shield_outlined;
+}
+
+VoidCallback? _profileWorkspaceVpnAction(MobileShellController controller) {
+  final mode = controller.activePlatformTunnelMode;
+  if (controller.busy ||
+      controller.hostConnection?.isReady != true ||
+      mode == null) {
+    return null;
+  }
+  final ready = controller.platformTunnelResultFor(mode)?.ready == true;
+  return () => unawaited(
+    ready ? controller.stopPlatformTunnel(mode) : controller.startPlatformTunnel(mode),
+  );
+}
+
+class _ProviderWorkspacePage extends StatelessWidget {
+  const _ProviderWorkspacePage({required this.controller});
+
+  final MobileShellController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (BuildContext context, _) {
+        return Scaffold(
+          appBar: AppBar(title: const Text('Manage providers')),
+          body: ListView(
+            padding: const EdgeInsets.all(20),
+            children: <Widget>[
+              if (controller.notice != null) ...<Widget>[
+                _NoticeBanner(message: controller.notice!),
+                const SizedBox(height: 12),
+              ],
+              _PresetLibrarySection(controller: controller),
+              const SizedBox(height: 16),
+              _ProviderConfigLibrarySection(controller: controller),
+              const SizedBox(height: 20),
+              SizedBox(
+                height: 640,
+                child: ProviderConfigEditorPanel(
+                  supportedProviders: controller.supportedProviderCatalog,
+                  providerDescriptors: controller.providerDescriptors,
+                  selectedManagedProviderId:
+                      controller.selectedManagedProviderId,
+                  draft: controller.managedProviderDraft,
+                  busy: controller.busy,
+                  onDraftChanged: controller.updateManagedProviderDraft,
+                  onSave: controller.saveManagedProviderDraft,
+                  onDelete: controller.deleteSelectedManagedProvider,
+                  onReset: controller.resetManagedProviderDraft,
+                  onApplyToProfileDraft: controller.useManagedProviderForDraft,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+String _profileInitials(ProfileRecord profile) {
+  final source = profile.name.trim().isEmpty
+      ? profile.spec.provider.trim()
+      : profile.name.trim();
+  if (source.isEmpty) {
+    return '?';
+  }
+  return source.characters.first.toUpperCase();
+}
+
+String _profileSummary(ProfileRecord profile) {
+  final provider = profile.spec.provider.trim().isEmpty
+      ? 'No provider'
+      : profile.spec.provider.trim();
+  final link = profile.spec.link.trim();
+  if (link.isEmpty) {
+    return provider;
+  }
+  final uri = Uri.tryParse(link);
+  if (uri == null || uri.host.isEmpty) {
+    return '$provider • input configured';
+  }
+  final pathPreview = switch (uri.pathSegments.length) {
+    0 => '',
+    1 => '/${uri.pathSegments.first}',
+    _ => '/${uri.pathSegments[0]}/${uri.pathSegments[1]}/...',
+  };
+  return '$provider • ${uri.host}$pathPreview';
 }
 
 class _SupportPage extends StatelessWidget {
@@ -557,10 +900,7 @@ class _SupportPage extends StatelessWidget {
                 children: <Widget>[
                   ChoiceChip(
                     selected: supportSurface == _SupportSurface.activity,
-                    label: Text(
-                      'Activity',
-                      style: theme.textTheme.labelLarge,
-                    ),
+                    label: Text('Activity', style: theme.textTheme.labelLarge),
                     onSelected: (_) =>
                         onSupportSurfaceChanged(_SupportSurface.activity),
                   ),
@@ -640,13 +980,15 @@ class _RoutingPageState extends State<_RoutingPage> {
         preferences.disallowedPackages,
     };
     final query = _searchController.text.trim().toLowerCase();
-    final filteredApps = controller.installedApps.where((MobilePlatformApp app) {
-      if (query.isEmpty) {
-        return true;
-      }
-      return app.label.toLowerCase().contains(query) ||
-          app.packageName.toLowerCase().contains(query);
-    }).toList(growable: false);
+    final filteredApps = controller.installedApps
+        .where((MobilePlatformApp app) {
+          if (query.isEmpty) {
+            return true;
+          }
+          return app.label.toLowerCase().contains(query) ||
+              app.packageName.toLowerCase().contains(query);
+        })
+        .toList(growable: false);
 
     return ListView(
       padding: const EdgeInsets.all(20),
@@ -698,32 +1040,35 @@ class _RoutingPageState extends State<_RoutingPage> {
                     runSpacing: 10,
                     children: <Widget>[
                       ChoiceChip(
-                        selected: routingPolicy ==
+                        selected:
+                            routingPolicy ==
                             PlatformTunnelApplicationRoutingPolicy.allApps,
                         label: const Text('All apps'),
-                        onSelected: (_) => controller
-                            .updateApplicationRoutingPolicy(
+                        onSelected: (_) =>
+                            controller.updateApplicationRoutingPolicy(
                               PlatformTunnelApplicationRoutingPolicy.allApps,
                             ),
                       ),
                       ChoiceChip(
-                        selected: routingPolicy ==
+                        selected:
+                            routingPolicy ==
                             PlatformTunnelApplicationRoutingPolicy
                                 .allowedPackages,
                         label: const Text('Included apps'),
-                        onSelected: (_) => controller
-                            .updateApplicationRoutingPolicy(
+                        onSelected: (_) =>
+                            controller.updateApplicationRoutingPolicy(
                               PlatformTunnelApplicationRoutingPolicy
                                   .allowedPackages,
                             ),
                       ),
                       ChoiceChip(
-                        selected: routingPolicy ==
+                        selected:
+                            routingPolicy ==
                             PlatformTunnelApplicationRoutingPolicy
                                 .disallowedPackages,
                         label: const Text('Excluded apps'),
-                        onSelected: (_) => controller
-                            .updateApplicationRoutingPolicy(
+                        onSelected: (_) =>
+                            controller.updateApplicationRoutingPolicy(
                               PlatformTunnelApplicationRoutingPolicy
                                   .disallowedPackages,
                             ),
@@ -735,8 +1080,7 @@ class _RoutingPageState extends State<_RoutingPage> {
             ),
           ),
           const SizedBox(height: 16),
-          if (routingPolicy ==
-              PlatformTunnelApplicationRoutingPolicy.allApps)
+          if (routingPolicy == PlatformTunnelApplicationRoutingPolicy.allApps)
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -798,23 +1142,27 @@ class _RoutingPageState extends State<_RoutingPage> {
                 child: Padding(
                   padding: const EdgeInsets.all(8),
                   child: Column(
-                    children: filteredApps.map<Widget>((MobilePlatformApp app) {
-                      final selected = selectedPackages.contains(app.packageName);
-                      return CheckboxListTile(
-                        value: selected,
-                        onChanged: (bool? nextValue) {
-                          controller.updateRoutingPackageSelection(
-                            packageName: app.packageName,
-                            selected: nextValue ?? false,
+                    children: filteredApps
+                        .map<Widget>((MobilePlatformApp app) {
+                          final selected = selectedPackages.contains(
+                            app.packageName,
                           );
-                        },
-                        title: Text(app.label),
-                        subtitle: Text(app.packageName),
-                        secondary: app.systemApp
-                            ? const Icon(Icons.memory_outlined)
-                            : const Icon(Icons.apps_outlined),
-                      );
-                    }).toList(growable: false),
+                          return CheckboxListTile(
+                            value: selected,
+                            onChanged: (bool? nextValue) {
+                              controller.updateRoutingPackageSelection(
+                                packageName: app.packageName,
+                                selected: nextValue ?? false,
+                              );
+                            },
+                            title: Text(app.label),
+                            subtitle: Text(app.packageName),
+                            secondary: app.systemApp
+                                ? const Icon(Icons.memory_outlined)
+                                : const Icon(Icons.apps_outlined),
+                          );
+                        })
+                        .toList(growable: false),
                   ),
                 ),
               ),
@@ -960,10 +1308,7 @@ class _HomeProfileCard extends StatelessWidget {
 }
 
 class _HomeModeCard extends StatelessWidget {
-  const _HomeModeCard({
-    required this.controller,
-    this.onOpenRouting,
-  });
+  const _HomeModeCard({required this.controller, this.onOpenRouting});
 
   final MobileShellController controller;
   final VoidCallback? onOpenRouting;
@@ -1009,15 +1354,19 @@ class _HomeModeCard extends StatelessWidget {
               Wrap(
                 spacing: 10,
                 runSpacing: 10,
-                children: controller.platformTunnels.map((capability) {
-                  return ChoiceChip(
-                    selected:
-                        controller.activePlatformTunnelMode == capability.mode,
-                    label: Text(capability.mode.label),
-                    onSelected: (_) =>
-                        controller.selectPlatformTunnelMode(capability.mode),
-                  );
-                }).toList(growable: false),
+                children: controller.platformTunnels
+                    .map((capability) {
+                      return ChoiceChip(
+                        selected:
+                            controller.activePlatformTunnelMode ==
+                            capability.mode,
+                        label: Text(capability.mode.label),
+                        onSelected: (_) => controller.selectPlatformTunnelMode(
+                          capability.mode,
+                        ),
+                      );
+                    })
+                    .toList(growable: false),
               ),
             ],
             if (executionPlans.length > 1) ...<Widget>[
@@ -1032,17 +1381,19 @@ class _HomeModeCard extends StatelessWidget {
               Wrap(
                 spacing: 10,
                 runSpacing: 10,
-                children: executionPlans.map((descriptor) {
-                  return ChoiceChip(
-                    selected: _sameExecutionPlanForUi(
-                      descriptor.plan,
-                      controller.activeExecutionPlan,
-                    ),
-                    label: Text(_executionPlanLabel(descriptor.plan)),
-                    onSelected: (_) =>
-                        controller.selectExecutionPlan(descriptor.plan),
-                  );
-                }).toList(growable: false),
+                children: executionPlans
+                    .map((descriptor) {
+                      return ChoiceChip(
+                        selected: _sameExecutionPlanForUi(
+                          descriptor.plan,
+                          controller.activeExecutionPlan,
+                        ),
+                        label: Text(_executionPlanLabel(descriptor.plan)),
+                        onSelected: (_) =>
+                            controller.selectExecutionPlan(descriptor.plan),
+                      );
+                    })
+                    .toList(growable: false),
               ),
             ],
             if (onOpenRouting != null) ...<Widget>[
@@ -1121,10 +1472,7 @@ class _HomePrimaryActionCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 6),
-            Text(
-              subtitle,
-              style: theme.textTheme.bodyMedium,
-            ),
+            Text(subtitle, style: theme.textTheme.bodyMedium),
             const SizedBox(height: 14),
             SizedBox(
               width: double.infinity,
@@ -1240,32 +1588,6 @@ class _RoutingUnavailableCard extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _WorkflowSurfacePicker extends StatelessWidget {
-  const _WorkflowSurfacePicker({required this.controller});
-
-  final MobileShellController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 10,
-      runSpacing: 10,
-      children: <Widget>[
-        ChoiceChip(
-          selected: controller.workflowSurface == MobileWorkflowSurface.profile,
-          label: const Text('Profile draft'),
-          onSelected: (_) => controller.showProfileWorkspace(),
-        ),
-        ChoiceChip(
-          selected: controller.workflowSurface != MobileWorkflowSurface.profile,
-          label: const Text('Providers'),
-          onSelected: (_) => controller.showProviderWorkspace(),
-        ),
-      ],
     );
   }
 }

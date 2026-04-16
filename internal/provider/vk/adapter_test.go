@@ -124,6 +124,65 @@ func (d *fixtureDoer) Do(request *http.Request) (*http.Response, error) {
 	}, nil
 }
 
+type browserAccessTokenRetryDoer struct {
+	t                      *testing.T
+	stages                 []fixtureStage
+	calls                  int
+	wantBrowserAccessToken string
+}
+
+func (d *browserAccessTokenRetryDoer) Do(request *http.Request) (*http.Response, error) {
+	d.t.Helper()
+
+	if d.calls >= len(d.stages) {
+		d.t.Fatalf("unexpected extra HTTP call to %s", request.URL.String())
+	}
+
+	stage := d.stages[d.calls]
+	d.calls++
+
+	if request.Method != http.MethodPost {
+		d.t.Fatalf("unexpected method for stage %s: %s", stage.EndpointID, request.Method)
+	}
+	if got, want := request.URL.String(), endpointURL(stage.EndpointID); got != want {
+		d.t.Fatalf("unexpected URL for stage %s: got %s want %s", stage.EndpointID, got, want)
+	}
+	if err := request.ParseForm(); err != nil {
+		d.t.Fatalf("parse form for stage %s: %v", stage.EndpointID, err)
+	}
+	if d.calls == 3 {
+		for _, key := range []string{"access_token", "name", "vk_join_link"} {
+			if _, ok := request.PostForm[key]; !ok {
+				d.t.Fatalf("browser retry missing form key %q", key)
+			}
+		}
+		if len(request.PostForm) != 3 {
+			d.t.Fatalf("browser retry unexpected form %#v", request.PostForm)
+		}
+		if got := request.PostForm.Get("access_token"); got != d.wantBrowserAccessToken {
+			d.t.Fatalf("browser retry access_token = %q, want %q", got, d.wantBrowserAccessToken)
+		}
+	} else {
+		for _, key := range stage.Request.FormKeys {
+			if _, ok := request.PostForm[key]; !ok {
+				d.t.Fatalf("stage %s missing form key %q", stage.EndpointID, key)
+			}
+		}
+	}
+
+	body, err := json.Marshal(stage.Response.Body)
+	if err != nil {
+		d.t.Fatalf("marshal response body: %v", err)
+	}
+
+	return &http.Response{
+		StatusCode: stage.Response.StatusCode,
+		Status:     http.StatusText(stage.Response.StatusCode),
+		Body:       io.NopCloser(bytes.NewReader(body)),
+		Header:     make(http.Header),
+	}, nil
+}
+
 func TestResolveUsesStagedVKFlow(t *testing.T) {
 	fixture := loadFixture(t, "vk_call_debug_success_v1.json")
 	doer := &fixtureDoer{t: t, stages: fixture.Stages}
@@ -414,6 +473,70 @@ func TestResolvePrefersLegacyRepeatedStage2WhenLiveEvidenceDoesNotReachPreview(t
 	}
 	if doer.calls != 4 {
 		t.Fatalf("unexpected HTTP call count %d", doer.calls)
+	}
+}
+
+func TestResolveRetriesStage2WithBrowserObservedAccessToken(t *testing.T) {
+	fixture := loadFixture(t, "vk_call_debug_captcha_resume_success_v1.json")
+	doer := &browserAccessTokenRetryDoer{
+		t:                      t,
+		stages:                 fixture.Stages,
+		wantBrowserAccessToken: "browser-token",
+	}
+	adapter := NewWithHTTPDoer(doer)
+
+	ctx := provider.WithBrowserContinuationHandler(context.Background(), provider.BrowserContinuationHandlerFunc(func(ctx context.Context, challenge provider.InteractiveChallenge) (*provider.BrowserContinuation, error) {
+		return &provider.BrowserContinuation{
+			StageResults: []provider.BrowserStageResult{
+				{
+					Stage:      stageBrowserLoginAnonymTokenMessages,
+					Method:     http.MethodPost,
+					URL:        liveLoginAnonymTokenURL + "&app_id=6287487",
+					FormKeys:   []string{"app_id", "client_id", "client_secret", "isApiOauthAnonymEnabled", "scopes", "version"},
+					StatusCode: http.StatusOK,
+					Body: map[string]any{
+						"data": map[string]any{
+							"access_token": "browser-token",
+						},
+						"type": "messages",
+					},
+				},
+				{
+					Stage:      fixture.Stages[2].Name,
+					Method:     fixture.Stages[2].Request.Method,
+					URL:        "https://api.vk.com/method/calls.getAnonymousToken?v=5.275&client_id=6287487",
+					FormKeys:   []string{"access_token", "captcha_attempt", "captcha_sid", "captcha_ts", "name", "success_token", "vk_join_link"},
+					StatusCode: fixture.Stages[1].Response.StatusCode,
+					Body:       fixture.Stages[1].Response.Body,
+				},
+			},
+			Cookies: []*http.Cookie{
+				{Name: "remixsid", Value: "test", Domain: ".vk.com", Path: "/", Secure: true},
+			},
+		}, nil
+	}))
+
+	resolution, err := adapter.Resolve(ctx, "https://vk.com/call/join/test-token")
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if resolution.Credentials.Username != fixture.Expected.Resolution.Username {
+		t.Fatalf("unexpected username %q", resolution.Credentials.Username)
+	}
+	if resolution.Credentials.Password != fixture.Expected.Resolution.Password {
+		t.Fatalf("unexpected password %q", resolution.Credentials.Password)
+	}
+	if resolution.Credentials.Address != fixture.Expected.Resolution.Address {
+		t.Fatalf("unexpected address %q", resolution.Credentials.Address)
+	}
+	if doer.calls != len(fixture.Stages) {
+		t.Fatalf("unexpected HTTP call count %d", doer.calls)
+	}
+	if resolution.Artifact == nil || len(resolution.Artifact.Stages) != len(fixture.Stages)+1 {
+		t.Fatalf("unexpected artifact %#v", resolution.Artifact)
+	}
+	if resolution.Artifact.Stages[2].Name != stageBrowserLoginAnonymTokenMessages {
+		t.Fatalf("expected preserved browser login evidence before retried stage 2, got %#v", resolution.Artifact.Stages)
 	}
 }
 

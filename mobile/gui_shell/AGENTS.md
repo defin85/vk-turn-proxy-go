@@ -19,3 +19,14 @@
 - Run `dart pub get` from the repository root before shell-local checks.
 - Run `cd mobile/gui_shell && flutter analyze && flutter test`.
 - If packaged-host or bridge semantics change, also run `go test ./internal/androidembeddedhost ./pkg/clientcontrol`.
+
+## Preferred Debug Loop
+
+- Prefer Dart MCP as the primary mobile UI loop.
+- Launch the app with `mcp__dart__.launch_app(device="<adb-serial>", root="/home/egor/code/vk-turn-proxy-go/mobile/gui_shell")`.
+- Pass a plain filesystem path to `launch_app.root`; do not pass a `file://...` URI.
+- After `launch_app` returns a DTD URI, connect Dart MCP to that URI and use `hot_reload`, runtime-error reads, and other Dart MCP tools against that live process.
+- For Android owned-browser or keyboard regressions, prefer the repo-owned harness target `mcp__dart__.launch_app(device="<adb-serial>", root="/home/egor/code/vk-turn-proxy-go/mobile/gui_shell", target="test_driver/owned_browser_harness_main.dart")` before inventing a custom repro app.
+- The harness keeps a local `_showHarnessDiagnostics` toggle. Leave it `false` for normal runs and only enable it for the current debugging task when native/DOM IME diagnostics are needed.
+- Dart MCP currently keeps one active DTD connection per Codex session. Use a fresh Codex session before switching this tooling connection between mobile and desktop targets.
+- Do not fall back to `adb`-driven install/logcat/forward/input steps unless the user explicitly agrees to leave the Dart MCP loop in the current thread.

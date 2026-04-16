@@ -180,10 +180,11 @@ func buildBrowserOwnedStageRequest(descriptor stageDescriptor, form map[string]s
 	}
 
 	return provider.BrowserStageRequest{
-		Stage:  descriptor.name,
-		Method: http.MethodPost,
-		URL:    descriptor.endpointURL,
-		Form:   clonedForm,
+		Stage:     descriptor.name,
+		Method:    http.MethodPost,
+		URL:       descriptor.endpointURL,
+		Form:      clonedForm,
+		UserAgent: userAgent,
 	}
 }
 

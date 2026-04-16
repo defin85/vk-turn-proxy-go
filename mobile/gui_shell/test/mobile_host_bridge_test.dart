@@ -177,6 +177,106 @@ void main() {
     },
   );
 
+  test('platform soft keyboard hider invokes the native bridge', () async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (MethodCall call) async {
+          expect(call.method, 'hideSoftKeyboard');
+          return null;
+        });
+
+    final hider = PlatformMobileSoftKeyboardHider(methodChannel: channel);
+
+    expect(await hider.hide(), isTrue);
+  });
+
+  test(
+    'platform owned-browser soft input mode controller invokes the native bridge',
+    () async {
+      final calls = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall call) async {
+            calls.add(call);
+            return null;
+          });
+
+      final controller = PlatformMobileWindowSoftInputModeController(
+        methodChannel: channel,
+      );
+
+      expect(await controller.enableOwnedBrowserMode(), isTrue);
+      expect(await controller.restoreDefaultMode(), isTrue);
+      expect(calls, hasLength(2));
+      expect(calls.first.method, 'setSoftInputMode');
+      expect(calls.first.arguments, <String, dynamic>{'mode': 'adjustNothing'});
+      expect(calls.last.method, 'setSoftInputMode');
+      expect(calls.last.arguments, <String, dynamic>{'mode': 'adjustResize'});
+    },
+  );
+
+  test('platform webview debug inspector invokes the native bridge', () async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (MethodCall call) async {
+          expect(call.method, 'debugInspectWebView');
+          expect(
+            call.arguments,
+            <String, dynamic>{'webViewIdentifier': 42},
+          );
+          return <String, Object?>{
+            'web_view_identifier': 42,
+            'ime_visible': true,
+            'last_no_extract_ui_flag': true,
+          };
+        });
+
+    final inspector = PlatformMobileWebViewDebugInspector(
+      methodChannel: channel,
+    );
+
+    expect(
+      await inspector.snapshot(webViewIdentifier: 42),
+      <String, Object?>{
+        'web_view_identifier': 42,
+        'ime_visible': true,
+        'last_no_extract_ui_flag': true,
+      },
+    );
+  });
+
+  test(
+    'platform webview document-start script installer invokes the native bridge',
+    () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall call) async {
+            expect(call.method, 'installDocumentStartJavaScript');
+            expect(call.arguments, <String, Object?>{
+              'webViewIdentifier': 42,
+              'javaScript': 'window.test = true;',
+              'allowedOriginRules': <String>[
+                'https://vk.com',
+                'https://*.vk.com',
+              ],
+            });
+            return null;
+          });
+
+      final installer = PlatformMobileWebViewDocumentStartScriptInstaller(
+        methodChannel: channel,
+      );
+
+      expect(
+        await installer.install(
+          webViewIdentifier: 42,
+          javaScript: 'window.test = true;',
+          allowedOriginRules: const <String>[
+            'https://vk.com',
+            'https://*.vk.com',
+          ],
+        ),
+        isTrue,
+      );
+    },
+  );
+
   test('platform host resolver rejects invalid native host URLs', () async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (MethodCall call) async {

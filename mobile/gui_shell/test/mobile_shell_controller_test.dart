@@ -305,12 +305,13 @@ void main() {
 
       expect(controller.status, ShellStatus.blocked);
       expect(controller.requiresLocalStateReset, isTrue);
-      expect(controller.hostConnection?.state, MobileHostLifecycleState.failed);
+      expect(controller.hostConnection?.state, MobileHostLifecycleState.ready);
+      expect(controller.activeModeSupportsAppRouting, isTrue);
       expect(
         controller.notice,
         contains('Secure profile secrets are unavailable'),
       );
-      expect(bridge.ensureReadyCalls, 0);
+      expect(bridge.ensureReadyCalls, 1);
     },
   );
 
@@ -337,7 +338,7 @@ void main() {
       expect(controller.requiresLocalStateReset, isFalse);
       expect(controller.status, ShellStatus.ready);
       expect(controller.hostConnection?.isReady, isTrue);
-      expect(bridge.ensureReadyCalls, 1);
+      expect(bridge.ensureReadyCalls, 2);
       expect(controller.profiles, isEmpty);
     },
   );
@@ -1249,6 +1250,38 @@ void main() {
   );
 
   test(
+    'controller clears stale notices when the profile draft changes',
+    () async {
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(),
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: const <ProfileRecord>[],
+            providerConfigs: const <ProviderConfigRecord>[],
+            draft: ProfileDraft.defaults(),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      controller.notice = 'input.link is required';
+
+      controller.updateDraft(
+        controller.draft.copyWith(
+          spec: controller.draft.spec.copyWith(
+            link: 'https://vk.com/call/join/fresh',
+          ),
+        ),
+      );
+
+      expect(controller.notice, isNull);
+      expect(controller.draft.spec.link, 'https://vk.com/call/join/fresh');
+    },
+  );
+
+  test(
     'controller fails closed when the mobile host does not advertise the provider',
     () async {
       final bridge = _FakeMobileHostBridge(
@@ -1446,11 +1479,11 @@ void main() {
   );
 
   test(
-    'controller consumes typed platform tunnel reports and startup-stage results',
+    'controller blocks strict Android VPN startup when runtime defaults still point to loopback',
     () async {
       final bridge = _FakeMobileHostBridge(
         resolutionsList: <ResolutionRecord>[
-          _resolutionRecord(id: 'resolution-android-1'),
+          _resolutionRecord(id: 'resolution-android-loopback-1'),
         ],
       );
       final controller = MobileShellController(
@@ -1471,6 +1504,54 @@ void main() {
         PlatformTunnelMode.androidVpnService,
       );
 
+      expect(bridge.startResolutionCalls, isEmpty);
+      expect(bridge.startedPlatformTunnels, isEmpty);
+      expect(
+        controller.platformTunnelResultFor(
+          PlatformTunnelMode.androidVpnService,
+        ),
+        isNull,
+      );
+      expect(controller.notice, contains('loopback peer 127.0.0.1:56000'));
+      expect(
+        controller.notice,
+        contains('Configure an operator-managed remote peer endpoint'),
+      );
+    },
+  );
+
+  test(
+    'controller consumes typed platform tunnel reports and startup-stage results',
+    () async {
+      final profile = ProfileRecord(
+        id: 'profile-1',
+        name: 'vk live',
+        spec: _profileSpec(),
+      );
+      final bridge = _FakeMobileHostBridge(
+        resolutionsList: <ResolutionRecord>[
+          _resolutionRecord(id: 'resolution-android-1'),
+        ],
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[profile],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: profile.id,
+            draft: ProfileDraft.fromProfile(profile),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.startPlatformTunnel(
+        PlatformTunnelMode.androidVpnService,
+      );
+
       expect(bridge.startedPlatformTunnels, <PlatformTunnelMode>[
         PlatformTunnelMode.androidVpnService,
       ]);
@@ -1480,9 +1561,7 @@ void main() {
       expect(bridge.startedPlatformTunnelRuntimeDefaults, hasLength(1));
       final runtimeDefaults =
           bridge.startedPlatformTunnelRuntimeDefaults.single;
-      final expectedDefaults = RuntimeDefaults.fromProfileSpec(
-        ProfileDraft.defaults().spec,
-      );
+      final expectedDefaults = RuntimeDefaults.fromProfileSpec(profile.spec);
       expect(runtimeDefaults, isNotNull);
       expect(runtimeDefaults?.listenAddress, expectedDefaults.listenAddress);
       expect(runtimeDefaults?.peerAddress, expectedDefaults.peerAddress);
@@ -1685,6 +1764,11 @@ void main() {
   test(
     'controller requests Android VPN permission and resumes the same startup attempt',
     () async {
+      final profile = ProfileRecord(
+        id: 'profile-1',
+        name: 'vk live',
+        spec: _profileSpec(),
+      );
       final bridge = _FakeMobileHostBridge(
         resolutionsList: <ResolutionRecord>[
           _resolutionRecord(id: 'resolution-android-1'),
@@ -1709,9 +1793,10 @@ void main() {
         bridge: bridge,
         stateStore: _InMemoryStateStore(
           MobileShellState(
-            profiles: const <ProfileRecord>[],
+            profiles: <ProfileRecord>[profile],
             providerConfigs: const <ProviderConfigRecord>[],
-            draft: ProfileDraft.defaults(),
+            selectedProfileId: profile.id,
+            draft: ProfileDraft.fromProfile(profile),
           ),
         ),
         appBuild: _testGuiBuild,
@@ -1740,6 +1825,11 @@ void main() {
   );
 
   test('controller clears ready platform tunnel state after stop', () async {
+    final profile = ProfileRecord(
+      id: 'profile-1',
+      name: 'vk live',
+      spec: _profileSpec(),
+    );
     final bridge = _FakeMobileHostBridge(
       startPlatformTunnelResult: const PlatformTunnelStartResult(
         mode: PlatformTunnelMode.androidVpnService,
@@ -1755,9 +1845,10 @@ void main() {
       bridge: bridge,
       stateStore: _InMemoryStateStore(
         MobileShellState(
-          profiles: const <ProfileRecord>[],
+          profiles: <ProfileRecord>[profile],
           providerConfigs: const <ProviderConfigRecord>[],
-          draft: ProfileDraft.defaults(),
+          selectedProfileId: profile.id,
+          draft: ProfileDraft.fromProfile(profile),
         ),
       ),
       appBuild: _testGuiBuild,

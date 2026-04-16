@@ -76,18 +76,18 @@ const RuntimeExecutionPlanDescriptor _androidVpnExecutionPlanDescriptor =
       isDefault: true,
     );
 
-const RuntimeExecutionPlanDescriptor _appleNetworkExtensionExecutionPlanDescriptor =
-    RuntimeExecutionPlanDescriptor(
-      plan: RuntimeExecutionPlan(
-        accessMethod: RuntimeAccessMethod.turnCredentials,
-        carrierFamily: RuntimeCarrierFamily.turnDatagram,
-        engineFamily: RuntimeEngineFamily.wireguardNative,
-        hostAdapter: RuntimeHostAdapter.appleNetworkExtension,
-      ),
-      supportState: RuntimeExecutionPlanSupportState.supported,
-      remoteEndpointFamily: RuntimeRemoteEndpointFamily.turnServer,
-      isDefault: true,
-    );
+const RuntimeExecutionPlanDescriptor
+_appleNetworkExtensionExecutionPlanDescriptor = RuntimeExecutionPlanDescriptor(
+  plan: RuntimeExecutionPlan(
+    accessMethod: RuntimeAccessMethod.turnCredentials,
+    carrierFamily: RuntimeCarrierFamily.turnDatagram,
+    engineFamily: RuntimeEngineFamily.wireguardNative,
+    hostAdapter: RuntimeHostAdapter.appleNetworkExtension,
+  ),
+  supportState: RuntimeExecutionPlanSupportState.supported,
+  remoteEndpointFamily: RuntimeRemoteEndpointFamily.turnServer,
+  isDefault: true,
+);
 
 void main() {
   testWidgets('mobile shell uses workflow-first navigation', (
@@ -183,14 +183,16 @@ void main() {
     expect(find.text('vk live'), findsWidgets);
 
     await _openProfilesTab(tester);
+    await _openProfileEditorFromProfiles(tester);
     await tester.enterText(find.byType(TextField).first, 'vk mobile draft');
     await tester.pumpAndSettle();
 
+    await tester.pageBack();
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Home').first);
     await tester.pumpAndSettle();
     await _openProfilesTab(tester);
-    await tester.pumpAndSettle();
-    expect(find.text('vk mobile draft'), findsOneWidget);
+    expect(controller.draft.name, 'vk mobile draft');
   });
 
   testWidgets(
@@ -286,6 +288,8 @@ void main() {
 
       expect(controller.selectedProfileId, isNull);
 
+      await tester.pageBack();
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Home').first);
       await tester.pumpAndSettle();
 
@@ -298,7 +302,7 @@ void main() {
   );
 
   testWidgets(
-    'home empty state offers add and import actions when no profiles exist',
+    'profiles root keeps only add visible and moves secondary actions into overflow',
     (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1200, 1800);
       tester.view.devicePixelRatio = 1.0;
@@ -313,10 +317,18 @@ void main() {
       await tester.pumpWidget(MobileShellApp(controller: controller));
       await tester.pumpAndSettle();
 
+      await _openProfilesTab(tester);
+
       expect(find.text('No saved profiles yet'), findsOneWidget);
       expect(find.text('Add profile'), findsOneWidget);
+      expect(find.text('Import invite'), findsNothing);
+      expect(find.text('Manage providers'), findsNothing);
+      expect(find.byTooltip('Profiles actions'), findsOneWidget);
+
+      await _openProfilesMenu(tester);
+
       expect(find.text('Import invite'), findsOneWidget);
-      expect(find.text('Turn on VPN'), findsNothing);
+      expect(find.text('Manage providers'), findsOneWidget);
     },
   );
 
@@ -413,7 +425,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.textContaining('Per-app routing is unavailable for this mobile mode.'),
+        find.textContaining(
+          'Per-app routing is unavailable for this mobile mode.',
+        ),
         findsOneWidget,
       );
       expect(find.text('Routing'), findsNothing);
@@ -458,10 +472,14 @@ void main() {
       await tester.pumpAndSettle();
 
       await _openProfilesTab(tester);
+      await _openProfileEditorFromProfiles(tester);
       await tester.enterText(find.byType(TextField).first, 'resize draft');
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Routing').first);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await _openProfilesMenu(tester);
+      await tester.tap(find.text('Routing').last);
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(ChoiceChip, 'Included apps').first);
       await tester.pumpAndSettle();
@@ -478,7 +496,7 @@ void main() {
       expect(find.text('Routing'), findsWidgets);
 
       await _openProfilesTab(tester);
-      expect(find.text('resize draft'), findsOneWidget);
+      expect(controller.draft.name, 'resize draft');
     },
   );
 
@@ -583,6 +601,391 @@ void main() {
         bridge.continueChallengePayloads.single?.cookies.single.value,
         'owned-session',
       );
+      expect(find.text('Turn on VPN'), findsOneWidget);
+      expect(
+        find.text(
+          'Inspect provider resolutions and session state without crowding the main workflow.',
+        ),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets(
+    'mobile shell reuses the continued resolution when Home starts VPN after an in-app browser flow',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final resolution = ResolutionRecord(
+        id: 'resolution-continued',
+        provider: 'vk',
+        input: const ResolutionInput(
+          provider: 'vk',
+          kind: ProviderInputKind.link,
+          linkRedacted: 'https://vk.com/call/join/<redacted:invite-token>',
+          interactiveProvider: true,
+        ),
+        state: ResolutionState.resolved,
+        artifact: const ResolutionArtifactRecord(
+          family: ArtifactFamily.genericTurn,
+          actions: <ResolutionActionRecord>[
+            ResolutionActionRecord(
+              id: ArtifactAction.startOnThisDevice,
+              executionOwner: ActionExecutionOwner.host,
+            ),
+          ],
+        ),
+        export: const ResolutionExportStatus(supported: true),
+        startedAt: DateTime.utc(2026, 4, 7, 12, 0),
+        updatedAt: DateTime.utc(2026, 4, 7, 12, 1),
+      );
+      final challenge = ChallengeRecord(
+        id: 'challenge-1',
+        sessionId: 'session-1',
+        resolutionId: resolution.id,
+        provider: 'vk',
+        stage: 'provider_resolve',
+        kind: 'browser',
+        prompt: 'Continue inside the in-app browser.',
+        openUrl: 'https://vk.com/call/join/test',
+        status: ChallengeStatus.pending,
+        completionMode: ChallengeCompletionMode.ownedBrowserObserved,
+        ownedBrowser: const ChallengeOwnedBrowserMetadata(
+          cookieUrls: <String>['https://login.vk.ru/'],
+        ),
+        createdAt: DateTime.utc(2026, 4, 7, 12, 0),
+        updatedAt: DateTime.utc(2026, 4, 7, 12, 1),
+      );
+      final runner = _FakeOwnedBrowserChallengeRunner(
+        result: const ChallengeContinuationSubmission(
+          cookies: <BrowserCookieRecord>[
+            BrowserCookieRecord(
+              name: 'session',
+              value: 'owned-session',
+              domain: 'login.vk.ru',
+              path: '/',
+            ),
+          ],
+        ),
+      );
+      final bridge = _FakeMobileHostBridge(
+        resolutionsList: <ResolutionRecord>[resolution],
+        sessionsList: <SessionRecord>[
+          SessionRecord(
+            id: 'session-1',
+            profileId: 'profile-1',
+            profileName: 'vk live',
+            profile: _profileSpec(),
+            state: SessionState.challengeRequired,
+            activeChallengeId: challenge.id,
+            startedAt: DateTime.utc(2026, 4, 7, 12, 0),
+            updatedAt: DateTime.utc(2026, 4, 7, 12, 1),
+          ),
+        ],
+        challengeMap: <String, ChallengeRecord>{challenge.id: challenge},
+        startPlatformTunnelResult: const PlatformTunnelStartResult(
+          mode: PlatformTunnelMode.androidVpnService,
+          ready: true,
+          stage: PlatformTunnelStartupStage.runtimeAttach,
+        ),
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: 'profile-1',
+            draft: ProfileDraft.fromProfile(
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ),
+          ),
+        ),
+      );
+      await controller.initialize();
+      await tester.pumpWidget(
+        MobileShellApp(
+          controller: controller,
+          ownedBrowserChallengeRunner: runner,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await _openSupportTab(tester);
+      await tester.tap(find.text('Sessions (1)'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue in app', skipOffstage: false));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(controller.selectedResolutionId, resolution.id);
+      expect(find.text('Turn on VPN'), findsOneWidget);
+
+      await tester.tap(find.text('Turn on VPN'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(bridge.startResolutionCalls, isEmpty);
+      expect(
+        bridge.startedPlatformTunnelResolutionIDs,
+        <String?>[resolution.id],
+      );
+    },
+  );
+
+  testWidgets(
+    'mobile shell falls back to the cached challenge resolution when continueChallenge omits resolution_id',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final resolution = ResolutionRecord(
+        id: 'resolution-cached',
+        provider: 'vk',
+        input: const ResolutionInput(
+          provider: 'vk',
+          kind: ProviderInputKind.link,
+          linkRedacted: 'https://vk.com/call/join/<redacted:invite-token>',
+          interactiveProvider: true,
+        ),
+        state: ResolutionState.resolved,
+        artifact: const ResolutionArtifactRecord(
+          family: ArtifactFamily.genericTurn,
+          actions: <ResolutionActionRecord>[
+            ResolutionActionRecord(
+              id: ArtifactAction.startOnThisDevice,
+              executionOwner: ActionExecutionOwner.host,
+            ),
+          ],
+        ),
+        export: const ResolutionExportStatus(supported: true),
+        startedAt: DateTime.utc(2026, 4, 7, 12, 0),
+        updatedAt: DateTime.utc(2026, 4, 7, 12, 1),
+      );
+      final cachedChallenge = ChallengeRecord(
+        id: 'challenge-1',
+        sessionId: 'session-1',
+        resolutionId: resolution.id,
+        provider: 'vk',
+        stage: 'provider_resolve',
+        kind: 'browser',
+        prompt: 'Continue inside the in-app browser.',
+        openUrl: 'https://vk.com/call/join/test',
+        status: ChallengeStatus.pending,
+        completionMode: ChallengeCompletionMode.ownedBrowserObserved,
+        ownedBrowser: const ChallengeOwnedBrowserMetadata(
+          cookieUrls: <String>['https://login.vk.ru/'],
+        ),
+        createdAt: DateTime.utc(2026, 4, 7, 12, 0),
+        updatedAt: DateTime.utc(2026, 4, 7, 12, 1),
+      );
+      final continuedChallenge = ChallengeRecord(
+        id: cachedChallenge.id,
+        sessionId: cachedChallenge.sessionId,
+        provider: cachedChallenge.provider,
+        stage: cachedChallenge.stage,
+        kind: cachedChallenge.kind,
+        prompt: cachedChallenge.prompt,
+        openUrl: cachedChallenge.openUrl,
+        status: ChallengeStatus.completed,
+        completionMode: cachedChallenge.completionMode,
+        browserReturn: cachedChallenge.browserReturn,
+        ownedBrowser: cachedChallenge.ownedBrowser,
+        createdAt: cachedChallenge.createdAt,
+        updatedAt: cachedChallenge.updatedAt.add(const Duration(seconds: 1)),
+      );
+      final runner = _FakeOwnedBrowserChallengeRunner(
+        result: const ChallengeContinuationSubmission(
+          cookies: <BrowserCookieRecord>[
+            BrowserCookieRecord(
+              name: 'session',
+              value: 'owned-session',
+              domain: 'login.vk.ru',
+              path: '/',
+            ),
+          ],
+        ),
+      );
+      final bridge = _FakeMobileHostBridge(
+        resolutionsList: <ResolutionRecord>[resolution],
+        sessionsList: <SessionRecord>[
+          SessionRecord(
+            id: 'session-1',
+            profileId: 'profile-1',
+            profileName: 'vk live',
+            profile: _profileSpec(),
+            state: SessionState.challengeRequired,
+            activeChallengeId: cachedChallenge.id,
+            startedAt: DateTime.utc(2026, 4, 7, 12, 0),
+            updatedAt: DateTime.utc(2026, 4, 7, 12, 1),
+          ),
+        ],
+        challengeMap: <String, ChallengeRecord>{cachedChallenge.id: continuedChallenge},
+        startPlatformTunnelResult: const PlatformTunnelStartResult(
+          mode: PlatformTunnelMode.androidVpnService,
+          ready: true,
+          stage: PlatformTunnelStartupStage.runtimeAttach,
+        ),
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: 'profile-1',
+            draft: ProfileDraft.fromProfile(
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ),
+          ),
+        ),
+      );
+      await controller.initialize();
+      await tester.pumpWidget(
+        MobileShellApp(
+          controller: controller,
+          ownedBrowserChallengeRunner: runner,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await _openSupportTab(tester);
+      await tester.tap(find.text('Sessions (1)'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue in app', skipOffstage: false));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(controller.selectedResolutionId, resolution.id);
+      await tester.tap(find.text('Turn on VPN'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(bridge.startResolutionCalls, isEmpty);
+      expect(
+        bridge.startedPlatformTunnelResolutionIDs,
+        <String?>[resolution.id],
+      );
+    },
+  );
+
+  testWidgets(
+    'mobile shell keeps resolution ordering stable and preserves the selected resolution across refresh',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final resolutionFailed = ResolutionRecord(
+        id: 'resolution-failed',
+        provider: 'vk',
+        input: const ResolutionInput(
+          provider: 'vk',
+          kind: ProviderInputKind.link,
+          linkRedacted: 'https://vk.com/call/join/failed',
+          interactiveProvider: true,
+        ),
+        state: ResolutionState.failed,
+        export: const ResolutionExportStatus(supported: false),
+        startedAt: DateTime.utc(2026, 4, 7, 12, 0, 0),
+        updatedAt: DateTime.utc(2026, 4, 7, 12, 1, 0),
+      );
+      final resolutionResolved = ResolutionRecord(
+        id: 'resolution-resolved',
+        provider: 'vk',
+        input: const ResolutionInput(
+          provider: 'vk',
+          kind: ProviderInputKind.link,
+          linkRedacted: 'https://vk.com/call/join/resolved',
+          interactiveProvider: true,
+        ),
+        state: ResolutionState.resolved,
+        export: const ResolutionExportStatus(supported: false),
+        startedAt: DateTime.utc(2026, 4, 7, 12, 0, 30),
+        updatedAt: DateTime.utc(2026, 4, 7, 12, 2, 0),
+      );
+      final resolutionChallenge = ResolutionRecord(
+        id: 'resolution-challenge',
+        provider: 'vk',
+        input: const ResolutionInput(
+          provider: 'vk',
+          kind: ProviderInputKind.link,
+          linkRedacted: 'https://vk.com/call/join/challenge',
+          interactiveProvider: true,
+        ),
+        state: ResolutionState.challengeRequired,
+        export: const ResolutionExportStatus(supported: false),
+        startedAt: DateTime.utc(2026, 4, 7, 12, 1, 0),
+        updatedAt: DateTime.utc(2026, 4, 7, 12, 3, 0),
+      );
+
+      final bridge = _FakeMobileHostBridge(
+        resolutionsList: <ResolutionRecord>[
+          resolutionFailed,
+          resolutionResolved,
+          resolutionChallenge,
+        ],
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(MobileShellState.empty()),
+      );
+
+      await controller.initialize();
+
+      expect(
+        controller.resolutions.map((ResolutionRecord record) => record.id),
+        <String>[
+          'resolution-challenge',
+          'resolution-resolved',
+          'resolution-failed',
+        ],
+      );
+      expect(controller.selectedResolutionId, 'resolution-challenge');
+
+      controller.selectResolution('resolution-resolved');
+      bridge._resolutions
+        ..clear()
+        ..addAll(<ResolutionRecord>[
+          resolutionResolved,
+          resolutionFailed,
+          resolutionChallenge,
+        ]);
+
+      await controller.refresh();
+
+      expect(
+        controller.resolutions.map((ResolutionRecord record) => record.id),
+        <String>[
+          'resolution-challenge',
+          'resolution-resolved',
+          'resolution-failed',
+        ],
+      );
+      expect(controller.selectedResolutionId, 'resolution-resolved');
     },
   );
 
@@ -762,6 +1165,704 @@ void main() {
     },
   );
 
+  testWidgets(
+    'owned-browser page yields shell chrome to web content while keyboard is visible even after a web resource error',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(2560, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final runner = WebViewOwnedBrowserChallengeRunner(
+        sessionFactory:
+            (
+              ValueChanged<String> onWebResourceError,
+              ValueChanged<Uri> onPageNavigation,
+            ) {
+              return OwnedBrowserWebSession(
+                viewBuilder: (BuildContext context) => const SizedBox.expand(
+                  key: Key('owned-browser-webview'),
+                  child: ColoredBox(color: Colors.black),
+                ),
+                load: (Uri uri) async {
+                  onWebResourceError('net::ERR_FAILED');
+                },
+                clearCookies: () async {},
+                collectCookies: (List<String> urls) async =>
+                    const <BrowserCookieRecord>[],
+              );
+            },
+      );
+      final challenge = ChallengeRecord(
+        id: 'challenge-1',
+        sessionId: 'session-1',
+        provider: 'vk',
+        stage: 'provider_resolve',
+        kind: 'captcha',
+        prompt: 'Continue inside the in-app browser.',
+        openUrl: 'https://vk.com/call/join/test',
+        status: ChallengeStatus.pending,
+        completionMode: ChallengeCompletionMode.ownedBrowserObserved,
+        ownedBrowser: const ChallengeOwnedBrowserMetadata(
+          cookieUrls: <String>['https://login.vk.ru/'],
+        ),
+        createdAt: DateTime.utc(2026, 4, 7, 12, 0),
+        updatedAt: DateTime.utc(2026, 4, 7, 12, 1),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (BuildContext context, Widget? child) {
+            return MediaQuery(
+              // Keep MediaQuery stale to prove the page reacts to real window
+              // metrics instead of relying only on inherited viewInsets.
+              data: const MediaQueryData(size: Size(2560, 1600)),
+              child: child!,
+            );
+          },
+          home: Builder(
+            builder: (BuildContext context) {
+              return Scaffold(
+                body: Center(
+                  child: FilledButton(
+                    onPressed: () {
+                      unawaited(runner.run(context, challenge));
+                    },
+                    child: const Text('Open challenge'),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open challenge'));
+      await tester.pumpAndSettle();
+
+      final webViewFinder = find.byKey(const Key('owned-browser-webview'));
+
+      expect(find.text('Continue inside the in-app browser.'), findsOneWidget);
+      expect(find.text('net::ERR_FAILED'), findsOneWidget);
+      expect(find.text('Continue'), findsOneWidget);
+      expect(find.text('vk challenge'), findsOneWidget);
+      expect(find.text('Cancel'), findsNothing);
+
+      tester.view.viewInsets = const FakeViewPadding(bottom: 700);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Continue inside the in-app browser.'), findsNothing);
+      expect(find.text('net::ERR_FAILED'), findsNothing);
+      expect(find.text('Cancel'), findsNothing);
+      expect(find.text('Continue'), findsOneWidget);
+      expect(find.text('vk challenge'), findsOneWidget);
+      expect(webViewFinder, findsOneWidget);
+      expect(find.text('Hide keyboard'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'owned-browser page keeps the embedded viewport size stable across IME transitions',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(2560, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final runner = WebViewOwnedBrowserChallengeRunner(
+        sessionFactory:
+            (
+              ValueChanged<String> onWebResourceError,
+              ValueChanged<Uri> onPageNavigation,
+            ) {
+              return OwnedBrowserWebSession(
+                viewBuilder: (BuildContext context) => const SizedBox.expand(
+                  key: Key('owned-browser-webview'),
+                  child: ColoredBox(color: Colors.black),
+                ),
+                load: (Uri uri) async {},
+                clearCookies: () async {},
+                collectCookies: (List<String> urls) async =>
+                    const <BrowserCookieRecord>[],
+              );
+            },
+      );
+      final challenge = ChallengeRecord(
+        id: 'challenge-1',
+        sessionId: 'session-1',
+        provider: 'vk',
+        stage: 'provider_resolve',
+        kind: 'captcha',
+        prompt: 'Continue inside the in-app browser.',
+        openUrl: 'https://vk.com/call/join/test',
+        status: ChallengeStatus.pending,
+        completionMode: ChallengeCompletionMode.ownedBrowserObserved,
+        ownedBrowser: const ChallengeOwnedBrowserMetadata(
+          cookieUrls: <String>['https://login.vk.ru/'],
+        ),
+        createdAt: DateTime.utc(2026, 4, 7, 12, 0),
+        updatedAt: DateTime.utc(2026, 4, 7, 12, 1),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (BuildContext context) {
+              return Scaffold(
+                body: Center(
+                  child: FilledButton(
+                    onPressed: () {
+                      unawaited(runner.run(context, challenge));
+                    },
+                    child: const Text('Open challenge'),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open challenge'));
+      await tester.pumpAndSettle();
+
+      final webViewFinder = find.byKey(const Key('owned-browser-webview'));
+      final viewportSizeBeforeIme = tester.getSize(webViewFinder);
+
+      tester.view.viewInsets = const FakeViewPadding(bottom: 700);
+      await tester.pumpAndSettle();
+
+      expect(tester.getSize(webViewFinder), viewportSizeBeforeIme);
+      expect(find.text('Hide keyboard'), findsOneWidget);
+    },
+  );
+
+  testWidgets('owned-browser page exposes a hide-keyboard action', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(2560, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    var hideCalls = 0;
+    final runner = WebViewOwnedBrowserChallengeRunner(
+      sessionFactory:
+          (
+            ValueChanged<String> onWebResourceError,
+            ValueChanged<Uri> onPageNavigation,
+          ) {
+            return OwnedBrowserWebSession(
+              viewBuilder: (BuildContext context) => const SizedBox.expand(
+                key: Key('owned-browser-webview'),
+                child: ColoredBox(color: Colors.black),
+              ),
+              load: (Uri uri) async {},
+              clearCookies: () async {},
+              collectCookies: (List<String> urls) async =>
+                  const <BrowserCookieRecord>[],
+            );
+          },
+      keyboardHider: _FakeMobileSoftKeyboardHider(
+        onHide: () {
+          hideCalls += 1;
+        },
+      ),
+    );
+    final challenge = ChallengeRecord(
+      id: 'challenge-1',
+      sessionId: 'session-1',
+      provider: 'vk',
+      stage: 'provider_resolve',
+      kind: 'captcha',
+      prompt: 'Continue inside the in-app browser.',
+      openUrl: 'https://vk.com/call/join/test',
+      status: ChallengeStatus.pending,
+      completionMode: ChallengeCompletionMode.ownedBrowserObserved,
+      ownedBrowser: const ChallengeOwnedBrowserMetadata(
+        cookieUrls: <String>['https://login.vk.ru/'],
+      ),
+      createdAt: DateTime.utc(2026, 4, 7, 12, 0),
+      updatedAt: DateTime.utc(2026, 4, 7, 12, 1),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (BuildContext context) {
+            return Scaffold(
+              body: Center(
+                child: FilledButton(
+                  onPressed: () {
+                    unawaited(runner.run(context, challenge));
+                  },
+                  child: const Text('Open challenge'),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open challenge'));
+    await tester.pumpAndSettle();
+
+    tester.view.viewInsets = const FakeViewPadding(bottom: 700);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Hide keyboard'), findsOneWidget);
+
+    await tester.tap(find.text('Hide keyboard'));
+    await tester.pump();
+
+    expect(hideCalls, 1);
+  });
+
+  testWidgets(
+    'owned-browser page reloads the original VK invite once after login lands on feed',
+    (WidgetTester tester) async {
+      final inviteUri = Uri.parse('https://vk.com/call/join/test');
+      final loadedUris = <Uri>[];
+      final runner = WebViewOwnedBrowserChallengeRunner(
+        sessionFactory:
+            (
+              ValueChanged<String> onWebResourceError,
+              ValueChanged<Uri> onPageNavigation,
+            ) {
+              return OwnedBrowserWebSession(
+                viewBuilder: (BuildContext context) => const SizedBox.expand(
+                  child: ColoredBox(color: Colors.black),
+                ),
+                load: (Uri uri) async {
+                  loadedUris.add(uri);
+                  if (uri == inviteUri) {
+                    onPageNavigation(Uri.parse('https://m.vk.com/feed'));
+                  }
+                },
+                clearCookies: () async {},
+                collectCookies: (List<String> urls) async =>
+                    const <BrowserCookieRecord>[],
+              );
+            },
+      );
+      final challenge = ChallengeRecord(
+        id: 'challenge-1',
+        sessionId: 'session-1',
+        provider: 'vk',
+        stage: 'provider_resolve',
+        kind: 'captcha',
+        prompt: 'Continue inside the in-app browser.',
+        openUrl: inviteUri.toString(),
+        status: ChallengeStatus.pending,
+        completionMode: ChallengeCompletionMode.ownedBrowserObserved,
+        ownedBrowser: const ChallengeOwnedBrowserMetadata(
+          cookieUrls: <String>['https://login.vk.ru/'],
+        ),
+        createdAt: DateTime.utc(2026, 4, 7, 12, 0),
+        updatedAt: DateTime.utc(2026, 4, 7, 12, 1),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (BuildContext context) {
+              return Scaffold(
+                body: Center(
+                  child: FilledButton(
+                    onPressed: () {
+                      unawaited(runner.run(context, challenge));
+                    },
+                    child: const Text('Open challenge'),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open challenge'));
+      await tester.pumpAndSettle();
+
+      expect(loadedUris, <Uri>[inviteUri, inviteUri]);
+    },
+  );
+
+  testWidgets('owned-browser page applies the VK desktop-like user agent', (
+    WidgetTester tester,
+  ) async {
+    final requestedUserAgents = <String>[];
+    final runner = WebViewOwnedBrowserChallengeRunner(
+      sessionFactory:
+          (
+            ValueChanged<String> onWebResourceError,
+            ValueChanged<Uri> onPageNavigation,
+          ) {
+            return OwnedBrowserWebSession(
+              viewBuilder: (BuildContext context) =>
+                  const SizedBox.expand(child: ColoredBox(color: Colors.black)),
+              load: (Uri uri) async {},
+              clearCookies: () async {},
+              setUserAgent: (String userAgent) async {
+                requestedUserAgents.add(userAgent);
+              },
+              collectCookies: (List<String> urls) async =>
+                  const <BrowserCookieRecord>[],
+            );
+          },
+    );
+    final challenge = ChallengeRecord(
+      id: 'challenge-1',
+      sessionId: 'session-1',
+      provider: 'vk',
+      stage: 'provider_resolve',
+      kind: 'captcha',
+      prompt: 'Continue inside the in-app browser.',
+      openUrl: 'https://vk.com/call/join/test',
+      status: ChallengeStatus.pending,
+      completionMode: ChallengeCompletionMode.ownedBrowserObserved,
+      ownedBrowser: const ChallengeOwnedBrowserMetadata(
+        cookieUrls: <String>['https://login.vk.ru/'],
+      ),
+      createdAt: DateTime.utc(2026, 4, 7, 12, 0),
+      updatedAt: DateTime.utc(2026, 4, 7, 12, 1),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (BuildContext context) {
+            return Scaffold(
+              body: Center(
+                child: FilledButton(
+                  onPressed: () {
+                    unawaited(runner.run(context, challenge));
+                  },
+                  child: const Text('Open challenge'),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open challenge'));
+    await tester.pumpAndSettle();
+
+    expect(requestedUserAgents, <String>[
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:144.0) Gecko/20100101 Firefox/144.0',
+    ]);
+  });
+
+  testWidgets('owned-browser page preserves VK cookies across sessions', (
+    WidgetTester tester,
+  ) async {
+    var clearCookiesCalls = 0;
+    final runner = WebViewOwnedBrowserChallengeRunner(
+      sessionFactory:
+          (
+            ValueChanged<String> onWebResourceError,
+            ValueChanged<Uri> onPageNavigation,
+          ) {
+            return OwnedBrowserWebSession(
+              viewBuilder: (BuildContext context) =>
+                  const SizedBox.expand(child: ColoredBox(color: Colors.black)),
+              load: (Uri uri) async {},
+              clearCookies: () async {
+                clearCookiesCalls += 1;
+              },
+              collectCookies: (List<String> urls) async =>
+                  const <BrowserCookieRecord>[],
+            );
+          },
+    );
+    final challenge = ChallengeRecord(
+      id: 'challenge-1',
+      sessionId: 'session-1',
+      provider: 'vk',
+      stage: 'provider_resolve',
+      kind: 'captcha',
+      prompt: 'Continue inside the in-app browser.',
+      openUrl: 'https://vk.com/call/join/test',
+      status: ChallengeStatus.pending,
+      completionMode: ChallengeCompletionMode.ownedBrowserObserved,
+      ownedBrowser: const ChallengeOwnedBrowserMetadata(
+        cookieUrls: <String>['https://login.vk.ru/'],
+      ),
+      createdAt: DateTime.utc(2026, 4, 7, 12, 0),
+      updatedAt: DateTime.utc(2026, 4, 7, 12, 1),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (BuildContext context) {
+            return Scaffold(
+              body: Center(
+                child: FilledButton(
+                  onPressed: () {
+                    unawaited(runner.run(context, challenge));
+                  },
+                  child: const Text('Open challenge'),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open challenge'));
+    await tester.pumpAndSettle();
+
+    expect(clearCookiesCalls, 0);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    expect(clearCookiesCalls, 0);
+  });
+
+  testWidgets('owned-browser page resets non-VK cookies per session', (
+    WidgetTester tester,
+  ) async {
+    var clearCookiesCalls = 0;
+    final runner = WebViewOwnedBrowserChallengeRunner(
+      sessionFactory:
+          (
+            ValueChanged<String> onWebResourceError,
+            ValueChanged<Uri> onPageNavigation,
+          ) {
+            return OwnedBrowserWebSession(
+              viewBuilder: (BuildContext context) =>
+                  const SizedBox.expand(child: ColoredBox(color: Colors.black)),
+              load: (Uri uri) async {},
+              clearCookies: () async {
+                clearCookiesCalls += 1;
+              },
+              collectCookies: (List<String> urls) async =>
+                  const <BrowserCookieRecord>[],
+            );
+          },
+    );
+    final challenge = ChallengeRecord(
+      id: 'challenge-1',
+      sessionId: 'session-1',
+      provider: 'example-provider',
+      stage: 'provider_resolve',
+      kind: 'captcha',
+      prompt: 'Continue inside the in-app browser.',
+      openUrl: 'https://example.com/challenge',
+      status: ChallengeStatus.pending,
+      completionMode: ChallengeCompletionMode.ownedBrowserObserved,
+      ownedBrowser: const ChallengeOwnedBrowserMetadata(
+        cookieUrls: <String>['https://example.com/'],
+      ),
+      createdAt: DateTime.utc(2026, 4, 7, 12, 0),
+      updatedAt: DateTime.utc(2026, 4, 7, 12, 1),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (BuildContext context) {
+            return Scaffold(
+              body: Center(
+                child: FilledButton(
+                  onPressed: () {
+                    unawaited(runner.run(context, challenge));
+                  },
+                  child: const Text('Open challenge'),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open challenge'));
+    await tester.pumpAndSettle();
+
+    expect(clearCookiesCalls, 1);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    expect(clearCookiesCalls, 2);
+  });
+
+  testWidgets(
+    'owned-browser page refreshes the embedded viewport while IME is visible',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(2560, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      var refreshCalls = 0;
+      final runner = WebViewOwnedBrowserChallengeRunner(
+        sessionFactory:
+            (
+              ValueChanged<String> onWebResourceError,
+              ValueChanged<Uri> onPageNavigation,
+            ) {
+              return OwnedBrowserWebSession(
+                viewBuilder: (BuildContext context) => const SizedBox.expand(
+                  child: ColoredBox(color: Colors.black),
+                ),
+                load: (Uri uri) async {},
+                clearCookies: () async {},
+                collectCookies: (List<String> urls) async =>
+                    const <BrowserCookieRecord>[],
+                refreshViewport: () async {
+                  refreshCalls += 1;
+                },
+              );
+            },
+      );
+      final challenge = ChallengeRecord(
+        id: 'challenge-1',
+        sessionId: 'session-1',
+        provider: 'vk',
+        stage: 'provider_resolve',
+        kind: 'captcha',
+        prompt: 'Continue inside the in-app browser.',
+        openUrl: 'https://vk.com/call/join/test',
+        status: ChallengeStatus.pending,
+        completionMode: ChallengeCompletionMode.ownedBrowserObserved,
+        ownedBrowser: const ChallengeOwnedBrowserMetadata(
+          cookieUrls: <String>['https://login.vk.ru/'],
+        ),
+        createdAt: DateTime.utc(2026, 4, 7, 12, 0),
+        updatedAt: DateTime.utc(2026, 4, 7, 12, 1),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (BuildContext context) {
+              return Scaffold(
+                body: Center(
+                  child: FilledButton(
+                    onPressed: () {
+                      unawaited(runner.run(context, challenge));
+                    },
+                    child: const Text('Open challenge'),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open challenge'));
+      await tester.pumpAndSettle();
+
+      expect(refreshCalls, 0);
+
+      tester.view.viewInsets = const FakeViewPadding(bottom: 700);
+      await tester.pump(const Duration(milliseconds: 350));
+
+      expect(refreshCalls, greaterThanOrEqualTo(3));
+      final callsWhileOpening = refreshCalls;
+
+      await tester.pump(const Duration(milliseconds: 800));
+
+      expect(refreshCalls, greaterThan(callsWhileOpening));
+
+      tester.view.viewInsets = FakeViewPadding.zero;
+      await tester.pump(const Duration(milliseconds: 350));
+
+      expect(refreshCalls, greaterThanOrEqualTo(6));
+      final callsAfterClosing = refreshCalls;
+
+      await tester.pump(const Duration(milliseconds: 800));
+
+      expect(refreshCalls, callsAfterClosing);
+    },
+  );
+
+  testWidgets(
+    'owned-browser page toggles Android soft input mode for the route lifetime',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(2560, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final softInputModeCalls = <String>[];
+      final runner = WebViewOwnedBrowserChallengeRunner(
+        sessionFactory:
+            (
+              ValueChanged<String> onWebResourceError,
+              ValueChanged<Uri> onPageNavigation,
+            ) {
+              return OwnedBrowserWebSession(
+                viewBuilder: (BuildContext context) => const SizedBox.expand(
+                  child: ColoredBox(color: Colors.black),
+                ),
+                load: (Uri uri) async {},
+                clearCookies: () async {},
+                collectCookies: (List<String> urls) async =>
+                    const <BrowserCookieRecord>[],
+              );
+            },
+        softInputModeController: _FakeMobileWindowSoftInputModeController(
+          onEnableOwnedBrowserMode: () {
+            softInputModeCalls.add('adjustNothing');
+          },
+          onRestoreDefaultMode: () {
+            softInputModeCalls.add('adjustResize');
+          },
+        ),
+      );
+      final challenge = ChallengeRecord(
+        id: 'challenge-1',
+        sessionId: 'session-1',
+        provider: 'vk',
+        stage: 'provider_resolve',
+        kind: 'captcha',
+        prompt: 'Continue inside the in-app browser.',
+        openUrl: 'https://vk.com/call/join/test',
+        status: ChallengeStatus.pending,
+        completionMode: ChallengeCompletionMode.ownedBrowserObserved,
+        ownedBrowser: const ChallengeOwnedBrowserMetadata(
+          cookieUrls: <String>['https://login.vk.ru/'],
+        ),
+        createdAt: DateTime.utc(2026, 4, 7, 12, 0),
+        updatedAt: DateTime.utc(2026, 4, 7, 12, 1),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (BuildContext context) {
+              return Scaffold(
+                body: Center(
+                  child: FilledButton(
+                    onPressed: () {
+                      unawaited(runner.run(context, challenge));
+                    },
+                    child: const Text('Open challenge'),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open challenge'));
+      await tester.pumpAndSettle();
+
+      expect(softInputModeCalls, contains('adjustNothing'));
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      expect(softInputModeCalls, contains('adjustResize'));
+    },
+  );
+
   testWidgets('mobile shell exposes reset action for blocked local state', (
     WidgetTester tester,
   ) async {
@@ -782,6 +1883,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Home'), findsWidgets);
+    expect(find.text('Routing'), findsWidgets);
     expect(find.text('Reset local state'), findsOneWidget);
     expect(
       find.textContaining('Secure profile secrets are unavailable'),
@@ -789,7 +1891,7 @@ void main() {
     );
 
     await _openSupportDiagnostics(tester);
-    expect(find.text('Mobile host blocked'), findsOneWidget);
+    expect(find.text('Mobile host ready'), findsOneWidget);
   });
 
   testWidgets(
@@ -1164,6 +2266,7 @@ void main() {
     await tester.pumpWidget(MobileShellApp(controller: controller));
     await tester.pumpAndSettle();
     await _openProfilesTab(tester);
+    await _openProviderWorkspaceFromProfiles(tester);
 
     await tester.scrollUntilVisible(
       find.byKey(const ValueKey<String>('preset-card-generic-turn-default')),
@@ -1176,7 +2279,7 @@ void main() {
       find.textContaining(
         'does not advertise the Generic TURN provider family yet',
       ),
-      findsOneWidget,
+      findsWidgets,
     );
   });
 
@@ -1215,6 +2318,7 @@ void main() {
     await tester.pumpWidget(MobileShellApp(controller: controller));
     await tester.pumpAndSettle();
     await _openProfilesTab(tester);
+    await _openProviderWorkspaceFromProfiles(tester);
 
     final workflowScrollable = _workflowScrollable();
     final wbPresetButton = find.byKey(
@@ -1257,6 +2361,7 @@ void main() {
       await tester.pumpWidget(MobileShellApp(controller: controller));
       await tester.pumpAndSettle();
       await _openProfilesTab(tester);
+      await _openProviderWorkspaceFromProfiles(tester);
 
       final workflowScrollable = _workflowScrollable();
       await tester.scrollUntilVisible(
@@ -1379,6 +2484,7 @@ void main() {
     await tester.pumpWidget(MobileShellApp(controller: controller));
     await tester.pumpAndSettle();
     await _openProfilesTab(tester);
+    await _openProviderWorkspaceFromProfiles(tester);
 
     expect(controller.workflowSurface, MobileWorkflowSurface.providerConfig);
     expect(
@@ -1435,6 +2541,7 @@ void main() {
       await tester.pumpWidget(MobileShellApp(controller: controller));
       await tester.pumpAndSettle();
       await _openProfilesTab(tester);
+      await _openProviderWorkspaceFromProfiles(tester);
 
       final providerWorkspaceScrollable = _managedProviderWorkspaceScrollable();
       await tester.scrollUntilVisible(
@@ -1521,6 +2628,7 @@ void main() {
       await tester.pumpWidget(MobileShellApp(controller: controller));
       await tester.pumpAndSettle();
       await _openProfilesTab(tester);
+      await _openProviderWorkspaceFromProfiles(tester);
 
       final applyButton = tester.widget<FilledButton>(
         find.byKey(const ValueKey<String>('managed-provider-apply-button')),
@@ -1597,6 +2705,7 @@ void main() {
       await tester.pumpWidget(MobileShellApp(controller: controller));
       await tester.pumpAndSettle();
       await _openProfilesTab(tester);
+      await _openProfileEditorFromProfiles(tester);
 
       final profileWorkspaceScrollable = _profileWorkspaceScrollable();
       await tester.scrollUntilVisible(
@@ -1635,6 +2744,25 @@ void main() {
 
 Future<void> _openProfilesTab(WidgetTester tester) async {
   await tester.tap(find.text('Profiles').first);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _openProfileEditorFromProfiles(
+  WidgetTester tester, {
+  String label = 'Add profile',
+}) async {
+  await tester.tap(find.text(label));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _openProfilesMenu(WidgetTester tester) async {
+  await tester.tap(find.byTooltip('Profiles actions'));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _openProviderWorkspaceFromProfiles(WidgetTester tester) async {
+  await _openProfilesMenu(tester);
+  await tester.tap(find.text('Manage providers').last);
   await tester.pumpAndSettle();
 }
 
@@ -1831,6 +2959,41 @@ class _FakeOwnedBrowserChallengeRunner implements OwnedBrowserChallengeRunner {
       throw error!;
     }
     return result;
+  }
+}
+
+class _FakeMobileSoftKeyboardHider implements MobileSoftKeyboardHider {
+  _FakeMobileSoftKeyboardHider({required this.onHide});
+
+  final VoidCallback onHide;
+
+  @override
+  Future<bool> hide() async {
+    onHide();
+    return true;
+  }
+}
+
+class _FakeMobileWindowSoftInputModeController
+    implements MobileWindowSoftInputModeController {
+  _FakeMobileWindowSoftInputModeController({
+    required this.onEnableOwnedBrowserMode,
+    required this.onRestoreDefaultMode,
+  });
+
+  final VoidCallback onEnableOwnedBrowserMode;
+  final VoidCallback onRestoreDefaultMode;
+
+  @override
+  Future<bool> enableOwnedBrowserMode() async {
+    onEnableOwnedBrowserMode();
+    return true;
+  }
+
+  @override
+  Future<bool> restoreDefaultMode() async {
+    onRestoreDefaultMode();
+    return true;
   }
 }
 

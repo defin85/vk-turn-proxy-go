@@ -6,6 +6,7 @@ It points to the smallest set of files needed to understand the repo, choose the
 ## Always read
 
 - `make codex-onboard`: fast repo-owned context refresh across agent docs and OpenSpec
+- `DEBUG.md`: verified launch/reload runbook for Flutter UI targets and other proven debug loops
 - `make codex-onboard-workflow`: same plus current git/Beads workflow state when the task needs mutable execution context
 - `docs/agent/runtime-surface.md`: concise runtime/operator surface and primary entrypoints
 - `docs/agent/architecture-map.md`: subsystem ownership and navigation map

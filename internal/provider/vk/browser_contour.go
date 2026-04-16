@@ -1,6 +1,7 @@
 package vk
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -124,8 +125,10 @@ func liveBrowserStageDescriptor(stage string) (stageDescriptor, bool) {
 }
 
 func (r *resolver) resolveAnonymousTokenFromBrowserContinuation(
+	ctx context.Context,
 	artifacts *artifactBuilder,
 	legacyDescriptor stageDescriptor,
+	joinToken string,
 	continuation *provider.BrowserContinuation,
 ) (anonymousTokenResolution, error) {
 	if continuation == nil {
@@ -145,6 +148,7 @@ func (r *resolver) resolveAnonymousTokenFromBrowserContinuation(
 	if len(liveResults) > 0 && hasLivePreviewOrPostPreviewResults(liveResults) {
 		return r.resolveLiveBrowserPreviewContour(artifacts, liveResults)
 	}
+	browserAccessToken, hasBrowserAccessToken := browserObservedAccessToken(liveResults)
 	if len(liveResults) > 0 && ok && stageResult != nil {
 		if err := appendLivePrePreviewArtifacts(artifacts, liveResults); err != nil {
 			return anonymousTokenResolution{}, err
@@ -152,6 +156,16 @@ func (r *resolver) resolveAnonymousTokenFromBrowserContinuation(
 	}
 
 	if !ok || stageResult == nil {
+		if hasBrowserAccessToken {
+			return r.resolveAnonymousTokenWithBrowserAccessToken(
+				ctx,
+				artifacts,
+				legacyDescriptor,
+				joinToken,
+				browserAccessToken,
+				continuation.Cookies,
+			)
+		}
 		if len(liveResults) > 0 {
 			return r.resolveLiveBrowserPreviewContour(artifacts, liveResults)
 		}
@@ -163,6 +177,29 @@ func (r *resolver) resolveAnonymousTokenFromBrowserContinuation(
 				err:   errors.New("browser-observed continuation result is required"),
 			},
 			ProbeArtifact: artifacts.artifact,
+		}
+	}
+
+	if hasBrowserAccessToken {
+		if _, challengeAgain := parseCaptchaChallenge(stageResult.Body); challengeAgain {
+			return r.resolveAnonymousTokenWithBrowserAccessToken(
+				ctx,
+				artifacts,
+				legacyDescriptor,
+				joinToken,
+				browserAccessToken,
+				continuation.Cookies,
+			)
+		}
+		if _, err := parseAnonymousToken(stageResult.Body); err != nil {
+			return r.resolveAnonymousTokenWithBrowserAccessToken(
+				ctx,
+				artifacts,
+				legacyDescriptor,
+				joinToken,
+				browserAccessToken,
+				continuation.Cookies,
+			)
 		}
 	}
 
@@ -409,4 +446,19 @@ func appendLivePrePreviewArtifacts(artifacts *artifactBuilder, results []provide
 	}
 
 	return nil
+}
+
+func browserObservedAccessToken(results []provider.BrowserStageResult) (string, bool) {
+	for i := len(results) - 1; i >= 0; i-- {
+		if results[i].Stage != stageBrowserLoginAnonymTokenMessages {
+			continue
+		}
+		accessToken, err := parseAccessToken(results[i].Body)
+		if err != nil {
+			continue
+		}
+		return accessToken, true
+	}
+
+	return "", false
 }

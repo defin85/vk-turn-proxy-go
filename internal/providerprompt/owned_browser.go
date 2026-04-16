@@ -71,6 +71,9 @@ func executeStageRequestWithCookies(
 		return provider.BrowserStageResult{}, fmt.Errorf("build browser stage request: %w", err)
 	}
 	httpRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if trimmedUserAgent := strings.TrimSpace(request.UserAgent); trimmedUserAgent != "" {
+		httpRequest.Header.Set("User-Agent", trimmedUserAgent)
+	}
 	for _, cookie := range cookiesForURL(parsedURL, cookies) {
 		httpRequest.AddCookie(cookie)
 	}

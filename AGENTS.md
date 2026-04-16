@@ -21,6 +21,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 ## First pass
 - Start with `docs/agent/index.md` for the repo map and task routing.
+- Read `DEBUG.md` when the task needs a verified UI launch/reload runbook.
 - Run `make codex-onboard` when you need a fast repo-context refresh across agent docs and OpenSpec.
 - Run `make codex-onboard-workflow` when you specifically need current git/Beads workflow context.
 - Use `docs/agent/runtime-surface.md` for the concise runtime/operator surface.
@@ -76,13 +77,19 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - Use that alias for repo-related remote checks when the user asks to inspect or run something on the VPS.
 - `egor-vps` remains as a compatibility alias, but `vk-turn-proxy-go` is the canonical name.
 - Keep remote actions non-destructive unless the user explicitly requests otherwise.
-- Direct Android device testing is available when a phone is connected over USB with debugging enabled and authorized.
-- Prefer the Windows Android SDK `adb.exe` at `C:\Users\Egor\AppData\Local\Android\Sdk\platform-tools\adb.exe` (WSL path `/mnt/c/Users/Egor/AppData/Local/Android/Sdk/platform-tools/adb.exe`) for physical-device install/logcat/intent checks.
+- Direct Android device testing is available when a phone or tablet is reachable over USB or ADB-over-Wi-Fi with debugging enabled and authorized.
+- The primary Flutter UI workflow is Dart MCP-first. Stay inside Dart MCP launch/DTD/hot-reload tooling unless the user explicitly agrees to switch to `adb`-driven install/logcat/forward/input work in the current thread.
+- When that explicit agreement exists, prefer the Linux `adb` on `PATH` or under `~/.local/share/android-sdk/platform-tools/adb` for physical-device install/logcat/forward/intent checks so pairing, forwarded ports, local HTTP probes, and APK paths stay inside one environment.
+- Use the Windows Android SDK `adb.exe` at `C:\Users\Egor\AppData\Local\Android\Sdk\platform-tools\adb.exe` (WSL path `/mnt/c/Users/Egor/AppData/Local/Android/Sdk/platform-tools/adb.exe`) only when the agreed task specifically depends on Windows-side tooling, the Windows mirror workflow, or a Windows-only pairing state that has not been re-established in WSL yet.
 - The Windows Android SDK root is `C:\Users\Egor\AppData\Local\Android\Sdk`, the Windows Flutter SDK used by the repo-owned mirror builds is `C:\flutter`, and the Windows mirror root is `E:\Projects\vk-turn-proxy-go`.
 - For the fastest desktop Flutter UI debug loop, prefer WSLg with the Linux target over the Windows mirror workflow.
-- The primary desktop UI path is: start `cmd/clientd` inside WSL on `127.0.0.1:7777`, run `dart pub get` from the repo root, then run `cd desktop/gui_shell && flutter run --machine -d linux`.
-- Prefer a hybrid desktop UI workflow: use direct WSLg launch for the running app, then connect Dart MCP tools to the `app.dtd` URI from Flutter machine output for `hot_reload`, widget-tree inspection, runtime errors, and driver actions.
+- The primary Flutter UI workflow is Dart MCP-first. Use `mcp__dart__.launch_app` with a plain filesystem `root` path, not a `file://...` URI.
+- The verified desktop MCP launch path is: start `go run ./cmd/clientd -listen 127.0.0.1:7777`, then `mcp__dart__.launch_app(device="linux", root="/home/egor/code/vk-turn-proxy-go/desktop/gui_shell")`.
+- In a fresh desktop-dedicated Codex session, connect to the returned DTD URI and use Dart MCP `hot_reload` and inspection tools.
+- The verified mobile MCP path is: `mcp__dart__.launch_app(device="<adb-serial>", root="/home/egor/code/vk-turn-proxy-go/mobile/gui_shell")`, then connect to the returned DTD URI and use Dart MCP `hot_reload` and inspection tools.
+- For Android WebView or IME regressions inside the mobile shell, a repo-owned MCP harness exists at `mobile/gui_shell/test_driver/owned_browser_harness_main.dart`.
+- That harness is an explicit debug mode, not the default app entrypoint. Keep its live diagnostics disabled by default and only flip the local toggle on when the current task needs native/DOM visibility for owned-browser investigation.
+- Dart MCP currently keeps one active DTD connection per Codex session. Work on one UI target per session; start a fresh Codex session before switching between desktop and mobile.
 - For screenshot or Flutter Driver automation on Linux desktop, launch `desktop/gui_shell` with `flutter run --machine -d linux -t test_driver/driver_main.dart`, but keep `enableTextEntryEmulation` disabled in that entrypoint so real keyboard input on the live WSLg window keeps working.
 - If an automation step truly needs `FlutterDriver.enterText`, enable text-entry emulation only for that session and turn it back off afterwards; do not bake emulated text entry into the app entrypoint.
-- Do not rely on Dart MCP `launch_app` as the primary desktop Linux launcher unless it has been re-verified in the current environment; it may miss the WSLg display setup and fail with `cannot open display`.
 - Use the Windows mirror and `flutter run -d windows` only when the task specifically needs Windows-native behavior, packaging, or sidecar-placement validation.

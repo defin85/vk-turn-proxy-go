@@ -25,12 +25,16 @@ coverage.out
 
 # Local operator/runtime artifacts and captures.
 /artifacts/device/
+/artifacts/device-ime-debug/
+/artifacts/device-screens/
+/artifacts/device-ui/
 /artifacts/generic-turn/
 /artifacts/live-vk-*/
 /artifacts/phone-vk-resolve/
 /artifacts/vk/
 /artifacts/wg-live-vk/
 /vk-browser-shot.png
+/build/
 
 # Local Python helper cache.
 /scripts/__pycache__/

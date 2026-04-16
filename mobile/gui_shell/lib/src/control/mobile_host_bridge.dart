@@ -121,6 +121,27 @@ abstract class MobilePlatformTunnelPermissionRequester {
   Future<bool> requestPermission({required PlatformTunnelMode mode});
 }
 
+abstract class MobileSoftKeyboardHider {
+  Future<bool> hide();
+}
+
+abstract class MobileWindowSoftInputModeController {
+  Future<bool> enableOwnedBrowserMode();
+  Future<bool> restoreDefaultMode();
+}
+
+abstract class MobileWebViewDebugInspector {
+  Future<Map<String, Object?>> snapshot({required int webViewIdentifier});
+}
+
+abstract class MobileWebViewDocumentStartScriptInstaller {
+  Future<bool> install({
+    required int webViewIdentifier,
+    required String javaScript,
+    required List<String> allowedOriginRules,
+  });
+}
+
 class PlatformMobileHostConfigResolver implements MobileHostConfigResolver {
   PlatformMobileHostConfigResolver({MethodChannel? methodChannel})
     : _methodChannel = methodChannel ?? const MethodChannel(_bridgeChannelName);
@@ -205,6 +226,133 @@ class PlatformMobilePlatformTunnelPermissionRequester
       throw MobileHostPlatformActionError(
         'Failed to request native platform tunnel permission: $error',
       );
+    }
+  }
+}
+
+class PlatformMobileSoftKeyboardHider implements MobileSoftKeyboardHider {
+  const PlatformMobileSoftKeyboardHider({MethodChannel? methodChannel})
+    : _methodChannel = methodChannel ?? const MethodChannel(_bridgeChannelName);
+
+  final MethodChannel _methodChannel;
+
+  @override
+  Future<bool> hide() async {
+    try {
+      await _methodChannel.invokeMethod<void>('hideSoftKeyboard');
+      return true;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+}
+
+class PlatformMobileWindowSoftInputModeController
+    implements MobileWindowSoftInputModeController {
+  const PlatformMobileWindowSoftInputModeController({
+    MethodChannel? methodChannel,
+  }) : _methodChannel =
+           methodChannel ?? const MethodChannel(_bridgeChannelName);
+
+  final MethodChannel _methodChannel;
+
+  @override
+  Future<bool> enableOwnedBrowserMode() => _setMode('adjustNothing');
+
+  @override
+  Future<bool> restoreDefaultMode() => _setMode('adjustResize');
+
+  Future<bool> _setMode(String mode) async {
+    try {
+      await _methodChannel.invokeMethod<void>(
+        'setSoftInputMode',
+        <String, dynamic>{'mode': mode},
+      );
+      return true;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+}
+
+class PlatformMobileWebViewDebugInspector implements MobileWebViewDebugInspector {
+  const PlatformMobileWebViewDebugInspector({MethodChannel? methodChannel})
+    : _methodChannel =
+          methodChannel ?? const MethodChannel(_bridgeChannelName);
+
+  final MethodChannel _methodChannel;
+
+  @override
+  Future<Map<String, Object?>> snapshot({
+    required int webViewIdentifier,
+  }) async {
+    try {
+      final payload = await _methodChannel.invokeMapMethod<String, Object?>(
+        'debugInspectWebView',
+        <String, Object?>{'webViewIdentifier': webViewIdentifier},
+      );
+      if (payload == null) {
+        return <String, Object?>{
+          'error': 'Native mobile host bridge returned no WebView snapshot.',
+        };
+      }
+      return payload;
+    } on MissingPluginException {
+      return <String, Object?>{
+        'error': 'Native mobile host bridge plugin is unavailable.',
+      };
+    } on PlatformException catch (error) {
+      return <String, Object?>{
+        'error':
+            'Failed to inspect native WebView: ${error.message ?? error.code}',
+      };
+    } catch (error) {
+      return <String, Object?>{
+        'error': 'Failed to inspect native WebView: $error',
+      };
+    }
+  }
+}
+
+class PlatformMobileWebViewDocumentStartScriptInstaller
+    implements MobileWebViewDocumentStartScriptInstaller {
+  const PlatformMobileWebViewDocumentStartScriptInstaller({
+    MethodChannel? methodChannel,
+  }) : _methodChannel =
+           methodChannel ?? const MethodChannel(_bridgeChannelName);
+
+  final MethodChannel _methodChannel;
+
+  @override
+  Future<bool> install({
+    required int webViewIdentifier,
+    required String javaScript,
+    required List<String> allowedOriginRules,
+  }) async {
+    try {
+      await _methodChannel.invokeMethod<void>(
+        'installDocumentStartJavaScript',
+        <String, Object?>{
+          'webViewIdentifier': webViewIdentifier,
+          'javaScript': javaScript,
+          'allowedOriginRules': allowedOriginRules,
+        },
+      );
+      return true;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    } catch (_) {
+      return false;
     }
   }
 }

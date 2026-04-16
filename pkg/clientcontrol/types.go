@@ -318,8 +318,17 @@ type BrowserCookie struct {
 	HTTPOnly bool      `json:"http_only,omitempty"`
 }
 
+type ObservedBrowserRequest struct {
+	Method     string            `json:"method,omitempty"`
+	URL        string            `json:"url,omitempty"`
+	FormValues map[string]string `json:"form_values,omitempty"`
+	StatusCode int               `json:"status_code,omitempty"`
+	Body       map[string]any    `json:"body,omitempty"`
+}
+
 type ChallengeContinuation struct {
-	Cookies []BrowserCookie `json:"cookies,omitempty"`
+	Cookies          []BrowserCookie          `json:"cookies,omitempty"`
+	ObservedRequests []ObservedBrowserRequest `json:"observed_requests,omitempty"`
 }
 
 type Event struct {

@@ -697,11 +697,7 @@ class _CompactReadyShellBarSummary extends StatelessWidget {
     if (stacked) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          summary,
-          const SizedBox(height: 10),
-          actions,
-        ],
+        children: <Widget>[summary, const SizedBox(height: 10), actions],
       );
     }
 
@@ -957,12 +953,16 @@ class _WorkflowQuickActions extends StatelessWidget {
     final actions = profileWorkflow
         ? <Widget>[
             FilledButton.tonal(
-              key: const ValueKey<String>('desktop-open-profile-library-button'),
+              key: const ValueKey<String>(
+                'desktop-open-profile-library-button',
+              ),
               onPressed: onOpenSavedProfiles,
               child: Text(dense ? 'Profiles' : 'Saved profiles'),
             ),
             OutlinedButton(
-              key: const ValueKey<String>('desktop-create-profile-draft-button'),
+              key: const ValueKey<String>(
+                'desktop-create-profile-draft-button',
+              ),
               onPressed: controller.busy ? null : controller.resetDraft,
               child: const Text('New draft'),
             ),
@@ -978,7 +978,9 @@ class _WorkflowQuickActions extends StatelessWidget {
           ]
         : <Widget>[
             FilledButton.tonal(
-              key: const ValueKey<String>('desktop-open-preset-bootstrap-button'),
+              key: const ValueKey<String>(
+                'desktop-open-preset-bootstrap-button',
+              ),
               onPressed: onOpenPresetBootstrap,
               child: Text(dense ? 'Presets' : 'Use preset'),
             ),

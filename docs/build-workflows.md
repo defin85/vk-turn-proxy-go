@@ -26,6 +26,32 @@ dart pub workspace list
 The authoritative resolution artifacts are the root `pubspec.lock` and root `.dart_tool/package_config.json`.
 Do not rely on `flutter pub get` inside individual shell app directories as the primary workflow.
 
+## Flutter UI development via Dart MCP
+
+For day-to-day UI development, prefer Dart MCP over ad-hoc `flutter run` terminals.
+
+Rules:
+- `mcp__dart__.launch_app.root` must be a plain filesystem path such as `/home/egor/code/vk-turn-proxy-go/mobile/gui_shell`.
+- Do not pass `file://...` URIs to `launch_app.root`.
+- One Codex session currently supports one active Dart Tooling Daemon connection at a time.
+- Use a fresh Codex session before switching the Dart MCP connection between desktop and mobile targets.
+- Do not switch to `adb`-driven install/logcat/forward/input work unless the user explicitly agrees to that fallback in the current thread.
+
+Verified mobile loop:
+1. `dart pub get`
+2. `mcp__dart__.launch_app(device="<adb-serial>", root="/home/egor/code/vk-turn-proxy-go/mobile/gui_shell")`
+3. `mcp__dart__.connect_dart_tooling_daemon(uri="<returned dtd uri>")`
+4. `mcp__dart__.hot_reload`
+
+Verified desktop Linux launch path:
+1. `dart pub get`
+2. `go run ./cmd/clientd -listen 127.0.0.1:7777`
+3. `mcp__dart__.launch_app(device="linux", root="/home/egor/code/vk-turn-proxy-go/desktop/gui_shell")`
+4. In a fresh Codex session dedicated to the desktop target, `mcp__dart__.connect_dart_tooling_daemon(uri="<returned dtd uri>")`
+5. Use `mcp__dart__.hot_reload` from that desktop-dedicated session
+
+The authoritative verified notes for this workflow live in `DEBUG.md`.
+
 ## Go artifacts from WSL
 
 Build the default Go matrix from the canonical WSL checkout:
@@ -120,10 +146,10 @@ flutter analyze
 flutter test
 ```
 
-For the primary Android debug loop on WSL, keep a Linux Android SDK/NDK inside
-WSL and target a physical device through Linux `adb` rather than depending on a
-Windows-hosted emulator. The current repo-owned setup expects that SDK root at
-`~/.local/share/android-sdk`.
+When the user has explicitly agreed to an `adb` fallback for physical-device
+work, keep a Linux Android SDK/NDK inside WSL and target the device through
+Linux `adb` rather than depending on a Windows-hosted emulator. The current
+repo-owned setup expects that SDK root at `~/.local/share/android-sdk`.
 
 For development against an HTTP bridge:
 
@@ -198,8 +224,10 @@ TURN_LINK='generic-turn://...' make smoke-android-vpn-service
 Optional environment and args:
 
 - `ANDROID_SERIAL=<adb-serial>` when more than one device is connected
+- after explicit user agreement to use `adb`, the repo-owned helpers default to Linux `adb` from `PATH` or
+  `~/.local/share/android-sdk/platform-tools/adb` inside WSL
 - `ADB=/mnt/c/Users/Egor/AppData/Local/Android/Sdk/platform-tools/adb.exe` to
-  override the adb binary
+  force the Windows adb binary for Windows-specific workflows
 - `python3 ./scripts/smoke-android-vpn-service.py --policy allowed_packages --allowed-package com.google.android.youtube`
   to verify the typed per-app path instead of `all_apps`
 

@@ -27,8 +27,11 @@ This workflow does not claim:
 - the packaged Android app installed from `dist/mobile/android-gui-shell/`
 - the official `WireGuard` Android app installed on the phone
 - USB debugging enabled on the phone
-- Windows `adb.exe` available at
-  `C:\Users\Egor\AppData\Local\Android\Sdk\platform-tools\adb.exe`
+- explicit user agreement to leave the Dart MCP-first UI loop and use `adb`
+- Linux `adb` available inside WSL on `PATH` or at
+  `~/.local/share/android-sdk/platform-tools/adb`
+- Windows `adb.exe` remains an acceptable fallback only for Windows-specific
+  workflows or when the device has not yet been paired into the WSL adb server
 - a real `generic-turn://...` link
 - the VPS `wg-quick@wgvktp0.service` and `vk-turn-tunnel-wg.service` already
   running
@@ -85,8 +88,8 @@ Use that exact value as `TURN_LINK` for the phone session.
 
 ## Repo-owned phone helper
 
-Use the repo-owned helper script to talk to the packaged embedded host over
-`adb`:
+After the user has explicitly agreed to an `adb` fallback, use the repo-owned
+helper script to talk to the packaged embedded host over the WSL-visible `adb`:
 
 ```bash
 python3 ./scripts/android-phone-session.py check
@@ -133,10 +136,8 @@ TURN_LINK='generic-turn://...' \
 7. Confirm the phone has public reachability:
 
 ```bash
-'/mnt/c/Users/Egor/AppData/Local/Android/Sdk/platform-tools/adb.exe' \
-  shell ping -c 3 -W 2 10.231.1.1
-'/mnt/c/Users/Egor/AppData/Local/Android/Sdk/platform-tools/adb.exe' \
-  shell ping -c 3 -W 2 1.1.1.1
+adb shell ping -c 3 -W 2 10.231.1.1
+adb shell ping -c 3 -W 2 1.1.1.1
 ```
 
 8. Open any public IP check page in the phone browser.

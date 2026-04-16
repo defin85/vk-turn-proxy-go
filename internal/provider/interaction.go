@@ -95,10 +95,11 @@ type BrowserStageObservation struct {
 }
 
 type BrowserStageRequest struct {
-	Stage  string
-	Method string
-	URL    string
-	Form   map[string]string
+	Stage     string
+	Method    string
+	URL       string
+	Form      map[string]string
+	UserAgent string
 }
 
 type BrowserStageResult struct {

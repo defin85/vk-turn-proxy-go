@@ -252,16 +252,7 @@ class MobileShellController extends ChangeNotifier {
     _startBrowserReturnSignals();
     await _restorePersistedState();
     if (_requiresLocalStateReset) {
-      hostConnection = MobileHostConnectionResult(
-        state: MobileHostLifecycleState.failed,
-        message:
-            _blockedLocalStateMessage ??
-            'Local mobile shell state must be reset before runtime control can continue.',
-        description: 'local mobile shell state',
-      );
-      status = ShellStatus.blocked;
-      busy = false;
-      _notify();
+      await _connectBridge(localStateBlocked: true);
       return;
     }
     await _connectBridge();
@@ -295,7 +286,7 @@ class MobileShellController extends ChangeNotifier {
     }
     try {
       final nextProviders = await bridge.providers();
-      final nextResolutions = await bridge.resolutions();
+      final nextResolutions = _orderedResolutions(await bridge.resolutions());
       final nextSessions = _orderedSessions(await bridge.sessions());
       final nextChallenges = await _loadActiveChallenges(
         nextSessions,
@@ -465,6 +456,7 @@ class MobileShellController extends ChangeNotifier {
   void updateDraft(ProfileDraft nextDraft) {
     workflowSurface = MobileWorkflowSurface.profile;
     draft = _normalizeDraft(nextDraft);
+    notice = null;
     _clearSelectedResolutionSelection();
     _scheduleStatePersist();
     notifyListeners();
@@ -718,6 +710,11 @@ class MobileShellController extends ChangeNotifier {
   }
 
   Future<void> saveDraft() async {
+    if (_requiresLocalStateReset) {
+      notice = _localStateResetBlockMessage();
+      _notify();
+      return;
+    }
     busy = true;
     _notify();
     try {
@@ -793,6 +790,11 @@ class MobileShellController extends ChangeNotifier {
   Future<void> deleteSelectedProfile() async {
     final profileId = selectedProfileId;
     if (profileId == null) {
+      return;
+    }
+    if (_requiresLocalStateReset) {
+      notice = _localStateResetBlockMessage();
+      _notify();
       return;
     }
     busy = true;
@@ -1043,6 +1045,16 @@ class MobileShellController extends ChangeNotifier {
         notice = _executionPlanSelectionRequiredMessage(mode);
         return;
       }
+      final runtimeDefaults = RuntimeDefaults.fromProfileSpec(draft.spec);
+      final runtimeDefaultsError = _platformTunnelRuntimeDefaultsBlockReason(
+        mode: mode,
+        executionPlan: executionPlan,
+        runtimeDefaults: runtimeDefaults,
+      );
+      if (runtimeDefaultsError != null) {
+        notice = runtimeDefaultsError;
+        return;
+      }
       final modePreferences = modePreferencesFor(mode);
       final routingError = _routingSelectionBlockReason(mode, modePreferences);
       if (routingError != null) {
@@ -1056,7 +1068,7 @@ class MobileShellController extends ChangeNotifier {
       var result = await bridge.startPlatformTunnel(
         mode: mode,
         resolutionId: resolutionId,
-        runtimeDefaults: RuntimeDefaults.fromProfileSpec(draft.spec),
+        runtimeDefaults: runtimeDefaults,
         executionPlan: executionPlan,
         applicationRoutingPolicy: _effectiveRoutingPolicyForMode(
           mode,
@@ -1298,7 +1310,7 @@ class MobileShellController extends ChangeNotifier {
     }, onError: (Object error, StackTrace stackTrace) {});
   }
 
-  Future<void> _connectBridge() async {
+  Future<void> _connectBridge({bool localStateBlocked = false}) async {
     busy = true;
     status = ShellStatus.booting;
     _notify();
@@ -1313,6 +1325,31 @@ class MobileShellController extends ChangeNotifier {
     }
 
     _clearPlatformTunnelResults();
+
+    if (localStateBlocked) {
+      if (hostConnection?.isReady == true) {
+        try {
+          await refresh();
+        } catch (error) {
+          await _handleBridgeFailure(error);
+          return;
+        }
+      } else {
+        await _stopRuntimeMonitoring();
+        _challengeCache.clear();
+        resolutions = const <ResolutionRecord>[];
+        sessions = const <SessionRecord>[];
+        selectedResolutionId = null;
+        selectedSessionId = null;
+        installedAppsError = null;
+      }
+      busy = false;
+      status = ShellStatus.blocked;
+      notice = _blockedLocalStateMessage ?? _localStateResetBlockMessage();
+      _notify();
+      return;
+    }
+
     _normalizeSelectedPlatformTunnelMode();
 
     if (hostConnection?.isReady != true) {
@@ -1474,16 +1511,26 @@ class MobileShellController extends ChangeNotifier {
     if (nextResolutions.isEmpty) {
       return null;
     }
+    final preferredLive = _firstPreferredResolution(nextResolutions);
+    final preferred = preferredLive?.id ?? nextResolutions.first.id;
     final currentID = selectedResolutionId?.trim() ?? '';
     if (currentID.isEmpty) {
-      return nextResolutions.first.id;
+      return preferred;
     }
+    ResolutionRecord? current;
     for (final resolution in nextResolutions) {
       if (resolution.id == currentID) {
-        return resolution.id;
+        current = resolution;
+        break;
       }
     }
-    return nextResolutions.first.id;
+    if (current == null) {
+      return preferred;
+    }
+    if (current.isTerminal && preferredLive != null) {
+      return preferredLive.id;
+    }
+    return current.id;
   }
 
   SessionRecord? _firstActiveSession(List<SessionRecord> nextSessions) {
@@ -1498,6 +1545,35 @@ class MobileShellController extends ChangeNotifier {
   bool _isTerminalSession(SessionRecord session) {
     return session.state == SessionState.stopped ||
         session.state == SessionState.failed;
+  }
+
+  List<ResolutionRecord> _orderedResolutions(
+    List<ResolutionRecord> nextResolutions,
+  ) {
+    final ordered = nextResolutions.toList(growable: true);
+    ordered.sort((ResolutionRecord left, ResolutionRecord right) {
+      final updatedAt = right.updatedAt.compareTo(left.updatedAt);
+      if (updatedAt != 0) {
+        return updatedAt;
+      }
+      final startedAt = right.startedAt.compareTo(left.startedAt);
+      if (startedAt != 0) {
+        return startedAt;
+      }
+      return left.id.compareTo(right.id);
+    });
+    return ordered;
+  }
+
+  ResolutionRecord? _firstPreferredResolution(
+    List<ResolutionRecord> nextResolutions,
+  ) {
+    for (final resolution in nextResolutions) {
+      if (!resolution.isTerminal) {
+        return resolution;
+      }
+    }
+    return null;
   }
 
   Future<void> _rehydrateProfiles() async {
@@ -1651,11 +1727,19 @@ class MobileShellController extends ChangeNotifier {
     BrowserReturnSignalKind? signalKind,
     ChallengeContinuationSubmission? browserContinuation,
   }) async {
+    final cachedChallenge = _challengeCache[challengeId];
+    final fallbackResolutionId = cachedChallenge?.resolutionId?.trim() ?? '';
     _browserHandoffChallengeId = null;
     final challenge = await bridge.continueChallenge(
       challengeId,
       browserContinuation: browserContinuation,
     );
+    final resolutionId = challenge.resolutionId?.trim().isNotEmpty == true
+        ? challenge.resolutionId!.trim()
+        : fallbackResolutionId;
+    if (resolutionId.isNotEmpty) {
+      selectedResolutionId = resolutionId;
+    }
     _challengeCache[challenge.id] = challenge;
     notice = automatic
         ? 'Detected ${_browserReturnSignalLabel(signalKind)} and continued challenge $challengeId.'
@@ -1670,6 +1754,11 @@ class MobileShellController extends ChangeNotifier {
           ChallengeCompletionMode.ownedBrowserObserved &&
       challenge.ownedBrowser != null &&
       challenge.ownedBrowser!.cookieUrls.isNotEmpty;
+
+  String _localStateResetBlockMessage() {
+    return _blockedLocalStateMessage ??
+        'Reset local mobile shell state before runtime control can continue.';
+  }
 
   String _browserReturnSignalLabel(BrowserReturnSignalKind? signalKind) {
     return switch (signalKind) {
@@ -1689,6 +1778,11 @@ class MobileShellController extends ChangeNotifier {
   }
 
   Future<void> _runBridgeMutation(Future<void> Function() action) async {
+    if (_requiresLocalStateReset) {
+      notice = _localStateResetBlockMessage();
+      _notify();
+      return;
+    }
     if (hostConnection?.isReady != true) {
       notice = hostConnection?.message ?? 'Mobile host bridge is not ready.';
       _notify();
@@ -1777,6 +1871,9 @@ class MobileShellController extends ChangeNotifier {
   }
 
   void _scheduleStatePersist() {
+    if (_requiresLocalStateReset) {
+      return;
+    }
     _persistTimer?.cancel();
     _persistTimer = Timer(const Duration(milliseconds: 150), () {
       unawaited(_persistState());
@@ -1784,6 +1881,9 @@ class MobileShellController extends ChangeNotifier {
   }
 
   Future<void> _persistState() async {
+    if (_requiresLocalStateReset) {
+      return;
+    }
     final next = MobileShellState(
       profiles: profiles,
       managedProviders: managedProviders,
@@ -2142,6 +2242,63 @@ class MobileShellController extends ChangeNotifier {
 
   RuntimeExecutionPlan? _resolvedExecutionPlanForMode(PlatformTunnelMode mode) {
     return modePreferencesFor(mode).executionPlan;
+  }
+
+  String? _platformTunnelRuntimeDefaultsBlockReason({
+    required PlatformTunnelMode mode,
+    required RuntimeExecutionPlan executionPlan,
+    required RuntimeDefaults runtimeDefaults,
+  }) {
+    if (!_requiresRemoteWireGuardPeerEndpoint(mode, executionPlan)) {
+      return null;
+    }
+    final peerAddress = runtimeDefaults.peerAddress.trim();
+    if (!_isLoopbackEndpoint(peerAddress)) {
+      return null;
+    }
+    return '${mode.label} still points to loopback peer $peerAddress. Configure an operator-managed remote peer endpoint before starting the mobile VPN path.';
+  }
+
+  bool _requiresRemoteWireGuardPeerEndpoint(
+    PlatformTunnelMode mode,
+    RuntimeExecutionPlan executionPlan,
+  ) {
+    return mode == PlatformTunnelMode.androidVpnService &&
+        executionPlan.accessMethod == RuntimeAccessMethod.turnCredentials &&
+        executionPlan.carrierFamily == RuntimeCarrierFamily.turnDatagram &&
+        executionPlan.engineFamily == RuntimeEngineFamily.wireguardNative &&
+        executionPlan.hostAdapter == RuntimeHostAdapter.androidVpnService;
+  }
+
+  bool _isLoopbackEndpoint(String endpoint) {
+    final host = _endpointHost(endpoint);
+    if (host == null) {
+      return false;
+    }
+    if (host.toLowerCase() == 'localhost') {
+      return true;
+    }
+    final address = InternetAddress.tryParse(host);
+    return address?.isLoopback ?? false;
+  }
+
+  String? _endpointHost(String endpoint) {
+    final trimmed = endpoint.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+    if (trimmed.startsWith('[')) {
+      final closingBracket = trimmed.indexOf(']');
+      if (closingBracket <= 1) {
+        return null;
+      }
+      return trimmed.substring(1, closingBracket);
+    }
+    final separator = trimmed.lastIndexOf(':');
+    if (separator <= 0) {
+      return trimmed;
+    }
+    return trimmed.substring(0, separator);
   }
 
   PlatformTunnelApplicationRoutingPolicy _effectiveRoutingPolicyForMode(

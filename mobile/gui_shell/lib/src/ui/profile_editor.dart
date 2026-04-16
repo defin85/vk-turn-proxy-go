@@ -25,6 +25,8 @@ class ProfileEditorPanel extends StatefulWidget {
     VoidCallback? onUseCustomProvider,
     List<ProviderConfigRecord>? availableProviderConfigs,
     ValueChanged<String>? onApplyProviderConfig,
+    this.showTitleBar = true,
+    this.showSavedProfilesSection = true,
   }) : managedProviders =
            managedProviders ??
            (availableProviderConfigs ?? const <ProviderConfigRecord>[])
@@ -48,6 +50,8 @@ class ProfileEditorPanel extends StatefulWidget {
   final void Function({String? managedProviderId})
   onActivateManagedProviderMode;
   final VoidCallback onUseCustomProvider;
+  final bool showTitleBar;
+  final bool showSavedProfilesSection;
   final Future<void> Function() onSave;
   final Future<void> Function() onDelete;
   final VoidCallback onReset;
@@ -146,26 +150,31 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: Text(
-                    'Profiles',
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
+            if (widget.showTitleBar) ...<Widget>[
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      'Profiles',
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
-                ),
-                FilledButton.tonal(
-                  onPressed: widget.busy ? null : widget.onReset,
-                  child: const Text('New'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _savedProfilesSection(theme),
-            const SizedBox(height: 16),
+                  FilledButton.tonal(
+                    onPressed: widget.busy ? null : widget.onReset,
+                    child: const Text('New'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+            ],
+            if (widget.showSavedProfilesSection) ...<Widget>[
+              _savedProfilesSection(theme),
+              const SizedBox(height: 16),
+            ],
             _field(
+              fieldKey: const ValueKey<String>('profile-editor-name-field'),
               controller: _nameController,
               label: 'Profile name',
               onChanged: (String value) => _pushDraft(name: value),
@@ -173,6 +182,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
             _providerModeCard(theme, managedMode),
             _providerField(),
             _field(
+              fieldKey: const ValueKey<String>('profile-editor-link-field'),
               controller: _linkController,
               label: _providerLinkLabel(descriptor),
               maxLines: 3,
@@ -214,6 +224,9 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
             ),
             const SizedBox(height: 16),
             _actionButton(
+              buttonKey: const ValueKey<String>(
+                'profile-editor-primary-action',
+              ),
               label: primaryLabel,
               onPressed: widget.busy
                   ? null
@@ -221,6 +234,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
             ),
             const SizedBox(height: 12),
             _actionButton(
+              buttonKey: const ValueKey<String>('profile-editor-save-action'),
               label: 'Save profile',
               variant: _ProfileEditorActionVariant.secondary,
               onPressed: widget.busy ? null : () => unawaited(widget.onSave()),
@@ -228,6 +242,9 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
             if (hasSavedProfile) ...<Widget>[
               const SizedBox(height: 12),
               _actionButton(
+                buttonKey: const ValueKey<String>(
+                  'profile-editor-resolve-action',
+                ),
                 label: 'Resolve invite',
                 variant: _ProfileEditorActionVariant.outlined,
                 onPressed: widget.busy
@@ -236,6 +253,9 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
               ),
               const SizedBox(height: 12),
               _actionButton(
+                buttonKey: const ValueKey<String>(
+                  'profile-editor-delete-action',
+                ),
                 label: 'Delete profile',
                 variant: _ProfileEditorActionVariant.text,
                 onPressed: widget.busy
@@ -250,6 +270,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   }
 
   Widget _field({
+    Key? fieldKey,
     required TextEditingController controller,
     required String label,
     required ValueChanged<String> onChanged,
@@ -260,6 +281,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: TextField(
+        key: fieldKey,
         controller: controller,
         maxLines: maxLines,
         obscureText: obscureText,
@@ -524,6 +546,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   }
 
   Widget _actionButton({
+    Key? buttonKey,
     required String label,
     required VoidCallback? onPressed,
     _ProfileEditorActionVariant variant = _ProfileEditorActionVariant.primary,
@@ -532,18 +555,22 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
       width: double.infinity,
       child: switch (variant) {
         _ProfileEditorActionVariant.primary => FilledButton(
+          key: buttonKey,
           onPressed: onPressed,
           child: Text(label),
         ),
         _ProfileEditorActionVariant.secondary => FilledButton.tonal(
+          key: buttonKey,
           onPressed: onPressed,
           child: Text(label),
         ),
         _ProfileEditorActionVariant.outlined => OutlinedButton(
+          key: buttonKey,
           onPressed: onPressed,
           child: Text(label),
         ),
         _ProfileEditorActionVariant.text => TextButton(
+          key: buttonKey,
           onPressed: onPressed,
           child: Text(label),
         ),
@@ -642,6 +669,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
       );
     }
     return _field(
+      fieldKey: const ValueKey<String>('profile-editor-provider-field'),
       controller: _providerController,
       label: 'Provider',
       onChanged: (String value) =>

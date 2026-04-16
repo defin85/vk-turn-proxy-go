@@ -23,6 +23,15 @@ func newDefaultHTTPClient() *http.Client {
 }
 
 func (r *resolver) performStage(ctx context.Context, descriptor stageDescriptor, form url.Values) (map[string]any, provider.ProbeArtifactStage, error) {
+	return r.performStageWithCookies(ctx, descriptor, form, nil)
+}
+
+func (r *resolver) performStageWithCookies(
+	ctx context.Context,
+	descriptor stageDescriptor,
+	form url.Values,
+	cookies []*http.Cookie,
+) (map[string]any, provider.ProbeArtifactStage, error) {
 	stage := provider.ProbeArtifactStage{
 		Name:       descriptor.name,
 		EndpointID: descriptor.name,
@@ -45,6 +54,9 @@ func (r *resolver) performStage(ctx context.Context, descriptor stageDescriptor,
 	}
 	request.Header.Set("User-Agent", userAgent)
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	for _, cookie := range cookiesForStageURL(request.URL, cookies) {
+		request.AddCookie(cookie)
+	}
 
 	response, err := r.doer.Do(request)
 	if err != nil {
@@ -103,4 +115,54 @@ func (r *resolver) performStage(ctx context.Context, descriptor stageDescriptor,
 	}
 
 	return payload, stage, nil
+}
+
+func cookiesForStageURL(target *url.URL, cookies []*http.Cookie) []*http.Cookie {
+	if target == nil || len(cookies) == 0 {
+		return nil
+	}
+
+	host := strings.ToLower(target.Hostname())
+	path := target.EscapedPath()
+	if path == "" {
+		path = "/"
+	}
+	isHTTPS := strings.EqualFold(target.Scheme, "https")
+
+	filtered := make([]*http.Cookie, 0, len(cookies))
+	for _, cookie := range cookies {
+		if cookie == nil {
+			continue
+		}
+		if cookie.Secure && !isHTTPS {
+			continue
+		}
+		if !stageCookieDomainMatches(host, cookie.Domain) {
+			continue
+		}
+		cookiePath := cookie.Path
+		if cookiePath == "" {
+			cookiePath = "/"
+		}
+		if !strings.HasPrefix(path, cookiePath) {
+			continue
+		}
+		copyCookie := *cookie
+		filtered = append(filtered, &copyCookie)
+	}
+
+	return filtered
+}
+
+func stageCookieDomainMatches(host string, domain string) bool {
+	trimmedHost := strings.TrimSpace(strings.ToLower(host))
+	if trimmedHost == "" {
+		return false
+	}
+	trimmedDomain := strings.TrimPrefix(strings.TrimSpace(strings.ToLower(domain)), ".")
+	if trimmedDomain == "" {
+		return true
+	}
+	return trimmedHost == trimmedDomain ||
+		strings.HasSuffix(trimmedHost, "."+trimmedDomain)
 }

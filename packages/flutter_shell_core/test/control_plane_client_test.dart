@@ -725,6 +725,14 @@ void main() {
           (cookies.single as Map<String, dynamic>)['value'],
           'owned-session',
         );
+        final observedRequests =
+            browserContinuation['observed_requests'] as List<dynamic>? ??
+            <dynamic>[];
+        expect(observedRequests, hasLength(1));
+        expect(
+          (observedRequests.single as Map<String, dynamic>)['method'],
+          'POST',
+        );
 
         request.response.headers.contentType = ContentType.json;
         request.response.write(
@@ -758,6 +766,17 @@ void main() {
               value: 'owned-session',
               domain: 'login.vk.ru',
               path: '/',
+            ),
+          ],
+          observedRequests: <BrowserObservedRequestRecord>[
+            BrowserObservedRequestRecord(
+              method: 'POST',
+              url: 'https://api.vk.com/method/calls.getCallPreview?v=5.275',
+              formValues: <String, String>{'method': 'calls.getCallPreview'},
+              statusCode: 200,
+              body: <String, dynamic>{
+                'response': <String, dynamic>{'call': 'preview'},
+              },
             ),
           ],
         ),

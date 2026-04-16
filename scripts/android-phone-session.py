@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import socket
 import subprocess
 import sys
@@ -17,10 +18,21 @@ from dataclasses import dataclass
 from typing import Any
 
 
-DEFAULT_ADB = (
-    os.environ.get("ADB")
-    or "/mnt/c/Users/Egor/AppData/Local/Android/Sdk/platform-tools/adb.exe"
-)
+
+def default_adb_path() -> str:
+    explicit = os.environ.get("ADB", "").strip()
+    if explicit:
+        return explicit
+    path_adb = shutil.which("adb")
+    if path_adb:
+        return path_adb
+    linux_sdk_adb = os.path.expanduser("~/.local/share/android-sdk/platform-tools/adb")
+    if os.path.exists(linux_sdk_adb):
+        return linux_sdk_adb
+    return "/mnt/c/Users/Egor/AppData/Local/Android/Sdk/platform-tools/adb.exe"
+
+
+DEFAULT_ADB = default_adb_path()
 DEFAULT_APP_PACKAGE = "com.defin85.mobile_gui_shell"
 DEFAULT_WIREGUARD_PACKAGE = "com.wireguard.android"
 DEFAULT_LISTEN_ADDR = "127.0.0.1:39000"
@@ -609,7 +621,11 @@ def build_parser() -> argparse.ArgumentParser:
             "WireGuard-over-transport PoC."
         )
     )
-    parser.add_argument("--adb", default=DEFAULT_ADB, help="path to adb executable")
+    parser.add_argument(
+        "--adb",
+        default=DEFAULT_ADB,
+        help="path to adb executable; defaults to WSL/Linux adb discovery with Windows adb.exe fallback",
+    )
     parser.add_argument("--serial", help="adb device serial; defaults to ANDROID_SERIAL or the single connected device")
     parser.add_argument("--app-package", default=DEFAULT_APP_PACKAGE)
     parser.add_argument("--wireguard-package", default=DEFAULT_WIREGUARD_PACKAGE)
