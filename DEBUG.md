@@ -29,6 +29,58 @@ Verified evidence:
 
 Use the default `mobile/gui_shell/lib/main.dart` entrypoint only when the task specifically needs production-entrypoint parity rather than driver-enabled inspection.
 
+### Mobile GUI shell via Dart MCP over USB from WSL
+
+Verified on `2026-04-17` against the same Android tablet after moving from
+ADB-over-Wi-Fi to USB passthrough into WSL.
+
+Host-side prerequisites:
+- Windows must have `usbipd-win` installed and the tablet's ADB interface must
+  be visible in `usbipd list`.
+- The current workstation verified this with Xiaomi Pad 5 in ADB mode
+  `VID:PID 2717:ff48`.
+- The tablet must keep `USB debugging` enabled and, when MIUI prompts for a
+  USB mode during attach, the stable choice on this workstation was
+  `Передача файлов / Android Auto` rather than `Без передачи данных` or `PTP`.
+- WSL needs a matching `udev` rule so the Linux `adb` can open the USB node
+  without a manual `chmod` or `chgrp` step:
+  `SUBSYSTEM=="usb", ATTR{idVendor}=="2717", ATTR{idProduct}=="ff48", MODE="0660", GROUP="wheel"`
+  in `/etc/udev/rules.d/51-xiaomi-adb.rules`.
+
+Verified Windows-to-WSL USB preparation:
+1. Share the current ADB interface once from elevated Windows PowerShell:
+   `usbipd bind --busid <busid>`
+2. Keep the USB passthrough active from Windows PowerShell:
+   `usbipd attach --wsl --busid <busid> --auto-attach`
+3. Confirm the Linux-side ADB target exists in WSL:
+   `adb devices -l`
+
+Verified Dart MCP loop after USB attach:
+1. Launch with Dart MCP from WSL:
+   `mcp__dart__.launch_app(device="<usb-serial>", root="/home/egor/code/vk-turn-proxy-go/mobile/gui_shell", target="test_driver/driver_main.dart")`
+2. Connect to the returned DTD URI with `mcp__dart__.connect_dart_tooling_daemon`.
+3. Use `mcp__dart__.hot_reload`.
+4. Use `mcp__dart__.flutter_driver(command="screenshot")` and other driver
+   commands against the USB target.
+
+Verified evidence:
+- `usbipd attach --wsl --auto-attach` delivered the Android ADB interface into
+  WSL as a real USB ADB device.
+- `adb devices -l` in WSL reported the tablet as `device` with serial
+  `b2bc0e37`.
+- Dart MCP `list_devices` exposed the USB target as `b2bc0e37`.
+- `launch_app`, `connect_dart_tooling_daemon`, `hot_reload`, and
+  `flutter_driver(command="get_health")` all succeeded against that USB target.
+
+Operational notes:
+- Keep the `usbipd attach --wsl --auto-attach ...` PowerShell session alive
+  while using the USB path; it handles MIUI-triggered USB re-enumeration.
+- If the USB interface changes after reconnecting the cable, rerun
+  `usbipd list` and use the new `BUSID`.
+- The USB path is the verified alternative to ADB-over-Wi-Fi for mobile Dart
+  MCP work from WSL. It is still a Windows-assisted passthrough step, not a
+  pure WSL-only attach path.
+
 ### Mobile owned-browser IME harness
 
 Verified on `2026-04-16` against the same Android tablet.

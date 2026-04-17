@@ -44,6 +44,20 @@ Verified mobile loop:
 4. `mcp__dart__.hot_reload`
 5. `mcp__dart__.flutter_driver(command="screenshot")`
 
+Verified USB alternative from WSL:
+1. In elevated Windows PowerShell, run `usbipd bind --busid <busid>` once for
+   the Android ADB interface when needed.
+2. In Windows PowerShell, keep `usbipd attach --wsl --busid <busid> --auto-attach`
+   running while the USB debug session is active.
+3. In WSL, confirm `adb devices -l` shows a USB serial.
+4. Use that USB serial in `mcp__dart__.launch_app(...)` instead of the Wi-Fi
+   ADB target.
+
+On this workstation, the verified USB path also requires a `udev` rule for the
+tablet's ADB interface so Linux `adb` can open the USB node without a manual
+permission fix. See `DEBUG.md` for the exact verified rule and workstation
+notes.
+
 Use the default `mobile/gui_shell/lib/main.dart` entrypoint only when the task specifically needs production-entrypoint parity instead of the driver-enabled agent loop.
 
 Verified desktop Linux launch path:
