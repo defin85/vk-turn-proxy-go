@@ -102,6 +102,7 @@ void Function({String? managedProviderId}) _legacyManagedProviderActivator(
 
 class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   late final TextEditingController _nameController;
+  FocusNode? _nameFocusNode;
   late final TextEditingController _providerController;
   late final TextEditingController _linkController;
   late final TextEditingController _listenController;
@@ -120,6 +121,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   void initState() {
     super.initState();
     _nameController = TextEditingController();
+    _nameFocusNode = FocusNode();
     _providerController = TextEditingController();
     _linkController = TextEditingController();
     _listenController = TextEditingController();
@@ -172,6 +174,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   @override
   void dispose() {
     _nameController.dispose();
+    _nameFocusNode?.dispose();
     _providerController.dispose();
     _linkController.dispose();
     _listenController.dispose();
@@ -488,6 +491,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
             _field(
               fieldKey: const ValueKey<String>('profile-editor-name-field'),
               controller: _nameController,
+              focusNode: _nameFocusNode,
               label: 'Profile name',
               onChanged: (String value) => _pushDraft(name: value),
             ),
@@ -637,6 +641,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     required TextEditingController controller,
     required String label,
     required ValueChanged<String> onChanged,
+    FocusNode? focusNode,
     int maxLines = 1,
     bool obscureText = false,
     TextInputType? keyboardType,
@@ -646,6 +651,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
       child: TextField(
         key: fieldKey,
         controller: controller,
+        focusNode: focusNode,
         maxLines: maxLines,
         obscureText: obscureText,
         keyboardType: keyboardType,
@@ -1308,17 +1314,37 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   }
 
   void _syncFromDraft() {
-    _nameController.text = widget.draft.name;
-    _providerController.text = widget.draft.spec.provider;
-    _linkController.text = widget.draft.spec.link;
-    _listenController.text = widget.draft.spec.listenAddress;
-    _peerController.text = widget.draft.spec.peerAddress;
-    _connectionsController.text = widget.draft.spec.connections.toString();
-    _turnServerController.text = widget.draft.spec.turnServer ?? '';
-    _turnPortController.text = widget.draft.spec.turnPort ?? '';
-    _bindInterfaceController.text = widget.draft.spec.bindInterface ?? '';
-    _logLevelController.text = widget.draft.spec.logLevel;
+    _syncControllerText(_nameController, widget.draft.name);
+    _syncControllerText(_providerController, widget.draft.spec.provider);
+    _syncControllerText(_linkController, widget.draft.spec.link);
+    _syncControllerText(_listenController, widget.draft.spec.listenAddress);
+    _syncControllerText(_peerController, widget.draft.spec.peerAddress);
+    _syncControllerText(
+      _connectionsController,
+      widget.draft.spec.connections.toString(),
+    );
+    _syncControllerText(
+      _turnServerController,
+      widget.draft.spec.turnServer ?? '',
+    );
+    _syncControllerText(_turnPortController, widget.draft.spec.turnPort ?? '');
+    _syncControllerText(
+      _bindInterfaceController,
+      widget.draft.spec.bindInterface ?? '',
+    );
+    _syncControllerText(_logLevelController, widget.draft.spec.logLevel);
     _syncProviderSettingControllers(_selectedDescriptor());
+  }
+
+  void _syncControllerText(TextEditingController controller, String text) {
+    if (controller.text == text) {
+      return;
+    }
+    controller.value = controller.value.copyWith(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+      composing: TextRange.empty,
+    );
   }
 
   TextEditingController _providerSettingController(String key) {

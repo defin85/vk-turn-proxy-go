@@ -33,15 +33,19 @@ void _debugLogContinuationEvidence({
   required List<BrowserObservedRequestRecord> observedRequests,
 }) {
   assert(() {
-    final requestSummaries = observedRequests.take(8).map((request) {
-      final uri = Uri.tryParse(request.url);
-      final target = uri == null
-          ? request.url
-          : '${uri.host}${uri.path.isEmpty ? '/' : uri.path}';
-      final formKeys = request.formValues.keys.toList(growable: false)..sort();
-      final bodyKeys = request.body.keys.toList(growable: false)..sort();
-      return '${request.method} $target form=$formKeys body=$bodyKeys status=${request.statusCode}';
-    }).join(' | ');
+    final requestSummaries = observedRequests
+        .take(8)
+        .map((request) {
+          final uri = Uri.tryParse(request.url);
+          final target = uri == null
+              ? request.url
+              : '${uri.host}${uri.path.isEmpty ? '/' : uri.path}';
+          final formKeys = request.formValues.keys.toList(growable: false)
+            ..sort();
+          final bodyKeys = request.body.keys.toList(growable: false)..sort();
+          return '${request.method} $target form=$formKeys body=$bodyKeys status=${request.statusCode}';
+        })
+        .join(' | ');
     debugPrint(
       'OwnedBrowser continuation evidence: cookies=${cookies.length} observed=${observedRequests.length}${requestSummaries.isEmpty ? '' : ' [$requestSummaries]'}',
     );
@@ -430,6 +434,8 @@ class _OwnedBrowserChallengePageState extends State<_OwnedBrowserChallengePage>
   String? _debugSnapshot;
   bool _keyboardVisible = false;
   Uri? _openUri;
+  Uri? _harnessInviteUri;
+  bool _harnessInviteLoaded = false;
   bool _restoredInviteAfterFeed = false;
 
   @override
@@ -449,7 +455,12 @@ class _OwnedBrowserChallengePageState extends State<_OwnedBrowserChallengePage>
         _handlePageNavigation(uri);
       },
     );
-    final openUri = Uri.parse(widget.challenge.openUrl!.trim());
+    final challengeUri = Uri.parse(widget.challenge.openUrl!.trim());
+    _harnessInviteUri = _extractHarnessInviteUri(
+      widget.challenge,
+      challengeUri,
+    );
+    final openUri = _normalizeChallengeOpenUri(widget.challenge, challengeUri);
     _openUri = openUri;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(widget.softInputModeController.enableOwnedBrowserMode());
@@ -481,6 +492,17 @@ class _OwnedBrowserChallengePageState extends State<_OwnedBrowserChallengePage>
       await _session.clearCookies();
     }
     await _session.load(uri);
+  }
+
+  Future<void> _loadHarnessInvite() async {
+    final inviteUri = _harnessInviteUri;
+    if (inviteUri == null) {
+      return;
+    }
+    setState(() {
+      _harnessInviteLoaded = true;
+    });
+    await _session.load(inviteUri);
   }
 
   void _handlePageNavigation(Uri uri) {
@@ -679,6 +701,18 @@ class _OwnedBrowserChallengePageState extends State<_OwnedBrowserChallengePage>
       appBar: AppBar(
         title: Text('${challenge.provider} challenge'),
         actions: <Widget>[
+          if (_harnessInviteUri != null && !_harnessInviteLoaded)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Center(
+                child: TextButton(
+                  onPressed: _submitting
+                      ? null
+                      : () => unawaited(_loadHarnessInvite()),
+                  child: const Text('Open invite'),
+                ),
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: Center(
@@ -790,14 +824,49 @@ bool _isVkHost(String host) {
 }
 
 String? _preferredUserAgentForChallenge(ChallengeRecord challenge) {
-  if (challenge.provider.trim().toLowerCase() != 'vk') {
+  if (!_isVkOwnedBrowserLikeChallenge(challenge)) {
     return null;
   }
   return _vkDesktopLikeUserAgent;
 }
 
 bool _shouldResetBrowserStateForChallenge(ChallengeRecord challenge) {
+  if (challenge.id == 'owned-browser-ime-harness') {
+    return true;
+  }
   return challenge.provider.trim().toLowerCase() != 'vk';
+}
+
+bool _isVkOwnedBrowserLikeChallenge(ChallengeRecord challenge) {
+  if (challenge.provider.trim().toLowerCase() == 'vk') {
+    return true;
+  }
+  return challenge.id == 'owned-browser-ime-harness';
+}
+
+Uri _normalizeChallengeOpenUri(ChallengeRecord challenge, Uri openUri) {
+  if (challenge.id != 'owned-browser-ime-harness') {
+    return openUri;
+  }
+  if (!openUri.hasFragment) {
+    return openUri;
+  }
+  return openUri.replace(fragment: '');
+}
+
+Uri? _extractHarnessInviteUri(ChallengeRecord challenge, Uri openUri) {
+  if (challenge.id != 'owned-browser-ime-harness') {
+    return null;
+  }
+  final fragment = openUri.fragment.trim();
+  if (!fragment.startsWith('codex-invite=')) {
+    return null;
+  }
+  final encoded = fragment.substring('codex-invite='.length).trim();
+  if (encoded.isEmpty) {
+    return null;
+  }
+  return Uri.tryParse(Uri.decodeComponent(encoded));
 }
 
 Future<void> nudgeOwnedBrowserViewport(WebViewController controller) async {

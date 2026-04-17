@@ -195,4 +195,124 @@ void main() {
       );
     },
   );
+
+  testWidgets(
+    'mobile profile editor keeps the keyboard open when naming a managed profile',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 2200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final managedProvider = ManagedProviderRecord(
+        id: 'provider-config-1',
+        provider: 'wb-stream',
+        name: 'WB Europe',
+        providerSettings: const <String, dynamic>{'region': 'eu-west'},
+        createdAt: DateTime.utc(2026, 4, 17, 12, 0),
+        updatedAt: DateTime.utc(2026, 4, 17, 12, 1),
+      );
+      var draft = ProfileDraft.defaults();
+      var showNotice = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (BuildContext context, StateSetter setState) {
+                return ListView(
+                  padding: const EdgeInsets.all(20),
+                  children: <Widget>[
+                    if (showNotice) ...<Widget>[
+                      const Card(
+                        child: Padding(
+                          padding: EdgeInsets.all(12),
+                          child: Text('Managed provider applied'),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    ProfileEditorPanel(
+                      key: const ValueKey<String>('profile-editor-harness'),
+                      profiles: const <ProfileRecord>[],
+                      providerDescriptors: const <ProviderDescriptor>[
+                        _providerWithSettingsDescriptor,
+                      ],
+                      managedProviders: <ManagedProviderRecord>[
+                        managedProvider,
+                      ],
+                      initialManagedProviderId: managedProvider.id,
+                      selectedProfileId: null,
+                      draft: draft,
+                      busy: false,
+                      onSelectProfile: (_) {},
+                      onDraftChanged: (ProfileDraft nextDraft) {
+                        setState(() {
+                          draft = nextDraft;
+                          showNotice = false;
+                        });
+                      },
+                      onActivateManagedProviderMode:
+                          ({String? managedProviderId}) {
+                            final selectedId =
+                                managedProviderId ?? managedProvider.id;
+                            expect(selectedId, managedProvider.id);
+                            setState(() {
+                              draft = draft.applyManagedProvider(
+                                managedProvider,
+                              );
+                              showNotice = true;
+                            });
+                          },
+                      onUseCustomProvider: () {
+                        setState(() {
+                          draft = draft.asCustomProvider();
+                          showNotice = false;
+                        });
+                      },
+                      onSave: () async {},
+                      onDelete: () async {},
+                      onReset: () {},
+                      onResolve: () async {},
+                      onStart: () async {},
+                      onPreparePortableExport: () => null,
+                      onCopyPortableExportText: (_) async {},
+                      onSharePortableExportText: (_) async {},
+                      onSharePortableExportFile: (_) async {},
+                      onImportPortableFromFile: () async => null,
+                      onPreviewPortableImport: (_) => null,
+                      onConfirmPortableImport: (_) async {},
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Managed provider'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Managed provider applied'), findsOneWidget);
+
+      final nameField = find.byKey(
+        const ValueKey<String>('profile-editor-name-field'),
+      );
+      await tester.showKeyboard(nameField);
+      await tester.pump();
+
+      expect(tester.testTextInput.isVisible, isTrue);
+
+      tester.testTextInput.enterText('a');
+      await tester.pumpAndSettle();
+
+      final editable = tester.state<EditableTextState>(
+        find.descendant(of: nameField, matching: find.byType(EditableText)),
+      );
+      expect(find.text('Managed provider applied'), findsNothing);
+      expect(editable.widget.controller.text, 'a');
+      expect(editable.widget.focusNode.hasFocus, isTrue);
+      expect(tester.testTextInput.isVisible, isTrue);
+    },
+  );
 }

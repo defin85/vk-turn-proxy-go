@@ -885,6 +885,7 @@ class _ProfileWorkspacePage extends StatelessWidget {
                 const SizedBox(height: 12),
               ],
               ProfileEditorPanel(
+                key: const ValueKey<String>('profile-workspace-editor'),
                 profiles: controller.profiles,
                 providerDescriptors: controller.providerDescriptors,
                 managedProviders: controller.managedProviders,
@@ -990,6 +991,7 @@ class _ProvidersPage extends StatelessWidget {
         final rootPanel = _ProviderRecordsRootSection(controller: controller);
         final detailPanel = switch (controller.workflowSurface) {
           MobileWorkflowSurface.providerConfig => ProviderConfigEditorPanel(
+            key: const ValueKey<String>('provider-config-editor-panel'),
             supportedProviders: controller.supportedProviderCatalog,
             providerDescriptors: controller.providerDescriptors,
             selectedManagedProviderId: controller.selectedManagedProviderId,
@@ -1005,6 +1007,7 @@ class _ProvidersPage extends StatelessWidget {
             showCloseButton: wide,
           ),
           MobileWorkflowSurface.providerTemplate => ProviderTemplateEditorPanel(
+            key: const ValueKey<String>('provider-template-editor-panel'),
             supportedProviders: controller.supportedProviderCatalog,
             providerDescriptors: controller.providerDescriptors,
             selectedProviderTemplateId: controller.selectedProviderTemplateId,
@@ -1107,7 +1110,10 @@ class _ProvidersPage extends StatelessWidget {
                   _NoticeBanner(message: notice),
                 ],
                 const SizedBox(height: 16),
-                Expanded(child: detailPanel),
+                Expanded(
+                  key: const ValueKey<String>('providers-detail-slot'),
+                  child: detailPanel,
+                ),
               ],
             ),
           );
