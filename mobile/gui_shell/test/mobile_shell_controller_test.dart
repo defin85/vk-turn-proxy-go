@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter_shell_core/portable_profile_transfer.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_models.dart';
 import 'package:mobile_gui_shell/src/control/mobile_handoff_adapter.dart';
 import 'package:mobile_gui_shell/src/control/mobile_host_bridge.dart';
+import 'package:mobile_gui_shell/src/control/mobile_portable_profile_transfer_adapter.dart';
 import 'package:mobile_gui_shell/src/control/mobile_shell_controller.dart';
 import 'package:mobile_gui_shell/src/control/mobile_shell_state_store.dart';
 import 'package:mobile_gui_shell/src/control/profile_draft.dart';
@@ -175,6 +178,8 @@ const ProviderDescriptor _unsupportedProviderSettingsDescriptor =
     );
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   test(
     'controller rehydrates persisted profiles into a ready mobile bridge',
     () async {
@@ -1250,6 +1255,210 @@ void main() {
   );
 
   test(
+    'controller exports selected profiles through the mobile portable transfer adapter',
+    () async {
+      final adapter = _FakeMobilePortableProfileTransferAdapter();
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(
+          profilesList: <ProfileRecord>[
+            ProfileRecord(id: 'profile-1', name: 'alpha', spec: _profileSpec()),
+          ],
+        ),
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'alpha',
+                spec: _profileSpec(),
+              ),
+            ],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: 'profile-1',
+            draft: ProfileDraft.fromProfile(
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'alpha',
+                spec: _profileSpec(),
+              ),
+            ),
+          ),
+        ),
+        portableProfileTransferAdapter: adapter,
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      final envelope = controller.selectedPortableProfileEnvelope();
+      expect(envelope, isNotNull);
+
+      await controller.copyPortableProfileEnvelopeText(envelope!);
+      await controller.sharePortableProfileEnvelopeText(envelope);
+      await controller.sharePortableProfileEnvelopeFile(envelope);
+
+      expect(adapter.copiedPayloads, hasLength(1));
+      expect(adapter.sharedTextPayloads, hasLength(1));
+      expect(adapter.sharedFilePayloads, hasLength(1));
+      expect(
+        adapter.sharedSuggestedNames.single,
+        'alpha.portable-profile.json',
+      );
+      expect(controller.notice, contains('portable profile'));
+    },
+  );
+
+  test(
+    'controller imports managed portable profiles append-only with fresh ids',
+    () async {
+      final bridge = _FakeMobileHostBridge();
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: const <ProfileRecord>[],
+            providerConfigs: const <ProviderConfigRecord>[],
+            draft: ProfileDraft.defaults(),
+          ),
+        ),
+        clock: () => DateTime.utc(2026, 4, 17, 12, 0),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      final envelope = PortableProfileEnvelope.build(
+        profile: ProfileRecord(
+          id: 'remote-profile',
+          name: 'Imported alpha',
+          spec: _profileSpec().copyWith(link: ''),
+        ),
+        providerBinding: const ProfileProviderBinding(
+          mode: ProfileProviderMode.managed,
+          managedProviderId: 'remote-managed',
+        ),
+        managedProviderSnapshot: _managedProviderRecord(
+          id: 'remote-managed',
+          name: 'Imported VK provider',
+        ),
+      );
+
+      await controller.confirmPortableProfileImport(envelope);
+
+      expect(bridge.upsertedProfiles, hasLength(1));
+      final savedProfile = bridge.upsertedProfiles.single;
+      expect(savedProfile.id, isNot('remote-profile'));
+      expect(savedProfile.id, startsWith('portable-'));
+      expect(controller.selectedProfileId, savedProfile.id);
+      expect(
+        controller.profileBindings[savedProfile.id]?.mode,
+        ProfileProviderMode.managed,
+      );
+      final importedManagedProviderId =
+          controller.profileBindings[savedProfile.id]?.managedProviderId;
+      expect(
+        controller.managedProviders.any(
+          (ManagedProviderRecord provider) =>
+              provider.id == importedManagedProviderId,
+        ),
+        isTrue,
+      );
+      expect(controller.notice, contains('Imported profile'));
+      expect(bridge.startedPlatformTunnels, isEmpty);
+      expect(bridge.startResolutionCalls, isEmpty);
+    },
+  );
+
+  test(
+    'controller fails closed for unsupported portable import payloads',
+    () async {
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(),
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: const <ProfileRecord>[],
+            providerConfigs: const <ProviderConfigRecord>[],
+            draft: ProfileDraft.defaults(),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      final envelope = controller.previewPortableProfileEnvelope(
+        jsonEncode(<String, dynamic>{
+          'type': kPortableProfileEnvelopeType,
+          'version': 99,
+          'profile': ProfileRecord(
+            id: 'profile-1',
+            name: 'alpha',
+            spec: _profileSpec(),
+          ).toJson(),
+          'provider_binding': const ProfileProviderBinding().toJson(),
+          'secret_classification': const PortableProfileSecretClassification(
+            secretBearing: true,
+          ).toJson(),
+        }),
+      );
+
+      expect(envelope, isNull);
+      expect(controller.notice, contains('unsupported envelope version'));
+    },
+  );
+
+  test(
+    'controller stages inbound portable profile ingress for preview before import',
+    () async {
+      final adapter = _FakeMobilePortableProfileTransferAdapter();
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(),
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: const <ProfileRecord>[],
+            providerConfigs: const <ProviderConfigRecord>[],
+            draft: ProfileDraft.defaults(),
+          ),
+        ),
+        portableProfileTransferAdapter: adapter,
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(() async {
+        await adapter.dispose();
+        controller.dispose();
+      });
+
+      await controller.initialize();
+
+      adapter.emitIngressPayload(
+        PortableProfileEnvelope.build(
+          profile: ProfileRecord(
+            id: 'remote-profile',
+            name: 'Inbound alpha',
+            spec: _profileSpec().copyWith(link: ''),
+          ),
+          providerBinding: const ProfileProviderBinding(
+            mode: ProfileProviderMode.custom,
+          ),
+        ).encode(),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      final pending = controller.pendingPortableProfileImportEnvelope;
+      expect(pending, isNotNull);
+      expect(pending?.displayName, 'Inbound alpha');
+      expect(controller.workflowSurface, MobileWorkflowSurface.profile);
+      expect(controller.profiles, isEmpty);
+
+      controller.clearPendingPortableProfileImportPreview();
+      expect(controller.pendingPortableProfileImportEnvelope, isNull);
+    },
+  );
+
+  test(
     'controller clears stale notices when the profile draft changes',
     () async {
       final controller = MobileShellController(
@@ -1280,6 +1489,42 @@ void main() {
       expect(controller.draft.spec.link, 'https://vk.com/call/join/fresh');
     },
   );
+
+  test('controller auto-dismisses saved profile notices', () async {
+    final controller = MobileShellController(
+      bridge: _FakeMobileHostBridge(),
+      stateStore: _InMemoryStateStore(MobileShellState.empty()),
+      appBuild: _testGuiBuild,
+      transientNoticeDuration: const Duration(milliseconds: 20),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.initialize();
+    await controller.saveDraft();
+
+    expect(controller.notice, contains('Saved mobile profile'));
+
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+
+    expect(controller.notice, isNull);
+  });
+
+  test('controller keeps non-transient notices sticky', () async {
+    final controller = MobileShellController(
+      bridge: _FakeMobileHostBridge(),
+      stateStore: _InMemoryStateStore(MobileShellState.empty()),
+      appBuild: _testGuiBuild,
+      transientNoticeDuration: const Duration(milliseconds: 20),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.initialize();
+    controller.notice = 'input.link is required';
+
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+
+    expect(controller.notice, 'input.link is required');
+  });
 
   test(
     'controller fails closed when the mobile host does not advertise the provider',
@@ -1961,6 +2206,20 @@ ProfileSpec _profileSpec() {
   );
 }
 
+ManagedProviderRecord _managedProviderRecord({
+  required String id,
+  required String name,
+}) {
+  return ManagedProviderRecord(
+    id: id,
+    provider: 'vk',
+    name: name,
+    providerSettings: const <String, dynamic>{'region': 'eu-west'},
+    createdAt: DateTime.utc(2026, 4, 17, 12, 0),
+    updatedAt: DateTime.utc(2026, 4, 17, 12, 1),
+  );
+}
+
 class _InMemoryStateStore implements MobileShellStateStore {
   const _InMemoryStateStore(this.state);
 
@@ -1996,6 +2255,7 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     ),
     List<ProviderDescriptor>? providersList,
     List<ProviderConfigRecord>? providerConfigsList,
+    List<ProfileRecord>? profilesList,
     List<ResolutionRecord>? resolutionsList,
     this.sessionsList = const <SessionRecord>[],
     this.challengeMap = const <String, ChallengeRecord>{},
@@ -2047,6 +2307,9 @@ class _FakeMobileHostBridge implements MobileHostBridge {
        _providerConfigs = List<ProviderConfigRecord>.of(
          providerConfigsList ?? const <ProviderConfigRecord>[],
        ),
+       _profiles = List<ProfileRecord>.of(
+         profilesList ?? const <ProfileRecord>[],
+       ),
        _resolutions = List<ResolutionRecord>.of(
          resolutionsList ?? const <ResolutionRecord>[],
        );
@@ -2054,6 +2317,7 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   final MobileHostConnectionResult ensureReadyResult;
   final List<ProviderDescriptor> _providers;
   final List<ProviderConfigRecord> _providerConfigs;
+  final List<ProfileRecord> _profiles;
   final List<SessionRecord> sessionsList;
   final Map<String, ChallengeRecord> challengeMap;
   final ControlPlaneError? startSessionError;
@@ -2259,7 +2523,7 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       _providerConfigs;
 
   @override
-  Future<List<ProfileRecord>> profiles() async => const <ProfileRecord>[];
+  Future<List<ProfileRecord>> profiles() async => _profiles;
 
   @override
   Future<List<ResolutionRecord>> resolutions() async => _resolutions;
@@ -2321,6 +2585,10 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   @override
   Future<ProfileRecord> upsertProfile(ProfileRecord profile) async {
     upsertedProfiles.add(profile);
+    _profiles.removeWhere(
+      (ProfileRecord existing) => existing.id == profile.id,
+    );
+    _profiles.add(profile);
     return profile;
   }
 
@@ -2409,6 +2677,48 @@ class _FakeMobileHandoffAdapter implements MobileHandoffAdapter {
   @override
   Future<void> shareLink(String link) async {
     sharedLinks.add(link);
+  }
+}
+
+class _FakeMobilePortableProfileTransferAdapter
+    implements MobilePortableProfileTransferAdapter {
+  final List<String> copiedPayloads = <String>[];
+  final List<String> sharedTextPayloads = <String>[];
+  final List<String> sharedFilePayloads = <String>[];
+  final List<String> sharedSuggestedNames = <String>[];
+  final StreamController<String> _ingressPayloads =
+      StreamController<String>.broadcast();
+  String? nextOpenedPayload;
+
+  void emitIngressPayload(String payload) {
+    _ingressPayloads.add(payload);
+  }
+
+  Future<void> dispose() => _ingressPayloads.close();
+
+  @override
+  Future<void> copyEnvelopeText(String payload) async {
+    copiedPayloads.add(payload);
+  }
+
+  @override
+  Stream<String> get ingressPayloads => _ingressPayloads.stream;
+
+  @override
+  Future<String?> openEnvelopeText() async => nextOpenedPayload;
+
+  @override
+  Future<void> shareEnvelopeFile({
+    required String suggestedName,
+    required String payload,
+  }) async {
+    sharedSuggestedNames.add(suggestedName);
+    sharedFilePayloads.add(payload);
+  }
+
+  @override
+  Future<void> shareEnvelopeText(String payload) async {
+    sharedTextPayloads.add(payload);
   }
 }
 

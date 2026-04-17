@@ -1,8 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_shell_core/portable_profile_transfer.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_models.dart';
 import 'package:mobile_gui_shell/src/control/profile_draft.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 class ProfileEditorPanel extends StatefulWidget {
   ProfileEditorPanel({
@@ -19,6 +22,15 @@ class ProfileEditorPanel extends StatefulWidget {
     required this.onReset,
     required this.onResolve,
     required this.onStart,
+    required this.onPreparePortableExport,
+    required this.onCopyPortableExportText,
+    required this.onSharePortableExportText,
+    required this.onSharePortableExportFile,
+    required this.onImportPortableFromFile,
+    required this.onPreviewPortableImport,
+    required this.onConfirmPortableImport,
+    this.pendingPortableImportEnvelope,
+    this.onPendingPortableImportHandled,
     List<ManagedProviderRecord>? managedProviders,
     String? initialManagedProviderId,
     void Function({String? managedProviderId})? onActivateManagedProviderMode,
@@ -57,6 +69,20 @@ class ProfileEditorPanel extends StatefulWidget {
   final VoidCallback onReset;
   final Future<void> Function() onResolve;
   final Future<void> Function() onStart;
+  final PortableProfileEnvelope? Function() onPreparePortableExport;
+  final Future<void> Function(PortableProfileEnvelope envelope)
+  onCopyPortableExportText;
+  final Future<void> Function(PortableProfileEnvelope envelope)
+  onSharePortableExportText;
+  final Future<void> Function(PortableProfileEnvelope envelope)
+  onSharePortableExportFile;
+  final Future<PortableProfileEnvelope?> Function() onImportPortableFromFile;
+  final PortableProfileEnvelope? Function(String payload)
+  onPreviewPortableImport;
+  final Future<void> Function(PortableProfileEnvelope envelope)
+  onConfirmPortableImport;
+  final PortableProfileEnvelope? pendingPortableImportEnvelope;
+  final VoidCallback? onPendingPortableImportHandled;
 
   @override
   State<ProfileEditorPanel> createState() => _ProfileEditorPanelState();
@@ -88,6 +114,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   final Map<String, TextEditingController> _providerSettingControllers =
       <String, TextEditingController>{};
   String? _selectedManagedProviderId;
+  String? _autoPreviewSignature;
 
   @override
   void initState() {
@@ -103,6 +130,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     _bindInterfaceController = TextEditingController();
     _logLevelController = TextEditingController();
     _syncFromDraft();
+    _schedulePendingPortableImportPreview();
   }
 
   @override
@@ -111,6 +139,34 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     if (oldWidget.draft != widget.draft) {
       _syncFromDraft();
     }
+    if (widget.pendingPortableImportEnvelope == null) {
+      _autoPreviewSignature = null;
+      return;
+    }
+    if (oldWidget.pendingPortableImportEnvelope !=
+        widget.pendingPortableImportEnvelope) {
+      _schedulePendingPortableImportPreview();
+    }
+  }
+
+  void _schedulePendingPortableImportPreview() {
+    final envelope = widget.pendingPortableImportEnvelope;
+    if (envelope == null) {
+      _autoPreviewSignature = null;
+      return;
+    }
+    final signature = envelope.encode();
+    if (_autoPreviewSignature == signature) {
+      return;
+    }
+    _autoPreviewSignature = signature;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      widget.onPendingPortableImportHandled?.call();
+      unawaited(_showPortableImportPreview(envelope));
+    });
   }
 
   @override
@@ -129,6 +185,262 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
       controller.dispose();
     }
     super.dispose();
+  }
+
+  Future<void> _showPortableExportDialog() async {
+    final envelope = widget.onPreparePortableExport();
+    if (envelope == null || !mounted) {
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Export portable profile'),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Text(
+                    envelope.displayName,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Provider: ${envelope.profile.spec.provider} · Source: ${envelope.providerBinding.mode.value}',
+                  ),
+                  const SizedBox(height: 8),
+                  if (envelope.isSecretBearing)
+                    _warningBanner(
+                      context,
+                      'This payload is secret-bearing. Treat shared text, files, and QR screens like credentials.',
+                    ),
+                  if (!envelope.isSecretBearing)
+                    Text(
+                      'Portable transfer stays separate from ordinary shell persistence and runtime handoff export.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  const SizedBox(height: 12),
+                  if (envelope.fitsQrBounds) ...<Widget>[
+                    Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: QrImageView(
+                          data: envelope.encode(),
+                          version: QrVersions.auto,
+                          size: 220,
+                          gapless: false,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'QR uses the same envelope in compact JSON form.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ] else ...<Widget>[
+                    _warningBanner(
+                      context,
+                      'QR is unavailable because this payload exceeds supported QR bounds (${envelope.encodedUtf8Bytes} bytes). Text and file sharing stay available.',
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            ),
+            TextButton(
+              onPressed: () =>
+                  unawaited(widget.onCopyPortableExportText(envelope)),
+              child: const Text('Copy text'),
+            ),
+            FilledButton.tonal(
+              onPressed: () =>
+                  unawaited(widget.onSharePortableExportText(envelope)),
+              child: const Text('Share text'),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  unawaited(widget.onSharePortableExportFile(envelope)),
+              child: const Text('Share file'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _importPortableFromFile() async {
+    final envelope = await widget.onImportPortableFromFile();
+    if (envelope == null || !mounted) {
+      return;
+    }
+    await _showPortableImportPreview(envelope);
+  }
+
+  Future<void> _scanPortableQr() async {
+    final payload = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
+        builder: (BuildContext context) => const _PortableQrScannerPage(),
+      ),
+    );
+    if (payload == null || payload.trim().isEmpty || !mounted) {
+      return;
+    }
+    final envelope = widget.onPreviewPortableImport(payload);
+    if (envelope == null || !mounted) {
+      return;
+    }
+    await _showPortableImportPreview(envelope);
+  }
+
+  Future<void> _showPortableImportPreview(
+    PortableProfileEnvelope envelope,
+  ) async {
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Import portable profile'),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Text(
+                    envelope.displayName,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text('Provider: ${envelope.profile.spec.provider}'),
+                  Text('Source mode: ${envelope.providerBinding.mode.value}'),
+                  if (envelope.providerBinding.isManaged)
+                    Text(
+                      'Managed provider snapshot: ${envelope.managedProviderSnapshot?.name.isNotEmpty == true ? envelope.managedProviderSnapshot!.name : envelope.managedProviderSnapshot?.id ?? 'missing'}',
+                    ),
+                  const SizedBox(height: 12),
+                  if (envelope.isSecretBearing)
+                    _warningBanner(
+                      context,
+                      'This import payload is secret-bearing. Confirm only if the source is trusted.',
+                    ),
+                  if (!envelope.isSecretBearing)
+                    Text(
+                      'Import creates fresh local ids and does not auto-start runtime.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                ],
+              ),
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await widget.onConfirmPortableImport(envelope);
+              },
+              child: const Text('Import profile'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showPortablePasteDialog() async {
+    final controller = TextEditingController();
+    String? errorText;
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (BuildContext context) {
+          return StatefulBuilder(
+            builder:
+                (
+                  BuildContext context,
+                  void Function(VoidCallback fn) setState,
+                ) {
+                  final keyboardVisible =
+                      MediaQuery.viewInsetsOf(context).bottom > 0;
+                  return AlertDialog(
+                    scrollable: true,
+                    title: const Text('Paste portable profile envelope'),
+                    content: SizedBox(
+                      width: 520,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          TextField(
+                            controller: controller,
+                            keyboardType: TextInputType.multiline,
+                            minLines: keyboardVisible ? 4 : 8,
+                            maxLines: keyboardVisible ? 10 : 16,
+                            decoration: InputDecoration(
+                              labelText: 'Portable profile JSON',
+                              errorText: errorText,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Preview opens before any local records are created.',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                    actions: <Widget>[
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('Cancel'),
+                      ),
+                      FilledButton(
+                        onPressed: () {
+                          FocusManager.instance.primaryFocus?.unfocus();
+                          final envelope = widget.onPreviewPortableImport(
+                            controller.text,
+                          );
+                          if (envelope == null) {
+                            setState(() {
+                              errorText = 'Payload is invalid or unsupported.';
+                            });
+                            return;
+                          }
+                          Navigator.of(context).pop();
+                          unawaited(_showPortableImportPreview(envelope));
+                        },
+                        child: const Text('Preview import'),
+                      ),
+                    ],
+                  );
+                },
+          );
+        },
+      );
+    } finally {
+      controller.dispose();
+    }
   }
 
   @override
@@ -221,6 +533,57 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
               subtitle: 'Transport overrides, local bind, and logging',
               initiallyExpanded: false,
               children: _advancedRuntimeSection(),
+            ),
+            const SizedBox(height: 12),
+            _disclosureSection(
+              title: 'Portable transfer',
+              subtitle:
+                  'Export the selected saved profile through an explicit envelope, or preview an import before creating local records.',
+              initiallyExpanded: false,
+              children: <Widget>[
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: <Widget>[
+                    FilledButton.tonal(
+                      key: const ValueKey<String>(
+                        'profile-editor-portable-export-action',
+                      ),
+                      onPressed: widget.busy || !hasSavedProfile
+                          ? null
+                          : () => unawaited(_showPortableExportDialog()),
+                      child: const Text('Export saved profile'),
+                    ),
+                    OutlinedButton(
+                      key: const ValueKey<String>(
+                        'profile-editor-portable-import-file-action',
+                      ),
+                      onPressed: widget.busy
+                          ? null
+                          : () => unawaited(_importPortableFromFile()),
+                      child: const Text('Import from file'),
+                    ),
+                    OutlinedButton(
+                      key: const ValueKey<String>(
+                        'profile-editor-portable-import-qr-action',
+                      ),
+                      onPressed: widget.busy
+                          ? null
+                          : () => unawaited(_scanPortableQr()),
+                      child: const Text('Scan QR'),
+                    ),
+                    OutlinedButton(
+                      key: const ValueKey<String>(
+                        'profile-editor-portable-import-paste-action',
+                      ),
+                      onPressed: widget.busy
+                          ? null
+                          : () => unawaited(_showPortablePasteDialog()),
+                      child: const Text('Paste envelope'),
+                    ),
+                  ],
+                ),
+              ],
             ),
             const SizedBox(height: 16),
             _actionButton(
@@ -794,6 +1157,19 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     );
   }
 
+  Widget _warningBanner(BuildContext context, String message) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFE2DE),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Text(message, style: theme.textTheme.bodySmall),
+    );
+  }
+
   Widget _providerModeCard(ThemeData theme, bool managedMode) {
     if (widget.managedProviders.isEmpty) {
       return Container(
@@ -1007,6 +1383,78 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
         composing: TextRange.empty,
       );
     }
+  }
+}
+
+class _PortableQrScannerPage extends StatefulWidget {
+  const _PortableQrScannerPage();
+
+  @override
+  State<_PortableQrScannerPage> createState() => _PortableQrScannerPageState();
+}
+
+class _PortableQrScannerPageState extends State<_PortableQrScannerPage> {
+  late final MobileScannerController _controller;
+  bool _handledDetection = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = MobileScannerController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Scan portable profile QR')),
+      body: Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
+          MobileScanner(
+            controller: _controller,
+            onDetect: (BarcodeCapture capture) {
+              if (_handledDetection) {
+                return;
+              }
+              for (final barcode in capture.barcodes) {
+                final rawValue = barcode.rawValue?.trim() ?? '';
+                if (rawValue.isEmpty) {
+                  continue;
+                }
+                _handledDetection = true;
+                Navigator.of(context).pop(rawValue);
+                return;
+              }
+            },
+          ),
+          Positioned(
+            left: 24,
+            right: 24,
+            bottom: 32,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.64),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text(
+                  'Point the camera at a portable profile QR code.',
+                  style: TextStyle(color: Colors.white),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

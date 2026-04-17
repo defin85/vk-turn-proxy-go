@@ -55,6 +55,11 @@ The envelope should carry:
   mode on the destination shell
 - transfer metadata such as schema version and secret classification
 
+The envelope should not carry shell-owned user provider templates.
+Those templates are authoring conveniences that seed new managed-provider
+drafts, but a saved profile depends on its provider binding and, in managed
+mode, on a reusable managed-provider record rather than on a template entry.
+
 ### Decision: Keep profile transfer separate from runtime handoff export
 
 Portable profile transfer is a shell-local operator workflow.
@@ -72,12 +77,16 @@ cross-device identifiers.
 
 Import should therefore treat incoming ids as advisory at most:
 
-- destination shells should allocate fresh local ids by default
+- the first shipped slice should always allocate fresh local ids for imported
+  profiles and imported managed-provider snapshots
 - import must not silently overwrite local profiles or managed providers based
-  only on a matching source id
+  only on a matching source id, and this change does not add an in-place
+  replacement workflow
 - if the imported profile references a managed provider, the destination shell
   should restore that relationship from the embedded snapshot rather than
   assuming the original managed-provider record already exists locally
+- user templates should not be imported as profile dependencies because they do
+  not satisfy an already-saved profile's binding contract
 
 ### Decision: Secret-bearing transfer stays explicit and operator-reviewed
 
@@ -108,6 +117,21 @@ shell must fail closed for QR:
 
 This keeps QR convenient without turning it into the only viable path.
 
+### Decision: Import remains preview-first and confirmation-gated
+
+Desktop and mobile import should validate and preview the incoming portable
+profile envelope before mutating local shell state.
+
+That preview should surface at least:
+
+- imported profile name
+- provider family
+- managed vs custom source mode
+- whether the payload is secret-bearing
+
+This change should not treat opening a file, scanning a QR code, or receiving a
+shared payload as implicit operator approval to create local records.
+
 ### Decision: Desktop and mobile own different platform adapters over one model
 
 Shared shell core should own the envelope, validation, and secret
@@ -116,8 +140,14 @@ Platform packages should keep ownership of:
 
 - desktop file picking, clipboard/text paste, and QR rendering surfaces
 - mobile share-sheet/file ingress, QR scanning, and QR rendering surfaces
+- app-local Android and iOS adapter wiring over the same mobile transfer model
 
 That keeps platform plugins and OS permissions out of shared shell core.
+It also keeps the first validated Android scanner path from hard-coding the
+envelope or preview flow around Android-only assumptions when iOS needs the
+same transfer contract via `UIActivityViewController`,
+`UIDocumentPickerViewController`, and either `DataScannerViewController` or an
+AVFoundation/Vision fallback.
 
 ## Risks / Trade-offs
 
@@ -138,11 +168,13 @@ That keeps platform plugins and OS permissions out of shared shell core.
 ## Migration Plan
 
 1. Add the portable-profile envelope and import/export shaping in shared shell
-   core.
+   core, including explicit managed-provider snapshot restoration without
+   template transfer.
 2. Add desktop export/import actions around the shared envelope, including QR
-   rendering and file/text paths.
-3. Add mobile export/import actions around the same envelope, including QR scan
-   and share/file paths.
+   rendering plus file/text preview-and-confirm paths.
+3. Add mobile export/import actions around the same envelope, including
+   platform-native Android/iOS share/file preview-and-confirm paths and QR
+   scan support behind app-local adapters.
 4. Keep import as a profile-workspace action that does not auto-start runtime
    or browser flows.
 5. Update docs and tests, then validate the change strictly.

@@ -1837,6 +1837,17 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   }
 
   @override
+  Future<PlatformTunnelStopResult> stopPlatformTunnel({
+    required PlatformTunnelMode mode,
+  }) async {
+    return PlatformTunnelStopResult(
+      mode: mode,
+      stopped: true,
+      message: 'stopped',
+    );
+  }
+
+  @override
   Future<List<ProviderDescriptor>> providers() async => _providers;
 
   @override

@@ -30,9 +30,16 @@ rules for ordinary shell persistence.
 - Require desktop to support explicit profile export/import with file or text
   transfer plus QR rendering for cross-device handoff.
 - Require mobile to support explicit profile export/import with platform-native
-  share or file flows plus QR scan/render paths.
+  share or file flows plus QR scan/render paths, while keeping Android and iOS
+  adapters app-local over the same shared envelope.
 - Preserve enough shell-local metadata to restore managed-provider-backed
   profiles without trusting source-local ids on the destination shell.
+- Keep user provider templates out of the portable-profile envelope because
+  templates seed provider authoring flows but do not satisfy a saved profile's
+  runtime dependency on a managed provider record.
+- Keep the first shipped import path append-only: imported profiles and managed
+  provider snapshots become new local records instead of an in-place
+  replacement workflow.
 - Keep secret-bearing profile transfer explicit, operator-reviewed, and
   fail-closed instead of treating it like background state sync.
 

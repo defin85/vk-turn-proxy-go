@@ -15,6 +15,10 @@ import UIKit
     open url: URL,
     options: [UIApplication.OpenURLOptionsKey: Any] = [:]
   ) -> Bool {
+    if url.isFileURL {
+      MobileHostBridgeLocatorPlugin.emitPortableProfileIngress(url: url)
+      return super.application(app, open: url, options: options)
+    }
     MobileHostBridgeLocatorPlugin.emitBrowserReturnSignal(
       kind: "app_link",
       uri: url.absoluteString

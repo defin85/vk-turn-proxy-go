@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter_shell_core/portable_profile_transfer.dart';
 import 'package:flutter/foundation.dart';
 import 'package:gui_shell/src/build/app_build_identity.dart';
 import 'package:gui_shell/src/control/control_plane_client.dart';
 import 'package:gui_shell/src/control/control_plane_models.dart';
 import 'package:gui_shell/src/control/desktop_handoff_adapter.dart';
 import 'package:gui_shell/src/control/desktop_host_supervisor.dart';
+import 'package:gui_shell/src/control/desktop_portable_profile_transfer_adapter.dart';
 import 'package:gui_shell/src/control/profile_draft.dart';
 import 'package:gui_shell/src/control/shell_state_store.dart';
 
@@ -68,6 +70,7 @@ class DesktopShellController extends ChangeNotifier {
     DirectoryProvider? diagnosticsDirectoryProvider,
     BrowserLauncher? browserLauncher,
     DesktopHandoffAdapter? handoffAdapter,
+    DesktopPortableProfileTransferAdapter? portableProfileTransferAdapter,
     DateTime Function()? clock,
     BuildIdentity? appBuild,
   }) : _diagnosticsDirectoryProvider =
@@ -75,6 +78,9 @@ class DesktopShellController extends ChangeNotifier {
        _browserLauncher = browserLauncher ?? const DesktopBrowserLauncher(),
        _handoffAdapter =
            handoffAdapter ?? const ClipboardDesktopHandoffAdapter(),
+       _portableProfileTransferAdapter =
+           portableProfileTransferAdapter ??
+           const SystemDesktopPortableProfileTransferAdapter(),
        _stateStore = stateStore ?? FileDesktopShellStateStore(),
        _clock = clock ?? DateTime.now,
        appBuild = appBuild ?? AppBuildIdentity.current;
@@ -84,6 +90,7 @@ class DesktopShellController extends ChangeNotifier {
   final DirectoryProvider _diagnosticsDirectoryProvider;
   final BrowserLauncher _browserLauncher;
   final DesktopHandoffAdapter _handoffAdapter;
+  final DesktopPortableProfileTransferAdapter _portableProfileTransferAdapter;
   final DesktopShellStateStore _stateStore;
   final DateTime Function() _clock;
   final BuildIdentity appBuild;
@@ -132,6 +139,7 @@ class DesktopShellController extends ChangeNotifier {
   bool _disposed = false;
   bool _shuttingDown = false;
   bool _suppressEventStreamClosure = false;
+  int _portableImportNonce = 0;
   String? _persistedStateSignature;
   bool _restoredState = false;
   Future<void>? _shutdownFuture;
@@ -662,6 +670,125 @@ class DesktopShellController extends ChangeNotifier {
     });
   }
 
+  PortableProfileEnvelope? selectedPortableProfileEnvelope() {
+    final selected = selectedSavedProfile;
+    if (selected == null) {
+      notice = 'Save or select a profile before exporting it.';
+      _notify();
+      return null;
+    }
+    final binding =
+        profileBindings[selected.id] ?? const ProfileProviderBinding();
+    final managedProviderId = binding.managedProviderId?.trim() ?? '';
+    final managedProviderSnapshot = managedProviderId.isEmpty
+        ? null
+        : managedProviderById(managedProviderId);
+    if (binding.isManaged && managedProviderSnapshot == null) {
+      notice =
+          'The selected profile depends on a managed provider snapshot that is no longer available locally.';
+      _notify();
+      return null;
+    }
+    try {
+      return PortableProfileEnvelope.build(
+        profile: selected,
+        providerBinding: binding,
+        managedProviderSnapshot: managedProviderSnapshot,
+      );
+    } on FormatException catch (error) {
+      notice = error.message;
+      _notify();
+      return null;
+    }
+  }
+
+  Future<void> copyPortableProfileEnvelopeText(
+    PortableProfileEnvelope envelope,
+  ) async {
+    await _runMutation(() async {
+      await _portableProfileTransferAdapter.copyEnvelopeText(
+        envelope.toPrettyJson(),
+      );
+      final profileLabel = envelope.displayName;
+      notice = envelope.isSecretBearing
+          ? 'Copied secret-bearing portable profile $profileLabel. Treat the payload like a credential.'
+          : 'Copied portable profile $profileLabel.';
+    });
+  }
+
+  Future<void> savePortableProfileEnvelopeToFile(
+    PortableProfileEnvelope envelope,
+  ) async {
+    await _runMutation(() async {
+      final path = await _portableProfileTransferAdapter.saveEnvelopeText(
+        suggestedName: _portableProfileSuggestedFilename(envelope),
+        payload: envelope.toPrettyJson(),
+      );
+      if (path == null) {
+        return;
+      }
+      final profileLabel = envelope.displayName;
+      notice = envelope.isSecretBearing
+          ? 'Saved secret-bearing portable profile $profileLabel to $path.'
+          : 'Saved portable profile $profileLabel to $path.';
+    });
+  }
+
+  Future<PortableProfileEnvelope?>
+  importPortableProfileEnvelopeFromFile() async {
+    final payload = await _portableProfileTransferAdapter.openEnvelopeText();
+    if (payload == null) {
+      return null;
+    }
+    return previewPortableProfileEnvelope(payload);
+  }
+
+  PortableProfileEnvelope? previewPortableProfileEnvelope(String payload) {
+    try {
+      return PortableProfileEnvelope.decode(payload);
+    } on FormatException catch (error) {
+      notice = error.message;
+      _notify();
+      return null;
+    }
+  }
+
+  Future<void> confirmPortableProfileImport(
+    PortableProfileEnvelope envelope,
+  ) async {
+    await _runMutation(() async {
+      final imported = importPortableProfileEnvelope(
+        envelope,
+        idFactory: _nextPortableImportId,
+      );
+      final savedProfile = await api.upsertProfile(imported.profile);
+      if (imported.managedProvider != null) {
+        final nextManagedProviders = <ManagedProviderRecord>[
+          for (final provider in managedProviders)
+            if (provider.id != imported.managedProvider!.id) provider,
+          imported.managedProvider!,
+        ]..sort(_managedProviderNameSort);
+        managedProviders = _overlayManagedProviders(nextManagedProviders);
+      }
+      profileBindings = <String, ProfileProviderBinding>{
+        ...profileBindings,
+        savedProfile.id: imported.providerBinding,
+      };
+      notice = envelope.isSecretBearing
+          ? 'Imported secret-bearing profile ${savedProfile.name.isEmpty ? savedProfile.id : savedProfile.name}. Review provider input before sharing it further.'
+          : 'Imported profile ${savedProfile.name.isEmpty ? savedProfile.id : savedProfile.name}.';
+      _showEditorRouteForSection(DesktopShellSection.profileWorkflow);
+      await refresh();
+      selectProfile(savedProfile.id);
+    });
+  }
+
+  String _nextPortableImportId() {
+    _portableImportNonce += 1;
+    final seed = _clock().microsecondsSinceEpoch.toRadixString(16);
+    return 'portable-$seed-${_portableImportNonce.toRadixString(16)}';
+  }
+
   Future<void> deleteSelectedManagedProvider() async {
     final providerId = selectedManagedProviderId;
     if (providerId == null) {
@@ -951,6 +1078,19 @@ class DesktopShellController extends ChangeNotifier {
 
   ProviderDescriptor? get activeProviderDescriptor =>
       descriptorForProvider(draft.spec.provider);
+
+  ProfileRecord? get selectedSavedProfile {
+    final profileId = selectedProfileId?.trim() ?? '';
+    if (profileId.isEmpty) {
+      return null;
+    }
+    for (final profile in profiles) {
+      if (profile.id == profileId) {
+        return profile;
+      }
+    }
+    return null;
+  }
 
   ManagedProviderRecord? managedProviderById(String managedProviderId) {
     final normalized = managedProviderId.trim();
@@ -1642,6 +1782,18 @@ String _formatNoticeTimestamp(DateTime value) {
   final local = value.toLocal();
   return '${local.year}-${_twoDigits(local.month)}-${_twoDigits(local.day)} '
       '${_twoDigits(local.hour)}:${_twoDigits(local.minute)}:${_twoDigits(local.second)}';
+}
+
+String _portableProfileSuggestedFilename(PortableProfileEnvelope envelope) {
+  final rawName = envelope.displayName.trim();
+  final slug = rawName.isEmpty
+      ? 'profile'
+      : rawName
+            .toLowerCase()
+            .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+            .replaceAll(RegExp(r'^-+|-+$'), '');
+  final safeSlug = slug.isEmpty ? 'profile' : slug;
+  return '$safeSlug.portable-profile.json';
 }
 
 String _twoDigits(int value) => value.toString().padLeft(2, '0');

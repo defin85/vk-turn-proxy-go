@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter_shell_core/portable_profile_transfer.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gui_shell/src/control/control_plane_client.dart';
 import 'package:gui_shell/src/control/control_plane_models.dart';
 import 'package:gui_shell/src/control/desktop_handoff_adapter.dart';
 import 'package:gui_shell/src/control/desktop_host_supervisor.dart';
+import 'package:gui_shell/src/control/desktop_portable_profile_transfer_adapter.dart';
 import 'package:gui_shell/src/control/desktop_shell_controller.dart';
 import 'package:gui_shell/src/control/profile_draft.dart';
 import 'package:gui_shell/src/control/shell_state_store.dart';
@@ -992,6 +994,162 @@ void main() {
   );
 
   test(
+    'controller exports selected profiles through portable transfer adapter',
+    () async {
+      final portableAdapter = _FakeDesktopPortableProfileTransferAdapter();
+      final api = _FakeControlPlaneApi(
+        profiles: <ProfileRecord>[
+          ProfileRecord(id: 'profile-1', name: 'alpha', spec: _profileSpec()),
+        ],
+        sessions: const <SessionRecord>[],
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(const <HostConnectionResult>[
+          HostConnectionResult(
+            state: HostLifecycleState.ready,
+            message: 'ready',
+            info: _readyHostInfo,
+          ),
+        ]),
+        portableProfileTransferAdapter: portableAdapter,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      controller.selectProfile('profile-1');
+
+      final envelope = controller.selectedPortableProfileEnvelope();
+      expect(envelope, isNotNull);
+
+      await controller.copyPortableProfileEnvelopeText(envelope!);
+      await controller.savePortableProfileEnvelopeToFile(envelope);
+
+      expect(portableAdapter.copiedPayloads, hasLength(1));
+      expect(
+        portableAdapter.copiedPayloads.single,
+        contains('"type": "portable_profile"'),
+      );
+      expect(portableAdapter.savedPayloads, hasLength(1));
+      expect(
+        portableAdapter.savedSuggestedNames.single,
+        'alpha.portable-profile.json',
+      );
+      expect(controller.notice, contains('secret-bearing portable profile'));
+    },
+  );
+
+  test(
+    'controller imports managed portable profiles append-only with fresh ids',
+    () async {
+      final api = _FakeControlPlaneApi(
+        profiles: const <ProfileRecord>[],
+        sessions: const <SessionRecord>[],
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(const <HostConnectionResult>[
+          HostConnectionResult(
+            state: HostLifecycleState.ready,
+            message: 'ready',
+            info: _readyHostInfo,
+          ),
+        ]),
+        clock: () => DateTime.utc(2026, 4, 17, 12, 0),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      final envelope = PortableProfileEnvelope.build(
+        profile: ProfileRecord(
+          id: 'remote-profile',
+          name: 'Imported alpha',
+          spec: _profileSpec().copyWith(link: ''),
+        ),
+        providerBinding: const ProfileProviderBinding(
+          mode: ProfileProviderMode.managed,
+          managedProviderId: 'remote-managed',
+        ),
+        managedProviderSnapshot: _managedProviderRecord(
+          id: 'remote-managed',
+          name: 'Imported VK provider',
+        ),
+      );
+
+      await controller.confirmPortableProfileImport(envelope);
+
+      expect(api.upsertedProfiles, hasLength(1));
+      final savedProfile = api.upsertedProfiles.single;
+      expect(savedProfile.id, isNot('remote-profile'));
+      expect(savedProfile.id, startsWith('portable-'));
+      expect(controller.selectedProfileId, savedProfile.id);
+      expect(
+        controller.profileBindings[savedProfile.id]?.mode,
+        ProfileProviderMode.managed,
+      );
+      expect(
+        controller.profileBindings[savedProfile.id]?.managedProviderId,
+        isNot('remote-managed'),
+      );
+      final importedManagedProviderId =
+          controller.profileBindings[savedProfile.id]?.managedProviderId;
+      expect(
+        controller.managedProviders.any(
+          (ManagedProviderRecord provider) =>
+              provider.id == importedManagedProviderId,
+        ),
+        isTrue,
+      );
+      expect(controller.notice, contains('Imported profile'));
+      expect(api.startSessionCalls, 0);
+      expect(api.startResolutionCalls, isEmpty);
+    },
+  );
+
+  test(
+    'controller fails closed for unsupported portable import payloads',
+    () async {
+      final api = _FakeControlPlaneApi(
+        profiles: const <ProfileRecord>[],
+        sessions: const <SessionRecord>[],
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(const <HostConnectionResult>[
+          HostConnectionResult(
+            state: HostLifecycleState.ready,
+            message: 'ready',
+            info: _readyHostInfo,
+          ),
+        ]),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      final envelope = controller.previewPortableProfileEnvelope(
+        jsonEncode(<String, dynamic>{
+          'type': kPortableProfileEnvelopeType,
+          'version': 99,
+          'profile': ProfileRecord(
+            id: 'profile-1',
+            name: 'alpha',
+            spec: _profileSpec(),
+          ).toJson(),
+          'provider_binding': const ProfileProviderBinding().toJson(),
+          'secret_classification': const PortableProfileSecretClassification(
+            secretBearing: true,
+          ).toJson(),
+        }),
+      );
+
+      expect(envelope, isNull);
+      expect(controller.notice, contains('unsupported envelope version'));
+    },
+  );
+
+  test(
     'controller consumes typed platform tunnel reports and startup-stage results',
     () async {
       final api = _FakeControlPlaneApi(
@@ -1294,6 +1452,17 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   }
 
   @override
+  Future<PlatformTunnelStopResult> stopPlatformTunnel({
+    required PlatformTunnelMode mode,
+  }) async {
+    return PlatformTunnelStopResult(
+      mode: mode,
+      stopped: true,
+      message: 'stopped',
+    );
+  }
+
+  @override
   Future<List<ProfileRecord>> profiles() async {
     if (failReads) {
       throw const ControlPlaneError(
@@ -1465,6 +1634,33 @@ class _FakeDesktopHandoffAdapter implements DesktopHandoffAdapter {
   }
 }
 
+class _FakeDesktopPortableProfileTransferAdapter
+    implements DesktopPortableProfileTransferAdapter {
+  final List<String> copiedPayloads = <String>[];
+  final List<String> savedPayloads = <String>[];
+  final List<String> savedSuggestedNames = <String>[];
+  String? nextSavedPath = '/tmp/exported-profile.json';
+  String? nextOpenedPayload;
+
+  @override
+  Future<void> copyEnvelopeText(String payload) async {
+    copiedPayloads.add(payload);
+  }
+
+  @override
+  Future<String?> openEnvelopeText() async => nextOpenedPayload;
+
+  @override
+  Future<String?> saveEnvelopeText({
+    required String suggestedName,
+    required String payload,
+  }) async {
+    savedSuggestedNames.add(suggestedName);
+    savedPayloads.add(payload);
+    return nextSavedPath;
+  }
+}
+
 class _FakeDesktopBrowserLauncher implements BrowserLauncher {
   final List<String> openedUrls = <String>[];
 
@@ -1500,6 +1696,20 @@ ProfileSpec _profileSpec() {
     peerAddress: '127.0.0.1:56000',
     turnServer: 'turn.example.test',
     turnPort: '3478',
+  );
+}
+
+ManagedProviderRecord _managedProviderRecord({
+  required String id,
+  required String name,
+}) {
+  return ManagedProviderRecord(
+    id: id,
+    provider: 'vk',
+    name: name,
+    providerSettings: const <String, dynamic>{'region': 'eu-west'},
+    createdAt: DateTime.utc(2026, 4, 17, 12, 0),
+    updatedAt: DateTime.utc(2026, 4, 17, 12, 1),
   );
 }
 

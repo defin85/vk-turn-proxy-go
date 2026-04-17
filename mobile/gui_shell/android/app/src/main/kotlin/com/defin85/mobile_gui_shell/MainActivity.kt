@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.net.VpnService
 import android.view.WindowInsets
@@ -20,11 +21,14 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugins.webviewflutter.WebViewFlutterAndroidExternalApi
 import io.flutter.plugins.webviewflutter.WebViewProxyApi
+import java.io.File
 
 private const val MOBILE_HOST_BRIDGE_CHANNEL =
     "com.defin85.vk_turn_proxy_go/mobile_host_bridge"
 private const val MOBILE_HOST_BRIDGE_BROWSER_RETURN_SIGNAL_CHANNEL =
     "com.defin85.vk_turn_proxy_go/mobile_host_bridge/browser_return_signals"
+private const val MOBILE_PORTABLE_PROFILE_INGRESS_CHANNEL =
+    "com.defin85.vk_turn_proxy_go/mobile_portable_profile_transfer/ingress"
 private const val MOBILE_HOST_URL_META_DATA =
     "com.defin85.vk_turn_proxy_go.MOBILE_HOST_URL"
 private const val PLATFORM_TUNNEL_PERMISSION_REQUEST_CODE = 1001
@@ -33,8 +37,11 @@ class MainActivity : FlutterActivity() {
     private var mobileHostBridgeChannel: MethodChannel? = null
     private var browserReturnSignalChannel: EventChannel? = null
     private var browserReturnSignalSink: EventChannel.EventSink? = null
+    private var portableProfileIngressChannel: EventChannel? = null
+    private var portableProfileIngressSink: EventChannel.EventSink? = null
     private var boundFlutterEngine: FlutterEngine? = null
     private val pendingBrowserReturnSignals = mutableListOf<Map<String, Any>>()
+    private val pendingPortableProfileIngressPayloads = mutableListOf<String>()
     private var pendingPlatformTunnelPermissionResult: MethodChannel.Result? = null
     private val documentStartScriptHandlers = mutableMapOf<Long, ScriptHandler>()
     private val platformTunnelBridge by lazy {
@@ -136,7 +143,28 @@ class MainActivity : FlutterActivity() {
                 },
             )
         }
+        portableProfileIngressChannel = EventChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            MOBILE_PORTABLE_PROFILE_INGRESS_CHANNEL,
+        ).apply {
+            setStreamHandler(
+                object : EventChannel.StreamHandler {
+                    override fun onListen(
+                        arguments: Any?,
+                        events: EventChannel.EventSink,
+                    ) {
+                        portableProfileIngressSink = events
+                        flushPendingPortableProfileIngressPayloads()
+                    }
+
+                    override fun onCancel(arguments: Any?) {
+                        portableProfileIngressSink = null
+                    }
+                },
+            )
+        }
         EmbeddedMobileHost.registerPlatformTunnelBridge(platformTunnelBridge)
+        emitPortableProfileIngressFromIntent(intent)
         emitBrowserReturnSignalFromIntent(intent)
     }
 
@@ -150,14 +178,19 @@ class MainActivity : FlutterActivity() {
         browserReturnSignalChannel?.setStreamHandler(null)
         browserReturnSignalChannel = null
         browserReturnSignalSink = null
+        portableProfileIngressChannel?.setStreamHandler(null)
+        portableProfileIngressChannel = null
+        portableProfileIngressSink = null
         boundFlutterEngine = null
         pendingBrowserReturnSignals.clear()
+        pendingPortableProfileIngressPayloads.clear()
         super.cleanUpFlutterEngine(flutterEngine)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        emitPortableProfileIngressFromIntent(intent)
         emitBrowserReturnSignalFromIntent(intent)
     }
 
@@ -203,10 +236,19 @@ class MainActivity : FlutterActivity() {
         if (intent?.action != Intent.ACTION_VIEW) {
             return
         }
+        val scheme = intent.data?.scheme?.lowercase()
+        if (scheme != "http" && scheme != "https") {
+            return
+        }
         emitBrowserReturnSignal(
             kind = "app_link",
             uri = intent.dataString?.trim()?.takeIf { value -> value.isNotEmpty() },
         )
+    }
+
+    private fun emitPortableProfileIngressFromIntent(intent: Intent?) {
+        val payload = extractPortableProfileIngressPayload(intent) ?: return
+        emitPortableProfileIngress(payload)
     }
 
     private fun emitBrowserReturnSignal(kind: String, uri: String?) {
@@ -222,12 +264,81 @@ class MainActivity : FlutterActivity() {
         sink.success(payload)
     }
 
+    private fun emitPortableProfileIngress(payload: String) {
+        val trimmed = payload.trim()
+        if (trimmed.isEmpty()) {
+            return
+        }
+        val sink = portableProfileIngressSink
+        if (sink == null) {
+            pendingPortableProfileIngressPayloads.add(trimmed)
+            return
+        }
+        sink.success(trimmed)
+    }
+
     private fun flushPendingBrowserReturnSignals() {
         val sink = browserReturnSignalSink ?: return
         for (payload in pendingBrowserReturnSignals) {
             sink.success(payload)
         }
         pendingBrowserReturnSignals.clear()
+    }
+
+    private fun flushPendingPortableProfileIngressPayloads() {
+        val sink = portableProfileIngressSink ?: return
+        for (payload in pendingPortableProfileIngressPayloads) {
+            sink.success(payload)
+        }
+        pendingPortableProfileIngressPayloads.clear()
+    }
+
+    private fun extractPortableProfileIngressPayload(intent: Intent?): String? {
+        if (intent == null) {
+            return null
+        }
+        return when (intent.action) {
+            Intent.ACTION_SEND -> {
+                extractPortableProfileSharePayload(intent)
+            }
+            Intent.ACTION_VIEW -> {
+                val uri = intent.data ?: return null
+                val scheme = uri.scheme?.lowercase()
+                if (scheme == "http" || scheme == "https") {
+                    null
+                } else {
+                    readPortableProfilePayload(uri)
+                }
+            }
+            else -> null
+        }
+    }
+
+    private fun extractPortableProfileSharePayload(intent: Intent): String? {
+        val streamUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
+        }
+        if (streamUri != null) {
+            return readPortableProfilePayload(streamUri)
+        }
+        return null
+    }
+
+    private fun readPortableProfilePayload(uri: Uri): String? {
+        return try {
+            val raw = when (uri.scheme?.lowercase()) {
+                "file" -> uri.path?.let { path -> File(path).readText() }
+                else -> contentResolver.openInputStream(uri)?.bufferedReader()?.use { reader ->
+                    reader.readText()
+                }
+            }
+            raw?.trim()?.takeIf { value -> value.isNotEmpty() }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun requestPlatformTunnelPermission(

@@ -6,6 +6,8 @@ It is a GUI over the local client control plane, not a second runtime implementa
 ## Scope
 
 - manage saved profiles
+- transfer saved profiles across shells through explicit portable-profile file,
+  text, and QR actions
 - resolve live provider links into typed handoff records
 - start the same-device runtime path from a resolved handoff without manual secret copy/paste
 - start and stop sessions through `cmd/clientd`
@@ -180,6 +182,31 @@ The persisted plaintext state keeps the same-device runtime defaults separate
 from secret-bearing provider input links; invite URLs, room/bootstrap tokens,
 and `generic-turn://...` handoff credentials are cleared before the plaintext
 state file is written.
+
+## Portable profile transfer
+
+Saved profiles now support a second explicit transfer path that stays distinct
+from both ordinary shell persistence and runtime handoff export:
+
+- `Export saved profile` in the profile workspace builds one versioned
+  portable-profile envelope from the saved profile plus any managed-provider
+  snapshot required to restore its managed/custom source mode on another shell
+- the desktop shell can copy that envelope as text, save it as a `.json` file,
+  and render the same payload as QR when the encoded envelope fits the shared
+  QR bounds
+- if the payload is too large for QR, the shell fails closed for QR and keeps
+  file/text export available instead of truncating the payload
+- desktop import accepts either a selected file or pasted JSON envelope, always
+  shows a preview before confirmation, allocates fresh local ids, restores
+  managed-provider bindings from the embedded snapshot, and never auto-starts
+  runtime or overwrites an unrelated local profile
+- secret-bearing portable envelopes are warned explicitly before copy, save, QR
+  rendering, or import confirmation
+
+This portable transfer path is not the same as `Copy handoff`.
+`Copy handoff` still exports a short-lived runtime artifact from a resolved
+resolution card, while portable profile transfer exports a saved profile
+workspace snapshot for shell-to-shell reuse.
 
 ## Challenge, tray, and notifications behavior
 

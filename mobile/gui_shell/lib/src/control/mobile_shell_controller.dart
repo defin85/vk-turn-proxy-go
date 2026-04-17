@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter_shell_core/portable_profile_transfer.dart';
 import 'package:flutter/widgets.dart';
 import 'package:mobile_gui_shell/src/build/app_build_identity.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_client.dart';
@@ -8,6 +9,7 @@ import 'package:mobile_gui_shell/src/control/control_plane_models.dart';
 import 'package:mobile_gui_shell/src/control/mobile_handoff_adapter.dart';
 import 'package:mobile_gui_shell/src/control/mobile_host_bridge.dart';
 import 'package:mobile_gui_shell/src/control/mobile_platform_app_inventory.dart';
+import 'package:mobile_gui_shell/src/control/mobile_portable_profile_transfer_adapter.dart';
 import 'package:mobile_gui_shell/src/control/mobile_shell_state_store.dart';
 import 'package:mobile_gui_shell/src/control/profile_draft.dart';
 import 'package:path_provider/path_provider.dart';
@@ -50,13 +52,18 @@ class MobileShellController extends ChangeNotifier {
     required this.stateStore,
     BrowserLauncher? browserLauncher,
     MobileHandoffAdapter? handoffAdapter,
+    MobilePortableProfileTransferAdapter? portableProfileTransferAdapter,
     MobilePlatformAppInventory? appInventory,
     DirectoryProvider? diagnosticsDirectoryProvider,
     DateTime Function()? clock,
     IDFactory? idFactory,
     BuildIdentity? appBuild,
+    Duration transientNoticeDuration = const Duration(seconds: 4),
   }) : _browserLauncher = browserLauncher ?? ExternalBrowserLauncher(),
        _handoffAdapter = handoffAdapter ?? const SystemMobileHandoffAdapter(),
+       _portableProfileTransferAdapter =
+           portableProfileTransferAdapter ??
+           SystemMobilePortableProfileTransferAdapter(),
        _appInventory = appInventory ?? PlatformMobilePlatformAppInventory(),
        _diagnosticsDirectoryProvider =
            diagnosticsDirectoryProvider ?? defaultDiagnosticsDirectory,
@@ -64,16 +71,19 @@ class MobileShellController extends ChangeNotifier {
        _idFactory =
            idFactory ??
            (() => DateTime.now().microsecondsSinceEpoch.toRadixString(16)),
+       _transientNoticeDuration = transientNoticeDuration,
        appBuild = appBuild ?? AppBuildIdentity.current;
 
   final MobileHostBridge bridge;
   final MobileShellStateStore stateStore;
   final BrowserLauncher _browserLauncher;
   final MobileHandoffAdapter _handoffAdapter;
+  final MobilePortableProfileTransferAdapter _portableProfileTransferAdapter;
   final MobilePlatformAppInventory _appInventory;
   final DirectoryProvider _diagnosticsDirectoryProvider;
   final DateTime Function() _clock;
   final IDFactory _idFactory;
+  final Duration _transientNoticeDuration;
   final BuildIdentity appBuild;
 
   static const String _draftModePreferenceScope = '__draft__';
@@ -109,7 +119,7 @@ class MobileShellController extends ChangeNotifier {
   String? installedAppsError;
   final Map<PlatformTunnelMode, PlatformTunnelStartResult>
   _platformTunnelResults = <PlatformTunnelMode, PlatformTunnelStartResult>{};
-  String? notice;
+  String? _notice;
   bool busy = false;
   bool _requiresLocalStateReset = false;
   String? _blockedLocalStateMessage;
@@ -118,13 +128,18 @@ class MobileShellController extends ChangeNotifier {
       <String, ChallengeRecord>{};
   StreamSubscription<EventRecord>? _eventSubscription;
   StreamSubscription<MobileBrowserReturnSignal>? _browserReturnSubscription;
+  StreamSubscription<String>? _portableProfileIngressSubscription;
   Timer? _pollTimer;
   Timer? _debounceTimer;
   Timer? _persistTimer;
+  Timer? _noticeTimer;
   bool _disposed = false;
+  int _portableImportNonce = 0;
   String? _persistedStateSignature;
   String? _browserHandoffChallengeId;
   final Set<String> _autoContinuedChallengeIds = <String>{};
+  PortableProfileEnvelope? _pendingPortableProfileImportEnvelope;
+  String? _pendingPortableProfileImportPayload;
 
   static const List<Capability> requiredCapabilities = <Capability>[
     Capability.mobileHostBridge,
@@ -139,6 +154,14 @@ class MobileShellController extends ChangeNotifier {
   ];
 
   bool get requiresLocalStateReset => _requiresLocalStateReset;
+
+  String? get notice => _notice;
+
+  set notice(String? value) {
+    _noticeTimer?.cancel();
+    _noticeTimer = null;
+    _notice = value;
+  }
 
   String? get hostStatusMessage {
     final message = hostConnection?.message.trim() ?? '';
@@ -215,6 +238,22 @@ class MobileShellController extends ChangeNotifier {
     return null;
   }
 
+  ProfileRecord? get selectedSavedProfile {
+    final profileId = selectedProfileId?.trim() ?? '';
+    if (profileId.isEmpty) {
+      return null;
+    }
+    for (final profile in profiles) {
+      if (profile.id == profileId) {
+        return profile;
+      }
+    }
+    return null;
+  }
+
+  PortableProfileEnvelope? get pendingPortableProfileImportEnvelope =>
+      _pendingPortableProfileImportEnvelope;
+
   ChallengeRecord? get activeHomeChallenge {
     final selectedResolutionChallenge = switch (selectedResolutionRecord) {
       final ResolutionRecord resolution => activeChallengeForResolution(
@@ -289,6 +328,21 @@ class MobileShellController extends ChangeNotifier {
     _notify();
   }
 
+  void showTransientNotice(String message) {
+    notice = message;
+    final trimmed = message.trim();
+    if (trimmed.isEmpty) {
+      return;
+    }
+    _noticeTimer = Timer(_transientNoticeDuration, () {
+      if (_notice?.trim() != trimmed) {
+        return;
+      }
+      _notice = null;
+      _notify();
+    });
+  }
+
   List<ProviderPreset> get presetCatalog => kProviderPresetCatalog;
 
   List<SupportedProviderDefinition> get supportedProviderCatalog =>
@@ -328,6 +382,7 @@ class MobileShellController extends ChangeNotifier {
 
   Future<void> initialize() async {
     _startBrowserReturnSignals();
+    _startPortableProfileIngress();
     await _restorePersistedState();
     if (_requiresLocalStateReset) {
       await _connectBridge(localStateBlocked: true);
@@ -594,6 +649,16 @@ class MobileShellController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void clearPendingPortableProfileImportPreview() {
+    if (_pendingPortableProfileImportEnvelope == null &&
+        _pendingPortableProfileImportPayload == null) {
+      return;
+    }
+    _pendingPortableProfileImportEnvelope = null;
+    _pendingPortableProfileImportPayload = null;
+    _notify();
+  }
+
   void showProviderWorkspace({String? preferredProvider}) {
     workflowSurface = MobileWorkflowSurface.provider;
     if (selectedManagedProviderId == null) {
@@ -720,7 +785,9 @@ class MobileShellController extends ChangeNotifier {
         saved,
       ]..sort(_providerTemplateNameSort);
       providerTemplates = _overlayProviderTemplates(next);
-      notice = 'Saved template ${saved.name.isEmpty ? saved.id : saved.name}.';
+      showTransientNotice(
+        'Saved template ${saved.name.isEmpty ? saved.id : saved.name}.',
+      );
       selectedProviderTemplateId = saved.id;
       providerTemplateDraft = ProviderTemplateDraft.fromRecord(saved);
       _scheduleStatePersist();
@@ -795,8 +862,9 @@ class MobileShellController extends ChangeNotifier {
         saved,
       ]..sort(_managedProviderNameSort);
       managedProviders = _overlayManagedProviders(next);
-      notice =
-          'Saved managed provider ${saved.name.isEmpty ? saved.id : saved.name}.';
+      showTransientNotice(
+        'Saved managed provider ${saved.name.isEmpty ? saved.id : saved.name}.',
+      );
       selectedManagedProviderId = saved.id;
       managedProviderDraft = ManagedProviderDraft.fromRecord(saved);
       _scheduleStatePersist();
@@ -968,8 +1036,9 @@ class MobileShellController extends ChangeNotifier {
       );
       profiles = nextProfiles;
       selectProfile(profile.id);
-      notice =
-          'Saved mobile profile ${profile.name.isEmpty ? profile.id : profile.name}.';
+      showTransientNotice(
+        'Saved mobile profile ${profile.name.isEmpty ? profile.id : profile.name}.',
+      );
       if (hostConnection?.isReady == true) {
         await refresh();
       }
@@ -1034,6 +1103,223 @@ class MobileShellController extends ChangeNotifier {
       busy = false;
       _notify();
     }
+  }
+
+  PortableProfileEnvelope? selectedPortableProfileEnvelope() {
+    final selected = selectedSavedProfile;
+    if (selected == null) {
+      notice = 'Save or select a profile before exporting it.';
+      _notify();
+      return null;
+    }
+    final binding =
+        profileBindings[selected.id] ?? const ProfileProviderBinding();
+    final managedProviderId = binding.managedProviderId?.trim() ?? '';
+    final managedProviderSnapshot = managedProviderId.isEmpty
+        ? null
+        : managedProviderById(managedProviderId);
+    if (binding.isManaged && managedProviderSnapshot == null) {
+      notice =
+          'The selected profile depends on a managed provider snapshot that is no longer available locally.';
+      _notify();
+      return null;
+    }
+    try {
+      return PortableProfileEnvelope.build(
+        profile: selected,
+        providerBinding: binding,
+        managedProviderSnapshot: managedProviderSnapshot,
+      );
+    } on FormatException catch (error) {
+      notice = error.message;
+      _notify();
+      return null;
+    }
+  }
+
+  Future<void> copyPortableProfileEnvelopeText(
+    PortableProfileEnvelope envelope,
+  ) async {
+    if (_requiresLocalStateReset) {
+      notice = _localStateResetBlockMessage();
+      _notify();
+      return;
+    }
+    busy = true;
+    _notify();
+    try {
+      await _portableProfileTransferAdapter.copyEnvelopeText(
+        envelope.toPrettyJson(),
+      );
+      final profileLabel = envelope.displayName;
+      notice = envelope.isSecretBearing
+          ? 'Copied secret-bearing portable profile $profileLabel. Treat the payload like a credential.'
+          : 'Copied portable profile $profileLabel.';
+    } catch (error) {
+      notice = '$error';
+    } finally {
+      busy = false;
+      _notify();
+    }
+  }
+
+  Future<void> sharePortableProfileEnvelopeText(
+    PortableProfileEnvelope envelope,
+  ) async {
+    if (_requiresLocalStateReset) {
+      notice = _localStateResetBlockMessage();
+      _notify();
+      return;
+    }
+    busy = true;
+    _notify();
+    try {
+      await _portableProfileTransferAdapter.shareEnvelopeText(
+        envelope.toPrettyJson(),
+      );
+      final profileLabel = envelope.displayName;
+      notice = envelope.isSecretBearing
+          ? 'Shared secret-bearing portable profile $profileLabel as text.'
+          : 'Shared portable profile $profileLabel as text.';
+    } catch (error) {
+      notice = '$error';
+    } finally {
+      busy = false;
+      _notify();
+    }
+  }
+
+  Future<void> sharePortableProfileEnvelopeFile(
+    PortableProfileEnvelope envelope,
+  ) async {
+    if (_requiresLocalStateReset) {
+      notice = _localStateResetBlockMessage();
+      _notify();
+      return;
+    }
+    busy = true;
+    _notify();
+    try {
+      await _portableProfileTransferAdapter.shareEnvelopeFile(
+        suggestedName: _portableProfileSuggestedFilename(envelope),
+        payload: envelope.toPrettyJson(),
+      );
+      final profileLabel = envelope.displayName;
+      notice = envelope.isSecretBearing
+          ? 'Shared secret-bearing portable profile $profileLabel as a file.'
+          : 'Shared portable profile $profileLabel as a file.';
+    } catch (error) {
+      notice = '$error';
+    } finally {
+      busy = false;
+      _notify();
+    }
+  }
+
+  Future<PortableProfileEnvelope?>
+  importPortableProfileEnvelopeFromFile() async {
+    if (_requiresLocalStateReset) {
+      notice = _localStateResetBlockMessage();
+      _notify();
+      return null;
+    }
+    try {
+      final payload = await _portableProfileTransferAdapter.openEnvelopeText();
+      if (payload == null) {
+        return null;
+      }
+      return previewPortableProfileEnvelope(payload);
+    } catch (error) {
+      notice = '$error';
+      _notify();
+      return null;
+    }
+  }
+
+  PortableProfileEnvelope? previewPortableProfileEnvelope(String payload) {
+    try {
+      return PortableProfileEnvelope.decode(payload);
+    } on FormatException catch (error) {
+      notice = error.message;
+      _notify();
+      return null;
+    }
+  }
+
+  Future<void> confirmPortableProfileImport(
+    PortableProfileEnvelope envelope,
+  ) async {
+    if (_requiresLocalStateReset) {
+      notice = _localStateResetBlockMessage();
+      _notify();
+      return;
+    }
+    busy = true;
+    _notify();
+    try {
+      final imported = importPortableProfileEnvelope(
+        envelope,
+        idFactory: _nextPortableImportId,
+      );
+      var profile = imported.profile;
+      if (hostConnection?.isReady == true) {
+        profile = await bridge.upsertProfile(profile);
+      }
+      if (imported.managedProvider != null) {
+        final nextManagedProviders = <ManagedProviderRecord>[
+          for (final provider in managedProviders)
+            if (provider.id != imported.managedProvider!.id) provider,
+          imported.managedProvider!,
+        ]..sort(_managedProviderNameSort);
+        managedProviders = _overlayManagedProviders(nextManagedProviders);
+      }
+      profileBindings = <String, ProfileProviderBinding>{
+        ...profileBindings,
+        profile.id: imported.providerBinding,
+      };
+      final nextProfiles = profiles.toList(growable: true);
+      nextProfiles.removeWhere(
+        (ProfileRecord existing) => existing.id == profile.id,
+      );
+      nextProfiles.add(profile);
+      nextProfiles.sort(
+        (ProfileRecord left, ProfileRecord right) =>
+            left.id.compareTo(right.id),
+      );
+      profiles = nextProfiles;
+      selectedProfileId = profile.id;
+      draft = _normalizeDraft(
+        ProfileDraft.fromProfile(
+          profile,
+          providerBinding: imported.providerBinding,
+        ),
+      );
+      workflowSurface = MobileWorkflowSurface.profile;
+      notice = envelope.isSecretBearing
+          ? 'Imported secret-bearing profile ${profile.name.isEmpty ? profile.id : profile.name}. Review provider input before sharing it further.'
+          : 'Imported profile ${profile.name.isEmpty ? profile.id : profile.name}.';
+      _scheduleStatePersist();
+      if (hostConnection?.isReady == true) {
+        await refresh();
+      }
+    } on ControlPlaneError catch (error) {
+      if (_bridgeShouldFailClosed(error)) {
+        await _handleBridgeFailure(error);
+      } else {
+        notice = error.message;
+      }
+    } catch (error) {
+      notice = '$error';
+    } finally {
+      busy = false;
+      _notify();
+    }
+  }
+
+  String _nextPortableImportId() {
+    _portableImportNonce += 1;
+    final seed = _clock().microsecondsSinceEpoch.toRadixString(16);
+    return 'portable-$seed-${_portableImportNonce.toRadixString(16)}';
   }
 
   Future<void> startSelectedProfile() async {
@@ -1488,8 +1774,10 @@ class MobileShellController extends ChangeNotifier {
     _debounceTimer?.cancel();
     _persistTimer?.cancel();
     _pollTimer?.cancel();
+    _noticeTimer?.cancel();
     _eventSubscription?.cancel();
     _browserReturnSubscription?.cancel();
+    _portableProfileIngressSubscription?.cancel();
     unawaited(bridge.dispose());
     super.dispose();
   }
@@ -1521,6 +1809,48 @@ class MobileShellController extends ChangeNotifier {
     ) {
       unawaited(_handleBrowserReturnSignal(signal));
     }, onError: (Object error, StackTrace stackTrace) {});
+  }
+
+  void _startPortableProfileIngress() {
+    if (_portableProfileIngressSubscription != null) {
+      return;
+    }
+    _portableProfileIngressSubscription = _portableProfileTransferAdapter
+        .ingressPayloads
+        .listen((String payload) {
+          unawaited(_handlePortableProfileIngressPayload(payload));
+        }, onError: (Object error, StackTrace stackTrace) {});
+  }
+
+  Future<void> _handlePortableProfileIngressPayload(String payload) async {
+    if (_disposed) {
+      return;
+    }
+    final trimmed = payload.trim();
+    if (trimmed.isEmpty) {
+      return;
+    }
+    if (_requiresLocalStateReset) {
+      notice = _localStateResetBlockMessage();
+      _notify();
+      return;
+    }
+    if (_pendingPortableProfileImportPayload == trimmed) {
+      return;
+    }
+    try {
+      final envelope = PortableProfileEnvelope.decode(trimmed);
+      _pendingPortableProfileImportPayload = trimmed;
+      _pendingPortableProfileImportEnvelope = envelope;
+      workflowSurface = MobileWorkflowSurface.profile;
+      notice = envelope.isSecretBearing
+          ? 'Received a secret-bearing portable profile ${envelope.displayName}. Review it before importing.'
+          : 'Received portable profile ${envelope.displayName}. Review it before importing.';
+      _notify();
+    } on FormatException catch (error) {
+      notice = error.message;
+      _notify();
+    }
   }
 
   Future<void> _connectBridge({bool localStateBlocked = false}) async {
@@ -2874,6 +3204,18 @@ String _formatNoticeTimestamp(DateTime value) {
   final local = value.toLocal();
   return '${local.year}-${_twoDigits(local.month)}-${_twoDigits(local.day)} '
       '${_twoDigits(local.hour)}:${_twoDigits(local.minute)}:${_twoDigits(local.second)}';
+}
+
+String _portableProfileSuggestedFilename(PortableProfileEnvelope envelope) {
+  final rawName = envelope.displayName.trim();
+  final slug = rawName.isEmpty
+      ? 'profile'
+      : rawName
+            .toLowerCase()
+            .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+            .replaceAll(RegExp(r'^-+|-+$'), '');
+  final safeSlug = slug.isEmpty ? 'profile' : slug;
+  return '$safeSlug.portable-profile.json';
 }
 
 String _twoDigits(int value) => value.toString().padLeft(2, '0');

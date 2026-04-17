@@ -9,7 +9,7 @@ class SceneDelegate: FlutterSceneDelegate {
   ) {
     super.scene(scene, willConnectTo: session, options: connectionOptions)
     for urlContext in connectionOptions.urlContexts {
-      emitAppLink(urlContext.url)
+      emitURL(urlContext.url)
     }
     for activity in connectionOptions.userActivities {
       emitUniversalLink(activity)
@@ -19,7 +19,7 @@ class SceneDelegate: FlutterSceneDelegate {
   override func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
     super.scene(scene, openURLContexts: URLContexts)
     for urlContext in URLContexts {
-      emitAppLink(urlContext.url)
+      emitURL(urlContext.url)
     }
   }
 
@@ -28,7 +28,11 @@ class SceneDelegate: FlutterSceneDelegate {
     emitUniversalLink(userActivity)
   }
 
-  private func emitAppLink(_ url: URL) {
+  private func emitURL(_ url: URL) {
+    if url.isFileURL {
+      MobileHostBridgeLocatorPlugin.emitPortableProfileIngress(url: url)
+      return
+    }
     MobileHostBridgeLocatorPlugin.emitBrowserReturnSignal(
       kind: "app_link",
       uri: url.absoluteString

@@ -68,6 +68,7 @@ class _DashboardPageState extends State<DashboardPage> {
   _SupportSurface _supportSurface = _SupportSurface.activity;
   _ActivitySurface _activitySurface = _ActivitySurface.resolutions;
   _DiagnosticsSurface _diagnosticsSurface = _DiagnosticsSurface.overview;
+  bool _portableImportRouteScheduled = false;
 
   Future<void> _launchChallengeSurface(ChallengeRecord challenge) async {
     if (!widget.controller.challengeRequiresOwnedBrowser(challenge)) {
@@ -222,6 +223,52 @@ class _DashboardPageState extends State<DashboardPage> {
         _openHome();
         return;
     }
+  }
+
+  void _ensurePortableImportDestination() {
+    if (widget.controller.pendingPortableProfileImportEnvelope == null) {
+      _portableImportRouteScheduled = false;
+      return;
+    }
+    if (_destination != _DashboardDestination.profiles) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _destination = _DashboardDestination.profiles;
+        });
+      });
+      return;
+    }
+    final route = ModalRoute.of(context);
+    if (_portableImportRouteScheduled || (route != null && !route.isCurrent)) {
+      return;
+    }
+    _portableImportRouteScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      final currentRoute = ModalRoute.of(context);
+      if (currentRoute != null && !currentRoute.isCurrent) {
+        _portableImportRouteScheduled = false;
+        return;
+      }
+      widget.controller.showProfileWorkspace();
+      Navigator.of(context)
+          .push<void>(
+            MaterialPageRoute<void>(
+              builder: (BuildContext context) => _ProfileWorkspacePage(
+                controller: widget.controller,
+                title: 'Import portable profile',
+              ),
+            ),
+          )
+          .whenComplete(() {
+            _portableImportRouteScheduled = false;
+          });
+    });
   }
 
   _DashboardDestination _activeDestination(bool routingSupported) {
@@ -385,6 +432,7 @@ class _DashboardPageState extends State<DashboardPage> {
     return AnimatedBuilder(
       animation: widget.controller,
       builder: (BuildContext context, Widget? child) {
+        _ensurePortableImportDestination();
         final width = MediaQuery.sizeOf(context).width;
         final wide = width >= _compactNavigationBreakpoint;
         final routingSupported = widget.controller.activeModeSupportsAppRouting;
@@ -855,6 +903,24 @@ class _ProfileWorkspacePage extends StatelessWidget {
                 onReset: controller.resetDraft,
                 onResolve: controller.startResolutionFromDraft,
                 onStart: controller.startSelectedProfile,
+                onPreparePortableExport:
+                    controller.selectedPortableProfileEnvelope,
+                onCopyPortableExportText:
+                    controller.copyPortableProfileEnvelopeText,
+                onSharePortableExportText:
+                    controller.sharePortableProfileEnvelopeText,
+                onSharePortableExportFile:
+                    controller.sharePortableProfileEnvelopeFile,
+                onImportPortableFromFile:
+                    controller.importPortableProfileEnvelopeFromFile,
+                onPreviewPortableImport:
+                    controller.previewPortableProfileEnvelope,
+                onConfirmPortableImport:
+                    controller.confirmPortableProfileImport,
+                pendingPortableImportEnvelope:
+                    controller.pendingPortableProfileImportEnvelope,
+                onPendingPortableImportHandled:
+                    controller.clearPendingPortableProfileImportPreview,
                 showTitleBar: false,
                 showSavedProfilesSection: false,
               ),

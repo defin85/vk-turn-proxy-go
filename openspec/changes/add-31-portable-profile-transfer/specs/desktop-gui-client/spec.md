@@ -22,9 +22,14 @@ ordinary shell-state files or runtime handoff export.
 - **GIVEN** the operator provides a valid portable-profile envelope through a
   supported desktop import path such as file import or pasted envelope text
 - **WHEN** the desktop shell accepts that import
-- **THEN** it creates a local imported profile in the Profiles workspace
+- **THEN** it first shows a preview and explicit confirmation surface for the
+  imported profile
+- **AND** after operator confirmation it creates a local imported profile in
+  the Profiles workspace
 - **AND** it restores managed-provider mode when the envelope includes the
   required managed-provider snapshot
+- **AND** it allocates fresh local ids for the imported profile and imported
+  managed-provider snapshot
 - **AND** it does not auto-resolve, auto-start runtime, or silently overwrite
   an existing local profile
 

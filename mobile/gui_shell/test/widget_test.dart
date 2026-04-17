@@ -2,11 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_shell_core/portable_profile_transfer.dart';
 import 'package:mobile_gui_shell/src/app.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_models.dart';
 import 'package:mobile_gui_shell/src/control/mobile_handoff_adapter.dart';
 import 'package:mobile_gui_shell/src/control/mobile_host_bridge.dart';
 import 'package:mobile_gui_shell/src/control/mobile_platform_app_inventory.dart';
+import 'package:mobile_gui_shell/src/control/mobile_portable_profile_transfer_adapter.dart';
 import 'package:mobile_gui_shell/src/control/mobile_shell_controller.dart';
 import 'package:mobile_gui_shell/src/control/mobile_shell_state_store.dart';
 import 'package:mobile_gui_shell/src/control/profile_draft.dart';
@@ -3220,6 +3222,136 @@ void main() {
       expect(controller.draft.providerBinding.isManaged, isFalse);
     },
   );
+
+  testWidgets(
+    'mobile shell previews portable profile ingress on the default profiles path before import',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final portableAdapter = _FakeMobilePortableProfileTransferAdapter();
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(),
+        stateStore: _InMemoryStateStore(MobileShellState.empty()),
+        portableProfileTransferAdapter: portableAdapter,
+      );
+      addTearDown(() async {
+        await portableAdapter.dispose();
+      });
+
+      await controller.initialize();
+      await tester.pumpWidget(MobileShellApp(controller: controller));
+      await tester.pumpAndSettle();
+
+      portableAdapter.emitIngressPayload(
+        PortableProfileEnvelope.build(
+          profile: ProfileRecord(
+            id: 'remote-profile',
+            name: 'Shared inbound profile',
+            spec: _profileSpec().copyWith(link: ''),
+          ),
+          providerBinding: const ProfileProviderBinding(
+            mode: ProfileProviderMode.custom,
+          ),
+        ).encode(),
+      );
+
+      await tester.pump();
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Import portable profile'), findsWidgets);
+      expect(find.text('Shared inbound profile'), findsOneWidget);
+      expect(find.text('Import profile'), findsOneWidget);
+      expect(controller.profiles, isEmpty);
+
+      await tester.tap(find.text('Import profile'));
+      await tester.pumpAndSettle();
+
+      expect(controller.selectedProfileId, startsWith('portable-'));
+      expect(
+        controller.profiles.any(
+          (ProfileRecord profile) => profile.name == 'Shared inbound profile',
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  testWidgets(
+    'portable paste dialog stays usable when keyboard insets shrink the viewport',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(),
+        stateStore: _InMemoryStateStore(MobileShellState.empty()),
+      );
+
+      await controller.initialize();
+      await tester.pumpWidget(MobileShellApp(controller: controller));
+      await tester.pumpAndSettle();
+
+      await _openProfilesTab(tester);
+      await _openProfileEditorFromProfiles(tester);
+      await tester.dragUntilVisible(
+        find.text('Portable transfer'),
+        _profileWorkspaceScrollable(),
+        const Offset(0, -160),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Portable transfer'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(
+          const ValueKey<String>('profile-editor-portable-import-paste-action'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      tester.view.viewInsets = const FakeViewPadding(bottom: 520);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('Paste portable profile envelope'), findsOneWidget);
+      expect(find.text('Preview import'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('saved profile banner auto-dismisses in the profile workspace', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 2200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final controller = MobileShellController(
+      bridge: _FakeMobileHostBridge(),
+      stateStore: _InMemoryStateStore(MobileShellState.empty()),
+      transientNoticeDuration: const Duration(milliseconds: 200),
+    );
+
+    await controller.initialize();
+    await tester.pumpWidget(MobileShellApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    await _openProfilesTab(tester);
+    await _openProfileEditorFromProfiles(tester);
+
+    await controller.saveDraft();
+    await tester.pump();
+
+    expect(find.textContaining('Saved mobile profile'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(find.textContaining('Saved mobile profile'), findsNothing);
+  });
 }
 
 Future<void> _openProfilesTab(WidgetTester tester) async {
@@ -3947,6 +4079,36 @@ class _FakeMobileHandoffAdapter implements MobileHandoffAdapter {
 
   @override
   Future<void> shareLink(String link) async {}
+}
+
+class _FakeMobilePortableProfileTransferAdapter
+    implements MobilePortableProfileTransferAdapter {
+  final StreamController<String> _ingressPayloads =
+      StreamController<String>.broadcast();
+
+  void emitIngressPayload(String payload) {
+    _ingressPayloads.add(payload);
+  }
+
+  Future<void> dispose() => _ingressPayloads.close();
+
+  @override
+  Future<void> copyEnvelopeText(String payload) async {}
+
+  @override
+  Stream<String> get ingressPayloads => _ingressPayloads.stream;
+
+  @override
+  Future<String?> openEnvelopeText() async => null;
+
+  @override
+  Future<void> shareEnvelopeFile({
+    required String suggestedName,
+    required String payload,
+  }) async {}
+
+  @override
+  Future<void> shareEnvelopeText(String payload) async {}
 }
 
 String _twoDigits(int value) => value.toString().padLeft(2, '0');

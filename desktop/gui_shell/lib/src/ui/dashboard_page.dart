@@ -1062,6 +1062,17 @@ class _CanvasSurface extends StatelessWidget {
               onReset: controller.resetDraft,
               onResolve: controller.startResolutionFromDraft,
               onStart: controller.startSelectedProfile,
+              onPreparePortableExport:
+                  controller.selectedPortableProfileEnvelope,
+              onCopyPortableExportText:
+                  controller.copyPortableProfileEnvelopeText,
+              onSavePortableExportFile:
+                  controller.savePortableProfileEnvelopeToFile,
+              onImportPortableFromFile:
+                  controller.importPortableProfileEnvelopeFromFile,
+              onPreviewPortableImport:
+                  controller.previewPortableProfileEnvelope,
+              onConfirmPortableImport: controller.confirmPortableProfileImport,
               onBrowseManagedProviders: () async {
                 onOpenManagedProvidersForProfile();
               },
