@@ -18,7 +18,12 @@ typedef IDFactory = String Function();
 
 enum ShellStatus { booting, ready, blocked }
 
-enum MobileWorkflowSurface { profile, providerConfig, provider }
+enum MobileWorkflowSurface {
+  profile,
+  providerConfig,
+  providerTemplate,
+  provider,
+}
 
 abstract class BrowserLauncher {
   Future<bool> open(String url);
@@ -78,16 +83,21 @@ class MobileShellController extends ChangeNotifier {
   List<ProviderDescriptor> providerDescriptors = const <ProviderDescriptor>[];
   List<ManagedProviderRecord> managedProviders =
       const <ManagedProviderRecord>[];
+  List<ProviderTemplateRecord> providerTemplates =
+      const <ProviderTemplateRecord>[];
   List<ProfileRecord> profiles = const <ProfileRecord>[];
   List<ResolutionRecord> resolutions = const <ResolutionRecord>[];
   List<SessionRecord> sessions = const <SessionRecord>[];
   List<EventRecord> events = const <EventRecord>[];
   ProfileDraft draft = ProfileDraft.defaults();
   ManagedProviderDraft managedProviderDraft = ManagedProviderDraft.defaults();
+  ProviderTemplateDraft providerTemplateDraft =
+      ProviderTemplateDraft.defaults();
   MobileWorkflowSurface workflowSurface = MobileWorkflowSurface.profile;
   String? selectedProfileId;
   PlatformTunnelMode? selectedPlatformTunnelMode;
   String? selectedManagedProviderId;
+  String? selectedProviderTemplateId;
   String? selectedResolutionId;
   String? selectedSessionId;
   Map<String, ProfileProviderBinding> profileBindings =
@@ -362,10 +372,14 @@ class MobileShellController extends ChangeNotifier {
       );
       providerDescriptors = nextProviders;
       managedProviders = _overlayManagedProviders(managedProviders);
+      providerTemplates = _overlayProviderTemplates(providerTemplates);
       resolutions = nextResolutions;
       draft = _normalizeDraft(draft);
       managedProviderDraft = _normalizeManagedProviderDraft(
         managedProviderDraft,
+      );
+      providerTemplateDraft = _normalizeProviderTemplateDraft(
+        providerTemplateDraft,
       );
       selectedResolutionId = _resolveSelectedResolutionId(nextResolutions);
       _replaceSessions(nextSessions);
@@ -378,6 +392,17 @@ class MobileShellController extends ChangeNotifier {
         selectedManagedProviderId = null;
         managedProviderDraft = _defaultManagedProviderDraft();
         if (workflowSurface != MobileWorkflowSurface.profile) {
+          workflowSurface = MobileWorkflowSurface.provider;
+        }
+      }
+      if (selectedProviderTemplateId != null &&
+          !providerTemplates.any(
+            (ProviderTemplateRecord template) =>
+                template.id == selectedProviderTemplateId,
+          )) {
+        selectedProviderTemplateId = null;
+        providerTemplateDraft = _defaultProviderTemplateDraft();
+        if (workflowSurface == MobileWorkflowSurface.providerTemplate) {
           workflowSurface = MobileWorkflowSurface.provider;
         }
       }
@@ -632,6 +657,110 @@ class MobileShellController extends ChangeNotifier {
     resetManagedProviderDraft(preferredProvider: preferredProvider);
   }
 
+  void startProviderTemplateDraftFromManagedProvider() {
+    workflowSurface = MobileWorkflowSurface.providerTemplate;
+    selectedProviderTemplateId = null;
+    providerTemplateDraft = _normalizeProviderTemplateDraft(
+      ProviderTemplateDraft.fromManagedProviderDraft(managedProviderDraft),
+    );
+    notifyListeners();
+  }
+
+  void selectProviderTemplate(String templateId) {
+    workflowSurface = MobileWorkflowSurface.providerTemplate;
+    selectedProviderTemplateId = templateId;
+    final selected =
+        providerTemplateById(templateId) ??
+        _defaultProviderTemplateDraft().toRecord();
+    providerTemplateDraft = _normalizeProviderTemplateDraft(
+      ProviderTemplateDraft.fromRecord(selected),
+    );
+    notifyListeners();
+  }
+
+  void updateProviderTemplateDraft(ProviderTemplateDraft nextDraft) {
+    workflowSurface = MobileWorkflowSurface.providerTemplate;
+    providerTemplateDraft = _normalizeProviderTemplateDraft(nextDraft);
+    notifyListeners();
+  }
+
+  Future<void> saveProviderTemplateDraft() async {
+    await _runBridgeMutation(() async {
+      final supported = supportedProviderDefinitionFor(
+        providerTemplateDraft.provider,
+      );
+      if (supported == null) {
+        notice =
+            'The selected template family is not part of the supported app catalog.';
+        return;
+      }
+      final draftToSave = _normalizeProviderTemplateDraft(
+        providerTemplateDraft,
+      );
+      final blockReason = _providerTemplateDraftBlockReason(draftToSave);
+      if (blockReason != null) {
+        notice = blockReason;
+        return;
+      }
+      final now = _clock();
+      final id = (draftToSave.id ?? '').trim().isEmpty
+          ? _idFactory()
+          : draftToSave.id!.trim();
+      final existing = providerTemplateById(id);
+      final saved = draftToSave
+          .copyWith(
+            id: id,
+            createdAt: existing?.createdAt ?? draftToSave.createdAt ?? now,
+            updatedAt: now,
+          )
+          .toRecord();
+      final next = <ProviderTemplateRecord>[
+        for (final template in providerTemplates)
+          if (template.id != id) template,
+        saved,
+      ]..sort(_providerTemplateNameSort);
+      providerTemplates = _overlayProviderTemplates(next);
+      notice = 'Saved template ${saved.name.isEmpty ? saved.id : saved.name}.';
+      selectedProviderTemplateId = saved.id;
+      providerTemplateDraft = ProviderTemplateDraft.fromRecord(saved);
+      _scheduleStatePersist();
+    });
+  }
+
+  Future<void> deleteSelectedProviderTemplate() async {
+    final templateId = selectedProviderTemplateId;
+    if (templateId == null) {
+      return;
+    }
+    await _runBridgeMutation(() async {
+      providerTemplates = providerTemplates
+          .where((ProviderTemplateRecord template) => template.id != templateId)
+          .toList(growable: false);
+      notice = 'Deleted template $templateId.';
+      selectedProviderTemplateId = null;
+      providerTemplateDraft = _defaultProviderTemplateDraft();
+      workflowSurface = MobileWorkflowSurface.provider;
+      _scheduleStatePersist();
+    });
+  }
+
+  void useProviderTemplate(String templateId) {
+    final template = providerTemplateById(templateId);
+    if (template == null) {
+      notice = 'Template $templateId is no longer available.';
+      _notify();
+      return;
+    }
+    workflowSurface = MobileWorkflowSurface.providerConfig;
+    selectedManagedProviderId = null;
+    managedProviderDraft = _normalizeManagedProviderDraft(
+      ManagedProviderDraft.fromTemplateRecord(template),
+    );
+    notice =
+        'Seeded a new managed provider draft from the ${template.name.isEmpty ? template.id : template.name} template.';
+    _notify();
+  }
+
   Future<void> saveManagedProviderDraft() async {
     await _runBridgeMutation(() async {
       final supported = supportedProviderDefinitionFor(
@@ -742,6 +871,7 @@ class MobileShellController extends ChangeNotifier {
       await stateStore.clear();
       _challengeCache.clear();
       managedProviders = const <ManagedProviderRecord>[];
+      providerTemplates = const <ProviderTemplateRecord>[];
       providerDescriptors = const <ProviderDescriptor>[];
       profiles = const <ProfileRecord>[];
       resolutions = const <ResolutionRecord>[];
@@ -749,10 +879,12 @@ class MobileShellController extends ChangeNotifier {
       events = const <EventRecord>[];
       draft = ProfileDraft.defaults();
       managedProviderDraft = ManagedProviderDraft.defaults();
+      providerTemplateDraft = ProviderTemplateDraft.defaults();
       workflowSurface = MobileWorkflowSurface.profile;
       selectedProfileId = null;
       selectedPlatformTunnelMode = null;
       selectedManagedProviderId = null;
+      selectedProviderTemplateId = null;
       profileBindings = <String, ProfileProviderBinding>{};
       platformModePreferences = <String, MobilePlatformModePreferences>{};
       selectedResolutionId = null;
@@ -1332,6 +1464,19 @@ class MobileShellController extends ChangeNotifier {
     for (final provider in managedProviders) {
       if (provider.id == normalized) {
         return provider;
+      }
+    }
+    return null;
+  }
+
+  ProviderTemplateRecord? providerTemplateById(String templateId) {
+    final normalized = templateId.trim();
+    if (normalized.isEmpty) {
+      return null;
+    }
+    for (final template in providerTemplates) {
+      if (template.id == normalized) {
+        return template;
       }
     }
     return null;
@@ -1923,12 +2068,14 @@ class MobileShellController extends ChangeNotifier {
       }
       profiles = state.profiles;
       managedProviders = state.managedProviders;
+      providerTemplates = state.providerTemplates;
       profileBindings = state.profileBindings;
       selectedProfileId = state.selectedProfileId;
       selectedPlatformTunnelMode = state.selectedPlatformTunnelMode;
       platformModePreferences = state.platformModePreferences;
       draft = state.draft;
       managedProviderDraft = _defaultManagedProviderDraft();
+      providerTemplateDraft = _defaultProviderTemplateDraft();
       _persistedStateSignature = state.signature();
     } catch (error) {
       _requiresLocalStateReset = true;
@@ -1955,6 +2102,7 @@ class MobileShellController extends ChangeNotifier {
     final next = MobileShellState(
       profiles: profiles,
       managedProviders: managedProviders,
+      providerTemplates: providerTemplates,
       profileBindings: profileBindings,
       selectedProfileId: selectedProfileId,
       selectedPlatformTunnelMode: selectedPlatformTunnelMode,
@@ -2061,6 +2209,24 @@ class MobileShellController extends ChangeNotifier {
     );
   }
 
+  ProviderTemplateDraft _defaultProviderTemplateDraft({
+    String? preferredProvider,
+  }) {
+    final managedProvider = managedProviderDraft.provider.trim().isEmpty
+        ? null
+        : managedProviderDraft.provider.trim();
+    final providerId =
+        preferredProvider ??
+        managedProvider ??
+        (supportedProviderCatalog.isEmpty
+            ? null
+            : supportedProviderCatalog.first.id) ??
+        '';
+    return _normalizeProviderTemplateDraft(
+      ProviderTemplateDraft.defaults(provider: providerId),
+    );
+  }
+
   ProfileDraft _normalizeDraft(ProfileDraft candidate) {
     final rawProvider = candidate.spec.provider.trim();
     if (providerDescriptors.isEmpty) {
@@ -2135,6 +2301,36 @@ class MobileShellController extends ChangeNotifier {
     );
   }
 
+  ProviderTemplateDraft _normalizeProviderTemplateDraft(
+    ProviderTemplateDraft candidate,
+  ) {
+    final supported =
+        supportedProviderDefinitionFor(candidate.provider) ??
+        (supportedProviderCatalog.isEmpty
+            ? null
+            : supportedProviderCatalog.first);
+    if (supported == null) {
+      return candidate;
+    }
+    final descriptor = descriptorForProvider(candidate.provider);
+    final sameProvider =
+        supported.id.trim().toLowerCase() ==
+        candidate.provider.trim().toLowerCase();
+    final seedValues = sameProvider
+        ? candidate.providerSettings
+        : const <String, dynamic>{};
+    final providerSettings = switch (descriptor?.settingsSchema) {
+      null => seedValues,
+      _ when descriptor != null && descriptor.supportsProviderSettings =>
+        descriptor.normalizeProviderSettings(seedValues),
+      _ => seedValues,
+    };
+    return candidate.copyWith(
+      provider: supported.id,
+      providerSettings: providerSettings,
+    );
+  }
+
   String? _providerSettingsBlockReason(ProviderDescriptor descriptor) {
     final reason = descriptor.providerSettingsSupportError;
     if (reason == null) {
@@ -2154,6 +2350,22 @@ class MobileShellController extends ChangeNotifier {
     }
     final schemaReason = descriptor.providerSettingsSupportError;
     if (schemaReason != null && provider.providerSettings.isNotEmpty) {
+      return 'The connected mobile shell cannot render reusable settings for ${descriptor.displayName}: $schemaReason';
+    }
+    return null;
+  }
+
+  String? _providerTemplateDraftBlockReason(ProviderTemplateDraft template) {
+    final supported = supportedProviderDefinitionFor(template.provider);
+    if (supported == null) {
+      return 'The selected template family is not part of the supported app catalog.';
+    }
+    final descriptor = descriptorForProvider(template.provider);
+    if (descriptor == null) {
+      return null;
+    }
+    final schemaReason = descriptor.providerSettingsSupportError;
+    if (schemaReason != null && template.providerSettings.isNotEmpty) {
       return 'The connected mobile shell cannot render reusable settings for ${descriptor.displayName}: $schemaReason';
     }
     return null;
@@ -2195,6 +2407,48 @@ class MobileShellController extends ChangeNotifier {
             );
           }
           return provider.copyWith(
+            availability: const ProviderConfigAvailability(),
+          );
+        })
+        .toList(growable: false);
+  }
+
+  List<ProviderTemplateRecord> _overlayProviderTemplates(
+    List<ProviderTemplateRecord> templates,
+  ) {
+    return templates
+        .map((ProviderTemplateRecord template) {
+          final supported = supportedProviderDefinitionFor(template.provider);
+          if (supported == null) {
+            return template.copyWith(
+              availability: const ProviderConfigAvailability(
+                state: ProviderConfigAvailabilityState.providerUnavailable,
+                message:
+                    'This template is not part of the supported app catalog.',
+              ),
+            );
+          }
+          final descriptor = descriptorForProvider(template.provider);
+          if (descriptor == null) {
+            return template.copyWith(
+              availability: ProviderConfigAvailability(
+                state: ProviderConfigAvailabilityState.providerUnavailable,
+                message:
+                    'The connected host does not advertise the ${supported.title} provider family yet.',
+              ),
+            );
+          }
+          final schemaReason = descriptor.providerSettingsSupportError;
+          if (schemaReason != null && template.providerSettings.isNotEmpty) {
+            return template.copyWith(
+              availability: ProviderConfigAvailability(
+                state: ProviderConfigAvailabilityState.schemaUnsupported,
+                message:
+                    'The connected mobile shell cannot render reusable settings for ${descriptor.displayName}: $schemaReason',
+              ),
+            );
+          }
+          return template.copyWith(
             availability: const ProviderConfigAvailability(),
           );
         })
@@ -2533,6 +2787,15 @@ class MobileShellController extends ChangeNotifier {
 int _managedProviderNameSort(
   ManagedProviderRecord left,
   ManagedProviderRecord right,
+) {
+  final leftLabel = left.name.isEmpty ? left.id : left.name;
+  final rightLabel = right.name.isEmpty ? right.id : right.name;
+  return leftLabel.toLowerCase().compareTo(rightLabel.toLowerCase());
+}
+
+int _providerTemplateNameSort(
+  ProviderTemplateRecord left,
+  ProviderTemplateRecord right,
 ) {
   final leftLabel = left.name.isEmpty ? left.id : left.name;
   final rightLabel = right.name.isEmpty ? right.id : right.name;

@@ -1920,6 +1920,80 @@ class ManagedProviderRecord {
   }
 }
 
+class ProviderTemplateRecord {
+  const ProviderTemplateRecord({
+    required this.id,
+    required this.provider,
+    required this.name,
+    required this.providerSettings,
+    required this.createdAt,
+    required this.updatedAt,
+    this.availability = const ProviderConfigAvailability(),
+  });
+
+  factory ProviderTemplateRecord.fromJson(Map<String, dynamic> json) {
+    return ProviderTemplateRecord(
+      id: json['id'] as String? ?? '',
+      provider: json['provider'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      providerSettings: _readJsonObject(json['provider_settings']),
+      createdAt: _readTimestamp(json['created_at']),
+      updatedAt: _readTimestamp(json['updated_at']),
+      availability: json['availability'] is Map<String, dynamic>
+          ? ProviderConfigAvailability.fromJson(
+              json['availability'] as Map<String, dynamic>,
+            )
+          : const ProviderConfigAvailability(),
+    );
+  }
+
+  final String id;
+  final String provider;
+  final String name;
+  final Map<String, dynamic> providerSettings;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final ProviderConfigAvailability availability;
+
+  bool get isAvailable => availability.isAvailable;
+
+  ProviderTemplateRecord copyWith({
+    String? id,
+    String? provider,
+    String? name,
+    Map<String, dynamic>? providerSettings,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    ProviderConfigAvailability? availability,
+  }) {
+    return ProviderTemplateRecord(
+      id: id ?? this.id,
+      provider: provider ?? this.provider,
+      name: name ?? this.name,
+      providerSettings: providerSettings ?? this.providerSettings,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      availability: availability ?? this.availability,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{
+      'id': id.isEmpty ? null : id,
+      'provider': provider,
+      'name': name,
+      'provider_settings': providerSettings.isEmpty ? null : providerSettings,
+      'availability': availability.toJson(),
+      'created_at': createdAt.millisecondsSinceEpoch == 0
+          ? null
+          : createdAt.toUtc().toIso8601String(),
+      'updated_at': updatedAt.millisecondsSinceEpoch == 0
+          ? null
+          : updatedAt.toUtc().toIso8601String(),
+    });
+  }
+}
+
 enum ProviderPresetAvailabilityState {
   available('available'),
   providerUnavailable('provider_unavailable');

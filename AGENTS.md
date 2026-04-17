@@ -86,7 +86,8 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - The primary Flutter UI workflow is Dart MCP-first. Use `mcp__dart__.launch_app` with a plain filesystem `root` path, not a `file://...` URI.
 - The verified desktop MCP launch path is: start `go run ./cmd/clientd -listen 127.0.0.1:7777`, then `mcp__dart__.launch_app(device="linux", root="/home/egor/code/vk-turn-proxy-go/desktop/gui_shell")`.
 - In a fresh desktop-dedicated Codex session, connect to the returned DTD URI and use Dart MCP `hot_reload` and inspection tools.
-- The verified mobile MCP path is: `mcp__dart__.launch_app(device="<adb-serial>", root="/home/egor/code/vk-turn-proxy-go/mobile/gui_shell")`, then connect to the returned DTD URI and use Dart MCP `hot_reload` and inspection tools.
+- The primary mobile MCP path for agent-operated UI work is: `mcp__dart__.launch_app(device="<adb-serial>", root="/home/egor/code/vk-turn-proxy-go/mobile/gui_shell", target="test_driver/driver_main.dart")`, then connect to the returned DTD URI and use Dart MCP `hot_reload`, inspection tools, and `flutter_driver` screenshot or tap commands.
+- Launch `mobile/gui_shell` without `target="test_driver/driver_main.dart"` only when the task specifically needs the normal production entrypoint behavior.
 - For Android WebView or IME regressions inside the mobile shell, a repo-owned MCP harness exists at `mobile/gui_shell/test_driver/owned_browser_harness_main.dart`.
 - That harness is an explicit debug mode, not the default app entrypoint. Keep its live diagnostics disabled by default and only flip the local toggle on when the current task needs native/DOM visibility for owned-browser investigation.
 - Dart MCP currently keeps one active DTD connection per Codex session. Work on one UI target per session; start a fresh Codex session before switching between desktop and mobile.

@@ -39,9 +39,12 @@ Rules:
 
 Verified mobile loop:
 1. `dart pub get`
-2. `mcp__dart__.launch_app(device="<adb-serial>", root="/home/egor/code/vk-turn-proxy-go/mobile/gui_shell")`
+2. `mcp__dart__.launch_app(device="<adb-serial>", root="/home/egor/code/vk-turn-proxy-go/mobile/gui_shell", target="test_driver/driver_main.dart")`
 3. `mcp__dart__.connect_dart_tooling_daemon(uri="<returned dtd uri>")`
 4. `mcp__dart__.hot_reload`
+5. `mcp__dart__.flutter_driver(command="screenshot")`
+
+Use the default `mobile/gui_shell/lib/main.dart` entrypoint only when the task specifically needs production-entrypoint parity instead of the driver-enabled agent loop.
 
 Verified desktop Linux launch path:
 1. `dart pub get`

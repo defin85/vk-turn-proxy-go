@@ -23,9 +23,10 @@
 ## Preferred Debug Loop
 
 - Prefer Dart MCP as the primary mobile UI loop.
-- Launch the app with `mcp__dart__.launch_app(device="<adb-serial>", root="/home/egor/code/vk-turn-proxy-go/mobile/gui_shell")`.
+- For normal agent-operated mobile UI inspection, screenshots, and taps, launch the app with `mcp__dart__.launch_app(device="<adb-serial>", root="/home/egor/code/vk-turn-proxy-go/mobile/gui_shell", target="test_driver/driver_main.dart")`.
+- Use the default `mobile/gui_shell/lib/main.dart` entrypoint only when the task specifically needs the production entrypoint behavior instead of the driver-enabled debug loop.
 - Pass a plain filesystem path to `launch_app.root`; do not pass a `file://...` URI.
-- After `launch_app` returns a DTD URI, connect Dart MCP to that URI and use `hot_reload`, runtime-error reads, and other Dart MCP tools against that live process.
+- After `launch_app` returns a DTD URI, connect Dart MCP to that URI and use `hot_reload`, runtime-error reads, widget inspection, and `flutter_driver` screenshot or tap commands against that live process.
 - For Android owned-browser or keyboard regressions, prefer the repo-owned harness target `mcp__dart__.launch_app(device="<adb-serial>", root="/home/egor/code/vk-turn-proxy-go/mobile/gui_shell", target="test_driver/owned_browser_harness_main.dart")` before inventing a custom repro app.
 - The harness keeps a local `_showHarnessDiagnostics` toggle. Leave it `false` for normal runs and only enable it for the current debugging task when native/DOM IME diagnostics are needed.
 - Dart MCP currently keeps one active DTD connection per Codex session. Use a fresh Codex session before switching this tooling connection between mobile and desktop targets.

@@ -20,7 +20,34 @@ enum _ActivitySurface { resolutions, sessions }
 
 enum _DiagnosticsSurface { overview, events }
 
-enum _ProviderCreateEntryPoint { blank, template }
+enum _ProviderChooserSurface { families, templates }
+
+class _ProviderChooserResult {
+  const _ProviderChooserResult.family(this.providerId)
+    : preset = null,
+      userTemplateId = null,
+      editUserTemplate = false;
+
+  const _ProviderChooserResult.template(this.preset)
+    : providerId = null,
+      userTemplateId = null,
+      editUserTemplate = false;
+
+  const _ProviderChooserResult.userTemplateUse(this.userTemplateId)
+    : providerId = null,
+      preset = null,
+      editUserTemplate = false;
+
+  const _ProviderChooserResult.userTemplateEdit(this.userTemplateId)
+    : providerId = null,
+      preset = null,
+      editUserTemplate = true;
+
+  final String? providerId;
+  final ProviderPreset? preset;
+  final String? userTemplateId;
+  final bool editUserTemplate;
+}
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({
@@ -123,61 +150,44 @@ class _DashboardPageState extends State<DashboardPage> {
     widget.controller.showProviderWorkspace();
   }
 
-  Future<void> _openBlankProviderFlow() async {
-    final providerId = await showModalBottomSheet<String>(
-      context: context,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (BuildContext context) {
-        return _ProviderFamilyPickerSheet(
-          supportedProviders: widget.controller.supportedProviderCatalog,
-          providerDescriptors: widget.controller.providerDescriptors,
-        );
-      },
-    );
-    if (!mounted || providerId == null) {
-      return;
-    }
-    widget.controller.resetManagedProviderDraft(preferredProvider: providerId);
-  }
-
-  Future<void> _openTemplatePicker() async {
-    final preset = await showModalBottomSheet<ProviderPreset>(
-      context: context,
-      useSafeArea: true,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (BuildContext context) {
-        return _TemplatePickerSheet(
-          presets: widget.controller.presetCatalog,
-          providerDescriptors: widget.controller.providerDescriptors,
-          busy: widget.controller.busy,
-        );
-      },
-    );
-    if (!mounted || preset == null) {
-      return;
-    }
-    widget.controller.applyPreset(preset);
-  }
-
   Future<void> _openNewProviderFlow() async {
-    final entryPoint = await showModalBottomSheet<_ProviderCreateEntryPoint>(
+    final result = await showDialog<_ProviderChooserResult>(
       context: context,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (BuildContext context) => const _ProviderCreateFlowSheet(),
+      builder: (BuildContext context) {
+        return _DialogSurfaceFrame(
+          maxWidth: 640,
+          maxHeight: 720,
+          child: _ProviderChooserDialog(
+            supportedProviders: widget.controller.supportedProviderCatalog,
+            providerDescriptors: widget.controller.providerDescriptors,
+            userTemplates: widget.controller.providerTemplates,
+            presets: widget.controller.presetCatalog,
+            busy: widget.controller.busy,
+          ),
+        );
+      },
     );
-    if (!mounted || entryPoint == null) {
+    if (!mounted || result == null) {
       return;
     }
-    switch (entryPoint) {
-      case _ProviderCreateEntryPoint.blank:
-        await _openBlankProviderFlow();
+    if (result.providerId != null) {
+      widget.controller.resetManagedProviderDraft(
+        preferredProvider: result.providerId,
+      );
+      return;
+    }
+    final preset = result.preset;
+    if (preset != null) {
+      widget.controller.applyPreset(preset);
+      return;
+    }
+    final userTemplateId = result.userTemplateId;
+    if (userTemplateId != null) {
+      if (result.editUserTemplate) {
+        widget.controller.selectProviderTemplate(userTemplateId);
         return;
-      case _ProviderCreateEntryPoint.template:
-        await _openTemplatePicker();
-        return;
+      }
+      widget.controller.useProviderTemplate(userTemplateId);
     }
   }
 
@@ -266,8 +276,6 @@ class _DashboardPageState extends State<DashboardPage> {
           onOpenDiagnostics: _openDiagnostics,
         ),
         onOpenNewProviderFlow: _openNewProviderFlow,
-        onOpenBlankProviderFlow: _openBlankProviderFlow,
-        onOpenTemplatePicker: _openTemplatePicker,
         onReturnToRoot: _returnToProviderRoot,
       ),
       _DashboardDestination.routing => _RoutingPage(
@@ -504,9 +512,7 @@ class _HomePage extends StatelessWidget {
         const SizedBox(height: 16),
         if (controller.profiles.isEmpty)
           _HomeEmptyState(onOpenProfiles: onOpenProfiles)
-        else if (selectedProfile == null)
-          _HomeProfileSelectionState(onOpenProfiles: onOpenProfiles)
-        else
+        else if (selectedProfile != null)
           _HomeProfileCard(profile: selectedProfile),
         if (showRuntimeCards) ...<Widget>[
           const SizedBox(height: 16),
@@ -896,16 +902,12 @@ class _ProvidersPage extends StatelessWidget {
     required this.controller,
     required this.headerAccessory,
     required this.onOpenNewProviderFlow,
-    required this.onOpenBlankProviderFlow,
-    required this.onOpenTemplatePicker,
     required this.onReturnToRoot,
   });
 
   final MobileShellController controller;
   final Widget headerAccessory;
   final Future<void> Function() onOpenNewProviderFlow;
-  final Future<void> Function() onOpenBlankProviderFlow;
-  final Future<void> Function() onOpenTemplatePicker;
   final VoidCallback onReturnToRoot;
 
   @override
@@ -914,68 +916,99 @@ class _ProvidersPage extends StatelessWidget {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         final wide = constraints.maxWidth >= _providerListDetailBreakpoint;
-        final showingEditor =
-            controller.workflowSurface == MobileWorkflowSurface.providerConfig;
-        final rootPanel = _ProviderRecordsRootSection(
-          controller: controller,
-          onOpenNewProviderFlow: onOpenNewProviderFlow,
-          onOpenBlankProviderFlow: onOpenBlankProviderFlow,
-          onOpenTemplatePicker: onOpenTemplatePicker,
-        );
+        final showingDetail =
+            controller.workflowSurface ==
+                MobileWorkflowSurface.providerConfig ||
+            controller.workflowSurface ==
+                MobileWorkflowSurface.providerTemplate;
+        final rootPanel = _ProviderRecordsRootSection(controller: controller);
+        final detailPanel = switch (controller.workflowSurface) {
+          MobileWorkflowSurface.providerConfig => ProviderConfigEditorPanel(
+            supportedProviders: controller.supportedProviderCatalog,
+            providerDescriptors: controller.providerDescriptors,
+            selectedManagedProviderId: controller.selectedManagedProviderId,
+            draft: controller.managedProviderDraft,
+            busy: controller.busy,
+            onDraftChanged: controller.updateManagedProviderDraft,
+            onSave: controller.saveManagedProviderDraft,
+            onSaveAsTemplate:
+                controller.startProviderTemplateDraftFromManagedProvider,
+            onDelete: controller.deleteSelectedManagedProvider,
+            onApplyToProfileDraft: controller.useManagedProviderForDraft,
+            onClose: onReturnToRoot,
+            showCloseButton: wide,
+          ),
+          MobileWorkflowSurface.providerTemplate => ProviderTemplateEditorPanel(
+            supportedProviders: controller.supportedProviderCatalog,
+            providerDescriptors: controller.providerDescriptors,
+            selectedProviderTemplateId: controller.selectedProviderTemplateId,
+            draft: controller.providerTemplateDraft,
+            busy: controller.busy,
+            onDraftChanged: controller.updateProviderTemplateDraft,
+            onSave: controller.saveProviderTemplateDraft,
+            onDelete: controller.deleteSelectedProviderTemplate,
+            onUseTemplate: controller.useProviderTemplate,
+            onClose: onReturnToRoot,
+            showCloseButton: wide,
+          ),
+          _ => const SizedBox.shrink(),
+        };
+        final rootChildren = <Widget>[
+          _PageHeader(
+            title: 'Providers',
+            subtitle:
+                'Choose a saved reusable provider or add a new one for Profiles.',
+            trailing: headerAccessory,
+          ),
+          if (notice != null) ...<Widget>[
+            const SizedBox(height: 12),
+            _NoticeBanner(message: notice),
+          ],
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton.icon(
+              key: const ValueKey<String>('managed-provider-create-button'),
+              onPressed: controller.busy
+                  ? null
+                  : () => unawaited(onOpenNewProviderFlow()),
+              icon: const Icon(Icons.add),
+              label: const Text('Add provider'),
+            ),
+          ),
+          const SizedBox(height: 20),
+          rootPanel,
+        ];
 
-        if (wide) {
+        if (wide && showingDetail) {
           return Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                _PageHeader(
-                  title: 'Providers',
-                  subtitle:
-                      'Open saved providers first, then intentionally create, edit, or seed a new one.',
-                  trailing: headerAccessory,
-                ),
-                if (notice != null) ...<Widget>[
-                  const SizedBox(height: 12),
-                  _NoticeBanner(message: notice),
-                ],
-                const SizedBox(height: 16),
                 Expanded(
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: <Widget>[
                       Flexible(
                         flex: 5,
-                        child: SingleChildScrollView(child: rootPanel),
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: rootChildren,
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 16),
                       Flexible(
                         flex: 7,
-                        child: showingEditor
-                            ? ProviderConfigEditorPanel(
-                                supportedProviders:
-                                    controller.supportedProviderCatalog,
-                                providerDescriptors:
-                                    controller.providerDescriptors,
-                                selectedManagedProviderId:
-                                    controller.selectedManagedProviderId,
-                                draft: controller.managedProviderDraft,
-                                busy: controller.busy,
-                                onDraftChanged:
-                                    controller.updateManagedProviderDraft,
-                                onSave: controller.saveManagedProviderDraft,
-                                onDelete:
-                                    controller.deleteSelectedManagedProvider,
-                                onStartNewProviderFlow: () {
-                                  unawaited(onOpenNewProviderFlow());
-                                },
-                                onApplyToProfileDraft:
-                                    controller.useManagedProviderForDraft,
-                              )
-                            : _ProviderEditorPlaceholderCard(
-                                onOpenNewProviderFlow: onOpenNewProviderFlow,
-                                onOpenTemplatePicker: onOpenTemplatePicker,
-                              ),
+                        child: Align(
+                          alignment: Alignment.topLeft,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 840),
+                            child: detailPanel,
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -985,7 +1018,7 @@ class _ProvidersPage extends StatelessWidget {
           );
         }
 
-        if (showingEditor) {
+        if (showingDetail) {
           return Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
@@ -1008,24 +1041,7 @@ class _ProvidersPage extends StatelessWidget {
                   _NoticeBanner(message: notice),
                 ],
                 const SizedBox(height: 16),
-                Expanded(
-                  child: ProviderConfigEditorPanel(
-                    supportedProviders: controller.supportedProviderCatalog,
-                    providerDescriptors: controller.providerDescriptors,
-                    selectedManagedProviderId:
-                        controller.selectedManagedProviderId,
-                    draft: controller.managedProviderDraft,
-                    busy: controller.busy,
-                    onDraftChanged: controller.updateManagedProviderDraft,
-                    onSave: controller.saveManagedProviderDraft,
-                    onDelete: controller.deleteSelectedManagedProvider,
-                    onStartNewProviderFlow: () {
-                      unawaited(onOpenNewProviderFlow());
-                    },
-                    onApplyToProfileDraft:
-                        controller.useManagedProviderForDraft,
-                  ),
-                ),
+                Expanded(child: detailPanel),
               ],
             ),
           );
@@ -1033,20 +1049,7 @@ class _ProvidersPage extends StatelessWidget {
 
         return ListView(
           padding: const EdgeInsets.all(20),
-          children: <Widget>[
-            _PageHeader(
-              title: 'Providers',
-              subtitle:
-                  'Open saved providers first, then intentionally create, edit, or seed a new one.',
-              trailing: headerAccessory,
-            ),
-            if (notice != null) ...<Widget>[
-              const SizedBox(height: 12),
-              _NoticeBanner(message: notice),
-            ],
-            const SizedBox(height: 16),
-            rootPanel,
-          ],
+          children: rootChildren,
         );
       },
     );
@@ -1458,43 +1461,6 @@ class _HomeEmptyState extends StatelessWidget {
   }
 }
 
-class _HomeProfileSelectionState extends StatelessWidget {
-  const _HomeProfileSelectionState({required this.onOpenProfiles});
-
-  final VoidCallback onOpenProfiles;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              'Choose a profile',
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Saved profiles exist, but no profile is currently selected for the home workflow.',
-              style: theme.textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 14),
-            FilledButton(
-              onPressed: onOpenProfiles,
-              child: const Text('Open profiles'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _HomeProfileCard extends StatelessWidget {
   const _HomeProfileCard({required this.profile});
 
@@ -1559,29 +1525,34 @@ class _HomeModeCard extends StatelessWidget {
     final executionPlans = activeMode == null
         ? const <RuntimeExecutionPlanDescriptor>[]
         : controller.executionPlanOptionsForMode(activeMode);
-    return DecoratedBox(
+    return Container(
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.22,
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.6),
+        ),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              'Mode and scope',
-              style: theme.textTheme.titleSmall?.copyWith(
+              'Current mode',
+              style: theme.textTheme.labelLarge?.copyWith(
                 fontWeight: FontWeight.w800,
+                color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             Text(
               activeMode == null
                   ? 'The connected host has not advertised a mobile tunnel mode yet.'
                   : _modeSummary(controller),
-              style: theme.textTheme.bodyMedium,
+              style: theme.textTheme.bodySmall,
             ),
             if (activeCapability?.message.isNotEmpty == true) ...<Widget>[
               const SizedBox(height: 8),
@@ -1593,7 +1564,7 @@ class _HomeModeCard extends StatelessWidget {
               ),
             ],
             if (controller.platformTunnels.length > 1) ...<Widget>[
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               Wrap(
                 spacing: 10,
                 runSpacing: 10,
@@ -1613,11 +1584,12 @@ class _HomeModeCard extends StatelessWidget {
               ),
             ],
             if (executionPlans.length > 1) ...<Widget>[
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               Text(
                 'Execution path',
-                style: theme.textTheme.titleSmall?.copyWith(
+                style: theme.textTheme.labelLarge?.copyWith(
                   fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
               const SizedBox(height: 8),
@@ -1979,193 +1951,63 @@ class _RoutingUnavailableCard extends StatelessWidget {
 }
 
 class _ProviderRecordsRootSection extends StatelessWidget {
-  const _ProviderRecordsRootSection({
-    required this.controller,
-    required this.onOpenNewProviderFlow,
-    required this.onOpenBlankProviderFlow,
-    required this.onOpenTemplatePicker,
-  });
+  const _ProviderRecordsRootSection({required this.controller});
 
   final MobileShellController controller;
-  final Future<void> Function() onOpenNewProviderFlow;
-  final Future<void> Function() onOpenBlankProviderFlow;
-  final Future<void> Function() onOpenTemplatePicker;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final hasSavedProviders = controller.managedProviders.isNotEmpty;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        'Saved providers',
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Saved provider records are the primary content here. Templates stay behind the new-provider flow instead of taking over the root.',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (hasSavedProviders) ...<Widget>[
-                  const SizedBox(width: 12),
-                  FilledButton.tonal(
-                    key: const ValueKey<String>(
-                      'managed-provider-create-button',
-                    ),
-                    onPressed: controller.busy
-                        ? null
-                        : () => unawaited(onOpenNewProviderFlow()),
-                    child: const Text('New provider'),
-                  ),
-                ],
-              ],
-            ),
-            const SizedBox(height: 12),
-            if (!hasSavedProviders)
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest.withValues(
-                    alpha: 0.35,
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      'No saved providers yet.',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Start a blank provider or browse templates. The root still stays focused on saved providers even when the list is empty.',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: <Widget>[
-                        FilledButton(
-                          key: const ValueKey<String>(
-                            'blank-provider-empty-action',
-                          ),
-                          onPressed: controller.busy
-                              ? null
-                              : () => unawaited(onOpenBlankProviderFlow()),
-                          child: const Text('Blank provider'),
-                        ),
-                        OutlinedButton(
-                          key: const ValueKey<String>(
-                            'template-provider-empty-action',
-                          ),
-                          onPressed: controller.busy
-                              ? null
-                              : () => unawaited(onOpenTemplatePicker()),
-                          child: const Text('Browse templates'),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              )
-            else
-              ...controller.managedProviders.map(
-                (ManagedProviderRecord config) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Material(
-                    color:
-                        controller.workflowSurface ==
-                                MobileWorkflowSurface.providerConfig &&
-                            controller.selectedManagedProviderId == config.id
-                        ? theme.colorScheme.primary.withValues(alpha: 0.1)
-                        : theme.colorScheme.surfaceContainerHighest.withValues(
-                            alpha: 0.35,
-                          ),
-                    borderRadius: BorderRadius.circular(14),
-                    child: InkWell(
-                      key: ValueKey<String>(
-                        'managed-provider-item-${config.id}',
-                      ),
-                      borderRadius: BorderRadius.circular(14),
-                      onTap: () => controller.selectManagedProvider(config.id),
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            Row(
-                              children: <Widget>[
-                                Expanded(
-                                  child: Text(
-                                    config.name.isEmpty
-                                        ? config.id
-                                        : config.name,
-                                    style: theme.textTheme.titleSmall?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                                _StatusChip(
-                                  label: config.availability.state.label,
-                                  accent: config.isAvailable,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              supportedProviderDefinitionFor(
-                                        config.provider,
-                                      )?.title ==
-                                      null
-                                  ? config.provider
-                                  : 'Provider family: ${supportedProviderDefinitionFor(config.provider)!.title}',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                            if (config
-                                .availability
-                                .message
-                                .isNotEmpty) ...<Widget>[
-                              const SizedBox(height: 4),
-                              Text(
-                                config.availability.message,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
+    if (controller.managedProviders.isEmpty) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                'No saved providers yet',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
                 ),
               ),
+              const SizedBox(height: 6),
+              Text(
+                'Add a provider, then reuse it from Profiles.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          children: <Widget>[
+            for (
+              var index = 0;
+              index < controller.managedProviders.length;
+              index++
+            ) ...<Widget>[
+              _ManagedProviderListItem(
+                provider: controller.managedProviders[index],
+                selected:
+                    controller.workflowSurface ==
+                        MobileWorkflowSurface.providerConfig &&
+                    controller.selectedManagedProviderId ==
+                        controller.managedProviders[index].id,
+                onSelect: () => controller.selectManagedProvider(
+                  controller.managedProviders[index].id,
+                ),
+              ),
+              if (index != controller.managedProviders.length - 1)
+                const Divider(height: 1),
+            ],
           ],
         ),
       ),
@@ -2173,159 +2015,245 @@ class _ProviderRecordsRootSection extends StatelessWidget {
   }
 }
 
-class _ProviderEditorPlaceholderCard extends StatelessWidget {
-  const _ProviderEditorPlaceholderCard({
-    required this.onOpenNewProviderFlow,
-    required this.onOpenTemplatePicker,
+class _ManagedProviderListItem extends StatelessWidget {
+  const _ManagedProviderListItem({
+    required this.provider,
+    required this.selected,
+    required this.onSelect,
   });
 
-  final Future<void> Function() onOpenNewProviderFlow;
-  final Future<void> Function() onOpenTemplatePicker;
+  final ManagedProviderRecord provider;
+  final bool selected;
+  final VoidCallback onSelect;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              'Choose or create a provider',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+    final title = provider.name.trim().isEmpty ? provider.id : provider.name;
+    final familyTitle =
+        supportedProviderDefinitionFor(provider.provider)?.title ??
+        provider.provider;
+
+    return ListTile(
+      key: ValueKey<String>('managed-provider-item-${provider.id}'),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      onTap: onSelect,
+      leading: CircleAvatar(
+        backgroundColor: selected
+            ? theme.colorScheme.primary
+            : theme.colorScheme.surfaceContainerHighest,
+        foregroundColor: selected
+            ? theme.colorScheme.onPrimary
+            : theme.colorScheme.onSurfaceVariant,
+        child: const Icon(Icons.cloud_outlined),
+      ),
+      title: Text(
+        title,
+        style: theme.textTheme.titleMedium?.copyWith(
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const SizedBox(height: 4),
+          Text(
+            'Type: $familyTitle',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
             ),
-            const SizedBox(height: 8),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Used in Profiles',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          if (provider.availability.message.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 4),
             Text(
-              'On wider layouts the saved-provider list stays visible while the selected record or new-provider editor opens beside it.',
-              style: theme.textTheme.bodyMedium?.copyWith(
+              provider.availability.message,
+              style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: <Widget>[
-                FilledButton.tonal(
-                  onPressed: () => unawaited(onOpenNewProviderFlow()),
-                  child: const Text('New provider'),
-                ),
-                OutlinedButton(
-                  onPressed: () => unawaited(onOpenTemplatePicker()),
-                  child: const Text('Browse templates'),
-                ),
-              ],
-            ),
           ],
-        ),
+        ],
+      ),
+      trailing: _StatusChip(
+        label: provider.availability.state.label,
+        accent: provider.isAvailable,
       ),
     );
   }
 }
 
-class _ProviderCreateFlowSheet extends StatelessWidget {
-  const _ProviderCreateFlowSheet();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              'New provider',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Choose whether to start from a blank family or a shipped template.',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 16),
-            FilledButton(
-              key: const ValueKey<String>('new-provider-blank-action'),
-              onPressed: () {
-                Navigator.of(context).pop(_ProviderCreateEntryPoint.blank);
-              },
-              child: const Text('Blank provider'),
-            ),
-            const SizedBox(height: 10),
-            OutlinedButton(
-              key: const ValueKey<String>('new-provider-template-action'),
-              onPressed: () {
-                Navigator.of(context).pop(_ProviderCreateEntryPoint.template);
-              },
-              child: const Text('Start from template'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ProviderFamilyPickerSheet extends StatelessWidget {
-  const _ProviderFamilyPickerSheet({
+class _ProviderChooserDialog extends StatefulWidget {
+  const _ProviderChooserDialog({
     required this.supportedProviders,
     required this.providerDescriptors,
+    required this.userTemplates,
+    required this.presets,
+    required this.busy,
   });
 
   final List<SupportedProviderDefinition> supportedProviders;
   final List<ProviderDescriptor> providerDescriptors;
+  final List<ProviderTemplateRecord> userTemplates;
+  final List<ProviderPreset> presets;
+  final bool busy;
+
+  @override
+  State<_ProviderChooserDialog> createState() => _ProviderChooserDialogState();
+}
+
+class _ProviderChooserDialogState extends State<_ProviderChooserDialog> {
+  late final TextEditingController _searchController;
+  _ProviderChooserSurface _surface = _ProviderChooserSurface.families;
+  String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              'Provider families',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Choose the family for a blank provider record before you open the editor.',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView(
-                children: <Widget>[
-                  if (supportedProviders.isEmpty)
+    final query = _query.trim().toLowerCase();
+    final filteredUserTemplates = widget.userTemplates
+        .where((ProviderTemplateRecord template) {
+          if (query.isEmpty) {
+            return true;
+          }
+          final familyTitle =
+              supportedProviderDefinitionFor(template.provider)?.title ?? '';
+          final haystack =
+              '${template.name} ${template.provider} $familyTitle ${template.availability.message}'
+                  .toLowerCase();
+          return haystack.contains(query);
+        })
+        .toList(growable: false);
+    final filteredPresets = widget.presets
+        .where((ProviderPreset preset) {
+          if (query.isEmpty) {
+            return true;
+          }
+          final familyTitle =
+              supportedProviderDefinitionFor(preset.provider)?.title ?? '';
+          final haystack =
+              '${preset.title} ${preset.description} ${preset.provider} $familyTitle'
+                  .toLowerCase();
+          return haystack.contains(query);
+        })
+        .toList(growable: false);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
                     Text(
-                      'This build does not advertise any shipped provider families yet.',
+                      'Create provider',
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _surface == _ProviderChooserSurface.families
+                          ? 'Choose a provider type and configure a new saved provider.'
+                          : 'Use a template to prefill a new provider. Templates are starting points, not saved providers.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                key: const ValueKey<String>('provider-chooser-close-button'),
+                tooltip: 'Close',
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: <Widget>[
+              ChoiceChip(
+                key: const ValueKey<String>(
+                  'provider-chooser-surface-families',
+                ),
+                selected: _surface == _ProviderChooserSurface.families,
+                label: Text(
+                  'Provider types',
+                  style: theme.textTheme.labelLarge,
+                ),
+                onSelected: (_) {
+                  setState(() {
+                    _surface = _ProviderChooserSurface.families;
+                  });
+                },
+              ),
+              ChoiceChip(
+                key: const ValueKey<String>(
+                  'provider-chooser-surface-templates',
+                ),
+                selected: _surface == _ProviderChooserSurface.templates,
+                label: Text('Templates', style: theme.textTheme.labelLarge),
+                onSelected: (_) {
+                  setState(() {
+                    _surface = _ProviderChooserSurface.templates;
+                  });
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 420),
+            child: switch (_surface) {
+              _ProviderChooserSurface.families => ListView(
+                primary: false,
+                shrinkWrap: true,
+                children: <Widget>[
+                  if (widget.supportedProviders.isEmpty)
+                    Text(
+                      'This build does not advertise any shipped provider types yet.',
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     )
                   else
-                    ...supportedProviders.map((
+                    ...widget.supportedProviders.map((
                       SupportedProviderDefinition provider,
                     ) {
                       final availability = provider.availabilityFor(
-                        providerDescriptors,
+                        widget.providerDescriptors,
                       );
                       return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.only(bottom: 10),
                         child: Material(
                           color: theme.colorScheme.surfaceContainerHighest
                               .withValues(alpha: 0.35),
@@ -2335,11 +2263,17 @@ class _ProviderFamilyPickerSheet extends StatelessWidget {
                               'provider-family-picker-item-${provider.id}',
                             ),
                             borderRadius: BorderRadius.circular(14),
-                            onTap: () {
-                              Navigator.of(context).pop(provider.id);
-                            },
+                            onTap: widget.busy
+                                ? null
+                                : () {
+                                    Navigator.of(context).pop(
+                                      _ProviderChooserResult.family(
+                                        provider.id,
+                                      ),
+                                    );
+                                  },
                             child: Padding(
-                              padding: const EdgeInsets.all(14),
+                              padding: const EdgeInsets.all(12),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: <Widget>[
@@ -2362,15 +2296,15 @@ class _ProviderFamilyPickerSheet extends StatelessWidget {
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 6),
+                                  const SizedBox(height: 4),
                                   Text(
                                     provider.description,
-                                    style: theme.textTheme.bodyMedium,
+                                    style: theme.textTheme.bodySmall,
                                   ),
                                   if (availability
                                       .message
                                       .isNotEmpty) ...<Widget>[
-                                    const SizedBox(height: 6),
+                                    const SizedBox(height: 4),
                                     Text(
                                       availability.message,
                                       style: theme.textTheme.bodySmall
@@ -2390,103 +2324,166 @@ class _ProviderFamilyPickerSheet extends StatelessWidget {
                     }),
                 ],
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _TemplatePickerSheet extends StatefulWidget {
-  const _TemplatePickerSheet({
-    required this.presets,
-    required this.providerDescriptors,
-    required this.busy,
-  });
-
-  final List<ProviderPreset> presets;
-  final List<ProviderDescriptor> providerDescriptors;
-  final bool busy;
-
-  @override
-  State<_TemplatePickerSheet> createState() => _TemplatePickerSheetState();
-}
-
-class _TemplatePickerSheetState extends State<_TemplatePickerSheet> {
-  late final TextEditingController _searchController;
-  String _query = '';
-
-  @override
-  void initState() {
-    super.initState();
-    _searchController = TextEditingController();
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final query = _query.trim().toLowerCase();
-    final filteredPresets = widget.presets
-        .where((ProviderPreset preset) {
-          if (query.isEmpty) {
-            return true;
-          }
-          final familyTitle =
-              supportedProviderDefinitionFor(preset.provider)?.title ?? '';
-          final haystack =
-              '${preset.title} ${preset.description} ${preset.provider} $familyTitle'
-                  .toLowerCase();
-          return haystack.contains(query);
-        })
-        .toList(growable: false);
-
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              'Templates',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Start from a shipped template when you intentionally want a seeded provider record.',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              key: const ValueKey<String>('provider-template-search-field'),
-              controller: _searchController,
-              decoration: const InputDecoration(
-                labelText: 'Search templates',
-                prefixIcon: Icon(Icons.search),
-              ),
-              onChanged: (String value) {
-                setState(() {
-                  _query = value;
-                });
-              },
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView(
+              _ProviderChooserSurface.templates => ListView(
+                primary: false,
+                shrinkWrap: true,
                 children: <Widget>[
+                  TextField(
+                    key: const ValueKey<String>(
+                      'provider-template-search-field',
+                    ),
+                    controller: _searchController,
+                    decoration: const InputDecoration(
+                      labelText: 'Search templates',
+                      prefixIcon: Icon(Icons.search),
+                      isDense: true,
+                    ),
+                    onChanged: (String value) {
+                      setState(() {
+                        _query = value;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'My templates',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if (filteredUserTemplates.isEmpty)
+                    Text(
+                      widget.userTemplates.isEmpty
+                          ? 'No saved templates yet. Save a provider as a template to reuse it here.'
+                          : 'No saved templates match the current search.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    )
+                  else
+                    ...filteredUserTemplates.map((
+                      ProviderTemplateRecord template,
+                    ) {
+                      final familyTitle =
+                          supportedProviderDefinitionFor(
+                            template.provider,
+                          )?.title ??
+                          template.provider;
+                      final templateTitle = template.name.trim().isEmpty
+                          ? template.id
+                          : template.name.trim();
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Container(
+                          key: ValueKey<String>(
+                            'user-template-item-${template.id}',
+                          ),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surfaceContainerHighest
+                                .withValues(alpha: 0.35),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Row(
+                                children: <Widget>[
+                                  Expanded(
+                                    child: Text(
+                                      templateTitle,
+                                      style: theme.textTheme.titleMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                    ),
+                                  ),
+                                  _StatusChip(
+                                    label: template.availability.state.label,
+                                    accent: template.isAvailable,
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Type: $familyTitle',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Prefills new providers',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                              if (template
+                                  .availability
+                                  .message
+                                  .isNotEmpty) ...<Widget>[
+                                const SizedBox(height: 4),
+                                Text(
+                                  template.availability.message,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: <Widget>[
+                                  FilledButton.tonal(
+                                    key: ValueKey<String>(
+                                      'user-template-use-${template.id}',
+                                    ),
+                                    onPressed: widget.busy
+                                        ? null
+                                        : () {
+                                            Navigator.of(context).pop(
+                                              _ProviderChooserResult.userTemplateUse(
+                                                template.id,
+                                              ),
+                                            );
+                                          },
+                                    child: const Text('Use template'),
+                                  ),
+                                  OutlinedButton(
+                                    key: ValueKey<String>(
+                                      'user-template-edit-${template.id}',
+                                    ),
+                                    onPressed: widget.busy
+                                        ? null
+                                        : () {
+                                            Navigator.of(context).pop(
+                                              _ProviderChooserResult.userTemplateEdit(
+                                                template.id,
+                                              ),
+                                            );
+                                          },
+                                    child: const Text('Edit template'),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Shipped templates',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   if (filteredPresets.isEmpty)
                     Text(
-                      'No templates match the current search.',
+                      'No shipped templates match the current search.',
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -2502,12 +2499,12 @@ class _TemplatePickerSheetState extends State<_TemplatePickerSheet> {
                           )?.title ??
                           preset.provider;
                       return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.only(bottom: 10),
                         child: Container(
                           key: ValueKey<String>(
                             'template-picker-item-${preset.id}',
                           ),
-                          padding: const EdgeInsets.all(14),
+                          padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
                             color: theme.colorScheme.surfaceContainerHighest
                                 .withValues(alpha: 0.35),
@@ -2535,20 +2532,35 @@ class _TemplatePickerSheetState extends State<_TemplatePickerSheet> {
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 6),
+                              const SizedBox(height: 4),
                               Text(
-                                'Provider family: $familyTitle',
+                                'Type: $familyTitle',
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),
                               ),
-                              const SizedBox(height: 6),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Starting point for new providers',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
                               Text(
                                 preset.description,
-                                style: theme.textTheme.bodyMedium,
+                                style: theme.textTheme.bodySmall,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Read-only shipped template',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                               if (availability.message.isNotEmpty) ...<Widget>[
-                                const SizedBox(height: 6),
+                                const SizedBox(height: 4),
                                 Text(
                                   availability.message,
                                   style: theme.textTheme.bodySmall?.copyWith(
@@ -2556,7 +2568,7 @@ class _TemplatePickerSheetState extends State<_TemplatePickerSheet> {
                                   ),
                                 ),
                               ],
-                              const SizedBox(height: 10),
+                              const SizedBox(height: 8),
                               FilledButton.tonal(
                                 key: ValueKey<String>(
                                   'template-picker-use-${preset.id}',
@@ -2565,7 +2577,11 @@ class _TemplatePickerSheetState extends State<_TemplatePickerSheet> {
                                     widget.busy || !availability.isAvailable
                                     ? null
                                     : () {
-                                        Navigator.of(context).pop(preset);
+                                        Navigator.of(context).pop(
+                                          _ProviderChooserResult.template(
+                                            preset,
+                                          ),
+                                        );
                                       },
                                 child: const Text('Use template'),
                               ),
@@ -2576,9 +2592,9 @@ class _TemplatePickerSheetState extends State<_TemplatePickerSheet> {
                     }),
                 ],
               ),
-            ),
-          ],
-        ),
+            },
+          ),
+        ],
       ),
     );
   }
@@ -2611,6 +2627,37 @@ class _StatusChip extends StatelessWidget {
           color: foreground,
           fontWeight: FontWeight.w700,
         ),
+      ),
+    );
+  }
+}
+
+class _DialogSurfaceFrame extends StatelessWidget {
+  const _DialogSurfaceFrame({
+    required this.child,
+    this.maxWidth = 560,
+    this.maxHeight = 640,
+  });
+
+  final Widget child;
+  final double maxWidth;
+  final double maxHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final resolvedHeight = size.height - 40 < maxHeight
+        ? size.height - 40
+        : maxHeight;
+    return Dialog(
+      insetPadding: const EdgeInsets.all(20),
+      clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: maxWidth,
+          maxHeight: resolvedHeight,
+        ),
+        child: SizedBox(width: maxWidth, child: child),
       ),
     );
   }
@@ -2874,13 +2921,16 @@ class _HostStatusIndicator extends StatelessWidget {
             borderRadius: borderRadius,
             child: InkWell(
               borderRadius: borderRadius,
-              onTap: () => showModalBottomSheet<void>(
+              onTap: () => showDialog<void>(
                 context: context,
-                showDragHandle: true,
                 builder: (BuildContext context) {
-                  return _HostStatusSheet(
-                    controller: controller,
-                    onOpenDiagnostics: onOpenDiagnostics,
+                  return _DialogSurfaceFrame(
+                    maxWidth: 520,
+                    maxHeight: 420,
+                    child: _HostStatusSheet(
+                      controller: controller,
+                      onOpenDiagnostics: onOpenDiagnostics,
+                    ),
                   );
                 },
               ),
@@ -2941,101 +2991,103 @@ class _HostStatusSheet extends StatelessWidget {
     final hostInfo = connection?.info;
     final tone = _hostIndicatorTone(controller);
 
-    return SafeArea(
-      top: false,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: tone.$2,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Icon(tone.$4, color: tone.$3, size: 22),
-                  ),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: tone.$2,
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        _diagnosticsHostTitle(connection),
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Icon(tone.$4, color: tone.$3, size: 22),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      _diagnosticsHostTitle(connection),
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        controller.hostStatusMessage ??
-                            'Waiting for mobile host bridge negotiation.',
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      controller.hostStatusMessage ??
+                          'Waiting for mobile host bridge negotiation.',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: <Widget>[
-                _Tag(label: 'GUI ${controller.appBuild.shortLabel}'),
-                if (hostInfo != null)
-                  _Tag(label: 'Host ${hostInfo.build.shortLabel}'),
-                if (hostInfo != null)
-                  _Tag(label: 'Contract ${hostInfo.contractVersion}'),
-                if ((connection?.description ?? '').isNotEmpty)
-                  _Tag(label: connection!.description),
-              ],
-            ),
-            const SizedBox(height: 18),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: <Widget>[
-                FilledButton.tonal(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    onOpenDiagnostics();
-                  },
-                  child: const Text('Open diagnostics'),
-                ),
-                FilledButton.tonal(
-                  onPressed:
-                      controller.busy || controller.requiresLocalStateReset
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                tooltip: 'Close',
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: <Widget>[
+              _Tag(label: 'GUI ${controller.appBuild.shortLabel}'),
+              if (hostInfo != null)
+                _Tag(label: 'Host ${hostInfo.build.shortLabel}'),
+              if (hostInfo != null)
+                _Tag(label: 'Contract ${hostInfo.contractVersion}'),
+              if ((connection?.description ?? '').isNotEmpty)
+                _Tag(label: connection!.description),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: <Widget>[
+              FilledButton.tonal(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  onOpenDiagnostics();
+                },
+                child: const Text('Open diagnostics'),
+              ),
+              FilledButton.tonal(
+                onPressed: controller.busy || controller.requiresLocalStateReset
+                    ? null
+                    : () => unawaited(controller.reconnect()),
+                child: const Text('Reconnect'),
+              ),
+              if (controller.requiresLocalStateReset)
+                OutlinedButton(
+                  onPressed: controller.busy
                       ? null
-                      : () => unawaited(controller.reconnect()),
-                  child: const Text('Reconnect'),
+                      : () => unawaited(controller.clearLocalState()),
+                  child: const Text('Reset local state'),
                 ),
-                if (controller.requiresLocalStateReset)
-                  OutlinedButton(
-                    onPressed: controller.busy
-                        ? null
-                        : () => unawaited(controller.clearLocalState()),
-                    child: const Text('Reset local state'),
-                  ),
-                FilledButton(
-                  onPressed:
-                      controller.busy ||
-                          controller.hostConnection?.isReady != true
-                      ? null
-                      : () => unawaited(controller.refresh()),
-                  child: const Text('Refresh'),
-                ),
-              ],
-            ),
-          ],
-        ),
+              FilledButton(
+                onPressed:
+                    controller.busy ||
+                        controller.hostConnection?.isReady != true
+                    ? null
+                    : () => unawaited(controller.refresh()),
+                child: const Text('Refresh'),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

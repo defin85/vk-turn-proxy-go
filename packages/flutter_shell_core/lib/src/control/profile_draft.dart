@@ -253,6 +253,17 @@ class ManagedProviderDraft {
     );
   }
 
+  factory ManagedProviderDraft.fromTemplateRecord(
+    ProviderTemplateRecord record,
+  ) {
+    return ManagedProviderDraft(
+      provider: record.provider,
+      name: record.name,
+      providerSettings: record.providerSettings,
+      availability: record.availability,
+    );
+  }
+
   final String? id;
   final String provider;
   final String name;
@@ -283,6 +294,134 @@ class ManagedProviderDraft {
 
   ManagedProviderRecord toRecord() {
     return ManagedProviderRecord(
+      id: id ?? '',
+      provider: provider,
+      name: name.trim(),
+      providerSettings: providerSettings,
+      createdAt: createdAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+      updatedAt: updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+      availability: availability,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'provider': provider,
+      'name': name,
+      'provider_settings': providerSettings,
+      'created_at': createdAt?.toUtc().toIso8601String(),
+      'updated_at': updatedAt?.toUtc().toIso8601String(),
+      'availability': availability.toJson(),
+    };
+  }
+}
+
+class ProviderTemplateDraft {
+  const ProviderTemplateDraft({
+    this.id,
+    required this.provider,
+    required this.name,
+    this.providerSettings = const <String, dynamic>{},
+    this.createdAt,
+    this.updatedAt,
+    this.availability = const ProviderConfigAvailability(),
+  });
+
+  factory ProviderTemplateDraft.defaults({String provider = ''}) {
+    return ProviderTemplateDraft(provider: provider, name: '');
+  }
+
+  factory ProviderTemplateDraft.fromJson(Map<String, dynamic> json) {
+    return ProviderTemplateDraft(
+      id: json['id'] as String?,
+      provider: json['provider'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      providerSettings: json['provider_settings'] is Map<String, dynamic>
+          ? Map<String, dynamic>.from(
+              json['provider_settings'] as Map<String, dynamic>,
+            )
+          : const <String, dynamic>{},
+      createdAt:
+          json['created_at'] is String &&
+              (json['created_at'] as String).isNotEmpty
+          ? DateTime.tryParse(json['created_at'] as String)?.toLocal()
+          : null,
+      updatedAt:
+          json['updated_at'] is String &&
+              (json['updated_at'] as String).isNotEmpty
+          ? DateTime.tryParse(json['updated_at'] as String)?.toLocal()
+          : null,
+      availability: json['availability'] is Map<String, dynamic>
+          ? ProviderConfigAvailability.fromJson(
+              json['availability'] as Map<String, dynamic>,
+            )
+          : const ProviderConfigAvailability(),
+    );
+  }
+
+  factory ProviderTemplateDraft.fromRecord(ProviderTemplateRecord record) {
+    return ProviderTemplateDraft(
+      id: record.id,
+      provider: record.provider,
+      name: record.name,
+      providerSettings: record.providerSettings,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+      availability: record.availability,
+    );
+  }
+
+  factory ProviderTemplateDraft.fromManagedProviderDraft(
+    ManagedProviderDraft draft,
+  ) {
+    return ProviderTemplateDraft(
+      provider: draft.provider,
+      name: draft.name,
+      providerSettings: draft.providerSettings,
+    );
+  }
+
+  factory ProviderTemplateDraft.fromManagedProviderRecord(
+    ManagedProviderRecord record,
+  ) {
+    return ProviderTemplateDraft(
+      provider: record.provider,
+      name: record.name,
+      providerSettings: record.providerSettings,
+    );
+  }
+
+  final String? id;
+  final String provider;
+  final String name;
+  final Map<String, dynamic> providerSettings;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+  final ProviderConfigAvailability availability;
+
+  ProviderTemplateDraft copyWith({
+    String? id,
+    String? provider,
+    String? name,
+    Map<String, dynamic>? providerSettings,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    ProviderConfigAvailability? availability,
+  }) {
+    return ProviderTemplateDraft(
+      id: id ?? this.id,
+      provider: provider ?? this.provider,
+      name: name ?? this.name,
+      providerSettings: providerSettings ?? this.providerSettings,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      availability: availability ?? this.availability,
+    );
+  }
+
+  ProviderTemplateRecord toRecord() {
+    return ProviderTemplateRecord(
       id: id ?? '',
       provider: provider,
       name: name.trim(),

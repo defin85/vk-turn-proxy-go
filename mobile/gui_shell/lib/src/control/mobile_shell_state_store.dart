@@ -75,6 +75,7 @@ class MobileShellState {
   MobileShellState({
     required this.profiles,
     List<ManagedProviderRecord>? managedProviders,
+    List<ProviderTemplateRecord>? providerTemplates,
     List<ProviderConfigRecord>? providerConfigs,
     required this.draft,
     this.profileBindings = const <String, ProfileProviderBinding>{},
@@ -86,12 +87,15 @@ class MobileShellState {
            managedProviders ??
            (providerConfigs ?? const <ProviderConfigRecord>[])
                .map(ManagedProviderRecord.fromLegacyProviderConfig)
-               .toList(growable: false);
+               .toList(growable: false),
+       providerTemplates =
+           providerTemplates ?? const <ProviderTemplateRecord>[];
 
   factory MobileShellState.empty() {
     return MobileShellState(
       profiles: const <ProfileRecord>[],
       managedProviders: const <ManagedProviderRecord>[],
+      providerTemplates: const <ProviderTemplateRecord>[],
       draft: ProfileDraft.defaults(),
     );
   }
@@ -105,6 +109,7 @@ class MobileShellState {
           )
           .toList(growable: false),
       managedProviders: _readManagedProviders(json),
+      providerTemplates: _readProviderTemplates(json),
       profileBindings: _readProfileBindings(json['profile_bindings']),
       selectedProfileId: json['selected_profile_id'] as String?,
       selectedPlatformTunnelMode: PlatformTunnelMode.fromJson(
@@ -121,6 +126,7 @@ class MobileShellState {
 
   final List<ProfileRecord> profiles;
   final List<ManagedProviderRecord> managedProviders;
+  final List<ProviderTemplateRecord> providerTemplates;
   final Map<String, ProfileProviderBinding> profileBindings;
   final String? selectedProfileId;
   final PlatformTunnelMode? selectedPlatformTunnelMode;
@@ -136,6 +142,9 @@ class MobileShellState {
           .toList(growable: false),
       'managed_providers': managedProviders
           .map((ManagedProviderRecord provider) => provider.toJson())
+          .toList(growable: false),
+      'provider_templates': providerTemplates
+          .map((ProviderTemplateRecord template) => template.toJson())
           .toList(growable: false),
       'profile_bindings': <String, dynamic>{
         for (final entry in profileBindings.entries)
@@ -174,6 +183,15 @@ class MobileShellState {
             (ManagedProviderRecord provider) => provider.copyWith(
               providerSettings: Map<String, dynamic>.from(
                 provider.providerSettings,
+              ),
+            ),
+          )
+          .toList(growable: false),
+      providerTemplates: providerTemplates
+          .map(
+            (ProviderTemplateRecord template) => template.copyWith(
+              providerSettings: Map<String, dynamic>.from(
+                template.providerSettings,
               ),
             ),
           )
@@ -319,6 +337,7 @@ class SecureMobileShellStateStore implements MobileShellStateStore {
           })
           .toList(growable: false),
       managedProviders: sanitized.managedProviders,
+      providerTemplates: sanitized.providerTemplates,
       profileBindings: sanitized.profileBindings,
       selectedProfileId: sanitized.selectedProfileId,
       selectedPlatformTunnelMode: sanitized.selectedPlatformTunnelMode,
@@ -473,6 +492,13 @@ List<ManagedProviderRecord> _readManagedProviders(Map<String, dynamic> json) {
       .toList(growable: false);
 }
 
+List<ProviderTemplateRecord> _readProviderTemplates(Map<String, dynamic> json) {
+  return (json['provider_templates'] as List<dynamic>? ?? const <dynamic>[])
+      .whereType<Map<String, dynamic>>()
+      .map(ProviderTemplateRecord.fromJson)
+      .toList(growable: false);
+}
+
 Map<String, ProfileProviderBinding> _readProfileBindings(dynamic raw) {
   if (raw is! Map<String, dynamic>) {
     return const <String, ProfileProviderBinding>{};
@@ -510,13 +536,12 @@ Map<String, MobilePlatformModePreferences> _readPlatformModePreferences(
 }
 
 List<String> _readPackageList(dynamic raw) {
-  final normalized =
-      (raw as List<dynamic>? ?? const <dynamic>[])
-          .whereType<String>()
-          .map((String value) => value.trim())
-          .where((String value) => value.isNotEmpty)
-          .toSet()
-          .toList(growable: false);
+  final normalized = (raw as List<dynamic>? ?? const <dynamic>[])
+      .whereType<String>()
+      .map((String value) => value.trim())
+      .where((String value) => value.isNotEmpty)
+      .toSet()
+      .toList(growable: false);
   normalized.sort();
   return normalized;
 }

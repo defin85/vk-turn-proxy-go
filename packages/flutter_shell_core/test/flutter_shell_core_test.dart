@@ -157,6 +157,35 @@ void main() {
     },
   );
 
+  test('provider templates round-trip through json and seed drafts', () {
+    final createdAt = DateTime.utc(2026, 4, 13, 10, 20);
+    final updatedAt = DateTime.utc(2026, 4, 13, 10, 21);
+    final record = ProviderTemplateRecord(
+      id: 'template-1',
+      provider: 'vk',
+      name: 'VK Guest Bootstrap',
+      providerSettings: const <String, dynamic>{'region': 'eu-west'},
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+    );
+
+    final restoredRecord = ProviderTemplateRecord.fromJson(record.toJson());
+    final restoredDraft = ProviderTemplateDraft.fromJson(
+      ProviderTemplateDraft.fromRecord(restoredRecord).toJson(),
+    );
+    final seededProviderDraft = ManagedProviderDraft.fromTemplateRecord(
+      restoredRecord,
+    );
+
+    expect(restoredRecord.id, 'template-1');
+    expect(restoredRecord.providerSettings['region'], 'eu-west');
+    expect(restoredDraft.id, 'template-1');
+    expect(restoredDraft.updatedAt?.toUtc(), updatedAt);
+    expect(seededProviderDraft.provider, 'vk');
+    expect(seededProviderDraft.name, 'VK Guest Bootstrap');
+    expect(seededProviderDraft.providerSettings['region'], 'eu-west');
+  });
+
   test('profile draft bootstrap applies provider configs snapshot-style', () {
     final draft = ProfileDraft.defaults().copyWith(
       name: 'Current profile',

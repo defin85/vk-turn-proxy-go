@@ -12,25 +12,29 @@ Verified UI development loops for this repository. Only techniques that were exe
 
 ## Mobile GUI shell via Dart MCP
 
-Verified on `2026-04-16` against Android tablet `192.168.0.16:39305`.
+Verified on `2026-04-17` against Android device `192.168.0.16:40017`.
 
 1. Launch with Dart MCP:
-   `mcp__dart__.launch_app(device="192.168.0.16:39305", root="/home/egor/code/vk-turn-proxy-go/mobile/gui_shell")`
+   `mcp__dart__.launch_app(device="192.168.0.16:40017", root="/home/egor/code/vk-turn-proxy-go/mobile/gui_shell", target="test_driver/driver_main.dart")`
 2. Connect to the returned DTD URI with `mcp__dart__.connect_dart_tooling_daemon`.
 3. Use `mcp__dart__.hot_reload` for iteration.
+4. Use `mcp__dart__.flutter_driver(command="screenshot")` and other `flutter_driver` commands for live screenshots and taps.
 
 Verified evidence:
-- `launch_app` returned a live DTD URI and PID for the tablet app.
+- `launch_app` returned a live DTD URI and PID for the mobile app.
 - `hot_reload` succeeded.
-- A temporary title change from `Home` to `Home MCP` appeared on the real device screenshot after `hot_reload`.
-- Reverting that title and running `hot_reload` again restored the original UI.
+- `flutter_driver(command="screenshot")` returned a real screenshot from the device.
+- `flutter_driver(command="tap", finderType="ByText", text="Providers")` successfully switched the app to `Providers`.
+- A follow-up screenshot showed the live wide-layout `Providers` screen with the saved-provider root on the left and the companion create pane on the right.
+
+Use the default `mobile/gui_shell/lib/main.dart` entrypoint only when the task specifically needs production-entrypoint parity rather than driver-enabled inspection.
 
 ### Mobile owned-browser IME harness
 
 Verified on `2026-04-16` against the same Android tablet.
 
-1. Launch the harness instead of the default app entrypoint:
-   `mcp__dart__.launch_app(device="192.168.0.16:39305", root="/home/egor/code/vk-turn-proxy-go/mobile/gui_shell", target="test_driver/owned_browser_harness_main.dart")`
+1. Launch the harness instead of the normal driver entrypoint:
+   `mcp__dart__.launch_app(device="192.168.0.16:40017", root="/home/egor/code/vk-turn-proxy-go/mobile/gui_shell", target="test_driver/owned_browser_harness_main.dart")`
 2. Connect to the returned DTD URI with `mcp__dart__.connect_dart_tooling_daemon`.
 3. Use `mcp__dart__.hot_reload` and reopen the harness route to iterate on the owned-browser `WebView` path.
 4. If the current task needs live native/DOM diagnostics, temporarily flip `_showHarnessDiagnostics` in `mobile/gui_shell/test_driver/owned_browser_harness_main.dart` to `true`, `hot_reload`, and reopen the route. Turn it back off afterwards.
