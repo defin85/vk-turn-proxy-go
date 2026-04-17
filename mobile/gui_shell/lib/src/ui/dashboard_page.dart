@@ -11,7 +11,7 @@ import 'package:mobile_gui_shell/src/ui/provider_config_editor.dart';
 
 const double _compactNavigationBreakpoint = 840;
 
-enum _DashboardDestination { home, profiles, routing, support }
+enum _DashboardDestination { home, profiles, providers, routing, support }
 
 enum _SupportSurface { activity, diagnostics }
 
@@ -99,9 +99,20 @@ class _DashboardPageState extends State<DashboardPage> {
     });
   }
 
+  void _openDiagnostics() {
+    _openSupport(surface: _SupportSurface.diagnostics);
+  }
+
   void _openProfiles() {
     setState(() {
       _destination = _DashboardDestination.profiles;
+    });
+  }
+
+  void _openProviders() {
+    widget.controller.showProviderWorkspace();
+    setState(() {
+      _destination = _DashboardDestination.providers;
     });
   }
 
@@ -129,6 +140,9 @@ class _DashboardPageState extends State<DashboardPage> {
       case _DashboardDestination.profiles:
         _openProfiles();
         return;
+      case _DashboardDestination.providers:
+        _openProviders();
+        return;
       case _DashboardDestination.home:
         _openHome();
         return;
@@ -149,6 +163,7 @@ class _DashboardPageState extends State<DashboardPage> {
     return <_DashboardDestination>[
       _DashboardDestination.home,
       _DashboardDestination.profiles,
+      _DashboardDestination.providers,
       if (wide && routingSupported) _DashboardDestination.routing,
       _DashboardDestination.support,
     ];
@@ -162,23 +177,48 @@ class _DashboardPageState extends State<DashboardPage> {
       _DashboardDestination.home => _HomePage(
         controller: widget.controller,
         onOpenProfiles: _openProfiles,
-        onOpenRouting: _openRouting,
         onOpenSupport: _openSupport,
+        headerAccessory: _HostStatusIndicator(
+          controller: widget.controller,
+          onOpenDiagnostics: _openDiagnostics,
+        ),
+        onLaunchChallengeSurface: _launchChallengeSurface,
+        openChallengeLabel: _openChallengeLabel,
+        showsManualChallengeContinue: _showsManualChallengeContinue,
       ),
       _DashboardDestination.profiles => _ProfilesPage(
         controller: widget.controller,
         onOpenRouting: _openRouting,
+        headerAccessory: _HostStatusIndicator(
+          controller: widget.controller,
+          onOpenDiagnostics: _openDiagnostics,
+        ),
+      ),
+      _DashboardDestination.providers => _ProvidersPage(
+        controller: widget.controller,
+        headerAccessory: _HostStatusIndicator(
+          controller: widget.controller,
+          onOpenDiagnostics: _openDiagnostics,
+        ),
       ),
       _DashboardDestination.routing => _RoutingPage(
         controller: widget.controller,
         onBack: compactRoutingRoute ? _openHome : null,
         onOpenProfiles: _openProfiles,
+        headerAccessory: _HostStatusIndicator(
+          controller: widget.controller,
+          onOpenDiagnostics: _openDiagnostics,
+        ),
       ),
       _DashboardDestination.support => _SupportPage(
         controller: widget.controller,
         supportSurface: _supportSurface,
         activitySurface: _activitySurface,
         diagnosticsSurface: _diagnosticsSurface,
+        headerAccessory: _HostStatusIndicator(
+          controller: widget.controller,
+          onOpenDiagnostics: _openDiagnostics,
+        ),
         onSupportSurfaceChanged: (_SupportSurface surface) {
           setState(() {
             _supportSurface = surface;
@@ -213,6 +253,11 @@ class _DashboardPageState extends State<DashboardPage> {
         selectedIcon: Icon(Icons.folder),
         label: 'Profiles',
       ),
+      _DashboardDestination.providers => const NavigationDestination(
+        icon: Icon(Icons.cloud_outlined),
+        selectedIcon: Icon(Icons.cloud),
+        label: 'Providers',
+      ),
       _DashboardDestination.routing => const NavigationDestination(
         icon: Icon(Icons.alt_route_outlined),
         selectedIcon: Icon(Icons.alt_route),
@@ -239,6 +284,11 @@ class _DashboardPageState extends State<DashboardPage> {
         icon: Icon(Icons.folder_outlined),
         selectedIcon: Icon(Icons.folder),
         label: Text('Profiles'),
+      ),
+      _DashboardDestination.providers => const NavigationRailDestination(
+        icon: Icon(Icons.cloud_outlined),
+        selectedIcon: Icon(Icons.cloud),
+        label: Text('Providers'),
       ),
       _DashboardDestination.routing => const NavigationRailDestination(
         icon: Icon(Icons.alt_route_outlined),
@@ -328,36 +378,47 @@ class _HomePage extends StatelessWidget {
   const _HomePage({
     required this.controller,
     required this.onOpenProfiles,
-    required this.onOpenRouting,
     required this.onOpenSupport,
+    required this.headerAccessory,
+    required this.onLaunchChallengeSurface,
+    required this.openChallengeLabel,
+    required this.showsManualChallengeContinue,
   });
 
   final MobileShellController controller;
   final VoidCallback onOpenProfiles;
-  final VoidCallback onOpenRouting;
   final void Function({_SupportSurface surface}) onOpenSupport;
+  final Widget headerAccessory;
+  final Future<void> Function(ChallengeRecord challenge)
+  onLaunchChallengeSurface;
+  final String Function(ChallengeRecord? challenge) openChallengeLabel;
+  final bool Function(ChallengeRecord? challenge) showsManualChallengeContinue;
 
   @override
   Widget build(BuildContext context) {
     final selectedProfile = _selectedProfile(controller);
+    final homeChallenge = controller.activeHomeChallenge;
     final activeMode = controller.activePlatformTunnelMode;
     final activeResult = activeMode == null
         ? null
         : controller.platformTunnelResultFor(activeMode);
     final tunnelReady = activeResult?.ready == true;
-    final showRuntimeCards = controller.profiles.isNotEmpty || tunnelReady;
+    final showRuntimeCards =
+        controller.profiles.isNotEmpty || tunnelReady || homeChallenge != null;
+    final notice = controller.surfaceNotice;
 
     return ListView(
       padding: const EdgeInsets.all(20),
       children: <Widget>[
-        const _PageHeader(
+        _PageHeader(
           title: 'Home',
           subtitle:
-              'Turn the current mobile VPN mode on or off without dropping into diagnostics-first workflow.',
+              'Pick a profile, finish any provider browser step from here, then turn the current mobile VPN path on or off.',
+          trailing: headerAccessory,
         ),
-        if (controller.notice != null) ...<Widget>[
+        if (notice != null) ...<Widget>[
           const SizedBox(height: 12),
-          _NoticeBanner(message: controller.notice!),
+          _NoticeBanner(message: notice),
         ],
         if (controller.requiresLocalStateReset) ...<Widget>[
           const SizedBox(height: 12),
@@ -377,28 +438,23 @@ class _HomePage extends StatelessWidget {
         else if (selectedProfile == null)
           _HomeProfileSelectionState(onOpenProfiles: onOpenProfiles)
         else
-          _HomeProfileCard(
-            controller: controller,
-            profile: selectedProfile,
-            onOpenProfiles: onOpenProfiles,
-          ),
+          _HomeProfileCard(profile: selectedProfile),
         if (showRuntimeCards) ...<Widget>[
-          const SizedBox(height: 16),
-          _HomeModeCard(
-            controller: controller,
-            onOpenRouting: controller.activeModeSupportsAppRouting
-                ? onOpenRouting
-                : null,
-          ),
           const SizedBox(height: 16),
           _HomePrimaryActionCard(
             controller: controller,
             hasSelectedProfile: selectedProfile != null,
             onOpenProfiles: onOpenProfiles,
             tunnelReady: tunnelReady,
+            challenge: homeChallenge,
+            onLaunchChallengeSurface: onLaunchChallengeSurface,
+            openChallengeLabel: openChallengeLabel,
+            showsManualChallengeContinue: showsManualChallengeContinue,
           ),
           const SizedBox(height: 16),
-          _HomeLiveStatusCard(
+          _HomeModeCard(controller: controller),
+          const SizedBox(height: 16),
+          _HomeSupportActions(
             controller: controller,
             onOpenActivity: () =>
                 onOpenSupport(surface: _SupportSurface.activity),
@@ -412,10 +468,15 @@ class _HomePage extends StatelessWidget {
 }
 
 class _ProfilesPage extends StatelessWidget {
-  const _ProfilesPage({required this.controller, required this.onOpenRouting});
+  const _ProfilesPage({
+    required this.controller,
+    required this.onOpenRouting,
+    required this.headerAccessory,
+  });
 
   final MobileShellController controller;
   final VoidCallback onOpenRouting;
+  final Widget headerAccessory;
 
   void _openProfileWorkspace(
     BuildContext context, {
@@ -437,20 +498,11 @@ class _ProfilesPage extends StatelessWidget {
     );
   }
 
-  void _openProviderWorkspace(BuildContext context) {
-    controller.showProviderWorkspace();
-    Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (BuildContext context) =>
-            _ProviderWorkspacePage(controller: controller),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final wide =
         MediaQuery.sizeOf(context).width >= _compactNavigationBreakpoint;
+    final notice = controller.surfaceNotice;
     final menuActions = <_CardActionEntry>[
       _CardActionEntry(
         id: 'import-invite',
@@ -461,13 +513,6 @@ class _ProfilesPage extends StatelessWidget {
             title: 'Import invite',
             resetDraft: true,
           );
-        },
-      ),
-      _CardActionEntry(
-        id: 'manage-providers',
-        label: 'Manage providers',
-        onSelected: () async {
-          _openProviderWorkspace(context);
         },
       ),
       if (!wide && controller.activeModeSupportsAppRouting)
@@ -492,6 +537,8 @@ class _ProfilesPage extends StatelessWidget {
                 subtitle: 'Choose a saved profile or add a new one for Home.',
               ),
             ),
+            const SizedBox(width: 8),
+            headerAccessory,
             const SizedBox(width: 12),
             _ActionOverflowButton(
               tooltip: 'Profiles actions',
@@ -500,9 +547,9 @@ class _ProfilesPage extends StatelessWidget {
             ),
           ],
         ),
-        if (controller.notice != null) ...<Widget>[
+        if (notice != null) ...<Widget>[
           const SizedBox(height: 12),
-          _NoticeBanner(message: controller.notice!),
+          _NoticeBanner(message: notice),
         ],
         const SizedBox(height: 16),
         Align(
@@ -673,6 +720,7 @@ class _ProfileWorkspacePage extends StatelessWidget {
     return AnimatedBuilder(
       animation: controller,
       builder: (BuildContext context, _) {
+        final notice = controller.surfaceNotice;
         final hasSavedProfile = controller.selectedProfileId != null;
         return Scaffold(
           appBar: AppBar(
@@ -702,17 +750,15 @@ class _ProfileWorkspacePage extends StatelessWidget {
                   key: const ValueKey<String>('profile-workspace-vpn-action'),
                   tooltip: _profileWorkspaceVpnLabel(controller),
                   onPressed: _profileWorkspaceVpnAction(controller),
-                  icon: Icon(
-                    _profileWorkspaceVpnIcon(controller),
-                  ),
+                  icon: Icon(_profileWorkspaceVpnIcon(controller)),
                 ),
             ],
           ),
           body: ListView(
             padding: const EdgeInsets.all(20),
             children: <Widget>[
-              if (controller.notice != null) ...<Widget>[
-                _NoticeBanner(message: controller.notice!),
+              if (notice != null) ...<Widget>[
+                _NoticeBanner(message: notice),
                 const SizedBox(height: 12),
               ],
               ProfileEditorPanel(
@@ -770,53 +816,58 @@ VoidCallback? _profileWorkspaceVpnAction(MobileShellController controller) {
   }
   final ready = controller.platformTunnelResultFor(mode)?.ready == true;
   return () => unawaited(
-    ready ? controller.stopPlatformTunnel(mode) : controller.startPlatformTunnel(mode),
+    ready
+        ? controller.stopPlatformTunnel(mode)
+        : controller.startPlatformTunnel(mode),
   );
 }
 
-class _ProviderWorkspacePage extends StatelessWidget {
-  const _ProviderWorkspacePage({required this.controller});
+class _ProvidersPage extends StatelessWidget {
+  const _ProvidersPage({
+    required this.controller,
+    required this.headerAccessory,
+  });
 
   final MobileShellController controller;
+  final Widget headerAccessory;
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (BuildContext context, _) {
-        return Scaffold(
-          appBar: AppBar(title: const Text('Manage providers')),
-          body: ListView(
-            padding: const EdgeInsets.all(20),
-            children: <Widget>[
-              if (controller.notice != null) ...<Widget>[
-                _NoticeBanner(message: controller.notice!),
-                const SizedBox(height: 12),
-              ],
-              _PresetLibrarySection(controller: controller),
-              const SizedBox(height: 16),
-              _ProviderConfigLibrarySection(controller: controller),
-              const SizedBox(height: 20),
-              SizedBox(
-                height: 640,
-                child: ProviderConfigEditorPanel(
-                  supportedProviders: controller.supportedProviderCatalog,
-                  providerDescriptors: controller.providerDescriptors,
-                  selectedManagedProviderId:
-                      controller.selectedManagedProviderId,
-                  draft: controller.managedProviderDraft,
-                  busy: controller.busy,
-                  onDraftChanged: controller.updateManagedProviderDraft,
-                  onSave: controller.saveManagedProviderDraft,
-                  onDelete: controller.deleteSelectedManagedProvider,
-                  onReset: controller.resetManagedProviderDraft,
-                  onApplyToProfileDraft: controller.useManagedProviderForDraft,
-                ),
-              ),
-            ],
+    final notice = controller.surfaceNotice;
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: <Widget>[
+        _PageHeader(
+          title: 'Providers',
+          subtitle:
+              'Create reusable provider records and presets for future profiles.',
+          trailing: headerAccessory,
+        ),
+        if (notice != null) ...<Widget>[
+          const SizedBox(height: 12),
+          _NoticeBanner(message: notice),
+        ],
+        const SizedBox(height: 16),
+        _PresetLibrarySection(controller: controller),
+        const SizedBox(height: 16),
+        _ProviderConfigLibrarySection(controller: controller),
+        const SizedBox(height: 20),
+        SizedBox(
+          height: 640,
+          child: ProviderConfigEditorPanel(
+            supportedProviders: controller.supportedProviderCatalog,
+            providerDescriptors: controller.providerDescriptors,
+            selectedManagedProviderId: controller.selectedManagedProviderId,
+            draft: controller.managedProviderDraft,
+            busy: controller.busy,
+            onDraftChanged: controller.updateManagedProviderDraft,
+            onSave: controller.saveManagedProviderDraft,
+            onDelete: controller.deleteSelectedManagedProvider,
+            onReset: controller.resetManagedProviderDraft,
+            onApplyToProfileDraft: controller.useManagedProviderForDraft,
           ),
-        );
-      },
+        ),
+      ],
     );
   }
 }
@@ -857,6 +908,7 @@ class _SupportPage extends StatelessWidget {
     required this.supportSurface,
     required this.activitySurface,
     required this.diagnosticsSurface,
+    required this.headerAccessory,
     required this.onSupportSurfaceChanged,
     required this.onActivitySurfaceChanged,
     required this.onDiagnosticsSurfaceChanged,
@@ -869,6 +921,7 @@ class _SupportPage extends StatelessWidget {
   final _SupportSurface supportSurface;
   final _ActivitySurface activitySurface;
   final _DiagnosticsSurface diagnosticsSurface;
+  final Widget headerAccessory;
   final ValueChanged<_SupportSurface> onSupportSurfaceChanged;
   final ValueChanged<_ActivitySurface> onActivitySurfaceChanged;
   final ValueChanged<_DiagnosticsSurface> onDiagnosticsSurfaceChanged;
@@ -888,10 +941,11 @@ class _SupportPage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              const _PageHeader(
+              _PageHeader(
                 title: 'Support',
                 subtitle:
                     'Activity, failures, logs, and diagnostics stay explicit but secondary to the main VPN workflow.',
+                trailing: headerAccessory,
               ),
               const SizedBox(height: 16),
               Wrap(
@@ -946,11 +1000,13 @@ class _RoutingPage extends StatefulWidget {
     required this.controller,
     this.onBack,
     required this.onOpenProfiles,
+    required this.headerAccessory,
   });
 
   final MobileShellController controller;
   final VoidCallback? onBack;
   final VoidCallback onOpenProfiles;
+  final Widget headerAccessory;
 
   @override
   State<_RoutingPage> createState() => _RoutingPageState();
@@ -1004,14 +1060,15 @@ class _RoutingPageState extends State<_RoutingPage> {
           ),
           const SizedBox(height: 12),
         ],
-        const _PageHeader(
+        _PageHeader(
           title: 'Routing',
           subtitle:
               'Choose whether Android system VPN covers all apps, only selected apps, or every app except the selected list.',
+          trailing: widget.headerAccessory,
         ),
-        if (controller.notice != null) ...<Widget>[
+        if (controller.surfaceNotice != null) ...<Widget>[
           const SizedBox(height: 12),
-          _NoticeBanner(message: controller.notice!),
+          _NoticeBanner(message: controller.surfaceNotice!),
         ],
         const SizedBox(height: 16),
         if (!controller.activeModeSupportsAppRouting || mode == null)
@@ -1258,25 +1315,31 @@ class _HomeProfileSelectionState extends StatelessWidget {
 }
 
 class _HomeProfileCard extends StatelessWidget {
-  const _HomeProfileCard({
-    required this.controller,
-    required this.profile,
-    required this.onOpenProfiles,
-  });
+  const _HomeProfileCard({required this.profile});
 
-  final MobileShellController controller;
   final ProfileRecord profile;
-  final VoidCallback onOpenProfiles;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
+            Text(
+              'Current profile',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 10),
             Text(
               profile.name.isEmpty ? profile.id : profile.name,
               style: theme.textTheme.titleLarge?.copyWith(
@@ -1295,11 +1358,6 @@ class _HomeProfileCard extends StatelessWidget {
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
-            const SizedBox(height: 14),
-            OutlinedButton(
-              onPressed: onOpenProfiles,
-              child: const Text('Edit profiles'),
-            ),
           ],
         ),
       ),
@@ -1308,10 +1366,9 @@ class _HomeProfileCard extends StatelessWidget {
 }
 
 class _HomeModeCard extends StatelessWidget {
-  const _HomeModeCard({required this.controller, this.onOpenRouting});
+  const _HomeModeCard({required this.controller});
 
   final MobileShellController controller;
-  final VoidCallback? onOpenRouting;
 
   @override
   Widget build(BuildContext context) {
@@ -1321,7 +1378,12 @@ class _HomeModeCard extends StatelessWidget {
     final executionPlans = activeMode == null
         ? const <RuntimeExecutionPlanDescriptor>[]
         : controller.executionPlanOptionsForMode(activeMode);
-    return Card(
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: Column(
@@ -1329,11 +1391,11 @@ class _HomeModeCard extends StatelessWidget {
           children: <Widget>[
             Text(
               'Mode and scope',
-              style: theme.textTheme.titleLarge?.copyWith(
+              style: theme.textTheme.titleSmall?.copyWith(
                 fontWeight: FontWeight.w800,
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 10),
             Text(
               activeMode == null
                   ? 'The connected host has not advertised a mobile tunnel mode yet.'
@@ -1396,13 +1458,6 @@ class _HomeModeCard extends StatelessWidget {
                     .toList(growable: false),
               ),
             ],
-            if (onOpenRouting != null) ...<Widget>[
-              const SizedBox(height: 14),
-              OutlinedButton(
-                onPressed: onOpenRouting,
-                child: const Text('Open routing'),
-              ),
-            ],
           ],
         ),
       ),
@@ -1416,36 +1471,108 @@ class _HomePrimaryActionCard extends StatelessWidget {
     required this.hasSelectedProfile,
     required this.onOpenProfiles,
     required this.tunnelReady,
+    required this.challenge,
+    required this.onLaunchChallengeSurface,
+    required this.openChallengeLabel,
+    required this.showsManualChallengeContinue,
   });
 
   final MobileShellController controller;
   final bool hasSelectedProfile;
   final VoidCallback onOpenProfiles;
   final bool tunnelReady;
+  final ChallengeRecord? challenge;
+  final Future<void> Function(ChallengeRecord challenge)
+  onLaunchChallengeSurface;
+  final String Function(ChallengeRecord? challenge) openChallengeLabel;
+  final bool Function(ChallengeRecord? challenge) showsManualChallengeContinue;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final mode = controller.activePlatformTunnelMode;
+    final activeChallenge = challenge;
     final needsProfileSelection = !tunnelReady && !hasSelectedProfile;
-    final title = switch ((tunnelReady, needsProfileSelection)) {
-      (true, _) => 'VPN is on',
-      (false, true) => 'Profile required',
-      (false, false) => 'VPN is off',
+    final stateTone = switch ((
+      activeChallenge,
+      tunnelReady,
+      needsProfileSelection,
+    )) {
+      (final ChallengeRecord _, _, _) => const (
+        'Provider step',
+        Color(0xFFFFF3D6),
+        Color(0xFFE4C16F),
+        Color(0xFF8A4B00),
+        Icons.travel_explore_rounded,
+        Icons.open_in_browser_rounded,
+      ),
+      (null, true, _) => const (
+        'Connection live',
+        Color(0xFFE2F5E9),
+        Color(0xFF88C9A4),
+        Color(0xFF17693F),
+        Icons.shield_rounded,
+        Icons.power_settings_new_rounded,
+      ),
+      (null, false, true) => const (
+        'Setup needed',
+        Color(0xFFF0F3F7),
+        Color(0xFFBAC3CF),
+        Color(0xFF4A5868),
+        Icons.folder_open_rounded,
+        Icons.arrow_forward_rounded,
+      ),
+      (null, false, false) => const (
+        'Main action',
+        Color(0xFFE3F0FF),
+        Color(0xFF90B8E6),
+        Color(0xFF0D5EAF),
+        Icons.power_rounded,
+        Icons.power_settings_new_rounded,
+      ),
     };
-    final subtitle = switch ((tunnelReady, needsProfileSelection)) {
-      (true, _) => 'Disconnect the current mobile VPN path from here.',
-      (false, true) =>
+    final title = switch ((
+      activeChallenge,
+      tunnelReady,
+      needsProfileSelection,
+    )) {
+      (final ChallengeRecord _, _, _) => 'Finish provider validation',
+      (null, true, _) => 'VPN is on',
+      (null, false, true) => 'Profile required',
+      (null, false, false) => 'VPN is off',
+    };
+    final subtitle = switch ((
+      activeChallenge,
+      tunnelReady,
+      needsProfileSelection,
+    )) {
+      (final ChallengeRecord challenge, _, _) =>
+        controller.challengeRequiresOwnedBrowser(challenge)
+            ? (challenge.prompt?.trim().isNotEmpty == true
+                  ? challenge.prompt!
+                  : 'Continue the provider flow in the in-app browser before VPN can start.')
+            : 'Open the required browser step from Home, then return here and confirm completion before VPN can start.',
+      (null, true, _) => 'Disconnect the current mobile VPN path from here.',
+      (null, false, true) =>
         'Choose or finish a profile in Profiles before starting the current mobile VPN path.',
-      (false, false) => 'Start the current mobile VPN path from here.',
+      (null, false, false) => 'Start the current mobile VPN path from here.',
     };
-    final buttonLabel = switch ((tunnelReady, needsProfileSelection)) {
-      (true, _) => 'Turn off VPN',
-      (false, true) => 'Continue in Profiles',
-      (false, false) => 'Turn on VPN',
+    final buttonLabel = switch ((
+      activeChallenge,
+      tunnelReady,
+      needsProfileSelection,
+    )) {
+      (final ChallengeRecord challenge, _, _) => openChallengeLabel(challenge),
+      (null, true, _) => 'Turn off VPN',
+      (null, false, true) => 'Continue in Profiles',
+      (null, false, false) => 'Turn on VPN',
     };
     final VoidCallback? onPressed;
-    if (needsProfileSelection) {
+    if (activeChallenge != null) {
+      onPressed = controller.busy
+          ? null
+          : () => unawaited(onLaunchChallengeSurface(activeChallenge));
+    } else if (needsProfileSelection) {
       onPressed = controller.busy ? null : onOpenProfiles;
     } else if (controller.busy ||
         controller.hostConnection?.isReady != true ||
@@ -1459,28 +1586,114 @@ class _HomePrimaryActionCard extends StatelessWidget {
       );
     }
     return Card(
-      color: const Color(0xFFE6EDF7),
+      color: stateTone.$2,
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              title,
-              style: theme.textTheme.titleLarge?.copyWith(
+              stateTone.$1,
+              style: theme.textTheme.labelLarge?.copyWith(
                 fontWeight: FontWeight.w800,
+                color: stateTone.$4,
               ),
             ),
-            const SizedBox(height: 6),
-            Text(subtitle, style: theme.textTheme.bodyMedium),
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.72),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: stateTone.$3.withOpacity(0.16)),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Icon(stateTone.$5, color: stateTone.$4, size: 28),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        title,
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(subtitle, style: theme.textTheme.bodyMedium),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (activeChallenge != null) ...<Widget>[
+              const SizedBox(height: 10),
+              Text(
+                'Challenge: ${activeChallenge.kind}',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
             const SizedBox(height: 14),
             SizedBox(
               width: double.infinity,
-              child: FilledButton(
+              child: FilledButton.icon(
                 onPressed: onPressed,
-                child: Text(buttonLabel),
+                icon: Icon(stateTone.$6, size: 22),
+                style: FilledButton.styleFrom(
+                  backgroundColor: stateTone.$4,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(68),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 16,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  textStyle: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                label: Text(buttonLabel),
               ),
             ),
+            if (activeChallenge != null) ...<Widget>[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: <Widget>[
+                  if (showsManualChallengeContinue(activeChallenge))
+                    OutlinedButton(
+                      onPressed: controller.busy
+                          ? null
+                          : () => unawaited(
+                              controller.continueChallenge(activeChallenge.id),
+                            ),
+                      child: const Text("I've completed it"),
+                    ),
+                  TextButton(
+                    onPressed: controller.busy
+                        ? null
+                        : () => unawaited(
+                            controller.cancelChallenge(activeChallenge.id),
+                          ),
+                    child: const Text('Cancel challenge'),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -1488,8 +1701,8 @@ class _HomePrimaryActionCard extends StatelessWidget {
   }
 }
 
-class _HomeLiveStatusCard extends StatelessWidget {
-  const _HomeLiveStatusCard({
+class _HomeSupportActions extends StatelessWidget {
+  const _HomeSupportActions({
     required this.controller,
     required this.onOpenActivity,
     required this.onOpenDiagnostics,
@@ -1509,48 +1722,38 @@ class _HomeLiveStatusCard extends StatelessWidget {
     final liveSummary = activeResult == null
         ? 'No startup request yet.'
         : _platformTunnelResultSummary(activeResult);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          'Need deeper detail?',
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Resolutions ${controller.resolutions.length} · Sessions ${controller.sessions.length} · $liveSummary',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
           children: <Widget>[
-            Text(
-              'Live status',
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
+            FilledButton.tonal(
+              onPressed: onOpenActivity,
+              child: const Text('Open activity'),
             ),
-            const SizedBox(height: 6),
-            Text(
-              'Resolutions ${controller.resolutions.length} · Sessions ${controller.sessions.length}',
-              style: theme.textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              liveSummary,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: <Widget>[
-                FilledButton.tonal(
-                  onPressed: onOpenActivity,
-                  child: const Text('Open activity'),
-                ),
-                OutlinedButton(
-                  onPressed: onOpenDiagnostics,
-                  child: const Text('Open diagnostics'),
-                ),
-              ],
+            OutlinedButton(
+              onPressed: onOpenDiagnostics,
+              child: const Text('Open diagnostics'),
             ),
           ],
         ),
-      ),
+      ],
     );
   }
 }
@@ -1994,9 +2197,9 @@ class _DiagnosticsPage extends StatelessWidget {
                   _HostBanner(controller: controller),
                   const SizedBox(height: 12),
                   _SystemTunnelBanner(controller: controller),
-                  if (controller.notice != null) ...<Widget>[
+                  if (controller.surfaceNotice != null) ...<Widget>[
                     const SizedBox(height: 12),
-                    _NoticeBanner(message: controller.notice!),
+                    _NoticeBanner(message: controller.surfaceNotice!),
                   ],
                 ],
               ),
@@ -2012,32 +2215,278 @@ class _DiagnosticsPage extends StatelessWidget {
 }
 
 class _PageHeader extends StatelessWidget {
-  const _PageHeader({required this.title, required this.subtitle});
+  const _PageHeader({
+    required this.title,
+    required this.subtitle,
+    this.trailing,
+  });
 
   final String title;
   final String subtitle;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Column(
+    return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text(
-          title,
-          style: theme.textTheme.headlineMedium?.copyWith(
-            fontWeight: FontWeight.w800,
-            color: theme.colorScheme.primary,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                title,
+                style: theme.textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                subtitle,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 8),
-        Text(
-          subtitle,
-          style: theme.textTheme.bodyLarge?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
+        if (trailing != null) ...<Widget>[const SizedBox(width: 12), trailing!],
       ],
+    );
+  }
+}
+
+class _HostStatusIndicator extends StatelessWidget {
+  const _HostStatusIndicator({
+    required this.controller,
+    required this.onOpenDiagnostics,
+  });
+
+  final MobileShellController controller;
+  final VoidCallback onOpenDiagnostics;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tone = _hostIndicatorTone(controller);
+    final connectionState = controller.hostConnection?.state;
+    final isReady =
+        !controller.requiresLocalStateReset &&
+        connectionState == MobileHostLifecycleState.ready &&
+        controller.status == ShellStatus.ready;
+    final isBlocked =
+        controller.requiresLocalStateReset ||
+        connectionState == MobileHostLifecycleState.incompatible ||
+        connectionState == MobileHostLifecycleState.failed ||
+        connectionState == MobileHostLifecycleState.unavailable;
+    final borderRadius = BorderRadius.circular(14);
+    final containerColor = Color.alphaBlend(
+      tone.$3.withValues(
+        alpha: isBlocked
+            ? 0.08
+            : isReady
+            ? 0.04
+            : 0.06,
+      ),
+      theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.82),
+    );
+    final borderColor = Color.alphaBlend(
+      tone.$3.withValues(
+        alpha: isBlocked
+            ? 0.22
+            : isReady
+            ? 0.16
+            : 0.18,
+      ),
+      theme.colorScheme.outlineVariant.withValues(alpha: 0.92),
+    );
+    final iconColor = Color.alphaBlend(
+      tone.$3.withValues(
+        alpha: isBlocked
+            ? 0.78
+            : isReady
+            ? 0.68
+            : 0.72,
+      ),
+      theme.colorScheme.onSurfaceVariant,
+    );
+    return Tooltip(
+      message: tone.$1,
+      child: Semantics(
+        button: true,
+        label: tone.$1,
+        child: SizedBox.square(
+          dimension: 44,
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: borderRadius,
+            child: InkWell(
+              borderRadius: borderRadius,
+              onTap: () => showModalBottomSheet<void>(
+                context: context,
+                showDragHandle: true,
+                builder: (BuildContext context) {
+                  return _HostStatusSheet(
+                    controller: controller,
+                    onOpenDiagnostics: onOpenDiagnostics,
+                  );
+                },
+              ),
+              child: Center(
+                child: Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: containerColor,
+                    borderRadius: borderRadius,
+                    border: Border.all(color: borderColor),
+                  ),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    alignment: Alignment.center,
+                    children: <Widget>[
+                      Icon(tone.$4, color: iconColor, size: 18),
+                      Positioned(
+                        top: 7,
+                        right: 7,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: tone.$3,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: theme.colorScheme.surface,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: const SizedBox(width: 9, height: 9),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HostStatusSheet extends StatelessWidget {
+  const _HostStatusSheet({
+    required this.controller,
+    required this.onOpenDiagnostics,
+  });
+
+  final MobileShellController controller;
+  final VoidCallback onOpenDiagnostics;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final connection = controller.hostConnection;
+    final hostInfo = connection?.info;
+    final tone = _hostIndicatorTone(controller);
+
+    return SafeArea(
+      top: false,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: tone.$2,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Icon(tone.$4, color: tone.$3, size: 22),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        _diagnosticsHostTitle(connection),
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        controller.hostStatusMessage ??
+                            'Waiting for mobile host bridge negotiation.',
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: <Widget>[
+                _Tag(label: 'GUI ${controller.appBuild.shortLabel}'),
+                if (hostInfo != null)
+                  _Tag(label: 'Host ${hostInfo.build.shortLabel}'),
+                if (hostInfo != null)
+                  _Tag(label: 'Contract ${hostInfo.contractVersion}'),
+                if ((connection?.description ?? '').isNotEmpty)
+                  _Tag(label: connection!.description),
+              ],
+            ),
+            const SizedBox(height: 18),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: <Widget>[
+                FilledButton.tonal(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    onOpenDiagnostics();
+                  },
+                  child: const Text('Open diagnostics'),
+                ),
+                FilledButton.tonal(
+                  onPressed:
+                      controller.busy || controller.requiresLocalStateReset
+                      ? null
+                      : () => unawaited(controller.reconnect()),
+                  child: const Text('Reconnect'),
+                ),
+                if (controller.requiresLocalStateReset)
+                  OutlinedButton(
+                    onPressed: controller.busy
+                        ? null
+                        : () => unawaited(controller.clearLocalState()),
+                    child: const Text('Reset local state'),
+                  ),
+                FilledButton(
+                  onPressed:
+                      controller.busy ||
+                          controller.hostConnection?.isReady != true
+                      ? null
+                      : () => unawaited(controller.refresh()),
+                  child: const Text('Refresh'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -3273,6 +3722,48 @@ class _NoticeBanner extends StatelessWidget {
       ),
     );
   }
+}
+
+(String, Color, Color, IconData) _hostIndicatorTone(
+  MobileShellController controller,
+) {
+  final connection = controller.hostConnection;
+  if (controller.requiresLocalStateReset) {
+    return (
+      'Reset needed',
+      const Color(0xFFFFE3E0),
+      const Color(0xFFB3261E),
+      Icons.error_rounded,
+    );
+  }
+  return switch (connection?.state) {
+    MobileHostLifecycleState.ready
+        when controller.status == ShellStatus.ready =>
+      (
+        'Host ready',
+        const Color(0xFFE2F4E8),
+        const Color(0xFF1E6A3B),
+        Icons.check_circle_rounded,
+      ),
+    MobileHostLifecycleState.incompatible => (
+      'Host incompatible',
+      const Color(0xFFFFE3E0),
+      const Color(0xFFB3261E),
+      Icons.sync_problem_rounded,
+    ),
+    MobileHostLifecycleState.failed || MobileHostLifecycleState.unavailable => (
+      'Host blocked',
+      const Color(0xFFFFE3E0),
+      const Color(0xFFB3261E),
+      Icons.error_rounded,
+    ),
+    _ => (
+      'Connecting',
+      const Color(0xFFE5ECF6),
+      const Color(0xFF35516D),
+      Icons.sync_rounded,
+    ),
+  };
 }
 
 Color _hostStatusColor(MobileHostConnectionResult? connection) {

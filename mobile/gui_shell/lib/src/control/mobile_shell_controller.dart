@@ -130,6 +130,23 @@ class MobileShellController extends ChangeNotifier {
 
   bool get requiresLocalStateReset => _requiresLocalStateReset;
 
+  String? get hostStatusMessage {
+    final message = hostConnection?.message?.trim() ?? '';
+    return message.isEmpty ? null : message;
+  }
+
+  String? get surfaceNotice {
+    final message = notice?.trim() ?? '';
+    if (message.isEmpty) {
+      return null;
+    }
+    final hostMessage = hostStatusMessage;
+    if (hostMessage != null && message == hostMessage) {
+      return null;
+    }
+    return message;
+  }
+
   List<PlatformTunnelCapability> get platformTunnels =>
       hostConnection?.info?.platformTunnels ??
       const <PlatformTunnelCapability>[];
@@ -171,6 +188,57 @@ class MobileShellController extends ChangeNotifier {
 
   PlatformTunnelStartResult? platformTunnelResultFor(PlatformTunnelMode mode) {
     return _platformTunnelResults[mode];
+  }
+
+  ResolutionRecord? get selectedResolutionRecord => _selectedResolutionRecord();
+
+  SessionRecord? get selectedSessionRecord {
+    final sessionId = selectedSessionId?.trim() ?? '';
+    if (sessionId.isEmpty) {
+      return null;
+    }
+    for (final session in sessions) {
+      if (session.id == sessionId) {
+        return session;
+      }
+    }
+    return null;
+  }
+
+  ChallengeRecord? get activeHomeChallenge {
+    final selectedResolutionChallenge = switch (selectedResolutionRecord) {
+      final ResolutionRecord resolution => activeChallengeForResolution(
+        resolution,
+      ),
+      null => null,
+    };
+    if (selectedResolutionChallenge != null) {
+      return selectedResolutionChallenge;
+    }
+
+    final selectedSessionChallenge = switch (selectedSessionRecord) {
+      final SessionRecord session => activeChallengeFor(session),
+      null => null,
+    };
+    if (selectedSessionChallenge != null) {
+      return selectedSessionChallenge;
+    }
+
+    for (final resolution in resolutions) {
+      final challenge = activeChallengeForResolution(resolution);
+      if (challenge != null &&
+          resolution.state == ResolutionState.challengeRequired) {
+        return challenge;
+      }
+    }
+    for (final session in sessions) {
+      final challenge = activeChallengeFor(session);
+      if (challenge != null &&
+          session.state == SessionState.challengeRequired) {
+        return challenge;
+      }
+    }
+    return null;
   }
 
   PlatformTunnelCapability? capabilityForMode(PlatformTunnelMode? mode) {

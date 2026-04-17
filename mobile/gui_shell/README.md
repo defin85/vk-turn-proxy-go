@@ -13,7 +13,7 @@ runtime contract.
 - start and stop sessions through that mobile host bridge
 - start and stop typed platform tunnels, including packaged Android
   `android_vpn_service` startup when the host advertises that mode
-- present a VPN-first `Home / Profiles / Support` shell, with `Routing` as a
+- present a VPN-first `Home / Profiles / Providers / Support` shell, with `Routing` as a
   dedicated mode-aware workflow instead of a permanently promoted phone tab
 - surface typed session state, challenge state, and diagnostics export
 - export resolved provider handoffs through explicit copy/share actions for another device
@@ -164,15 +164,17 @@ The primary product shell is now split into:
 - `Home`: selected profile or empty state, current mode, scope summary,
   compact live status, and one dominant connect or disconnect action
 - `Profiles`: saved profile selection, add, import, and edit entry points
+- `Providers`: reusable provider catalog, managed records, and preset bootstrap
+  flows for future profiles
 - `Support`: activity and diagnostics drill-down without making those surfaces
   the default first impression
 - `Routing`: a dedicated searchable route for app-routing modes; shown as a
   primary rail destination on wider layouts and opened as an explicit compact
   workflow on phones
 
-Advanced runtime overrides, provider-specific settings, and secondary
-resolution/session actions stay reachable through explicit disclosure and
-overflow affordances instead of crowding the first mobile screen.
+Advanced runtime overrides and secondary resolution/session actions stay
+reachable through explicit disclosure and overflow affordances instead of
+crowding the first mobile screen.
 
 ## Lifecycle and browser handoff
 

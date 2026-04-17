@@ -152,8 +152,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Home'), findsWidgets);
-    expect(find.text('Turn on VPN'), findsOneWidget);
+    expect(find.text('Finish provider validation'), findsOneWidget);
+    expect(find.text('Open browser'), findsOneWidget);
+    expect(find.text("I've completed it"), findsOneWidget);
+    expect(find.text('Providers'), findsWidgets);
     expect(find.text('Open activity'), findsOneWidget);
+    expect(find.text('Edit profiles'), findsNothing);
+    expect(find.text('Open routing'), findsNothing);
 
     await _openSupportDiagnostics(tester);
 
@@ -173,15 +178,6 @@ void main() {
       PlatformTunnelStartupStage.capabilityCheck,
     );
     expect(find.textContaining('Capability check'), findsWidgets);
-
-    await _openSupportTab(tester);
-    await tester.tap(find.text('Sessions (1)'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Open browser', skipOffstage: false), findsOneWidget);
-    expect(find.text("I've completed it", skipOffstage: false), findsOneWidget);
-    expect(find.text('vk live'), findsWidgets);
-
     await _openProfilesTab(tester);
     await _openProfileEditorFromProfiles(tester);
     await tester.enterText(find.byType(TextField).first, 'vk mobile draft');
@@ -194,6 +190,39 @@ void main() {
     await _openProfilesTab(tester);
     expect(controller.draft.name, 'vk mobile draft');
   });
+
+  testWidgets(
+    'shell host indicator keeps host connection details out of the main workflow until requested',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(),
+        stateStore: _InMemoryStateStore(MobileShellState.empty()),
+      );
+      await controller.initialize();
+      await tester.pumpWidget(MobileShellApp(controller: controller));
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('Host ready'), findsOneWidget);
+      expect(
+        find.textContaining('Connected to embedded mobile host bridge'),
+        findsNothing,
+      );
+
+      await tester.tap(find.byTooltip('Host ready'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Mobile host ready'), findsOneWidget);
+      expect(
+        find.textContaining('Connected to embedded mobile host bridge'),
+        findsOneWidget,
+      );
+      expect(find.text('Open diagnostics'), findsOneWidget);
+    },
+  );
 
   testWidgets(
     'home primary action resolves the selected profile and then disconnects from the same surface',
@@ -295,14 +324,14 @@ void main() {
 
       expect(find.text('Choose a profile'), findsOneWidget);
       expect(find.text('Mode and scope'), findsOneWidget);
-      expect(find.text('Live status'), findsOneWidget);
       expect(find.text('Continue in Profiles'), findsOneWidget);
       expect(find.text('Open activity'), findsOneWidget);
+      expect(find.text('Open routing'), findsNothing);
     },
   );
 
   testWidgets(
-    'profiles root keeps only add visible and moves secondary actions into overflow',
+    'providers move to top-level navigation while profiles overflow stays profile-only',
     (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1200, 1800);
       tester.view.devicePixelRatio = 1.0;
@@ -328,7 +357,14 @@ void main() {
       await _openProfilesMenu(tester);
 
       expect(find.text('Import invite'), findsOneWidget);
-      expect(find.text('Manage providers'), findsOneWidget);
+      expect(find.text('Manage providers'), findsNothing);
+      await tester.tapAt(const Offset(200, 200));
+      await tester.pumpAndSettle();
+
+      await _openProvidersTab(tester);
+
+      expect(find.text('App-owned provider catalog'), findsOneWidget);
+      expect(find.text('Supported provider families'), findsOneWidget);
     },
   );
 
@@ -583,14 +619,11 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await _openSupportTab(tester);
-      await tester.tap(find.text('Sessions (1)'));
-      await tester.pumpAndSettle();
+      expect(find.text('Finish provider validation'), findsOneWidget);
+      expect(find.text('Continue in app'), findsOneWidget);
+      expect(find.text("I've completed it"), findsNothing);
 
-      expect(find.text('Continue in app', skipOffstage: false), findsOneWidget);
-      expect(find.text("I've completed it", skipOffstage: false), findsNothing);
-
-      await tester.tap(find.text('Continue in app', skipOffstage: false));
+      await tester.tap(find.text('Continue in app'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
@@ -723,10 +756,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await _openSupportTab(tester);
-      await tester.tap(find.text('Sessions (1)'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Continue in app', skipOffstage: false));
+      expect(find.text('Continue in app'), findsOneWidget);
+      await tester.tap(find.text('Continue in app'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
@@ -738,10 +769,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 200));
 
       expect(bridge.startResolutionCalls, isEmpty);
-      expect(
-        bridge.startedPlatformTunnelResolutionIDs,
-        <String?>[resolution.id],
-      );
+      expect(bridge.startedPlatformTunnelResolutionIDs, <String?>[
+        resolution.id,
+      ]);
     },
   );
 
@@ -833,7 +863,9 @@ void main() {
             updatedAt: DateTime.utc(2026, 4, 7, 12, 1),
           ),
         ],
-        challengeMap: <String, ChallengeRecord>{cachedChallenge.id: continuedChallenge},
+        challengeMap: <String, ChallengeRecord>{
+          cachedChallenge.id: continuedChallenge,
+        },
         startPlatformTunnelResult: const PlatformTunnelStartResult(
           mode: PlatformTunnelMode.androidVpnService,
           ready: true,
@@ -872,10 +904,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await _openSupportTab(tester);
-      await tester.tap(find.text('Sessions (1)'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Continue in app', skipOffstage: false));
+      expect(find.text('Continue in app'), findsOneWidget);
+      await tester.tap(find.text('Continue in app'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
@@ -885,10 +915,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 200));
 
       expect(bridge.startResolutionCalls, isEmpty);
-      expect(
-        bridge.startedPlatformTunnelResolutionIDs,
-        <String?>[resolution.id],
-      );
+      expect(bridge.startedPlatformTunnelResolutionIDs, <String?>[
+        resolution.id,
+      ]);
     },
   );
 
@@ -1953,9 +1982,14 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Home'), findsWidgets);
-      expect(find.textContaining('contract mismatch'), findsWidgets);
+      expect(find.byTooltip('Host incompatible'), findsOneWidget);
+      expect(find.textContaining('contract mismatch'), findsNothing);
 
-      await _openSupportDiagnostics(tester);
+      await tester.tap(find.byTooltip('Host incompatible'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('contract mismatch'), findsOneWidget);
+      await tester.tap(find.text('Open diagnostics').last);
+      await tester.pumpAndSettle();
 
       expect(find.text('Mobile host incompatible'), findsOneWidget);
       expect(find.text('Contract 2'), findsOneWidget);
@@ -2265,8 +2299,7 @@ void main() {
     await controller.initialize();
     await tester.pumpWidget(MobileShellApp(controller: controller));
     await tester.pumpAndSettle();
-    await _openProfilesTab(tester);
-    await _openProviderWorkspaceFromProfiles(tester);
+    await _openProvidersTab(tester);
 
     await tester.scrollUntilVisible(
       find.byKey(const ValueKey<String>('preset-card-generic-turn-default')),
@@ -2317,8 +2350,7 @@ void main() {
     await controller.initialize();
     await tester.pumpWidget(MobileShellApp(controller: controller));
     await tester.pumpAndSettle();
-    await _openProfilesTab(tester);
-    await _openProviderWorkspaceFromProfiles(tester);
+    await _openProvidersTab(tester);
 
     final workflowScrollable = _workflowScrollable();
     final wbPresetButton = find.byKey(
@@ -2360,8 +2392,7 @@ void main() {
       await controller.initialize();
       await tester.pumpWidget(MobileShellApp(controller: controller));
       await tester.pumpAndSettle();
-      await _openProfilesTab(tester);
-      await _openProviderWorkspaceFromProfiles(tester);
+      await _openProvidersTab(tester);
 
       final workflowScrollable = _workflowScrollable();
       await tester.scrollUntilVisible(
@@ -2483,8 +2514,7 @@ void main() {
     controller.selectProviderConfig('provider-config-1');
     await tester.pumpWidget(MobileShellApp(controller: controller));
     await tester.pumpAndSettle();
-    await _openProfilesTab(tester);
-    await _openProviderWorkspaceFromProfiles(tester);
+    await _openProvidersTab(tester);
 
     expect(controller.workflowSurface, MobileWorkflowSurface.providerConfig);
     expect(
@@ -2540,8 +2570,7 @@ void main() {
       controller.selectProviderConfig('provider-config-1');
       await tester.pumpWidget(MobileShellApp(controller: controller));
       await tester.pumpAndSettle();
-      await _openProfilesTab(tester);
-      await _openProviderWorkspaceFromProfiles(tester);
+      await _openProvidersTab(tester);
 
       final providerWorkspaceScrollable = _managedProviderWorkspaceScrollable();
       await tester.scrollUntilVisible(
@@ -2627,8 +2656,7 @@ void main() {
       controller.selectProviderConfig('provider-config-1');
       await tester.pumpWidget(MobileShellApp(controller: controller));
       await tester.pumpAndSettle();
-      await _openProfilesTab(tester);
-      await _openProviderWorkspaceFromProfiles(tester);
+      await _openProvidersTab(tester);
 
       final applyButton = tester.widget<FilledButton>(
         find.byKey(const ValueKey<String>('managed-provider-apply-button')),
@@ -2747,6 +2775,17 @@ Future<void> _openProfilesTab(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+Future<void> _openProvidersTab(WidgetTester tester) async {
+  final inactiveIcon = find.byIcon(Icons.cloud_outlined);
+  final activeIcon = find.byIcon(Icons.cloud);
+  if (inactiveIcon.evaluate().isNotEmpty) {
+    await tester.tap(inactiveIcon.first);
+  } else {
+    await tester.tap(activeIcon.first);
+  }
+  await tester.pumpAndSettle();
+}
+
 Future<void> _openProfileEditorFromProfiles(
   WidgetTester tester, {
   String label = 'Add profile',
@@ -2757,12 +2796,6 @@ Future<void> _openProfileEditorFromProfiles(
 
 Future<void> _openProfilesMenu(WidgetTester tester) async {
   await tester.tap(find.byTooltip('Profiles actions'));
-  await tester.pumpAndSettle();
-}
-
-Future<void> _openProviderWorkspaceFromProfiles(WidgetTester tester) async {
-  await _openProfilesMenu(tester);
-  await tester.tap(find.text('Manage providers').last);
   await tester.pumpAndSettle();
 }
 
@@ -3063,10 +3096,13 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   Future<ChallengeRecord> cancelChallenge(String challengeId) async {
     cancelChallengeCalls.add(challengeId);
     final challenge = challengeMap[challengeId]!;
-    return challenge.copyWith(
+    final cancelled = challenge.copyWith(
       status: ChallengeStatus.cancelled,
       updatedAt: challenge.updatedAt.add(const Duration(seconds: 1)),
     );
+    challengeMap[challengeId] = cancelled;
+    _resolveChallengeOutcome(cancelled);
+    return cancelled;
   }
 
   @override
@@ -3081,7 +3117,16 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   }) async {
     continueChallengeCalls.add(challengeId);
     continueChallengePayloads.add(browserContinuation);
-    return challengeMap[challengeId]!;
+    final challenge = challengeMap[challengeId]!;
+    final continued = challenge.status == ChallengeStatus.pending
+        ? challenge.copyWith(
+            status: ChallengeStatus.completed,
+            updatedAt: challenge.updatedAt.add(const Duration(seconds: 1)),
+          )
+        : challenge;
+    challengeMap[challengeId] = continued;
+    _resolveChallengeOutcome(continued);
+    return continued;
   }
 
   @override
@@ -3325,6 +3370,71 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       (ProviderDescriptor descriptor) =>
           descriptor.id.trim().toLowerCase() == normalized,
     );
+  }
+
+  void _resolveChallengeOutcome(ChallengeRecord challenge) {
+    for (var index = 0; index < sessionsList.length; index += 1) {
+      final session = sessionsList[index];
+      if (session.activeChallengeId != challenge.id) {
+        continue;
+      }
+      sessionsList[index] = SessionRecord(
+        id: session.id,
+        profileId: session.profileId,
+        profileName: session.profileName,
+        sourceResolutionId:
+            session.sourceResolutionId ?? challenge.resolutionId,
+        profile: session.profile,
+        state: switch (challenge.status) {
+          ChallengeStatus.completed => SessionState.ready,
+          ChallengeStatus.cancelled => SessionState.stopped,
+          ChallengeStatus.failed => SessionState.failed,
+          ChallengeStatus.pending ||
+          ChallengeStatus.continuing => session.state,
+        },
+        failure: session.failure,
+        startedAt: session.startedAt,
+        updatedAt: challenge.updatedAt,
+        stoppedAt: challenge.status == ChallengeStatus.cancelled
+            ? challenge.updatedAt
+            : session.stoppedAt,
+      );
+    }
+
+    final resolutionId = challenge.resolutionId?.trim() ?? '';
+    if (resolutionId.isEmpty) {
+      return;
+    }
+    for (var index = 0; index < _resolutions.length; index += 1) {
+      final resolution = _resolutions[index];
+      if (resolution.id != resolutionId &&
+          resolution.activeChallengeId != challenge.id) {
+        continue;
+      }
+      _resolutions[index] = ResolutionRecord(
+        id: resolution.id,
+        provider: resolution.provider,
+        resolutionMethod: resolution.resolutionMethod,
+        input: resolution.input,
+        state: switch (challenge.status) {
+          ChallengeStatus.completed => ResolutionState.resolved,
+          ChallengeStatus.cancelled => ResolutionState.cancelled,
+          ChallengeStatus.failed => ResolutionState.failed,
+          ChallengeStatus.pending ||
+          ChallengeStatus.continuing => resolution.state,
+        },
+        artifact: resolution.artifact,
+        credentials: resolution.credentials,
+        export: resolution.export,
+        failure: resolution.failure,
+        startedAt: resolution.startedAt,
+        updatedAt: challenge.updatedAt,
+        resolvedAt: challenge.status == ChallengeStatus.completed
+            ? (resolution.resolvedAt ?? challenge.updatedAt)
+            : resolution.resolvedAt,
+        expiredAt: resolution.expiredAt,
+      );
+    }
   }
 }
 
