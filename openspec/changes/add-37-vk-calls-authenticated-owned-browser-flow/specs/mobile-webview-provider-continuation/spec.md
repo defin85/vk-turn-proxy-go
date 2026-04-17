@@ -27,6 +27,16 @@ pages that make up that approved flow.
   pages
 - **AND** it does not reset app-owned cookies or storage between those steps
 
+#### Scenario: Approved provider flow continues from browser-observed evidence
+
+- **GIVEN** an approved mobile provider-owned browser flow keeps one app-owned
+  browser session for the committed continuation contour
+- **WHEN** the host resumes provider resolution from browser-observed stage
+  evidence captured from that same embedded session
+- **THEN** the flow remains eligible for owned WebView continuation
+- **AND** approval does not depend on the flow exposing browser-owned replay
+  requests only
+
 #### Scenario: Provider is not approved for owned WebView continuation
 
 - **GIVEN** a mobile provider flow that is not explicitly approved for owned
@@ -60,3 +70,31 @@ completed or validated inside the owned mobile WebView.
 - **THEN** the session fails explicitly
 - **AND** it does not treat authenticated browser state alone as a resolved
   artifact
+
+### Requirement: Owned mobile WebView continuation preserves app-owned session boundaries
+
+The system SHALL keep embedded continuation state inside app-managed WebView
+storage, must not import session state from the user's external browser
+profile, and SHALL expose an explicit reset path that clears only the
+app-owned browser session state required for owned-browser continuation.
+
+#### Scenario: Embedded continuation keeps browser state inside the app sandbox
+
+- **GIVEN** a mobile challenge that runs through an owned in-app WebView
+- **WHEN** provider continuation needs cookies, storage, or other
+  browser-backed state from that flow
+- **THEN** the runtime uses the app-owned embedded session state for that
+  continuation
+- **AND** it does not read cookies or profile data from the user's regular
+  browser installation
+
+#### Scenario: Operator explicitly forgets embedded sign-in
+
+- **GIVEN** an approved mobile owned-browser flow remembered app-owned browser
+  state from an earlier embedded VK session
+- **WHEN** the operator invokes the explicit reset or forget action for that
+  embedded browser state
+- **THEN** the shell clears the app-owned browser cookies and browser storage
+  required for that remembered sign-in session
+- **AND** it does not wipe saved profiles, managed providers, drafts,
+  diagnostics, or unrelated shell preferences

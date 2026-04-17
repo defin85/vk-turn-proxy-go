@@ -2,9 +2,10 @@
 
 ### Requirement: Authenticated `calls.vk.com` start is an additive VK session input
 
-The system SHALL treat the supported `https://calls.vk.com/` start link as an
-additional VK session-start path on approved owned-browser surfaces without
-removing the existing `https://vk.com/call/join/...` invite workflow.
+The system SHALL treat the supported canonical `https://calls.vk.com/` root
+start link as an additional VK session-start path on approved owned-browser
+surfaces without removing the existing `https://vk.com/call/join/...` invite
+workflow or implying support for arbitrary `calls.vk.com` deep links.
 
 #### Scenario: Mobile starts a VK session from `calls.vk.com`
 
@@ -15,6 +16,16 @@ removing the existing `https://vk.com/call/join/...` invite workflow.
   authenticated hosted-call flow
 - **AND** it does not require the operator to paste a `vk.com/call/join/...`
   link for that specific flow
+
+#### Scenario: Root-link support does not imply arbitrary deep-link support
+
+- **GIVEN** the current approved authenticated VK path is the canonical
+  `https://calls.vk.com/` root start link
+- **WHEN** a caller supplies another `calls.vk.com` page or deep link without
+  separate committed evidence
+- **THEN** the product does not imply that input is supported by this change
+- **AND** support for that alternate entry path requires an explicit future
+  contract update
 
 ### Requirement: Authenticated hosted-call contour resolves transport-ready data
 

@@ -33,15 +33,24 @@ behavior instead of silently replacing it.
   hosted-call path based on `auth.anonymLogin` bootstrap plus
   `vchat.startConversation(createJoinLink=true)` transport data, rather than
   forcing that flow through the legacy invite/guest contour.
+- Require the mobile owned-browser approval path to cover same-session
+  browser-observed continuation evidence for that committed contour instead of
+  assuming only browser-owned replay requests can drive embedded continuation.
+- Add sanitized replayable compatibility evidence for the authenticated
+  hosted-call contour and keep it distinct from the legacy invite-first VK
+  contour.
 - Require fail-closed handling when the authenticated embedded browser flow
   stops before transport-ready data or only yields account/bootstrap state.
 
 ## Impact
 - Affected specs: `vk-authenticated-call-workflow`,
-  `vk-invite-user-workflow`, `mobile-webview-provider-continuation`
+  `vk-invite-user-workflow`, `mobile-webview-provider-continuation`,
+  `client-control-plane`, `vk-call-debug-contour`
 - Affected code:
   - `internal/provider/vk`
   - `internal/androidembeddedhost`
   - `pkg/clientcontrol`
+  - `cmd/probe`
   - `mobile/gui_shell`
+  - `test/compatibility/vk`
   - VK provider tests, owned-browser harness coverage, and related docs
