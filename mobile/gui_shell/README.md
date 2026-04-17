@@ -164,8 +164,8 @@ The primary product shell is now split into:
 - `Home`: selected profile or empty state, current mode, scope summary,
   compact live status, and one dominant connect or disconnect action
 - `Profiles`: saved profile selection, add, import, and edit entry points
-- `Providers`: reusable provider catalog, managed records, and preset bootstrap
-  flows for future profiles
+- `Providers`: saved managed provider records first, with explicit blank or
+  template-backed new-provider flows instead of a preset-heavy root
 - `Support`: activity and diagnostics drill-down without making those surfaces
   the default first impression
 - `Routing`: a dedicated searchable route for app-routing modes; shown as a

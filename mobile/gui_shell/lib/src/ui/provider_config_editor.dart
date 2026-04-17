@@ -16,7 +16,7 @@ class ProviderConfigEditorPanel extends StatefulWidget {
     required this.onDraftChanged,
     required this.onSave,
     required this.onDelete,
-    required this.onReset,
+    required this.onStartNewProviderFlow,
     required this.onApplyToProfileDraft,
   });
 
@@ -28,7 +28,7 @@ class ProviderConfigEditorPanel extends StatefulWidget {
   final ValueChanged<ManagedProviderDraft> onDraftChanged;
   final Future<void> Function() onSave;
   final Future<void> Function() onDelete;
-  final VoidCallback onReset;
+  final VoidCallback onStartNewProviderFlow;
   final ValueChanged<String> onApplyToProfileDraft;
 
   @override
@@ -70,6 +70,15 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
     final supportedProvider = _selectedSupportedProvider();
     final descriptor = _selectedDescriptor();
     final selectedSavedProvider = widget.selectedManagedProviderId != null;
+    final editorTitle = selectedSavedProvider
+        ? 'Provider record'
+        : 'New provider record';
+    final editorDetail = selectedSavedProvider
+        ? 'Edit one reusable provider record. The attached family stays visible below with the current host overlay.'
+        : 'Choose a provider family through the new-provider flow, then edit the reusable parameters for this record here.';
+    final recordTitle = selectedSavedProvider
+        ? 'Saved provider record'
+        : 'New provider record';
     final blockedBySchemaSupport =
         descriptor?.providerSettingsSupportError != null &&
         widget.draft.providerSettings.isNotEmpty;
@@ -90,16 +99,14 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       Text(
-                        'App-owned provider catalog',
+                        editorTitle,
                         style: theme.textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        selectedSavedProvider
-                            ? 'Editing a managed provider record from the shipped provider catalog'
-                            : 'Select a shipped provider family, then create a managed provider record',
+                        editorDetail,
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -108,8 +115,8 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                   ),
                 ),
                 FilledButton.tonal(
-                  onPressed: widget.busy ? null : widget.onReset,
-                  child: const Text('New record'),
+                  onPressed: widget.busy ? null : widget.onStartNewProviderFlow,
+                  child: const Text('New provider'),
                 ),
               ],
             ),
@@ -121,7 +128,7 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                 ),
                 children: <Widget>[
                   Text(
-                    'The app owns the supported provider catalog. Host descriptors only overlay current availability and reusable-field validation. Applying a managed record still snapshots its current provider values into the active profile draft.',
+                    'Provider families are shipped by the app. Host descriptors only overlay current availability and reusable-field validation. Applying a saved provider still snapshots its current values into the active profile draft.',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -144,14 +151,14 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                       ),
                     const SizedBox(height: 16),
                     Text(
-                      'Managed provider record',
+                      recordTitle,
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'This shell-owned record stores only reusable, non-secret provider-owned values for the selected shipped family.',
+                      'This saved provider stores only reusable, non-secret provider values for the selected family.',
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -159,7 +166,7 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                     const SizedBox(height: 12),
                     _field(
                       controller: _nameController,
-                      label: 'Managed record name',
+                      label: 'Record name',
                       onChanged: (String value) => _pushDraft(name: value),
                     ),
                     if (hostAvailability != null &&
@@ -218,7 +225,7 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
               onPressed: widget.busy || blockedBySchemaSupport
                   ? null
                   : () => unawaited(widget.onSave()),
-              child: const Text('Save managed record'),
+              child: const Text('Save provider'),
             ),
             const SizedBox(height: 12),
             FilledButton.tonal(
@@ -228,7 +235,7 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                   : () => widget.onApplyToProfileDraft(
                       widget.selectedManagedProviderId!,
                     ),
-              child: const Text('Apply record to profile draft'),
+              child: const Text('Use in profile draft'),
             ),
             const SizedBox(height: 12),
             OutlinedButton(
@@ -236,7 +243,7 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
               onPressed: widget.busy || widget.selectedManagedProviderId == null
                   ? null
                   : () => unawaited(widget.onDelete()),
-              child: const Text('Delete record'),
+              child: const Text('Delete provider'),
             ),
           ],
         ),

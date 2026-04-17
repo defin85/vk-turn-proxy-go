@@ -131,7 +131,7 @@ class MobileShellController extends ChangeNotifier {
   bool get requiresLocalStateReset => _requiresLocalStateReset;
 
   String? get hostStatusMessage {
-    final message = hostConnection?.message?.trim() ?? '';
+    final message = hostConnection?.message.trim() ?? '';
     return message.isEmpty ? null : message;
   }
 
@@ -378,7 +378,7 @@ class MobileShellController extends ChangeNotifier {
         selectedManagedProviderId = null;
         managedProviderDraft = _defaultManagedProviderDraft();
         if (workflowSurface != MobileWorkflowSurface.profile) {
-          workflowSurface = MobileWorkflowSurface.profile;
+          workflowSurface = MobileWorkflowSurface.provider;
         }
       }
       _normalizeSelectedPlatformTunnelMode();
@@ -570,7 +570,7 @@ class MobileShellController extends ChangeNotifier {
   }
 
   void showProviderWorkspace({String? preferredProvider}) {
-    workflowSurface = MobileWorkflowSurface.providerConfig;
+    workflowSurface = MobileWorkflowSurface.provider;
     if (selectedManagedProviderId == null) {
       managedProviderDraft = _defaultManagedProviderDraft(
         preferredProvider: preferredProvider,
@@ -697,7 +697,7 @@ class MobileShellController extends ChangeNotifier {
       notice = 'Deleted managed provider $providerId.';
       selectedManagedProviderId = null;
       managedProviderDraft = _defaultManagedProviderDraft();
-      workflowSurface = MobileWorkflowSurface.profile;
+      workflowSurface = MobileWorkflowSurface.provider;
       _scheduleStatePersist();
     });
   }

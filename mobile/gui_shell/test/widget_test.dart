@@ -363,8 +363,17 @@ void main() {
 
       await _openProvidersTab(tester);
 
-      expect(find.text('App-owned provider catalog'), findsOneWidget);
-      expect(find.text('Supported provider families'), findsOneWidget);
+      expect(find.text('Saved providers'), findsOneWidget);
+      expect(find.text('No saved providers yet.'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey<String>('blank-provider-empty-action')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('template-provider-empty-action')),
+        findsOneWidget,
+      );
+      expect(find.text('Supported provider families'), findsNothing);
     },
   );
 
@@ -2276,7 +2285,7 @@ void main() {
     expect(find.text('session-1', skipOffstage: false), findsOneWidget);
   });
 
-  testWidgets('mobile shell keeps unavailable presets explicit', (
+  testWidgets('mobile shell keeps unavailable templates explicit', (
     WidgetTester tester,
   ) async {
     tester.view.physicalSize = const Size(1200, 2200);
@@ -2301,13 +2310,12 @@ void main() {
     await tester.pumpAndSettle();
     await _openProvidersTab(tester);
 
-    await tester.scrollUntilVisible(
-      find.byKey(const ValueKey<String>('preset-card-generic-turn-default')),
-      240,
-      scrollable: _workflowScrollable(),
+    await tester.tap(
+      find.byKey(const ValueKey<String>('template-provider-empty-action')),
     );
     await tester.pumpAndSettle();
 
+    expect(find.text('Templates'), findsOneWidget);
     expect(
       find.textContaining(
         'does not advertise the Generic TURN provider family yet',
@@ -2316,65 +2324,76 @@ void main() {
     );
   });
 
-  testWidgets('mobile shell bootstraps an available preset into a new draft', (
-    WidgetTester tester,
-  ) async {
-    tester.view.physicalSize = const Size(1200, 2200);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
+  testWidgets(
+    'mobile shell keeps the saved-provider root visible while a template-seeded editor opens on wide layouts',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 2200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
 
-    final controller = MobileShellController(
-      bridge: _FakeMobileHostBridge(providersList: _providerDescriptors),
-      stateStore: _InMemoryStateStore(
-        MobileShellState(
-          profiles: <ProfileRecord>[
-            ProfileRecord(
-              id: 'profile-1',
-              name: 'vk live',
-              spec: _profileSpec(),
-            ),
-          ],
-          providerConfigs: const <ProviderConfigRecord>[],
-          selectedProfileId: 'profile-1',
-          draft: ProfileDraft.fromProfile(
-            ProfileRecord(
-              id: 'profile-1',
-              name: 'vk live',
-              spec: _profileSpec(),
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(providersList: _providerDescriptors),
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: 'profile-1',
+            draft: ProfileDraft.fromProfile(
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
             ),
           ),
         ),
-      ),
-    );
+      );
 
-    await controller.initialize();
-    await tester.pumpWidget(MobileShellApp(controller: controller));
-    await tester.pumpAndSettle();
-    await _openProvidersTab(tester);
+      await controller.initialize();
+      await tester.pumpWidget(MobileShellApp(controller: controller));
+      await tester.pumpAndSettle();
+      await _openProvidersTab(tester);
 
-    final workflowScrollable = _workflowScrollable();
-    final wbPresetButton = find.byKey(
-      const ValueKey<String>('preset-use-generic-turn-default'),
-    );
-    await tester.scrollUntilVisible(
-      wbPresetButton,
-      240,
-      scrollable: workflowScrollable,
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(wbPresetButton);
-    await tester.pumpAndSettle();
+      expect(find.text('Saved providers'), findsOneWidget);
+      expect(find.text('No saved providers yet.'), findsOneWidget);
 
-    expect(controller.workflowSurface, MobileWorkflowSurface.providerConfig);
-    expect(controller.managedProviderDraft.name, 'Generic TURN');
-    expect(controller.managedProviderDraft.provider, 'generic-turn');
-    expect(controller.selectedManagedProviderId, isNull);
-  });
+      await tester.tap(
+        find.byKey(const ValueKey<String>('template-provider-empty-action')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(
+          const ValueKey<String>('template-picker-use-generic-turn-default'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(controller.workflowSurface, MobileWorkflowSurface.providerConfig);
+      expect(controller.managedProviderDraft.name, 'Generic TURN');
+      expect(controller.managedProviderDraft.provider, 'generic-turn');
+      expect(controller.selectedManagedProviderId, isNull);
+      expect(find.text('Saved providers'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey<String>('managed-provider-save-button')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('providers-back-button')),
+        findsNothing,
+      );
+    },
+  );
 
   testWidgets(
-    'mobile shell creates edits and deletes managed provider records',
+    'mobile shell drills into provider records on compact layouts and returns to the saved-provider root',
     (WidgetTester tester) async {
-      tester.view.physicalSize = const Size(1200, 2200);
+      tester.view.physicalSize = const Size(430, 1600);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
@@ -2394,21 +2413,33 @@ void main() {
       await tester.pumpAndSettle();
       await _openProvidersTab(tester);
 
-      final workflowScrollable = _workflowScrollable();
-      await tester.scrollUntilVisible(
-        find.byKey(const ValueKey<String>('managed-provider-create-button')),
-        240,
-        scrollable: workflowScrollable,
+      expect(find.text('Saved providers'), findsOneWidget);
+      expect(find.text('No saved providers yet.'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey<String>('providers-back-button')),
+        findsNothing,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('blank-provider-empty-action')),
       );
       await tester.pumpAndSettle();
       await tester.tap(
-        find.byKey(const ValueKey<String>('managed-provider-create-button')),
+        find.byKey(const ValueKey<String>('provider-family-picker-item-vk')),
       );
       await tester.pumpAndSettle();
 
       expect(controller.workflowSurface, MobileWorkflowSurface.providerConfig);
-      expect(find.text('App-owned provider catalog'), findsOneWidget);
+      expect(find.text('Saved providers'), findsNothing);
+      expect(
+        find.byKey(const ValueKey<String>('managed-provider-save-button')),
+        findsOneWidget,
+      );
       expect(find.text('Supported provider families'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey<String>('providers-back-button')),
+        findsOneWidget,
+      );
       expect(
         find.byKey(const ValueKey<String>('supported-provider-card-vk')),
         findsOneWidget,
@@ -2422,7 +2453,7 @@ void main() {
 
       final providerWorkspaceScrollable = _managedProviderWorkspaceScrollable();
       await tester.scrollUntilVisible(
-        find.text('Managed record name'),
+        find.text('Record name'),
         240,
         scrollable: providerWorkspaceScrollable,
       );
@@ -2430,19 +2461,46 @@ void main() {
       await tester.enterText(find.byType(TextField).first, 'WB Central');
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
-        find.text('Save managed record'),
+        find.byKey(const ValueKey<String>('managed-provider-save-button')),
         240,
         scrollable: providerWorkspaceScrollable,
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Save managed record'));
+      await tester.tap(
+        find.byKey(const ValueKey<String>('managed-provider-save-button')),
+      );
       await tester.pumpAndSettle();
 
       expect(controller.providerConfigs, hasLength(1));
       expect(controller.providerConfigs.single.name, 'WB Central');
 
+      await tester.tap(
+        find.byKey(const ValueKey<String>('providers-back-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(controller.workflowSurface, MobileWorkflowSurface.provider);
+      expect(find.text('Saved providers'), findsOneWidget);
+      expect(
+        find.byKey(
+          ValueKey<String>(
+            'managed-provider-item-${controller.providerConfigs.single.id}',
+          ),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.byKey(
+          ValueKey<String>(
+            'managed-provider-item-${controller.providerConfigs.single.id}',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
       await tester.scrollUntilVisible(
-        find.text('Managed record name'),
+        find.text('Record name'),
         240,
         scrollable: providerWorkspaceScrollable,
       );
@@ -2453,12 +2511,14 @@ void main() {
       );
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
-        find.text('Save managed record'),
+        find.byKey(const ValueKey<String>('managed-provider-save-button')),
         240,
         scrollable: providerWorkspaceScrollable,
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Save managed record'));
+      await tester.tap(
+        find.byKey(const ValueKey<String>('managed-provider-save-button')),
+      );
       await tester.pumpAndSettle();
 
       expect(controller.providerConfigs.single.name, 'WB Central Updated');
@@ -2477,7 +2537,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(controller.providerConfigs, isEmpty);
-      expect(controller.workflowSurface, MobileWorkflowSurface.profile);
+      expect(controller.workflowSurface, MobileWorkflowSurface.provider);
+      expect(find.text('No saved providers yet.'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey<String>('providers-back-button')),
+        findsNothing,
+      );
     },
   );
 
@@ -2511,10 +2576,16 @@ void main() {
     );
 
     await controller.initialize();
-    controller.selectProviderConfig('provider-config-1');
     await tester.pumpWidget(MobileShellApp(controller: controller));
     await tester.pumpAndSettle();
     await _openProvidersTab(tester);
+
+    await tester.tap(
+      find.byKey(
+        const ValueKey<String>('managed-provider-item-provider-config-1'),
+      ),
+    );
+    await tester.pumpAndSettle();
 
     expect(controller.workflowSurface, MobileWorkflowSurface.providerConfig);
     expect(
@@ -2526,7 +2597,7 @@ void main() {
     expect(
       tester
           .widget<FilledButton>(
-            find.widgetWithText(FilledButton, 'Apply record to profile draft'),
+            find.byKey(const ValueKey<String>('managed-provider-apply-button')),
           )
           .onPressed,
       isNotNull,
@@ -2567,10 +2638,16 @@ void main() {
       );
 
       await controller.initialize();
-      controller.selectProviderConfig('provider-config-1');
       await tester.pumpWidget(MobileShellApp(controller: controller));
       await tester.pumpAndSettle();
       await _openProvidersTab(tester);
+
+      await tester.tap(
+        find.byKey(
+          const ValueKey<String>('managed-provider-item-provider-config-1'),
+        ),
+      );
+      await tester.pumpAndSettle();
 
       final providerWorkspaceScrollable = _managedProviderWorkspaceScrollable();
       await tester.scrollUntilVisible(
@@ -2653,10 +2730,16 @@ void main() {
       );
 
       await controller.initialize();
-      controller.selectProviderConfig('provider-config-1');
       await tester.pumpWidget(MobileShellApp(controller: controller));
       await tester.pumpAndSettle();
       await _openProvidersTab(tester);
+
+      await tester.tap(
+        find.byKey(
+          const ValueKey<String>('managed-provider-item-provider-config-1'),
+        ),
+      );
+      await tester.pumpAndSettle();
 
       final applyButton = tester.widget<FilledButton>(
         find.byKey(const ValueKey<String>('managed-provider-apply-button')),

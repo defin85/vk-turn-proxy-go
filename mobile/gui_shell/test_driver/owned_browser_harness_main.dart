@@ -179,11 +179,11 @@ class _OwnedBrowserHarnessHomeState extends State<_OwnedBrowserHarnessHome> {
 
   static OwnedBrowserWebSession _buildSession(
     ValueChanged<String> onWebResourceError,
+    ValueChanged<Uri> onPageNavigation,
   ) {
-    final controllerCreationParams = WebViewPlatform.instance
-            is AndroidWebViewPlatform
-        ? AndroidWebViewControllerCreationParams
-            .fromPlatformWebViewControllerCreationParams(
+    final controllerCreationParams =
+        WebViewPlatform.instance is AndroidWebViewPlatform
+        ? AndroidWebViewControllerCreationParams.fromPlatformWebViewControllerCreationParams(
             const PlatformWebViewControllerCreationParams(),
           )
         : const PlatformWebViewControllerCreationParams();
@@ -195,6 +195,15 @@ class _OwnedBrowserHarnessHomeState extends State<_OwnedBrowserHarnessHome> {
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageFinished: (_) {
+            final currentUrl = controller.currentUrl();
+            unawaited(
+              currentUrl.then((String? url) {
+                final parsed = url == null ? null : Uri.tryParse(url);
+                if (parsed != null) {
+                  onPageNavigation(parsed);
+                }
+              }),
+            );
             for (final delay in <Duration>[
               Duration.zero,
               const Duration(milliseconds: 300),
@@ -217,8 +226,8 @@ class _OwnedBrowserHarnessHomeState extends State<_OwnedBrowserHarnessHome> {
         PlatformWebViewWidgetCreationParams(controller: controller.platform);
     Future<Map<String, Object?>> Function()? collectDebugSnapshot;
     if (WebViewPlatform.instance is AndroidWebViewPlatform) {
-      widgetCreationParams = AndroidWebViewWidgetCreationParams
-          .fromPlatformWebViewWidgetCreationParams(
+      widgetCreationParams =
+          AndroidWebViewWidgetCreationParams.fromPlatformWebViewWidgetCreationParams(
             widgetCreationParams,
             displayWithHybridComposition: true,
           );
@@ -231,10 +240,7 @@ class _OwnedBrowserHarnessHomeState extends State<_OwnedBrowserHarnessHome> {
             webViewIdentifier: androidController.webViewIdentifier,
           );
           final pageSnapshot = await _collectDomSnapshot(controller);
-          return <String, Object?>{
-            ...nativeSnapshot,
-            ...pageSnapshot,
-          };
+          return <String, Object?>{...nativeSnapshot, ...pageSnapshot};
         };
       }
     }
@@ -261,7 +267,7 @@ class _OwnedBrowserHarnessHomeState extends State<_OwnedBrowserHarnessHome> {
       );
       final payload = switch (raw) {
         String value => value,
-        _ => raw?.toString() ?? '',
+        _ => raw.toString(),
       };
       if (payload.isEmpty) {
         return const <String, Object?>{};
@@ -279,9 +285,7 @@ class _OwnedBrowserHarnessHomeState extends State<_OwnedBrowserHarnessHome> {
         'page_visible_inputs': decoded['visibleInputs'],
       };
     } catch (error) {
-      return <String, Object?>{
-        'page_debug_error': '$error',
-      };
+      return <String, Object?>{'page_debug_error': '$error'};
     }
   }
 
