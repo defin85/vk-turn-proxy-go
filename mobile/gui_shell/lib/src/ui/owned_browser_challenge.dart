@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_models.dart';
 import 'package:mobile_gui_shell/src/control/mobile_host_bridge.dart';
@@ -262,12 +263,10 @@ class WebViewOwnedBrowserChallengeRunner
     final ownedBrowser = challenge.ownedBrowser;
     final openUrl = challenge.openUrl?.trim() ?? '';
     if (ownedBrowser == null || ownedBrowser.cookieUrls.isEmpty) {
-      throw StateError(
-        'This challenge does not advertise the app-owned browser metadata required for in-app continuation.',
-      );
+      throw StateError(context.shellText.ownedBrowserMissingMetadata);
     }
     if (openUrl.isEmpty) {
-      throw StateError('This challenge does not expose an in-app browser URL.');
+      throw StateError(context.shellText.ownedBrowserMissingUrl);
     }
     return Navigator.of(context).push<ChallengeContinuationSubmission>(
       MaterialPageRoute<ChallengeContinuationSubmission>(
@@ -632,15 +631,14 @@ class _OwnedBrowserChallengePageState extends State<_OwnedBrowserChallengePage>
       _submitting = true;
       _error = null;
     });
+    final noEvidenceMessage = context.shellText.ownedBrowserNoEvidence;
     try {
       final cookies = await _session.collectCookies(
         widget.challenge.ownedBrowser?.cookieUrls ?? const <String>[],
       );
       final observedRequests = await _session.collectObservedRequests();
       if (cookies.isEmpty && observedRequests.isEmpty) {
-        throw StateError(
-          'The embedded browser session did not expose any usable continuation evidence.',
-        );
+        throw StateError(noEvidenceMessage);
       }
       _debugLogContinuationEvidence(
         cookies: cookies,
@@ -690,6 +688,7 @@ class _OwnedBrowserChallengePageState extends State<_OwnedBrowserChallengePage>
   Widget build(BuildContext context) {
     final challenge = widget.challenge;
     final theme = Theme.of(context);
+    final copy = context.shellText;
     final keyboardInsetBottom = math.max(
       MediaQuery.viewInsetsOf(context).bottom,
       _keyboardInsetBottom,
@@ -699,7 +698,7 @@ class _OwnedBrowserChallengePageState extends State<_OwnedBrowserChallengePage>
     return Scaffold(
       resizeToAvoidBottomInset: false,
       appBar: AppBar(
-        title: Text('${challenge.provider} challenge'),
+        title: Text(copy.ownedBrowserTitle(challenge.provider)),
         actions: <Widget>[
           if (_harnessInviteUri != null && !_harnessInviteLoaded)
             Padding(
@@ -709,7 +708,7 @@ class _OwnedBrowserChallengePageState extends State<_OwnedBrowserChallengePage>
                   onPressed: _submitting
                       ? null
                       : () => unawaited(_loadHarnessInvite()),
-                  child: const Text('Open invite'),
+                  child: Text(copy.ownedBrowserOpenInvite),
                 ),
               ),
             ),
@@ -718,7 +717,11 @@ class _OwnedBrowserChallengePageState extends State<_OwnedBrowserChallengePage>
             child: Center(
               child: TextButton(
                 onPressed: _submitting ? null : _complete,
-                child: Text(_submitting ? 'Collecting...' : 'Continue'),
+                child: Text(
+                  _submitting
+                      ? copy.ownedBrowserCollecting
+                      : copy.ownedBrowserContinue,
+                ),
               ),
             ),
           ),
@@ -746,7 +749,7 @@ class _OwnedBrowserChallengePageState extends State<_OwnedBrowserChallengePage>
                       Text(
                         challenge.prompt?.trim().isNotEmpty == true
                             ? challenge.prompt!
-                            : 'Complete the browser step in this in-app session, then continue.',
+                            : copy.ownedBrowserFallbackPrompt,
                         style: theme.textTheme.bodyMedium,
                       ),
                       if (_error != null) ...<Widget>[
@@ -789,7 +792,7 @@ class _OwnedBrowserChallengePageState extends State<_OwnedBrowserChallengePage>
                     FilledButton.tonalIcon(
                       onPressed: _submitting ? null : _hideKeyboard,
                       icon: const Icon(Icons.keyboard_hide_rounded),
-                      label: const Text('Hide keyboard'),
+                      label: Text(copy.ownedBrowserHideKeyboard),
                     ),
                   ],
                 ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:gui_shell/src/control/control_plane_models.dart';
 
 class SavedProfilesLibrarySurface extends StatelessWidget {
@@ -20,6 +21,7 @@ class SavedProfilesLibrarySurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final copy = context.shellText;
     return ListView(
       key: const ValueKey<String>('saved-profile-library-scroll'),
       primary: false,
@@ -29,28 +31,26 @@ class SavedProfilesLibrarySurface extends StatelessWidget {
           children: <Widget>[
             Expanded(
               child: _LibrarySectionHeader(
-                title: 'Saved profiles',
-                subtitle:
-                    'Browse saved operator workspaces intentionally, then return to the active editor without leaving the main path permanently split.',
+                title: copy.desktopSavedProfilesLibraryTitle,
+                subtitle: copy.desktopSavedProfilesLibrarySubtitle,
               ),
             ),
             FilledButton.tonal(
               key: const ValueKey<String>('profile-create-draft-button'),
               onPressed: busy ? null : onCreateDraft,
-              child: const Text('New draft'),
+              child: Text(t.commonNewDraft),
             ),
           ],
         ),
         const SizedBox(height: 12),
-        const _LibraryHintCard(
+        _LibraryHintCard(
           icon: Icons.fact_check_outlined,
-          title: 'Return path stays explicit',
-          message:
-              'Selecting a saved profile updates the active workflow and closes this secondary surface.',
+          title: copy.desktopReturnPathExplicitTitle,
+          message: copy.desktopReturnPathExplicitMessage,
         ),
         const SizedBox(height: 14),
         if (profiles.isEmpty)
-          const _EmptyCard(message: 'No saved profiles yet.')
+          _EmptyCard(message: copy.desktopNoSavedProfilesYetShort)
         else
           ...profiles.map(
             (ProfileRecord profile) => Padding(
@@ -85,6 +85,7 @@ class ManagedProvidersLibrarySurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final copy = context.shellText;
     return ListView(
       key: const ValueKey<String>('managed-provider-library-scroll'),
       primary: false,
@@ -92,34 +93,29 @@ class ManagedProvidersLibrarySurface extends StatelessWidget {
       children: <Widget>[
         Row(
           children: <Widget>[
-            const Expanded(
+            Expanded(
               child: _LibrarySectionHeader(
-                title: 'Provider records',
-                subtitle:
-                    'Create a reusable provider record or reopen one you already saved.',
+                title: copy.desktopProviderRecordsLibraryTitle,
+                subtitle: copy.desktopProviderRecordsLibrarySubtitle,
               ),
             ),
             if (onCreateManagedProvider != null)
               FilledButton.tonal(
                 key: const ValueKey<String>('managed-provider-create-button'),
                 onPressed: onCreateManagedProvider,
-                child: const Text('New record'),
+                child: Text(copy.desktopNewRecord),
               ),
           ],
         ),
         const SizedBox(height: 12),
-        const _LibraryHintCard(
+        _LibraryHintCard(
           icon: Icons.tune_outlined,
-          title: 'Records are separate from families',
-          message:
-              'Create a record here, then choose its family in the separate family chooser. Open an existing record to continue editing it.',
+          title: copy.desktopRecordsSeparateFromFamiliesTitle,
+          message: copy.desktopRecordsSeparateFromFamiliesMessage,
         ),
         const SizedBox(height: 14),
         if (managedProviders.isEmpty)
-          const _EmptyCard(
-            message:
-                'No provider records yet. Create one to choose a family and store reusable parameters.',
-          )
+          _EmptyCard(message: copy.desktopNoProviderRecordsYet)
         else
           ...managedProviders.map(
             (ManagedProviderRecord provider) => Padding(
@@ -154,22 +150,21 @@ class PresetBootstrapSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final copy = context.shellText;
     return ListView(
       key: const ValueKey<String>('preset-bootstrap-scroll'),
       primary: false,
       padding: const EdgeInsets.all(20),
       children: <Widget>[
-        const _LibrarySectionHeader(
-          title: 'New from preset',
-          subtitle:
-              'Start from a curated provider seed only when you intentionally ask for it.',
+        _LibrarySectionHeader(
+          title: t.commonNewFromPreset,
+          subtitle: copy.desktopNewFromPresetSubtitle,
         ),
         const SizedBox(height: 12),
-        const _LibraryHintCard(
+        _LibraryHintCard(
           icon: Icons.auto_awesome_outlined,
-          title: 'Preset bootstrap stays explicit',
-          message:
-              'Unavailable presets remain visible and honest here, but they no longer occupy the default provider workspace.',
+          title: copy.desktopPresetBootstrapExplicitTitle,
+          message: copy.desktopPresetBootstrapExplicitMessage,
         ),
         const SizedBox(height: 14),
         ...presets.map((ProviderPreset preset) {
@@ -209,29 +204,25 @@ class SupportedProviderChooserSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final copy = context.shellText;
     return ListView(
       key: const ValueKey<String>('provider-family-chooser-scroll'),
       primary: false,
       padding: const EdgeInsets.all(20),
       children: <Widget>[
-        const _LibrarySectionHeader(
-          title: 'Provider families',
-          subtitle:
-              'Choose the shipped family here, then return to the provider record editor.',
+        _LibrarySectionHeader(
+          title: t.commonProviderFamilies,
+          subtitle: copy.desktopProviderFamiliesSubtitle,
         ),
         const SizedBox(height: 12),
-        const _LibraryHintCard(
+        _LibraryHintCard(
           icon: Icons.widgets_outlined,
-          title: 'Families are read-only here',
-          message:
-              'This list belongs to the shipped shell. Choose a family here, then edit the selected record back in the record editor.',
+          title: copy.desktopFamiliesReadonlyHereTitle,
+          message: copy.desktopFamiliesReadonlyHereMessage,
         ),
         const SizedBox(height: 14),
         if (supportedProviders.isEmpty)
-          const _EmptyCard(
-            message:
-                'This build does not advertise any shipped provider families yet.',
-          )
+          _EmptyCard(message: copy.desktopNoShippedProviderFamilies)
         else
           ...supportedProviders.map((SupportedProviderDefinition provider) {
             final availability = provider.availabilityFor(providerDescriptors);
@@ -360,6 +351,7 @@ class _PresetCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final copy = context.shellText;
     return Container(
       key: ValueKey<String>('preset-card-${preset.id}'),
       padding: const EdgeInsets.all(14),
@@ -381,7 +373,9 @@ class _PresetCard extends StatelessWidget {
                 ),
               ),
               _StatusChip(
-                label: availability.isAvailable ? 'Available' : 'Unavailable',
+                label: availability.isAvailable
+                    ? copy.available
+                    : copy.unavailable,
                 accent: availability.isAvailable,
               ),
             ],
@@ -403,7 +397,7 @@ class _PresetCard extends StatelessWidget {
             child: FilledButton.tonal(
               key: ValueKey<String>('preset-use-${preset.id}'),
               onPressed: busy || !availability.isAvailable ? null : onApply,
-              child: const Text('Use preset'),
+              child: Text(copy.desktopUsePreset),
             ),
           ),
         ],
@@ -428,6 +422,7 @@ class _ManagedProviderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final supportedProvider = supportedProviderDefinitionFor(provider.provider);
+    final copy = context.shellText;
     return Material(
       color: selected
           ? theme.colorScheme.primary.withValues(alpha: 0.1)
@@ -462,7 +457,7 @@ class _ManagedProviderCard extends StatelessWidget {
               Text(
                 supportedProvider == null
                     ? provider.provider
-                    : 'Provider family: ${supportedProvider.title}',
+                    : copy.providerFamilyLabel(supportedProvider.title),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -470,7 +465,7 @@ class _ManagedProviderCard extends StatelessWidget {
               if (supportedProvider != null) ...<Widget>[
                 const SizedBox(height: 4),
                 Text(
-                  'App-owned managed record',
+                  copy.appOwnedManagedRecord,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -569,14 +564,15 @@ class _SupportedProviderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final copy = context.shellText;
     final managedFieldLabel = switch (descriptor) {
-      null => 'No reusable fields yet',
+      null => copy.noReusableFieldsYet,
       final ProviderDescriptor descriptor
           when descriptor.providerSettingsSupportError != null =>
-        'Schema blocked in this shell',
+        copy.schemaBlockedInShell,
       final ProviderDescriptor descriptor when descriptor.settingsSchema == null =>
-        'No reusable fields yet',
-      _ => 'Reusable fields ready',
+        copy.noReusableFieldsYet,
+      _ => copy.reusableFieldsReady,
     };
 
     return Material(
@@ -604,7 +600,9 @@ class _SupportedProviderCard extends StatelessWidget {
                     ),
                   ),
                   _StatusChip(
-                    label: availability.isAvailable ? 'Available' : 'Unavailable',
+                    label: availability.isAvailable
+                        ? copy.available
+                        : copy.unavailable,
                     accent: availability.isAvailable,
                   ),
                 ],
@@ -619,7 +617,9 @@ class _SupportedProviderCard extends StatelessWidget {
                 spacing: 8,
                 runSpacing: 8,
                 children: <Widget>[
-                  _MetaChip(label: selected ? 'Selected family' : 'Shipped by app'),
+                  _MetaChip(
+                    label: selected ? copy.selectedFamily : copy.desktopShippedByApp,
+                  ),
                   _MetaChip(label: managedFieldLabel),
                 ],
               ),

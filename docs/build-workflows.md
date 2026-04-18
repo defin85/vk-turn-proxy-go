@@ -31,18 +31,19 @@ Do not rely on `flutter pub get` inside individual shell app directories as the 
 For day-to-day UI development, prefer Dart MCP over ad-hoc `flutter run` terminals.
 
 Rules:
-- `mcp__dart__.launch_app.root` must be a plain filesystem path such as `/home/egor/code/vk-turn-proxy-go/mobile/gui_shell`.
+- Use `mcp__dart_mobile__` for `mobile/gui_shell` and `mcp__dart_desktop__` for `desktop/gui_shell`. Keep `mcp__dart__` only as a backward-compatible single-target fallback.
+- `launch_app.root` must be a plain filesystem path such as `/home/egor/code/vk-turn-proxy-go/mobile/gui_shell`.
 - Do not pass `file://...` URIs to `launch_app.root`.
-- One Codex session currently supports one active Dart Tooling Daemon connection at a time.
-- Use a fresh Codex session before switching the Dart MCP connection between desktop and mobile targets.
+- Each Dart MCP namespace currently supports one active Dart Tooling Daemon connection at a time.
+- With dedicated namespaces, one Codex session can keep separate desktop and mobile DTD connections. Use a fresh session only when replacing an already connected target inside the same namespace.
 - Do not switch to `adb`-driven install/logcat/forward/input work unless the user explicitly agrees to that fallback in the current thread.
 
 Verified mobile loop:
 1. `dart pub get`
-2. `mcp__dart__.launch_app(device="<adb-serial>", root="/home/egor/code/vk-turn-proxy-go/mobile/gui_shell", target="test_driver/driver_main.dart")`
-3. `mcp__dart__.connect_dart_tooling_daemon(uri="<returned dtd uri>")`
-4. `mcp__dart__.hot_reload`
-5. `mcp__dart__.flutter_driver(command="screenshot")`
+2. `mcp__dart_mobile__.launch_app(device="<adb-serial>", root="/home/egor/code/vk-turn-proxy-go/mobile/gui_shell", target="test_driver/driver_main.dart")`
+3. `mcp__dart_mobile__.connect_dart_tooling_daemon(uri="<returned dtd uri>")`
+4. `mcp__dart_mobile__.hot_reload`
+5. `mcp__dart_mobile__.flutter_driver(command="screenshot")`
 
 Verified USB alternative from WSL:
 1. In elevated Windows PowerShell, run `usbipd bind --busid <busid>` once for
@@ -50,7 +51,7 @@ Verified USB alternative from WSL:
 2. In Windows PowerShell, keep `usbipd attach --wsl --busid <busid> --auto-attach`
    running while the USB debug session is active.
 3. In WSL, confirm `adb devices -l` shows a USB serial.
-4. Use that USB serial in `mcp__dart__.launch_app(...)` instead of the Wi-Fi
+4. Use that USB serial in `mcp__dart_mobile__.launch_app(...)` instead of the Wi-Fi
    ADB target.
 
 On this workstation, the verified USB path also requires a `udev` rule for the
@@ -63,9 +64,9 @@ Use the default `mobile/gui_shell/lib/main.dart` entrypoint only when the task s
 Verified desktop Linux launch path:
 1. `dart pub get`
 2. `go run ./cmd/clientd -listen 127.0.0.1:7777`
-3. `mcp__dart__.launch_app(device="linux", root="/home/egor/code/vk-turn-proxy-go/desktop/gui_shell")`
-4. In a fresh Codex session dedicated to the desktop target, `mcp__dart__.connect_dart_tooling_daemon(uri="<returned dtd uri>")`
-5. Use `mcp__dart__.hot_reload` from that desktop-dedicated session
+3. `mcp__dart_desktop__.launch_app(device="linux", root="/home/egor/code/vk-turn-proxy-go/desktop/gui_shell")`
+4. `mcp__dart_desktop__.connect_dart_tooling_daemon(uri="<returned dtd uri>")`
+5. Use `mcp__dart_desktop__.hot_reload` from that desktop namespace
 
 The authoritative verified notes for this workflow live in `DEBUG.md`.
 

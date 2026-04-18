@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter_shell_core/portable_profile_transfer.dart';
 import 'package:flutter_shell_core/provider_settings_form.dart';
 import 'package:gui_shell/src/control/control_plane_models.dart';
@@ -147,8 +148,9 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     await showDialog<void>(
       context: context,
       builder: (BuildContext context) {
+        final copy = context.shellText;
         return AlertDialog(
-          title: const Text('Export portable profile'),
+          title: Text(copy.exportPortableProfile),
           content: SizedBox(
             width: 540,
             child: SingleChildScrollView(
@@ -164,17 +166,20 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Provider: ${envelope.profile.spec.provider} · Source: ${envelope.providerBinding.mode.value}',
+                    copy.providerAndSource(
+                      provider: envelope.profile.spec.provider,
+                      source: envelope.providerBinding.mode.value,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   if (envelope.isSecretBearing)
                     _warningBanner(
                       context,
-                      'This payload is secret-bearing. Treat copied text, saved files, and QR screens like credentials.',
+                      copy.portableExportSecretWarningDesktop,
                     ),
                   if (!envelope.isSecretBearing)
                     Text(
-                      'Exported payload stays separate from ordinary shell persistence and runtime handoff export.',
+                      copy.portableExportSeparateFromRuntimeDesktop,
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   const SizedBox(height: 12),
@@ -196,13 +201,15 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'QR uses the same envelope in compact JSON form.',
+                      copy.portableQrCompactJson,
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ] else ...<Widget>[
                     _warningBanner(
                       context,
-                      'QR is unavailable because this payload exceeds supported QR bounds (${envelope.encodedUtf8Bytes} bytes). File and text export stay available.',
+                      copy.portableQrUnavailableDesktop(
+                        envelope.encodedUtf8Bytes,
+                      ),
                     ),
                   ],
                 ],
@@ -212,17 +219,17 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Close'),
+              child: Text(copy.close),
             ),
             FilledButton.tonal(
               onPressed: () =>
                   unawaited(widget.onCopyPortableExportText(envelope)),
-              child: const Text('Copy text'),
+              child: Text(copy.copyText),
             ),
             FilledButton(
               onPressed: () =>
                   unawaited(widget.onSavePortableExportFile(envelope)),
-              child: const Text('Save file'),
+              child: Text(copy.saveFile),
             ),
           ],
         );
@@ -244,8 +251,13 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     await showDialog<void>(
       context: context,
       builder: (BuildContext context) {
+        final copy = context.shellText;
+        final snapshotName =
+            envelope.managedProviderSnapshot?.name.isNotEmpty == true
+            ? envelope.managedProviderSnapshot!.name
+            : envelope.managedProviderSnapshot?.id ?? copy.missing;
         return AlertDialog(
-          title: const Text('Import portable profile'),
+          title: Text(copy.importPortableProfile),
           content: SizedBox(
             width: 540,
             child: SingleChildScrollView(
@@ -260,21 +272,21 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text('Provider: ${envelope.profile.spec.provider}'),
-                  Text('Source mode: ${envelope.providerBinding.mode.value}'),
+                  Text(copy.providerLabel(envelope.profile.spec.provider)),
+                  Text(copy.sourceModeLabel(envelope.providerBinding.mode.value)),
                   if (envelope.providerBinding.isManaged)
                     Text(
-                      'Managed provider snapshot: ${envelope.managedProviderSnapshot?.name.isNotEmpty == true ? envelope.managedProviderSnapshot!.name : envelope.managedProviderSnapshot?.id ?? 'missing'}',
+                      copy.managedProviderSnapshot(snapshotName),
                     ),
                   const SizedBox(height: 12),
                   if (envelope.isSecretBearing)
                     _warningBanner(
                       context,
-                      'This import payload is secret-bearing. Confirm only if the source is trusted.',
+                      copy.portableImportSecretWarning,
                     ),
                   if (!envelope.isSecretBearing)
                     Text(
-                      'Import creates new local records with fresh ids and does not auto-start runtime.',
+                      copy.portableImportCreatesFreshIdsDesktop,
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                 ],
@@ -284,14 +296,14 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+              child: Text(copy.cancel),
             ),
             FilledButton(
               onPressed: () async {
                 Navigator.of(context).pop();
                 await widget.onConfirmPortableImport(envelope);
               },
-              child: const Text('Import profile'),
+              child: Text(copy.importProfile),
             ),
           ],
         );
@@ -306,6 +318,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
       await showDialog<void>(
         context: context,
         builder: (BuildContext context) {
+          final copy = context.shellText;
           return StatefulBuilder(
             builder:
                 (
@@ -313,7 +326,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                   void Function(VoidCallback fn) setState,
                 ) {
                   return AlertDialog(
-                    title: const Text('Paste portable profile envelope'),
+                    title: Text(copy.pastePortableProfileEnvelope),
                     content: SizedBox(
                       width: 560,
                       child: Column(
@@ -325,13 +338,13 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                             minLines: 8,
                             maxLines: 16,
                             decoration: InputDecoration(
-                              labelText: 'Portable profile JSON',
+                              labelText: copy.portableProfileJson,
                               errorText: errorText,
                             ),
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Preview opens before any local records are created.',
+                            copy.previewOpensBeforeRecordsCreated,
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ],
@@ -340,7 +353,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                     actions: <Widget>[
                       TextButton(
                         onPressed: () => Navigator.of(context).pop(),
-                        child: const Text('Cancel'),
+                        child: Text(copy.cancel),
                       ),
                       FilledButton(
                         onPressed: () {
@@ -349,14 +362,14 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                           );
                           if (envelope == null) {
                             setState(() {
-                              errorText = 'Payload is invalid or unsupported.';
+                              errorText = copy.payloadInvalidOrUnsupported;
                             });
                             return;
                           }
                           Navigator.of(context).pop();
                           unawaited(_showPortableImportPreview(envelope));
                         },
-                        child: const Text('Preview import'),
+                        child: Text(copy.previewImport),
                       ),
                     ],
                   );
@@ -372,6 +385,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final copy = context.shellText;
     final descriptor = _selectedDescriptor();
     final managedMode = widget.draft.providerBinding.isManaged;
     final selectedManagedProviderId = _resolvedManagedProviderId();
@@ -382,8 +396,8 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
       selectedManagedProvider?.provider ?? widget.draft.spec.provider,
     );
     final profileScopeLabel = widget.selectedProfileId == null
-        ? 'Unsaved draft'
-        : 'Saved profile workspace';
+        ? copy.desktopUnsavedDraft
+        : copy.desktopSavedProfileWorkspace;
 
     return Card(
       child: LayoutBuilder(
@@ -399,18 +413,18 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                 onPressed: widget.busy
                     ? null
                     : () => unawaited(widget.onResolve()),
-                child: Text(_nextStepTitle(descriptor)),
+                child: Text(_nextStepTitle(context, descriptor)),
               ),
               Tooltip(
                 message: widget.selectedProfileId == null
-                    ? 'Save profile first'
-                    : 'Start a session from this saved profile',
+                    ? copy.desktopSaveProfileFirst
+                    : copy.desktopStartSessionFromSavedProfile,
                 child: FilledButton.tonal(
                   key: const ValueKey<String>('profile-start-action'),
                   onPressed: widget.busy || widget.selectedProfileId == null
                       ? null
                       : () => unawaited(widget.onStart()),
-                  child: const Text('Start session'),
+                  child: Text(copy.startSession),
                 ),
               ),
               FilledButton.tonal(
@@ -418,12 +432,12 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                 onPressed: widget.busy
                     ? null
                     : () => unawaited(widget.onSave()),
-                child: const Text('Save profile'),
+                child: Text(copy.saveProfile),
               ),
               FilledButton.tonalIcon(
                 onPressed: widget.busy ? null : widget.onReset,
                 icon: const Icon(Icons.add),
-                label: const Text('Fresh draft'),
+                label: Text(copy.freshDraft),
               ),
             ],
           );
@@ -437,7 +451,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       Text(
-                        'Profile workspace',
+                        copy.desktopProfileWorkspaceTitle,
                         style: theme.textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
@@ -462,7 +476,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: <Widget>[
                             Text(
-                              'Profile workspace',
+                              copy.desktopProfileWorkspaceTitle,
                               style: theme.textTheme.titleLarge?.copyWith(
                                 fontWeight: FontWeight.w700,
                               ),
@@ -560,6 +574,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     ThemeData theme,
     ProviderDescriptor descriptor,
   ) {
+    final copy = context.shellText;
     return Container(
       key: const ValueKey<String>('profile-provider-descriptor-card'),
       padding: const EdgeInsets.all(16),
@@ -588,11 +603,11 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
             spacing: 8,
             runSpacing: 8,
             children: <Widget>[
-              _workflowTag('Input: ${descriptor.inputKind.value}'),
-              _workflowTag('Auth: ${descriptor.authPosture.label}'),
-              _workflowTag('Browser: ${descriptor.browserPolicy.label}'),
+              _workflowTag(copy.tagInput(descriptor.inputKind.value)),
+              _workflowTag(copy.tagAuth(descriptor.authPosture.label)),
+              _workflowTag(copy.tagBrowser(descriptor.browserPolicy.label)),
               for (final family in descriptor.artifactFamilies)
-                _workflowTag('Family: ${family.label}'),
+                _workflowTag(copy.tagFamily(family.label)),
             ],
           ),
         ],
@@ -614,8 +629,9 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
       const SizedBox(height: 10),
       _primarySectionCard(
         theme,
-        title: 'Profile settings',
+        title: context.shellText.desktopProfileSettings,
         child: _mainSettingsSection(
+          context,
           theme,
           descriptor,
           managedMode: managedMode,
@@ -640,9 +656,8 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     final children = <Widget>[
       _secondarySectionCard(
         theme,
-        title: 'Change source',
-        subtitle:
-            'Switch between a saved provider record and draft-owned input only when the profile needs a different source.',
+        title: context.shellText.desktopChangeSource,
+        subtitle: context.shellText.desktopChangeSourceSubtitle,
         child: _providerModeCard(
           theme,
           managedMode,
@@ -667,12 +682,13 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     return _field(
       key: const ValueKey<String>('profile-name-field'),
       controller: _nameController,
-      label: 'Profile name',
+      label: context.shellText.profileName,
       onChanged: (String value) => _pushDraft(name: value),
     );
   }
 
   Widget _mainSettingsSection(
+    BuildContext context,
     ThemeData theme,
     ProviderDescriptor? descriptor, {
     required bool managedMode,
@@ -687,8 +703,9 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
           : selectedManagedProvider.name;
       providerFields.add(
         _readOnlyField(
+          context: context,
           key: const ValueKey<String>('profile-provider-record-field'),
-          label: 'Provider record',
+          label: context.shellText.desktopProviderRecord,
           value: recordName,
         ),
       );
@@ -720,27 +737,27 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
         providerSummary,
         _field(
           controller: _linkController,
-          label: _providerLinkLabel(descriptor),
+          label: _providerLinkLabel(context, descriptor),
           maxLines: 3,
           onChanged: (String value) =>
               _pushDraft(spec: widget.draft.spec.copyWith(link: value.trim())),
         ),
         const Divider(height: 16),
         Text(
-          'Runtime defaults',
+          context.shellText.desktopRuntimeDefaults,
           style: theme.textTheme.titleSmall?.copyWith(
             fontWeight: FontWeight.w700,
           ),
         ),
         const SizedBox(height: 6),
         Text(
-          'These fields apply when the profile starts on this device.',
+          context.shellText.desktopRuntimeDefaultsSubtitle,
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
         const SizedBox(height: 8),
-        ..._runtimeDefaultsFields(),
+        ..._runtimeDefaultsFields(context),
       ],
     );
   }
@@ -777,15 +794,13 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   Widget _supportActionsCard(ThemeData theme) {
     return _secondarySectionCard(
       theme,
-      title: 'Profile maintenance',
-      subtitle: 'Keep destructive actions out of the main edit flow.',
+      title: context.shellText.desktopProfileMaintenance,
+      subtitle: context.shellText.desktopProfileMaintenanceSubtitle,
       child: ExpansionTile(
         tilePadding: EdgeInsets.zero,
         childrenPadding: const EdgeInsets.only(top: 8),
-        title: const Text('Show maintenance actions'),
-        subtitle: const Text(
-          'Delete the saved profile without crowding the action row.',
-        ),
+        title: Text(context.shellText.desktopShowMaintenanceActions),
+        subtitle: Text(context.shellText.desktopDeleteSavedProfileHint),
         children: <Widget>[
           Wrap(
             spacing: 12,
@@ -796,7 +811,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                 onPressed: widget.busy || widget.selectedProfileId == null
                     ? null
                     : () => unawaited(widget.onDelete()),
-                child: const Text('Delete'),
+                child: Text(context.shellText.delete),
               ),
             ],
           ),
@@ -808,9 +823,8 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   Widget _portableTransferCard(ThemeData theme) {
     return _secondarySectionCard(
       theme,
-      title: 'Portable transfer',
-      subtitle:
-          'Export the selected saved profile as an explicit transfer envelope, or preview an import before creating local records.',
+      title: context.shellText.mobilePortableTransfer,
+      subtitle: context.shellText.desktopPortableTransferSubtitle,
       child: Wrap(
         spacing: 12,
         runSpacing: 12,
@@ -820,21 +834,21 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
             onPressed: widget.busy || widget.selectedProfileId == null
                 ? null
                 : () => unawaited(_showPortableExportDialog()),
-            child: const Text('Export saved profile'),
+            child: Text(context.shellText.exportSavedProfile),
           ),
           OutlinedButton(
             key: const ValueKey<String>('profile-portable-import-file-action'),
             onPressed: widget.busy
                 ? null
                 : () => unawaited(_importPortableFromFile()),
-            child: const Text('Import from file'),
+            child: Text(context.shellText.importFromFile),
           ),
           OutlinedButton(
             key: const ValueKey<String>('profile-portable-import-paste-action'),
             onPressed: widget.busy
                 ? null
                 : () => unawaited(_showPortablePasteDialog()),
-            child: const Text('Paste envelope'),
+            child: Text(context.shellText.pasteEnvelope),
           ),
         ],
       ),
@@ -884,14 +898,15 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   }) {
     if (managedMode) {
       return _readOnlyField(
+        context: context,
         key: const ValueKey<String>('profile-managed-provider-family'),
-        label: 'Provider family',
+        label: context.shellText.providerFamily,
         value: _providerFamilyValue(descriptor),
       );
     }
     return _field(
       controller: _providerController,
-      label: 'Provider family',
+      label: context.shellText.providerFamily,
       onChanged: (String value) =>
           _pushDraft(spec: widget.draft.spec.copyWith(provider: value.trim())),
     );
@@ -900,30 +915,29 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   Widget _providerFlowCard(ThemeData theme, ProviderDescriptor? descriptor) {
     final message = switch (descriptor?.browserPolicy) {
       ProviderBrowserPolicy.externalRequired =>
-        'This provider requires an external browser when challenge continuation appears.',
+        context.shellText.browserNeedsExternal,
       ProviderBrowserPolicy.embeddedAllowed =>
-        'This provider allows an embedded browser surface, but the host still controls whether a browser challenge appears.',
-      _ => 'This provider does not report a required browser surface.',
+        context.shellText.browserAllowsEmbedded,
+      _ => context.shellText.browserNotRequired,
     };
     final continuation = descriptor?.mayRequireBrowserContinuation == true
-        ? 'Browser continuation may appear for this provider.'
-        : 'No browser challenge mode is currently advertised for this provider.';
+        ? context.shellText.browserContinuationMayAppear
+        : context.shellText.browserContinuationNotAdvertised;
 
     return _secondarySectionCard(
       theme,
-      title: 'Browser handling',
-      subtitle:
-          'Show this context only when the provider can hand off into a browser challenge.',
+      title: context.shellText.desktopBrowserHandling,
+      subtitle: context.shellText.desktopBrowserHandlingSubtitle,
       child: Text('$message $continuation', style: theme.textTheme.bodySmall),
     );
   }
 
-  String _providerLinkLabel(ProviderDescriptor? descriptor) {
+  String _providerLinkLabel(BuildContext context, ProviderDescriptor? descriptor) {
     if (descriptor == null) {
-      return 'Provider input';
+      return context.shellText.providerInput;
     }
     return switch (descriptor.inputKind) {
-      ProviderInputKind.link => 'Provider link',
+      ProviderInputKind.link => context.shellText.providerLink,
     };
   }
 
@@ -935,12 +949,12 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     return widget.draft.spec.provider.trim();
   }
 
-  String _nextStepTitle(ProviderDescriptor? descriptor) {
+  String _nextStepTitle(BuildContext context, ProviderDescriptor? descriptor) {
     if (descriptor?.mayRequireBrowserContinuation == true &&
         widget.draft.spec.link.trim().isNotEmpty) {
-      return 'Resolve invite';
+      return context.shellText.resolveInvite;
     }
-    return 'Resolve profile';
+    return context.shellText.resolveProfile;
   }
 
   ProviderDescriptor? _selectedDescriptor() {
@@ -978,11 +992,14 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   }
 
   Widget _readOnlyField({
+    required BuildContext context,
     Key? key,
     required String label,
     required String value,
   }) {
-    final displayValue = value.trim().isEmpty ? 'Not set' : value.trim();
+    final displayValue = value.trim().isEmpty
+        ? context.shellText.notSet
+        : value.trim();
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: InputDecorator(
@@ -1036,7 +1053,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     if (supportError != null) {
       return _primarySectionCard(
         theme,
-        title: 'Profile provider settings',
+        title: context.shellText.desktopProfileProviderSettings,
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -1044,7 +1061,10 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
             borderRadius: BorderRadius.circular(14),
           ),
           child: Text(
-            'This desktop shell cannot render the provider settings schema for ${descriptor!.displayName}: $supportError. Save and resolve stay blocked until the host advertises a supported schema subset.',
+            context.shellText.desktopProviderSettingsSupportError(
+              providerName: descriptor!.displayName,
+              error: supportError,
+            ),
             style: theme.textTheme.bodyMedium,
           ),
         ),
@@ -1053,12 +1073,12 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
 
     return _primarySectionCard(
       theme,
-      title: 'Profile provider settings',
+      title: context.shellText.desktopProfileProviderSettings,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
-            'Saved profile settings for the selected provider. Prompt-only values stay only in the active draft.',
+            context.shellText.desktopProfileProviderSettingsHelp,
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -1079,14 +1099,14 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     );
   }
 
-  List<Widget> _runtimeDefaultsFields() {
+  List<Widget> _runtimeDefaultsFields(BuildContext context) {
     return <Widget>[
       Row(
         children: <Widget>[
           Expanded(
             child: _field(
               controller: _listenController,
-              label: 'Local UDP listen',
+              label: context.shellText.localUdpListen,
               onChanged: (String value) => _pushDraft(
                 spec: widget.draft.spec.copyWith(listenAddress: value.trim()),
               ),
@@ -1096,7 +1116,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
           Expanded(
             child: _field(
               controller: _peerController,
-              label: 'Peer address',
+              label: context.shellText.peerAddress,
               onChanged: (String value) => _pushDraft(
                 spec: widget.draft.spec.copyWith(peerAddress: value.trim()),
               ),
@@ -1109,7 +1129,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
           Expanded(
             child: _field(
               controller: _connectionsController,
-              label: 'Connections',
+              label: context.shellText.connections,
               onChanged: (String value) => _pushDraft(
                 spec: widget.draft.spec.copyWith(
                   connections: int.tryParse(value.trim()) ?? 1,
@@ -1121,7 +1141,9 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
           Expanded(
             child: DropdownButtonFormField<TransportMode>(
               initialValue: widget.draft.spec.mode,
-              decoration: const InputDecoration(labelText: 'TURN mode'),
+              decoration: InputDecoration(
+                labelText: context.shellText.turnMode,
+              ),
               items: TransportMode.values
                   .map(
                     (TransportMode mode) => DropdownMenuItem<TransportMode>(
@@ -1147,7 +1169,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
           Expanded(
             child: _field(
               controller: _turnServerController,
-              label: 'TURN override',
+              label: context.shellText.turnOverride,
               onChanged: (String value) => _pushDraft(
                 spec: widget.draft.spec.copyWith(turnServer: value.trim()),
               ),
@@ -1157,7 +1179,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
           Expanded(
             child: _field(
               controller: _turnPortController,
-              label: 'TURN port',
+              label: context.shellText.turnPort,
               onChanged: (String value) => _pushDraft(
                 spec: widget.draft.spec.copyWith(turnPort: value.trim()),
               ),
@@ -1167,14 +1189,14 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
       ),
       _field(
         controller: _bindInterfaceController,
-        label: 'Bind interface',
+        label: context.shellText.bindInterface,
         onChanged: (String value) => _pushDraft(
           spec: widget.draft.spec.copyWith(bindInterface: value.trim()),
         ),
       ),
       _field(
         controller: _logLevelController,
-        label: 'Log level',
+        label: context.shellText.logLevel,
         onChanged: (String value) => _pushDraft(
           spec: widget.draft.spec.copyWith(logLevel: value.trim()),
         ),
@@ -1187,7 +1209,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
             : (bool enabled) => _pushDraft(
                 spec: widget.draft.spec.copyWith(useDtls: enabled),
               ),
-        title: const Text('DTLS enabled'),
+        title: Text(context.shellText.dtlsEnabled),
       ),
     ];
   }
@@ -1244,7 +1266,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
-            'No saved provider records are available yet.',
+            context.shellText.desktopNoSavedProviderRecords,
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -1252,7 +1274,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
           const SizedBox(height: 10),
           ChoiceChip(
             selected: true,
-            label: const Text('Direct input'),
+            label: Text(context.shellText.directInput),
             onSelected: widget.busy
                 ? null
                 : (_) => widget.onUseCustomProvider(),
@@ -1266,8 +1288,8 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
       children: <Widget>[
         Text(
           managedMode
-              ? 'A saved provider record is attached to this draft.'
-              : 'This draft keeps its own provider input.',
+              ? context.shellText.desktopSavedRecordAttached
+              : context.shellText.desktopDraftOwnsProviderInput,
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
@@ -1279,7 +1301,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
           children: <Widget>[
             ChoiceChip(
               selected: managedMode,
-              label: const Text('Saved record'),
+              label: Text(context.shellText.savedRecord),
               onSelected: widget.busy
                   ? null
                   : (_) => widget.onActivateManagedProviderMode(
@@ -1288,7 +1310,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
             ),
             ChoiceChip(
               selected: !managedMode,
-              label: const Text('Direct input'),
+              label: Text(context.shellText.directInput),
               onSelected: widget.busy
                   ? null
                   : (_) => widget.onUseCustomProvider(),

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter_shell_core/provider_settings_form.dart';
 import 'package:gui_shell/src/control/control_plane_models.dart';
 import 'package:gui_shell/src/control/profile_draft.dart';
@@ -73,21 +74,22 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final copy = context.shellText;
     final supportedProvider = _selectedSupportedProvider();
     final descriptor = _selectedDescriptor();
     final selectedSavedProvider = widget.selectedManagedProviderId != null;
     final editorTitle = selectedSavedProvider
-        ? 'Provider record'
-        : 'New provider record';
+        ? copy.desktopProviderRecord
+        : copy.desktopNewProviderRecord;
     final editorDetail = selectedSavedProvider
-        ? 'Edit one reusable provider record. The attached family is shown below and stays read-only here.'
-        : 'Create one reusable provider record. Choose its family separately, then edit the record parameters below.';
+        ? copy.desktopEditReusableProviderRecord
+        : copy.desktopCreateReusableProviderRecord;
     final parametersTitle = supportedProvider == null
-        ? 'Record parameters'
-        : 'Parameters for ${supportedProvider.title}';
+        ? copy.desktopRecordParameters
+        : copy.desktopParametersFor(supportedProvider.title);
     final parametersDetail = supportedProvider == null
-        ? 'Choose a provider family from the separate family list first. Record parameters will appear here afterwards.'
-        : 'Edit reusable parameters stored in this record for ${supportedProvider.title}. This does not change the family itself.';
+        ? copy.desktopChooseProviderFamilyFirst
+        : copy.desktopEditReusableParametersFor(supportedProvider.title);
     final blockedBySchemaSupport =
         descriptor?.providerSettingsSupportError != null &&
         widget.draft.providerSettings.isNotEmpty;
@@ -118,7 +120,7 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                     : () => widget.onApplyToProfileDraft(
                         widget.selectedManagedProviderId!,
                       ),
-                child: const Text('Use in profile draft'),
+                child: Text(copy.desktopUseInProfileDraft),
               ),
               OutlinedButton(
                 key: const ValueKey<String>('managed-provider-delete-action'),
@@ -126,12 +128,12 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                     widget.busy || widget.selectedManagedProviderId == null
                     ? null
                     : () => unawaited(widget.onDelete()),
-                child: const Text('Delete'),
+                child: Text(copy.delete),
               ),
               FilledButton.tonalIcon(
                 onPressed: widget.busy ? null : widget.onReset,
                 icon: const Icon(Icons.tune),
-                label: const Text('New record'),
+                label: Text(copy.desktopNewRecord),
               ),
             ],
           );
@@ -200,18 +202,18 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                       if (widget.supportedProviders.isEmpty)
                         _unavailableCard(
                           theme,
-                          'This build does not advertise any shipped provider families yet.',
+                          copy.desktopNoShippedProviderFamilies,
                         )
                       else ...<Widget>[
                         Text(
-                          'Record name',
+                          copy.desktopRecordName,
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'Name this saved provider record first. Family choice and record parameters stay below.',
+                          copy.desktopRecordNameHelp,
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
@@ -219,19 +221,19 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                         const SizedBox(height: 12),
                         _field(
                           controller: _nameController,
-                          label: 'Record name',
+                          label: copy.desktopRecordName,
                           onChanged: (String value) => _pushDraft(name: value),
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          'Attached family',
+                          copy.desktopAttachedFamily,
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'Families live in a separate chooser. The selected family is attached to this record and described here.',
+                          copy.desktopAttachedFamilyHelp,
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
@@ -253,14 +255,14 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                         const SizedBox(height: 16),
                         if (descriptor != null) ...<Widget>[
                           Text(
-                            'Family characteristics',
+                            copy.desktopFamilyCharacteristics,
                             style: theme.textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.w700,
                             ),
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            'Read-only characteristics from the selected family and current host overlay.',
+                            copy.desktopFamilyCharacteristicsHelp,
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
@@ -292,14 +294,19 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                             widget.draft.providerSettings.isNotEmpty)
                           _unavailableCard(
                             theme,
-                            'This desktop shell cannot render the provider settings schema for ${descriptor!.displayName}: ${descriptor.providerSettingsSupportError}. Save stays blocked until the host advertises a supported schema subset.',
+                            copy.desktopProviderRecordSupportError(
+                              providerName: descriptor!.displayName,
+                              error: descriptor.providerSettingsSupportError!,
+                            ),
                           )
                         else if (descriptor?.settingsSchema == null)
                           _infoCard(
                             theme,
                             supportedProvider == null
-                                ? 'Choose a provider family first. Record parameters will appear here afterwards.'
-                                : '${supportedProvider.title} has no editable record parameters in this desktop shell.',
+                                ? copy.desktopChooseProviderFamilyFirst
+                                : copy.desktopNoEditableRecordParameters(
+                                    supportedProvider.title,
+                                  ),
                           )
                         else if (descriptor != null) ...<Widget>[
                           ProviderSettingsForm(
@@ -344,12 +351,13 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
     required SupportedProviderDefinition? provider,
     required SupportedProviderAvailability? availability,
   }) {
+    final copy = context.shellText;
     final title = provider == null
-        ? 'No family attached yet'
-        : 'Selected family';
+        ? copy.desktopNoFamilyAttachedYet
+        : copy.desktopSelectedFamily;
     final detail = provider == null
-        ? 'Open the separate family chooser before you continue with this provider record.'
-        : '${provider.title} is attached to this record until you intentionally change it in the family chooser.';
+        ? copy.desktopOpenFamilyChooserFirst
+        : copy.desktopFamilyAttachedToRecord(provider.title);
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -381,13 +389,13 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
               spacing: 8,
               runSpacing: 8,
               children: <Widget>[
-                _metaChip(theme, label: 'Shipped by app', accent: true),
+                _metaChip(theme, label: copy.desktopShippedByApp, accent: true),
                 if (availability != null)
                   _metaChip(
                     theme,
                     label: availability.isAvailable
-                        ? 'Host overlay: available'
-                        : 'Host overlay: unavailable',
+                        ? copy.desktopHostOverlayAvailable
+                        : copy.desktopHostOverlayUnavailable,
                     accent: availability.isAvailable,
                   ),
               ],
@@ -396,8 +404,8 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
           const SizedBox(height: 12),
           Text(
             provider == null
-                ? 'Use the action strip above to choose a family. Families are read-only here.'
-                : 'Families stay read-only here. Change the attached family from the action strip above; edit this record\'s parameters below.',
+                ? copy.desktopUseActionStripToChooseFamily
+                : copy.desktopFamiliesReadonlyEditBelow,
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -409,12 +417,12 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
 
   String _nextStepTitle(SupportedProviderDefinition? provider) {
     if (provider == null) {
-      return 'Choose family';
+      return context.shellText.desktopChooseFamily;
     }
     if (widget.draft.name.trim().isEmpty) {
-      return 'Save draft';
+      return context.shellText.desktopSaveDraft;
     }
-    return 'Save record';
+    return context.shellText.desktopSaveRecord;
   }
 
   Widget _selectedFamilyCard(
@@ -424,6 +432,7 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
     required ProviderDescriptor? descriptor,
   }) {
     final fieldLabel = _managedFieldSurfaceLabel(descriptor);
+    final copy = context.shellText;
     final fieldAccent =
         descriptor?.settingsSchema != null &&
         descriptor?.providerSettingsSupportError == null;
@@ -446,7 +455,7 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                   ),
                 ),
               ),
-              _metaChip(theme, label: 'Selected family', accent: true),
+              _metaChip(theme, label: copy.selectedFamily, accent: true),
             ],
           ),
           const SizedBox(height: 6),
@@ -456,13 +465,13 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
             spacing: 8,
             runSpacing: 8,
             children: <Widget>[
-              _metaChip(theme, label: 'Read-only family', accent: true),
+              _metaChip(theme, label: copy.desktopReadOnlyFamily, accent: true),
               if (availability != null)
                 _metaChip(
                   theme,
                   label: availability.isAvailable
-                      ? 'Host overlay: available'
-                      : 'Host overlay: unavailable',
+                      ? copy.desktopHostOverlayAvailable
+                      : copy.desktopHostOverlayUnavailable,
                   accent: availability.isAvailable,
                 ),
               _metaChip(theme, label: fieldLabel, accent: fieldAccent),
@@ -470,7 +479,7 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
           ),
           const SizedBox(height: 10),
           Text(
-            'This card describes the attached family. Editable record parameters are shown below.',
+            copy.desktopAttachedFamilyCardHelp,
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -585,15 +594,15 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
 
   String _managedFieldSurfaceLabel(ProviderDescriptor? descriptor) {
     if (descriptor == null) {
-      return 'No editable parameters yet';
+      return context.shellText.desktopNoEditableParametersYet;
     }
     if (descriptor.providerSettingsSupportError != null) {
-      return 'Schema blocked in this shell';
+      return context.shellText.schemaBlockedInShell;
     }
     if (descriptor.settingsSchema == null) {
-      return 'No editable parameters';
+      return context.shellText.desktopNoEditableParameters;
     }
-    return 'Editable parameters ready';
+    return context.shellText.desktopEditableParametersReady;
   }
 
   void _pushDraft({

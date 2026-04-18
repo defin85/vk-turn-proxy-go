@@ -32,9 +32,8 @@ Future<void> restoreShellLocale(String? rawLocale) async {
 }
 
 String shellLocaleDisplayName(BuildContext context, AppLocale locale) {
-  final translations = context.t;
   return switch (locale) {
-    AppLocale.en => translations.localeEnglish,
-    AppLocale.ru => translations.localeRussian,
+    AppLocale.en => t.localeEnglish,
+    AppLocale.ru => t.localeRussian,
   };
 }

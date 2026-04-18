@@ -82,10 +82,15 @@ class _DashboardPageState extends State<DashboardPage> {
         challenge,
       );
       if (browserContinuation == null) {
+        if (!mounted) {
+          await widget.controller.cancelChallenge(challenge.id);
+          return;
+        }
         await widget.controller.cancelChallenge(
           challenge.id,
-          noticeOverride:
-              'Cancelled the in-app browser continuation for challenge ${challenge.id} and marked the challenge cancelled.',
+          noticeOverride: context.shellText.challengeContinuationCancelled(
+            challenge.id,
+          ),
         );
         return;
       }
@@ -100,21 +105,27 @@ class _DashboardPageState extends State<DashboardPage> {
         _destination = _DashboardDestination.home;
       });
     } catch (error) {
+      if (!mounted) {
+        await widget.controller.cancelChallenge(challenge.id);
+        return;
+      }
       await widget.controller.cancelChallenge(
         challenge.id,
-        noticeOverride:
-            'In-app browser continuation failed: $error. Marked challenge ${challenge.id} as cancelled.',
+        noticeOverride: context.shellText.challengeContinuationFailed(
+          challengeId: challenge.id,
+          error: error,
+        ),
       );
     }
   }
 
   String _openChallengeLabel(ChallengeRecord? challenge) {
     if (challenge == null) {
-      return 'Open browser';
+      return context.shellText.mobileOpenBrowser;
     }
     return widget.controller.challengeRequiresOwnedBrowser(challenge)
-        ? 'Continue in app'
-        : 'Open browser';
+        ? context.shellText.mobileContinueInApp
+        : context.shellText.mobileOpenBrowser;
   }
 
   bool _showsManualChallengeContinue(ChallengeRecord? challenge) {
@@ -262,7 +273,7 @@ class _DashboardPageState extends State<DashboardPage> {
             MaterialPageRoute<void>(
               builder: (BuildContext context) => _ProfileWorkspacePage(
                 controller: widget.controller,
-                title: 'Import portable profile',
+                title: context.shellText.importPortableProfile,
               ),
             ),
           )
@@ -374,27 +385,27 @@ class _DashboardPageState extends State<DashboardPage> {
       _DashboardDestination.home => NavigationDestination(
         icon: Icon(Icons.shield_outlined),
         selectedIcon: Icon(Icons.shield),
-        label: context.t.commonHome,
+        label: t.commonHome,
       ),
       _DashboardDestination.profiles => NavigationDestination(
         icon: Icon(Icons.folder_outlined),
         selectedIcon: Icon(Icons.folder),
-        label: context.t.commonProfiles,
+        label: t.commonProfiles,
       ),
       _DashboardDestination.providers => NavigationDestination(
         icon: Icon(Icons.cloud_outlined),
         selectedIcon: Icon(Icons.cloud),
-        label: context.t.commonProviders,
+        label: t.commonProviders,
       ),
       _DashboardDestination.routing => NavigationDestination(
         icon: Icon(Icons.alt_route_outlined),
         selectedIcon: Icon(Icons.alt_route),
-        label: context.t.commonRouting,
+        label: t.commonRouting,
       ),
       _DashboardDestination.support => NavigationDestination(
         icon: Icon(Icons.support_agent_outlined),
         selectedIcon: Icon(Icons.support_agent),
-        label: context.t.commonSupport,
+        label: t.commonSupport,
       ),
     };
   }
@@ -407,27 +418,27 @@ class _DashboardPageState extends State<DashboardPage> {
       _DashboardDestination.home => NavigationRailDestination(
         icon: Icon(Icons.shield_outlined),
         selectedIcon: Icon(Icons.shield),
-        label: Text(context.t.commonHome),
+        label: Text(t.commonHome),
       ),
       _DashboardDestination.profiles => NavigationRailDestination(
         icon: Icon(Icons.folder_outlined),
         selectedIcon: Icon(Icons.folder),
-        label: Text(context.t.commonProfiles),
+        label: Text(t.commonProfiles),
       ),
       _DashboardDestination.providers => NavigationRailDestination(
         icon: Icon(Icons.cloud_outlined),
         selectedIcon: Icon(Icons.cloud),
-        label: Text(context.t.commonProviders),
+        label: Text(t.commonProviders),
       ),
       _DashboardDestination.routing => NavigationRailDestination(
         icon: Icon(Icons.alt_route_outlined),
         selectedIcon: Icon(Icons.alt_route),
-        label: Text(context.t.commonRouting),
+        label: Text(t.commonRouting),
       ),
       _DashboardDestination.support => NavigationRailDestination(
         icon: Icon(Icons.support_agent_outlined),
         selectedIcon: Icon(Icons.support_agent),
-        label: Text(context.t.commonSupport),
+        label: Text(t.commonSupport),
       ),
     };
   }
@@ -547,8 +558,8 @@ class _HomePage extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       children: <Widget>[
         _PageHeader(
-          title: context.t.mobileHomeTitle,
-          subtitle: context.t.mobileHomeSubtitle,
+          title: t.mobileHomeTitle,
+          subtitle: t.mobileHomeSubtitle,
           trailing: headerAccessory,
         ),
         if (notice != null) ...<Widget>[
@@ -563,7 +574,7 @@ class _HomePage extends StatelessWidget {
               onPressed: controller.busy
                   ? null
                   : () => unawaited(controller.clearLocalState()),
-              child: const Text('Reset local state'),
+              child: Text(context.shellText.resetLocalState),
             ),
           ),
         ],
@@ -639,11 +650,11 @@ class _ProfilesPage extends StatelessWidget {
     final menuActions = <_CardActionEntry>[
       _CardActionEntry(
         id: 'import-invite',
-        label: context.t.mobileProfilesImportInvite,
+        label: t.mobileProfilesImportInvite,
         onSelected: () async {
           _openProfileWorkspace(
             context,
-            title: context.t.mobileProfilesImportInvite,
+            title: t.mobileProfilesImportInvite,
             resetDraft: true,
           );
         },
@@ -651,7 +662,7 @@ class _ProfilesPage extends StatelessWidget {
       if (!wide && controller.activeModeSupportsAppRouting)
         _CardActionEntry(
           id: 'routing',
-          label: context.t.mobileProfilesRouting,
+          label: t.mobileProfilesRouting,
           onSelected: () async {
             onOpenRouting();
           },
@@ -666,15 +677,15 @@ class _ProfilesPage extends StatelessWidget {
           children: <Widget>[
             Expanded(
               child: _PageHeader(
-                title: context.t.mobileProfilesTitle,
-                subtitle: context.t.mobileProfilesSubtitle,
+                title: t.mobileProfilesTitle,
+                subtitle: t.mobileProfilesSubtitle,
               ),
             ),
             const SizedBox(width: 8),
             headerAccessory,
             const SizedBox(width: 12),
             _ActionOverflowButton(
-              tooltip: context.t.mobileProfilesActionsTooltip,
+              tooltip: t.mobileProfilesActionsTooltip,
               enabled: !controller.busy,
               actions: menuActions,
             ),
@@ -692,11 +703,11 @@ class _ProfilesPage extends StatelessWidget {
                 ? null
                 : () => _openProfileWorkspace(
                     context,
-                    title: context.t.mobileProfilesAddProfile,
+                    title: t.mobileProfilesAddProfile,
                     resetDraft: true,
                   ),
             icon: const Icon(Icons.add),
-            label: Text(context.t.mobileProfilesAddProfile),
+            label: Text(t.mobileProfilesAddProfile),
           ),
         ),
         const SizedBox(height: 20),
@@ -704,7 +715,7 @@ class _ProfilesPage extends StatelessWidget {
           controller: controller,
           onEditProfile: (ProfileRecord profile) => _openProfileWorkspace(
             context,
-            title: 'Edit profile',
+            title: context.shellText.mobileEditProfile,
             profileId: profile.id,
           ),
         ),
@@ -733,14 +744,14 @@ class _ProfilesListSection extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Text(
-                context.t.mobileProfilesEmptyTitle,
+                t.mobileProfilesEmptyTitle,
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(height: 6),
               Text(
-                context.t.mobileProfilesEmptyMessage,
+                t.mobileProfilesEmptyMessage,
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -822,19 +833,22 @@ class _ProfileListItem extends StatelessWidget {
         children: <Widget>[
           const SizedBox(height: 4),
           Text(
-            _profileSummary(profile),
+            _profileSummary(context, profile),
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
           if (selected) ...<Widget>[
             const SizedBox(height: 8),
-            _StatusChip(label: 'Selected for Home', accent: true),
+            _StatusChip(
+              label: context.shellText.mobileSelectedForHome,
+              accent: true,
+            ),
           ],
         ],
       ),
       trailing: IconButton(
-        tooltip: 'Edit profile',
+        tooltip: context.shellText.mobileEditProfile,
         onPressed: onEdit,
         icon: const Icon(Icons.edit_outlined),
       ),
@@ -861,7 +875,7 @@ class _ProfileWorkspacePage extends StatelessWidget {
             actions: <Widget>[
               IconButton(
                 key: const ValueKey<String>('profile-workspace-save-action'),
-                tooltip: 'Save profile',
+                tooltip: context.shellText.saveProfile,
                 onPressed: controller.busy
                     ? null
                     : () => unawaited(controller.saveDraft()),
@@ -872,7 +886,7 @@ class _ProfileWorkspacePage extends StatelessWidget {
                   key: const ValueKey<String>(
                     'profile-workspace-resolve-action',
                   ),
-                  tooltip: 'Resolve invite',
+                  tooltip: context.shellText.resolveInvite,
                   onPressed: controller.busy
                       ? null
                       : () => unawaited(controller.startResolutionFromDraft()),
@@ -881,7 +895,7 @@ class _ProfileWorkspacePage extends StatelessWidget {
               if (hasSavedProfile)
                 IconButton(
                   key: const ValueKey<String>('profile-workspace-vpn-action'),
-                  tooltip: _profileWorkspaceVpnLabel(controller),
+                  tooltip: _profileWorkspaceVpnLabel(context, controller),
                   onPressed: _profileWorkspaceVpnAction(controller),
                   icon: Icon(_profileWorkspaceVpnIcon(controller)),
                 ),
@@ -943,13 +957,18 @@ class _ProfileWorkspacePage extends StatelessWidget {
   }
 }
 
-String _profileWorkspaceVpnLabel(MobileShellController controller) {
+String _profileWorkspaceVpnLabel(
+  BuildContext context,
+  MobileShellController controller,
+) {
   final mode = controller.activePlatformTunnelMode;
   if (mode == null) {
-    return 'Turn on VPN';
+    return context.shellText.mobileTurnOnVpn;
   }
   final ready = controller.platformTunnelResultFor(mode)?.ready == true;
-  return ready ? 'Turn off VPN' : 'Turn on VPN';
+  return ready
+      ? context.shellText.mobileTurnOffVpn
+      : context.shellText.mobileTurnOnVpn;
 }
 
 IconData _profileWorkspaceVpnIcon(MobileShellController controller) {
@@ -1034,9 +1053,8 @@ class _ProvidersPage extends StatelessWidget {
         };
         final rootChildren = <Widget>[
           _PageHeader(
-            title: 'Providers',
-            subtitle:
-                'Choose a saved reusable provider or add a new one for Profiles.',
+            title: context.shellText.mobileProvidersTitle,
+            subtitle: context.shellText.mobileProvidersSubtitle,
             trailing: headerAccessory,
           ),
           if (notice != null) ...<Widget>[
@@ -1052,7 +1070,7 @@ class _ProvidersPage extends StatelessWidget {
                   ? null
                   : () => unawaited(onOpenNewProviderFlow()),
               icon: const Icon(Icons.add),
-              label: const Text('Add provider'),
+              label: Text(context.shellText.mobileAddProvider),
             ),
           ),
           const SizedBox(height: 20),
@@ -1103,15 +1121,19 @@ class _ProvidersPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Row(
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  runAlignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  runSpacing: 12,
                   children: <Widget>[
                     OutlinedButton.icon(
                       key: const ValueKey<String>('providers-back-button'),
                       onPressed: onReturnToRoot,
                       icon: const Icon(Icons.arrow_back),
-                      label: const Text('Back to providers'),
+                      label: Text(context.shellText.mobileBackToProviders),
                     ),
-                    const Spacer(),
                     headerAccessory,
                   ],
                 ),
@@ -1148,9 +1170,9 @@ String _profileInitials(ProfileRecord profile) {
   return source.characters.first.toUpperCase();
 }
 
-String _profileSummary(ProfileRecord profile) {
+String _profileSummary(BuildContext context, ProfileRecord profile) {
   final provider = profile.spec.provider.trim().isEmpty
-      ? 'No provider'
+      ? context.shellText.mobileNoProvider
       : profile.spec.provider.trim();
   final link = profile.spec.link.trim();
   if (link.isEmpty) {
@@ -1158,7 +1180,7 @@ String _profileSummary(ProfileRecord profile) {
   }
   final uri = Uri.tryParse(link);
   if (uri == null || uri.host.isEmpty) {
-    return '$provider • input configured';
+    return '$provider • ${context.shellText.mobileInputConfigured}';
   }
   final pathPreview = switch (uri.pathSegments.length) {
     0 => '',
@@ -1208,9 +1230,8 @@ class _SupportPage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               _PageHeader(
-                title: 'Support',
-                subtitle:
-                    'Activity, failures, logs, and diagnostics stay explicit but secondary to the main VPN workflow.',
+                title: context.shellText.supportTitle,
+                subtitle: context.shellText.supportSubtitle,
                 trailing: headerAccessory,
               ),
               const SizedBox(height: 16),
@@ -1220,14 +1241,17 @@ class _SupportPage extends StatelessWidget {
                 children: <Widget>[
                   ChoiceChip(
                     selected: supportSurface == _SupportSurface.activity,
-                    label: Text('Activity', style: theme.textTheme.labelLarge),
+                    label: Text(
+                      context.shellText.activity,
+                      style: theme.textTheme.labelLarge,
+                    ),
                     onSelected: (_) =>
                         onSupportSurfaceChanged(_SupportSurface.activity),
                   ),
                   ChoiceChip(
                     selected: supportSurface == _SupportSurface.diagnostics,
                     label: Text(
-                      'Diagnostics',
+                      context.shellText.diagnostics,
                       style: theme.textTheme.labelLarge,
                     ),
                     onSelected: (_) =>
@@ -1321,15 +1345,14 @@ class _RoutingPageState extends State<_RoutingPage> {
             child: OutlinedButton.icon(
               onPressed: widget.onBack,
               icon: const Icon(Icons.arrow_back),
-              label: const Text('Back'),
+              label: Text(context.shellText.back),
             ),
           ),
           const SizedBox(height: 12),
         ],
         _PageHeader(
-          title: 'Routing',
-          subtitle:
-              'Choose whether Android system VPN covers all apps, only selected apps, or every app except the selected list.',
+          title: context.shellText.routingTitle,
+          subtitle: context.shellText.routingSubtitle,
           trailing: widget.headerAccessory,
         ),
         if (controller.surfaceNotice != null) ...<Widget>[
@@ -1347,14 +1370,14 @@ class _RoutingPageState extends State<_RoutingPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Text(
-                    '${mode.label} scope',
+                    context.shellText.modeScope(mode.label),
                     style: theme.textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    _routingSummaryForHome(controller),
+                    _routingSummaryForHome(context, controller),
                     style: theme.textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 14),
@@ -1366,7 +1389,7 @@ class _RoutingPageState extends State<_RoutingPage> {
                         selected:
                             routingPolicy ==
                             PlatformTunnelApplicationRoutingPolicy.allApps,
-                        label: const Text('All apps'),
+                        label: Text(context.shellText.allApps),
                         onSelected: (_) =>
                             controller.updateApplicationRoutingPolicy(
                               PlatformTunnelApplicationRoutingPolicy.allApps,
@@ -1377,7 +1400,7 @@ class _RoutingPageState extends State<_RoutingPage> {
                             routingPolicy ==
                             PlatformTunnelApplicationRoutingPolicy
                                 .allowedPackages,
-                        label: const Text('Included apps'),
+                        label: Text(context.shellText.includedApps),
                         onSelected: (_) =>
                             controller.updateApplicationRoutingPolicy(
                               PlatformTunnelApplicationRoutingPolicy
@@ -1389,7 +1412,7 @@ class _RoutingPageState extends State<_RoutingPage> {
                             routingPolicy ==
                             PlatformTunnelApplicationRoutingPolicy
                                 .disallowedPackages,
-                        label: const Text('Excluded apps'),
+                        label: Text(context.shellText.excludedApps),
                         onSelected: (_) =>
                             controller.updateApplicationRoutingPolicy(
                               PlatformTunnelApplicationRoutingPolicy
@@ -1408,7 +1431,7 @@ class _RoutingPageState extends State<_RoutingPage> {
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Text(
-                  'All installed apps will use the Android system VPN path for this mobile mode.',
+                  context.shellText.allInstalledAppsUseVpnPath,
                   style: theme.textTheme.bodyMedium,
                 ),
               ),
@@ -1417,9 +1440,9 @@ class _RoutingPageState extends State<_RoutingPage> {
             TextField(
               controller: _searchController,
               onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search),
-                labelText: 'Search apps',
+              decoration: InputDecoration(
+                prefixIcon: const Icon(Icons.search),
+                labelText: context.shellText.searchApps,
                 border: OutlineInputBorder(),
               ),
             ),
@@ -1442,7 +1465,7 @@ class _RoutingPageState extends State<_RoutingPage> {
                         onPressed: () => unawaited(
                           controller.ensureInstalledAppsLoaded(force: true),
                         ),
-                        child: const Text('Retry app scan'),
+                        child: Text(context.shellText.retryAppScan),
                       ),
                     ],
                   ),
@@ -1454,8 +1477,8 @@ class _RoutingPageState extends State<_RoutingPage> {
                   padding: const EdgeInsets.all(16),
                   child: Text(
                     query.isEmpty
-                        ? 'No installed apps were reported by the Android shell bridge.'
-                        : 'No installed apps match this search.',
+                        ? context.shellText.noInstalledAppsReported
+                        : context.shellText.noInstalledAppsMatchSearch,
                     style: theme.textTheme.bodyMedium,
                   ),
                 ),
@@ -1511,14 +1534,14 @@ class _HomeEmptyState extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              'No saved profiles yet',
+              context.shellText.homeNoSavedProfilesYet,
               style: theme.textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w800,
               ),
             ),
             const SizedBox(height: 6),
             Text(
-              'Create or import a profile first, then come back here for the fast VPN toggle.',
+              context.shellText.homeNoSavedProfilesMessage,
               style: theme.textTheme.bodyMedium,
             ),
             const SizedBox(height: 14),
@@ -1528,11 +1551,11 @@ class _HomeEmptyState extends StatelessWidget {
               children: <Widget>[
                 FilledButton(
                   onPressed: onOpenProfiles,
-                  child: const Text('Add profile'),
+                  child: Text(t.mobileProfilesAddProfile),
                 ),
                 FilledButton.tonal(
                   onPressed: onOpenProfiles,
-                  child: const Text('Import invite'),
+                  child: Text(t.mobileProfilesImportInvite),
                 ),
               ],
             ),
@@ -1563,7 +1586,7 @@ class _HomeProfileCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              'Current profile',
+              context.shellText.currentProfile,
               style: theme.textTheme.titleSmall?.copyWith(
                 fontWeight: FontWeight.w800,
               ),
@@ -1582,7 +1605,7 @@ class _HomeProfileCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Listening on ${profile.spec.listenAddress}',
+              context.shellText.listeningOn(profile.spec.listenAddress),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -1623,7 +1646,7 @@ class _HomeModeCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              'Current mode',
+              context.shellText.currentMode,
               style: theme.textTheme.labelLarge?.copyWith(
                 fontWeight: FontWeight.w800,
                 color: theme.colorScheme.onSurfaceVariant,
@@ -1632,8 +1655,8 @@ class _HomeModeCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               activeMode == null
-                  ? 'The connected host has not advertised a mobile tunnel mode yet.'
-                  : _modeSummary(controller),
+                  ? context.shellText.noMobileTunnelModeAdvertised
+                  : _modeSummary(context, controller),
               style: theme.textTheme.bodySmall,
             ),
             if (activeCapability?.message.isNotEmpty == true) ...<Widget>[
@@ -1668,7 +1691,7 @@ class _HomeModeCard extends StatelessWidget {
             if (executionPlans.length > 1) ...<Widget>[
               const SizedBox(height: 12),
               Text(
-                'Execution path',
+                context.shellText.executionPath,
                 style: theme.textTheme.labelLarge?.copyWith(
                   fontWeight: FontWeight.w700,
                   color: theme.colorScheme.onSurfaceVariant,
@@ -1685,7 +1708,9 @@ class _HomeModeCard extends StatelessWidget {
                           descriptor.plan,
                           controller.activeExecutionPlan,
                         ),
-                        label: Text(_executionPlanLabel(descriptor.plan)),
+                        label: Text(
+                          _executionPlanLabel(context, descriptor.plan),
+                        ),
                         onSelected: (_) =>
                             controller.selectExecutionPlan(descriptor.plan),
                       );
@@ -1734,7 +1759,7 @@ class _HomePrimaryActionCard extends StatelessWidget {
       needsProfileSelection,
     )) {
       (final ChallengeRecord _, _, _) => const (
-        'Provider step',
+        null,
         Color(0xFFFFF3D6),
         Color(0xFFE4C16F),
         Color(0xFF8A4B00),
@@ -1742,7 +1767,7 @@ class _HomePrimaryActionCard extends StatelessWidget {
         Icons.open_in_browser_rounded,
       ),
       (null, true, _) => const (
-        'Connection live',
+        null,
         Color(0xFFE2F5E9),
         Color(0xFF88C9A4),
         Color(0xFF17693F),
@@ -1750,7 +1775,7 @@ class _HomePrimaryActionCard extends StatelessWidget {
         Icons.power_settings_new_rounded,
       ),
       (null, false, true) => const (
-        'Setup needed',
+        null,
         Color(0xFFF0F3F7),
         Color(0xFFBAC3CF),
         Color(0xFF4A5868),
@@ -1758,7 +1783,7 @@ class _HomePrimaryActionCard extends StatelessWidget {
         Icons.arrow_forward_rounded,
       ),
       (null, false, false) => const (
-        'Main action',
+        null,
         Color(0xFFE3F0FF),
         Color(0xFF90B8E6),
         Color(0xFF0D5EAF),
@@ -1766,15 +1791,25 @@ class _HomePrimaryActionCard extends StatelessWidget {
         Icons.power_settings_new_rounded,
       ),
     };
+    final toneLabel = switch ((
+      activeChallenge,
+      tunnelReady,
+      needsProfileSelection,
+    )) {
+      (final ChallengeRecord _, _, _) => context.shellText.providerStepTone,
+      (null, true, _) => context.shellText.connectionLiveTone,
+      (null, false, true) => context.shellText.setupNeededTone,
+      (null, false, false) => context.shellText.mainActionTone,
+    };
     final title = switch ((
       activeChallenge,
       tunnelReady,
       needsProfileSelection,
     )) {
-      (final ChallengeRecord _, _, _) => 'Finish provider validation',
-      (null, true, _) => 'VPN is on',
-      (null, false, true) => 'Profile required',
-      (null, false, false) => 'VPN is off',
+      (final ChallengeRecord _, _, _) => context.shellText.finishProviderValidation,
+      (null, true, _) => context.shellText.vpnIsOn,
+      (null, false, true) => context.shellText.profileRequired,
+      (null, false, false) => context.shellText.vpnIsOff,
     };
     final subtitle = switch ((
       activeChallenge,
@@ -1785,12 +1820,12 @@ class _HomePrimaryActionCard extends StatelessWidget {
         controller.challengeRequiresOwnedBrowser(challenge)
             ? (challenge.prompt?.trim().isNotEmpty == true
                   ? challenge.prompt!
-                  : 'Continue the provider flow in the in-app browser before VPN can start.')
-            : 'Open the required browser step from Home, then return here and confirm completion before VPN can start.',
-      (null, true, _) => 'Disconnect the current mobile VPN path from here.',
+                  : context.shellText.continueProviderFlowInApp)
+            : context.shellText.openRequiredBrowserStepFromHome,
+      (null, true, _) => context.shellText.disconnectCurrentMobileVpnPath,
       (null, false, true) =>
-        'Choose or finish a profile in Profiles before starting the current mobile VPN path.',
-      (null, false, false) => 'Start the current mobile VPN path from here.',
+        context.shellText.chooseOrFinishProfileBeforeStartingVpn,
+      (null, false, false) => context.shellText.startCurrentMobileVpnPath,
     };
     final buttonLabel = switch ((
       activeChallenge,
@@ -1798,9 +1833,9 @@ class _HomePrimaryActionCard extends StatelessWidget {
       needsProfileSelection,
     )) {
       (final ChallengeRecord challenge, _, _) => openChallengeLabel(challenge),
-      (null, true, _) => 'Turn off VPN',
-      (null, false, true) => 'Continue in Profiles',
-      (null, false, false) => 'Turn on VPN',
+      (null, true, _) => context.shellText.mobileTurnOffVpn,
+      (null, false, true) => context.shellText.continueInProfiles,
+      (null, false, false) => context.shellText.mobileTurnOnVpn,
     };
     final VoidCallback? onPressed;
     if (activeChallenge != null) {
@@ -1830,7 +1865,7 @@ class _HomePrimaryActionCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              stateTone.$1,
+              toneLabel,
               style: theme.textTheme.labelLarge?.copyWith(
                 fontWeight: FontWeight.w800,
                 color: stateTone.$4,
@@ -1874,7 +1909,7 @@ class _HomePrimaryActionCard extends StatelessWidget {
             if (activeChallenge != null) ...<Widget>[
               const SizedBox(height: 10),
               Text(
-                'Challenge: ${activeChallenge.kind}',
+                context.shellText.challengeKind(activeChallenge.kind),
                 style: theme.textTheme.labelLarge?.copyWith(
                   fontWeight: FontWeight.w700,
                   color: theme.colorScheme.onSurfaceVariant,
@@ -1918,7 +1953,7 @@ class _HomePrimaryActionCard extends StatelessWidget {
                           : () => unawaited(
                               controller.continueChallenge(activeChallenge.id),
                             ),
-                      child: const Text("I've completed it"),
+                      child: Text(context.shellText.iveCompletedIt),
                     ),
                   TextButton(
                     onPressed: controller.busy
@@ -1926,7 +1961,7 @@ class _HomePrimaryActionCard extends StatelessWidget {
                         : () => unawaited(
                             controller.cancelChallenge(activeChallenge.id),
                           ),
-                    child: const Text('Cancel challenge'),
+                    child: Text(context.shellText.cancelChallenge),
                   ),
                 ],
               ),
@@ -1957,20 +1992,24 @@ class _HomeSupportActions extends StatelessWidget {
         ? null
         : controller.platformTunnelResultFor(activeMode);
     final liveSummary = activeResult == null
-        ? 'No startup request yet.'
-        : _platformTunnelResultSummary(activeResult);
+        ? context.shellText.noStartupRequestYetShort
+        : _platformTunnelResultSummary(context, activeResult);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Text(
-          'Need deeper detail?',
+          context.shellText.needDeeperDetail,
           style: theme.textTheme.titleSmall?.copyWith(
             fontWeight: FontWeight.w800,
           ),
         ),
         const SizedBox(height: 6),
         Text(
-          'Resolutions ${controller.resolutions.length} · Sessions ${controller.sessions.length} · $liveSummary',
+          context.shellText.resolutionsSessionsSummary(
+            resolutions: controller.resolutions.length,
+            sessions: controller.sessions.length,
+            liveSummary: liveSummary,
+          ),
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
@@ -1982,11 +2021,11 @@ class _HomeSupportActions extends StatelessWidget {
           children: <Widget>[
             FilledButton.tonal(
               onPressed: onOpenActivity,
-              child: const Text('Open activity'),
+              child: Text(context.shellText.openActivity),
             ),
             OutlinedButton(
               onPressed: onOpenDiagnostics,
-              child: const Text('Open diagnostics'),
+              child: Text(context.shellText.openDiagnostics),
             ),
           ],
         ),
@@ -2010,20 +2049,20 @@ class _RoutingUnavailableCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              'Routing is unavailable for this mode',
+              context.shellText.routingUnavailableForMode,
               style: theme.textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w800,
               ),
             ),
             const SizedBox(height: 6),
             Text(
-              'Only mobile modes that support per-app scope expose this surface. Pick another mode from home if the host advertises one.',
+              context.shellText.routingUnavailableMessage,
               style: theme.textTheme.bodyMedium,
             ),
             const SizedBox(height: 14),
             FilledButton.tonal(
               onPressed: onOpenProfiles,
-              child: const Text('Open profiles'),
+              child: Text(context.shellText.openProfiles),
             ),
           ],
         ),
@@ -2048,14 +2087,14 @@ class _ProviderRecordsRootSection extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Text(
-                'No saved providers yet',
+                context.shellText.noSavedProvidersYet,
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(height: 6),
               Text(
-                'Add a provider, then reuse it from Profiles.',
+                context.shellText.noSavedProvidersMessage,
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -2140,14 +2179,14 @@ class _ManagedProviderListItem extends StatelessWidget {
         children: <Widget>[
           const SizedBox(height: 4),
           Text(
-            'Type: $familyTitle',
+            context.shellText.typeLabel(familyTitle),
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 4),
           Text(
-            'Used in Profiles',
+            context.shellText.usedInProfiles,
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -2252,7 +2291,7 @@ class _ProviderChooserDialogState extends State<_ProviderChooserDialog> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text(
-                      'Create provider',
+                      context.shellText.createProvider,
                       style: theme.textTheme.headlineSmall?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
@@ -2260,8 +2299,8 @@ class _ProviderChooserDialogState extends State<_ProviderChooserDialog> {
                     const SizedBox(height: 8),
                     Text(
                       _surface == _ProviderChooserSurface.families
-                          ? 'Choose a provider type and configure a new saved provider.'
-                          : 'Use a template to prefill a new provider. Templates are starting points, not saved providers.',
+                          ? context.shellText.createProviderChooseType
+                          : context.shellText.createProviderUseTemplate,
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -2272,7 +2311,7 @@ class _ProviderChooserDialogState extends State<_ProviderChooserDialog> {
               const SizedBox(width: 8),
               IconButton(
                 key: const ValueKey<String>('provider-chooser-close-button'),
-                tooltip: 'Close',
+                tooltip: context.shellText.close,
                 onPressed: () => Navigator.of(context).pop(),
                 icon: const Icon(Icons.close),
               ),
@@ -2289,7 +2328,7 @@ class _ProviderChooserDialogState extends State<_ProviderChooserDialog> {
                 ),
                 selected: _surface == _ProviderChooserSurface.families,
                 label: Text(
-                  'Provider types',
+                  context.shellText.providerTypes,
                   style: theme.textTheme.labelLarge,
                 ),
                 onSelected: (_) {
@@ -2303,7 +2342,10 @@ class _ProviderChooserDialogState extends State<_ProviderChooserDialog> {
                   'provider-chooser-surface-templates',
                 ),
                 selected: _surface == _ProviderChooserSurface.templates,
-                label: Text('Templates', style: theme.textTheme.labelLarge),
+                label: Text(
+                  context.shellText.templates,
+                  style: theme.textTheme.labelLarge,
+                ),
                 onSelected: (_) {
                   setState(() {
                     _surface = _ProviderChooserSurface.templates;
@@ -2322,7 +2364,7 @@ class _ProviderChooserDialogState extends State<_ProviderChooserDialog> {
                 children: <Widget>[
                   if (widget.supportedProviders.isEmpty)
                     Text(
-                      'This build does not advertise any shipped provider types yet.',
+                      context.shellText.noShippedProviderTypesYet,
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -2372,8 +2414,8 @@ class _ProviderChooserDialogState extends State<_ProviderChooserDialog> {
                                       ),
                                       _StatusChip(
                                         label: availability.isAvailable
-                                            ? 'Available'
-                                            : 'Unavailable',
+                                            ? context.shellText.available
+                                            : context.shellText.unavailable,
                                         accent: availability.isAvailable,
                                       ),
                                     ],
@@ -2415,9 +2457,9 @@ class _ProviderChooserDialogState extends State<_ProviderChooserDialog> {
                       'provider-template-search-field',
                     ),
                     controller: _searchController,
-                    decoration: const InputDecoration(
-                      labelText: 'Search templates',
-                      prefixIcon: Icon(Icons.search),
+                    decoration: InputDecoration(
+                      labelText: context.shellText.searchTemplates,
+                      prefixIcon: const Icon(Icons.search),
                       isDense: true,
                     ),
                     onChanged: (String value) {
@@ -2428,7 +2470,7 @@ class _ProviderChooserDialogState extends State<_ProviderChooserDialog> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'My templates',
+                    context.shellText.myTemplates,
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -2437,8 +2479,8 @@ class _ProviderChooserDialogState extends State<_ProviderChooserDialog> {
                   if (filteredUserTemplates.isEmpty)
                     Text(
                       widget.userTemplates.isEmpty
-                          ? 'No saved templates yet. Save a provider as a template to reuse it here.'
-                          : 'No saved templates match the current search.',
+                          ? context.shellText.noSavedTemplatesYet
+                          : context.shellText.noSavedTemplatesMatchSearch,
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -2489,14 +2531,14 @@ class _ProviderChooserDialogState extends State<_ProviderChooserDialog> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Type: $familyTitle',
+                                context.shellText.typeLabel(familyTitle),
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Prefills new providers',
+                                context.shellText.prefillsNewProviders,
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),
@@ -2531,7 +2573,7 @@ class _ProviderChooserDialogState extends State<_ProviderChooserDialog> {
                                               ),
                                             );
                                           },
-                                    child: const Text('Use template'),
+                                    child: Text(context.shellText.mobileUseTemplate),
                                   ),
                                   OutlinedButton(
                                     key: ValueKey<String>(
@@ -2546,7 +2588,7 @@ class _ProviderChooserDialogState extends State<_ProviderChooserDialog> {
                                               ),
                                             );
                                           },
-                                    child: const Text('Edit template'),
+                                    child: Text(context.shellText.mobileEditTemplate),
                                   ),
                                 ],
                               ),
@@ -2557,7 +2599,7 @@ class _ProviderChooserDialogState extends State<_ProviderChooserDialog> {
                     }),
                   const SizedBox(height: 12),
                   Text(
-                    'Shipped templates',
+                    context.shellText.shippedTemplates,
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -2565,7 +2607,7 @@ class _ProviderChooserDialogState extends State<_ProviderChooserDialog> {
                   const SizedBox(height: 8),
                   if (filteredPresets.isEmpty)
                     Text(
-                      'No shipped templates match the current search.',
+                      context.shellText.noShippedTemplatesMatchSearch,
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -2608,22 +2650,22 @@ class _ProviderChooserDialogState extends State<_ProviderChooserDialog> {
                                   ),
                                   _StatusChip(
                                     label: availability.isAvailable
-                                        ? 'Available'
-                                        : 'Unavailable',
+                                        ? context.shellText.available
+                                        : context.shellText.unavailable,
                                     accent: availability.isAvailable,
                                   ),
                                 ],
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Type: $familyTitle',
+                                context.shellText.typeLabel(familyTitle),
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Starting point for new providers',
+                                context.shellText.startingPointForNewProviders,
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),
@@ -2635,7 +2677,7 @@ class _ProviderChooserDialogState extends State<_ProviderChooserDialog> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Read-only shipped template',
+                                context.shellText.readOnlyShippedTemplate,
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,
                                   fontWeight: FontWeight.w600,
@@ -2665,7 +2707,7 @@ class _ProviderChooserDialogState extends State<_ProviderChooserDialog> {
                                           ),
                                         );
                                       },
-                                child: const Text('Use template'),
+                                child: Text(context.shellText.mobileUseTemplate),
                               ),
                             ],
                           ),
@@ -2771,10 +2813,9 @@ class _ActivityPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const _PageHeader(
-            title: 'Activity',
-            subtitle:
-                'Inspect provider resolutions and session state without crowding the main workflow.',
+          _PageHeader(
+            title: context.shellText.activity,
+            subtitle: context.shellText.activityPageSubtitle,
           ),
           const SizedBox(height: 16),
           Wrap(
@@ -2784,7 +2825,9 @@ class _ActivityPage extends StatelessWidget {
               ChoiceChip(
                 selected: surface == _ActivitySurface.resolutions,
                 label: Text(
-                  'Resolutions (${controller.resolutions.length})',
+                  context.shellText.resolutionsCount(
+                    controller.resolutions.length,
+                  ),
                   style: theme.textTheme.labelLarge,
                 ),
                 onSelected: (_) =>
@@ -2793,7 +2836,7 @@ class _ActivityPage extends StatelessWidget {
               ChoiceChip(
                 selected: surface == _ActivitySurface.sessions,
                 label: Text(
-                  'Sessions (${controller.sessions.length})',
+                  context.shellText.sessionsCount(controller.sessions.length),
                   style: theme.textTheme.labelLarge,
                 ),
                 onSelected: (_) => onSurfaceChanged(_ActivitySurface.sessions),
@@ -2842,10 +2885,9 @@ class _DiagnosticsPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const _PageHeader(
-            title: 'Diagnostics',
-            subtitle:
-                'Detailed host readiness, platform tunnel detail, and recent typed events.',
+          _PageHeader(
+            title: context.shellText.diagnostics,
+            subtitle: context.shellText.diagnosticsPageSubtitle,
           ),
           const SizedBox(height: 16),
           Wrap(
@@ -2854,14 +2896,17 @@ class _DiagnosticsPage extends StatelessWidget {
             children: <Widget>[
               ChoiceChip(
                 selected: surface == _DiagnosticsSurface.overview,
-                label: Text('Overview', style: theme.textTheme.labelLarge),
+                label: Text(
+                  context.shellText.overview,
+                  style: theme.textTheme.labelLarge,
+                ),
                 onSelected: (_) =>
                     onSurfaceChanged(_DiagnosticsSurface.overview),
               ),
               ChoiceChip(
                 selected: surface == _DiagnosticsSurface.events,
                 label: Text(
-                  'Events (${controller.events.length})',
+                  context.shellText.eventsCount(controller.events.length),
                   style: theme.textTheme.labelLarge,
                 ),
                 onSelected: (_) => onSurfaceChanged(_DiagnosticsSurface.events),
@@ -2970,7 +3015,7 @@ class _LocaleMenuButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<String>(
-      tooltip: context.t.localeSwitchTooltip,
+      tooltip: t.localeSwitchTooltip,
       onSelected: (String value) {
         unawaited(controller.selectLocaleOverride(value.isEmpty ? null : value));
       },
@@ -2978,7 +3023,7 @@ class _LocaleMenuButton extends StatelessWidget {
         CheckedPopupMenuItem<String>(
           value: '',
           checked: controller.usesSystemLocale,
-          child: Text(context.t.localeSystemDefault),
+          child: Text(t.localeSystemDefault),
         ),
         for (final locale in AppLocale.values)
           CheckedPopupMenuItem<String>(
@@ -2989,18 +3034,15 @@ class _LocaleMenuButton extends StatelessWidget {
             child: Text(shellLocaleDisplayName(context, locale)),
           ),
       ],
-      child: Tooltip(
-        message: context.t.localeSwitchTooltip,
-        child: SizedBox.square(
-          dimension: 44,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              color: Theme.of(context).colorScheme.surfaceContainerHighest
-                  .withValues(alpha: 0.72),
-            ),
-            child: const Icon(Icons.translate_rounded),
+      child: SizedBox.square(
+        dimension: 44,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            color: Theme.of(context).colorScheme.surfaceContainerHighest
+                .withValues(alpha: 0.72),
           ),
+          child: const Icon(Icons.translate_rounded),
         ),
       ),
     );
@@ -3019,7 +3061,7 @@ class _HostStatusIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final tone = _hostIndicatorTone(controller);
+    final tone = _hostIndicatorTone(context, controller);
     final connectionState = controller.hostConnection?.state;
     final isReady =
         !controller.requiresLocalStateReset &&
@@ -3141,7 +3183,7 @@ class _HostStatusSheet extends StatelessWidget {
     final theme = Theme.of(context);
     final connection = controller.hostConnection;
     final hostInfo = connection?.info;
-    final tone = _hostIndicatorTone(controller);
+    final tone = _hostIndicatorTone(context, controller);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
@@ -3168,7 +3210,7 @@ class _HostStatusSheet extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text(
-                      _diagnosticsHostTitle(connection),
+                      _diagnosticsHostTitle(context, connection),
                       style: theme.textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.w800,
                       ),
@@ -3176,7 +3218,7 @@ class _HostStatusSheet extends StatelessWidget {
                     const SizedBox(height: 6),
                     Text(
                       controller.hostStatusMessage ??
-                          'Waiting for mobile host bridge negotiation.',
+                          context.shellText.waitingForMobileHostBridge,
                       style: theme.textTheme.bodyMedium,
                     ),
                   ],
@@ -3184,7 +3226,7 @@ class _HostStatusSheet extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               IconButton(
-                tooltip: 'Close',
+                tooltip: context.shellText.close,
                 onPressed: () => Navigator.of(context).pop(),
                 icon: const Icon(Icons.close),
               ),
@@ -3195,11 +3237,23 @@ class _HostStatusSheet extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: <Widget>[
-              _Tag(label: 'GUI ${controller.appBuild.shortLabel}'),
+              _Tag(
+                label: context.shellText.guiBuildTag(
+                  controller.appBuild.shortLabel,
+                ),
+              ),
               if (hostInfo != null)
-                _Tag(label: 'Host ${hostInfo.build.shortLabel}'),
+                _Tag(
+                  label: context.shellText.hostBuildTag(
+                    hostInfo.build.shortLabel,
+                  ),
+                ),
               if (hostInfo != null)
-                _Tag(label: 'Contract ${hostInfo.contractVersion}'),
+                _Tag(
+                  label: context.shellText.contractTag(
+                    hostInfo.contractVersion,
+                  ),
+                ),
               if ((connection?.description ?? '').isNotEmpty)
                 _Tag(label: connection!.description),
             ],
@@ -3214,20 +3268,20 @@ class _HostStatusSheet extends StatelessWidget {
                   Navigator.of(context).pop();
                   onOpenDiagnostics();
                 },
-                child: const Text('Open diagnostics'),
+                child: Text(context.shellText.openDiagnostics),
               ),
               FilledButton.tonal(
                 onPressed: controller.busy || controller.requiresLocalStateReset
                     ? null
                     : () => unawaited(controller.reconnect()),
-                child: const Text('Reconnect'),
+                child: Text(context.shellText.reconnect),
               ),
               if (controller.requiresLocalStateReset)
                 OutlinedButton(
                   onPressed: controller.busy
                       ? null
                       : () => unawaited(controller.clearLocalState()),
-                  child: const Text('Reset local state'),
+                  child: Text(context.shellText.resetLocalState),
                 ),
               FilledButton(
                 onPressed:
@@ -3235,7 +3289,7 @@ class _HostStatusSheet extends StatelessWidget {
                         controller.hostConnection?.isReady != true
                     ? null
                     : () => unawaited(controller.refresh()),
-                child: const Text('Refresh'),
+                child: Text(context.shellText.refresh),
               ),
             ],
           ),
@@ -3265,26 +3319,37 @@ class _HostBanner extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              _diagnosticsHostTitle(connection),
+              _diagnosticsHostTitle(context, connection),
               style: theme.textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w800,
               ),
             ),
             const SizedBox(height: 6),
             Text(
-              connection?.message ??
-                  'Waiting for mobile host bridge negotiation.',
+              connection?.message ?? context.shellText.waitingForMobileHostBridge,
             ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: <Widget>[
-                _Tag(label: 'GUI ${controller.appBuild.shortLabel}'),
+                _Tag(
+                  label: context.shellText.guiBuildTag(
+                    controller.appBuild.shortLabel,
+                  ),
+                ),
                 if (hostInfo != null)
-                  _Tag(label: 'Host ${hostInfo.build.shortLabel}'),
+                  _Tag(
+                    label: context.shellText.hostBuildTag(
+                      hostInfo.build.shortLabel,
+                    ),
+                  ),
                 if (hostInfo != null)
-                  _Tag(label: 'Contract ${hostInfo.contractVersion}'),
+                  _Tag(
+                    label: context.shellText.contractTag(
+                      hostInfo.contractVersion,
+                    ),
+                  ),
                 if ((connection?.description ?? '').isNotEmpty)
                   _Tag(label: connection!.description),
               ],
@@ -3300,14 +3365,14 @@ class _HostBanner extends StatelessWidget {
                       : controller.requiresLocalStateReset
                       ? null
                       : () => unawaited(controller.reconnect()),
-                  child: const Text('Reconnect'),
+                  child: Text(context.shellText.reconnect),
                 ),
                 if (controller.requiresLocalStateReset)
                   OutlinedButton(
                     onPressed: controller.busy
                         ? null
                         : () => unawaited(controller.clearLocalState()),
-                    child: const Text('Reset local state'),
+                    child: Text(context.shellText.resetLocalState),
                   ),
                 FilledButton(
                   onPressed:
@@ -3315,7 +3380,7 @@ class _HostBanner extends StatelessWidget {
                           controller.hostConnection?.isReady != true
                       ? null
                       : () => unawaited(controller.refresh()),
-                  child: const Text('Refresh'),
+                  child: Text(context.shellText.refresh),
                 ),
               ],
             ),
@@ -3351,14 +3416,14 @@ class _ResolutionsPanel extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              'Resolutions',
+              context.shellText.resolutionsTitle,
               style: theme.textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.w800,
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Resolve the invite first, then use the capability-gated action set to start on this device, export a handoff, or open provider-native targets.',
+              context.shellText.resolutionsSubtitle,
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -3368,7 +3433,7 @@ class _ResolutionsPanel extends StatelessWidget {
               child: controller.resolutions.isEmpty
                   ? Center(
                       child: Text(
-                        'No provider resolutions yet.',
+                        context.shellText.noProviderResolutionsYet,
                         style: theme.textTheme.bodyLarge?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -3499,7 +3564,7 @@ class _SystemTunnelBanner extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'This mobile slice renders typed host capability and startup-stage results for the reported platform modes. Use the controls below to start or disconnect supported system-tunnel paths.',
+                    context.shellText.systemTunnelBannerText,
                     style: theme.textTheme.bodyMedium,
                   ),
                 ),
@@ -3508,7 +3573,7 @@ class _SystemTunnelBanner extends StatelessWidget {
             const SizedBox(height: 14),
             if (platformTunnels.isEmpty)
               Text(
-                'The connected mobile host did not report any platform tunnel modes.',
+                context.shellText.noPlatformTunnelModesReported,
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -3589,7 +3654,9 @@ class _PlatformTunnelCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
-                  capability.available ? 'available' : 'unavailable',
+                  capability.available
+                      ? context.shellText.availableLowercase
+                      : context.shellText.unavailableLowercase,
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
               ),
@@ -3604,7 +3671,7 @@ class _PlatformTunnelCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            _platformTunnelCapabilitySummary(capability),
+            _platformTunnelCapabilitySummary(context, capability),
             style: theme.textTheme.bodyMedium,
           ),
           if (capability.message.isNotEmpty) ...<Widget>[
@@ -3615,18 +3682,18 @@ class _PlatformTunnelCard extends StatelessWidget {
           if (result?.ready == true)
             OutlinedButton(
               onPressed: busy || !ready ? null : () => unawaited(onStop()),
-              child: const Text('Disconnect VPN'),
+              child: Text(context.shellText.disconnectVpn),
             )
           else
             FilledButton.tonal(
               onPressed: busy || !ready ? null : () => unawaited(onStart()),
-              child: const Text('Request startup'),
+              child: Text(context.shellText.requestStartup),
             ),
           const SizedBox(height: 10),
           Text(
             result == null
-                ? 'No startup request yet. Use the typed mobile host contract to verify the fail-closed path.'
-                : _platformTunnelResultSummary(result!),
+                ? context.shellText.noStartupRequestYet
+                : _platformTunnelResultSummary(context, result!),
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -3715,7 +3782,10 @@ class _ResolutionCard extends StatelessWidget {
               if (resolution.credentials != null) ...<Widget>[
                 const SizedBox(height: 4),
                 Text(
-                  'TURN ${resolution.credentials!.address} | ${resolution.credentials!.usernameRedacted}',
+                  context.shellText.turnCredentialsSummary(
+                    address: resolution.credentials!.address,
+                    username: resolution.credentials!.usernameRedacted,
+                  ),
                   style: theme.textTheme.bodySmall,
                 ),
               ],
@@ -3729,7 +3799,7 @@ class _ResolutionCard extends StatelessWidget {
                     for (final action in resolution.artifact!.actions)
                       _Tag(
                         label:
-                            '${action.id.label} · ${action.executionOwner.value}',
+                            '${action.id.label} · ${context.shellText.actionExecutionOwnerLabel(action.executionOwner.value)}',
                       ),
                   ],
                 ),
@@ -3737,8 +3807,12 @@ class _ResolutionCard extends StatelessWidget {
               if (resolution.export.expiresAt != null) ...<Widget>[
                 const SizedBox(height: 4),
                 Text(
-                  'Export expiry ${_formatSessionTimestamp(resolution.export.expiresAt!)}'
-                  '${resolution.export.expirySource == null ? '' : ' via ${resolution.export.expirySource}'}',
+                  context.shellText.exportExpiry(
+                    timestamp: _formatSessionTimestamp(
+                      resolution.export.expiresAt!,
+                    ),
+                    source: resolution.export.expirySource,
+                  ),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -3747,7 +3821,14 @@ class _ResolutionCard extends StatelessWidget {
               if (resolution.failure != null) ...<Widget>[
                 const SizedBox(height: 10),
                 Text(
-                  '${resolution.failure!.stage ?? 'failure'}: ${resolution.failure!.message ?? 'unknown'}',
+                  context.shellText.failureSummary(
+                    stage:
+                        resolution.failure!.stage ??
+                        context.shellText.failureFallback,
+                    message:
+                        resolution.failure!.message ??
+                        context.shellText.unknownValue,
+                  ),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: const Color(0xFF7A1F16),
                     fontWeight: FontWeight.w600,
@@ -3766,7 +3847,7 @@ class _ResolutionCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       Text(
-                        'Challenge: ${challenge!.kind}',
+                        context.shellText.challengeKind(challenge!.kind),
                         style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
@@ -3791,16 +3872,16 @@ class _ResolutionCard extends StatelessWidget {
                                   ? null
                                   : () =>
                                         unawaited(onContinueChallenge!.call()),
-                              child: const Text("I've completed it"),
+                              child: Text(context.shellText.iveCompletedIt),
                             ),
                           if (onCancelChallenge != null)
                             _ActionOverflowButton(
-                              tooltip: 'More challenge actions',
+                              tooltip: context.shellText.moreChallengeActions,
                               enabled: !busy,
                               actions: <_CardActionEntry>[
                                 _CardActionEntry(
                                   id: 'cancel-challenge',
-                                  label: 'Cancel challenge',
+                                  label: context.shellText.cancelChallenge,
                                   onSelected: onCancelChallenge!,
                                 ),
                               ],
@@ -3814,9 +3895,9 @@ class _ResolutionCard extends StatelessWidget {
               const SizedBox(height: 12),
               _ActionRow(
                 busy: busy,
-                primaryAction: _primaryAction(),
-                secondaryActions: _secondaryActions(),
-                overflowTooltip: 'More resolution actions',
+                primaryAction: _primaryAction(context),
+                secondaryActions: _secondaryActions(context),
+                overflowTooltip: context.shellText.moreResolutionActions,
               ),
             ],
           ),
@@ -3825,91 +3906,91 @@ class _ResolutionCard extends StatelessWidget {
     );
   }
 
-  _CardActionEntry? _primaryAction() {
+  _CardActionEntry? _primaryAction(BuildContext context) {
     final actions = <_CardActionEntry>[
       if (onMaterialize != null)
         _CardActionEntry(
           id: 'materialize',
-          label: 'Start on this device',
+          label: context.shellText.startOnThisDevice,
           onSelected: onMaterialize!,
         ),
       if (onShareExport != null)
         _CardActionEntry(
           id: 'share-export',
-          label: 'Share handoff',
+          label: context.shellText.shareHandoff,
           onSelected: onShareExport!,
         ),
       if (onOpenRoom != null)
         _CardActionEntry(
           id: 'open-room',
-          label: 'Open room',
+          label: context.shellText.openRoom,
           onSelected: onOpenRoom!,
         ),
       if (onOpenCamera != null)
         _CardActionEntry(
           id: 'open-camera',
-          label: 'Open camera',
+          label: context.shellText.openCamera,
           onSelected: onOpenCamera!,
         ),
       if (onOpenArchive != null)
         _CardActionEntry(
           id: 'open-archive',
-          label: 'Open archive',
+          label: context.shellText.openArchive,
           onSelected: onOpenArchive!,
         ),
       if (onCopyExport != null)
         _CardActionEntry(
           id: 'copy-export',
-          label: 'Copy handoff',
+          label: context.shellText.copyHandoff,
           onSelected: onCopyExport!,
         ),
       if (onCancel != null)
         _CardActionEntry(
           id: 'cancel-resolution',
-          label: 'Cancel resolution',
+          label: context.shellText.cancelResolution,
           onSelected: onCancel!,
         ),
     ];
     return actions.isEmpty ? null : actions.first;
   }
 
-  List<_CardActionEntry> _secondaryActions() {
-    final primaryId = _primaryAction()?.id;
+  List<_CardActionEntry> _secondaryActions(BuildContext context) {
+    final primaryId = _primaryAction(context)?.id;
     return <_CardActionEntry>[
       if (onCopyExport != null)
         _CardActionEntry(
           id: 'copy-export',
-          label: 'Copy handoff',
+          label: context.shellText.copyHandoff,
           onSelected: onCopyExport!,
         ),
       if (onShareExport != null)
         _CardActionEntry(
           id: 'share-export',
-          label: 'Share handoff',
+          label: context.shellText.shareHandoff,
           onSelected: onShareExport!,
         ),
       if (onOpenRoom != null)
         _CardActionEntry(
           id: 'open-room',
-          label: 'Open room',
+          label: context.shellText.openRoom,
           onSelected: onOpenRoom!,
         ),
       if (onOpenCamera != null)
         _CardActionEntry(
           id: 'open-camera',
-          label: 'Open camera',
+          label: context.shellText.openCamera,
           onSelected: onOpenCamera!,
         ),
       if (onOpenArchive != null)
         _CardActionEntry(
           id: 'open-archive',
-          label: 'Open archive',
+          label: context.shellText.openArchive,
           onSelected: onOpenArchive!,
         ),
       if (onCancel != null)
         _CardActionEntry(
           id: 'cancel-resolution',
-          label: 'Cancel resolution',
+          label: context.shellText.cancelResolution,
           onSelected: onCancel!,
         ),
     ].where((entry) => entry.id != primaryId).toList(growable: false);
@@ -3941,7 +4022,7 @@ class _SessionsPanel extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              'Sessions',
+              context.shellText.sessionsTitle,
               style: theme.textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.w800,
               ),
@@ -3951,7 +4032,7 @@ class _SessionsPanel extends StatelessWidget {
               child: controller.sessions.isEmpty
                   ? Center(
                       child: Text(
-                        'No active or recent mobile sessions yet.',
+                        context.shellText.noMobileSessionsYet,
                         style: theme.textTheme.bodyLarge?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -4064,12 +4145,18 @@ class _SessionCard extends StatelessWidget {
                 '${session.profile.provider} -> ${session.profile.peerAddress}',
               ),
               Text(
-                'listen ${session.profile.listenAddress} | connections ${session.profile.connections}',
+                context.shellText.sessionListenConnections(
+                  listen: session.profile.listenAddress,
+                  connections: session.profile.connections,
+                ),
                 style: theme.textTheme.bodySmall,
               ),
               const SizedBox(height: 4),
               Text(
-                'Updated ${_formatSessionTimestamp(session.updatedAt)} | session ${_shortSessionId(session.id)}',
+                context.shellText.sessionUpdated(
+                  timestamp: _formatSessionTimestamp(session.updatedAt),
+                  sessionId: _shortSessionId(session.id),
+                ),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -4077,7 +4164,14 @@ class _SessionCard extends StatelessWidget {
               if (session.failure != null) ...<Widget>[
                 const SizedBox(height: 10),
                 Text(
-                  '${session.failure!.stage ?? 'failure'}: ${session.failure!.message ?? 'unknown'}',
+                  context.shellText.failureSummary(
+                    stage:
+                        session.failure!.stage ??
+                        context.shellText.failureFallback,
+                    message:
+                        session.failure!.message ??
+                        context.shellText.unknownValue,
+                  ),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: const Color(0xFF7A1F16),
                     fontWeight: FontWeight.w600,
@@ -4096,7 +4190,7 @@ class _SessionCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       Text(
-                        'Challenge: ${challenge!.kind}',
+                        context.shellText.challengeKind(challenge!.kind),
                         style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
@@ -4121,16 +4215,16 @@ class _SessionCard extends StatelessWidget {
                                   ? null
                                   : () =>
                                         unawaited(onContinueChallenge!.call()),
-                              child: const Text("I've completed it"),
+                              child: Text(context.shellText.iveCompletedIt),
                             ),
                           if (onCancelChallenge != null)
                             _ActionOverflowButton(
-                              tooltip: 'More challenge actions',
+                              tooltip: context.shellText.moreChallengeActions,
                               enabled: !busy,
                               actions: <_CardActionEntry>[
                                 _CardActionEntry(
                                   id: 'cancel-challenge',
-                                  label: 'Cancel challenge',
+                                  label: context.shellText.cancelChallenge,
                                   onSelected: onCancelChallenge!,
                                 ),
                               ],
@@ -4144,9 +4238,9 @@ class _SessionCard extends StatelessWidget {
               const SizedBox(height: 12),
               _ActionRow(
                 busy: busy,
-                primaryAction: _primaryAction(),
-                secondaryActions: _secondaryActions(),
-                overflowTooltip: 'More session actions',
+                primaryAction: _primaryAction(context),
+                secondaryActions: _secondaryActions(context),
+                overflowTooltip: context.shellText.moreSessionActions,
               ),
             ],
           ),
@@ -4155,35 +4249,35 @@ class _SessionCard extends StatelessWidget {
     );
   }
 
-  _CardActionEntry _primaryAction() {
+  _CardActionEntry _primaryAction(BuildContext context) {
     if (session.state != SessionState.stopped &&
         session.state != SessionState.failed) {
       return _CardActionEntry(
         id: 'stop-session',
-        label: 'Stop session',
+        label: context.shellText.stopSession,
         onSelected: onStop,
       );
     }
     return _CardActionEntry(
       id: 'export-diagnostics',
-      label: 'Export diagnostics',
+      label: context.shellText.exportDiagnostics,
       onSelected: onExport,
     );
   }
 
-  List<_CardActionEntry> _secondaryActions() {
-    final primaryId = _primaryAction().id;
+  List<_CardActionEntry> _secondaryActions(BuildContext context) {
+    final primaryId = _primaryAction(context).id;
     return <_CardActionEntry>[
       _CardActionEntry(
         id: 'export-diagnostics',
-        label: 'Export diagnostics',
+        label: context.shellText.exportDiagnostics,
         onSelected: onExport,
       ),
       if (session.state != SessionState.stopped &&
           session.state != SessionState.failed)
         _CardActionEntry(
           id: 'stop-session',
-          label: 'Stop session',
+          label: context.shellText.stopSession,
           onSelected: onStop,
         ),
     ].where((entry) => entry.id != primaryId).toList(growable: false);
@@ -4206,14 +4300,14 @@ class _EventsPanel extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              'Event stream',
+              context.shellText.eventStream,
               style: theme.textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.w800,
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Typed state transitions and challenge updates from the mobile host bridge.',
+              context.shellText.eventStreamSubtitle,
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -4223,7 +4317,7 @@ class _EventsPanel extends StatelessWidget {
               child: controller.events.isEmpty
                   ? Center(
                       child: Text(
-                        'No events yet.',
+                        context.shellText.noEventsYet,
                         style: theme.textTheme.bodyLarge?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -4304,7 +4398,7 @@ class _SessionStateChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        state.value,
+        context.shellText.sessionStateLabel(state.value),
         style: TextStyle(color: foreground, fontWeight: FontWeight.w700),
       ),
     );
@@ -4343,7 +4437,7 @@ class _ResolutionStateChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        state.value,
+        context.shellText.resolutionStateLabel(state.value),
         style: TextStyle(color: foreground, fontWeight: FontWeight.w700),
       ),
     );
@@ -4479,12 +4573,14 @@ class _NoticeBanner extends StatelessWidget {
 }
 
 (String, Color, Color, IconData) _hostIndicatorTone(
+  BuildContext context,
   MobileShellController controller,
 ) {
   final connection = controller.hostConnection;
+  final copy = context.shellText;
   if (controller.requiresLocalStateReset) {
     return (
-      'Reset needed',
+      copy.resetNeeded,
       const Color(0xFFFFE3E0),
       const Color(0xFFB3261E),
       Icons.error_rounded,
@@ -4494,25 +4590,25 @@ class _NoticeBanner extends StatelessWidget {
     MobileHostLifecycleState.ready
         when controller.status == ShellStatus.ready =>
       (
-        'Host ready',
+        copy.hostReady,
         const Color(0xFFE2F4E8),
         const Color(0xFF1E6A3B),
         Icons.check_circle_rounded,
       ),
     MobileHostLifecycleState.incompatible => (
-      'Host incompatible',
+      copy.hostIncompatible,
       const Color(0xFFFFE3E0),
       const Color(0xFFB3261E),
       Icons.sync_problem_rounded,
     ),
     MobileHostLifecycleState.failed || MobileHostLifecycleState.unavailable => (
-      'Host blocked',
+      copy.hostBlocked,
       const Color(0xFFFFE3E0),
       const Color(0xFFB3261E),
       Icons.error_rounded,
     ),
     _ => (
-      'Connecting',
+      copy.connecting,
       const Color(0xFFE5ECF6),
       const Color(0xFF35516D),
       Icons.sync_rounded,
@@ -4529,12 +4625,16 @@ Color _hostStatusColor(MobileHostConnectionResult? connection) {
   };
 }
 
-String _diagnosticsHostTitle(MobileHostConnectionResult? connection) {
+String _diagnosticsHostTitle(
+  BuildContext context,
+  MobileHostConnectionResult? connection,
+) {
+  final copy = context.shellText;
   return switch (connection?.state) {
-    MobileHostLifecycleState.ready => 'Mobile host ready',
-    MobileHostLifecycleState.incompatible => 'Mobile host incompatible',
-    MobileHostLifecycleState.failed => 'Mobile host blocked',
-    _ => 'Connecting to mobile host',
+    MobileHostLifecycleState.ready => copy.mobileHostReady,
+    MobileHostLifecycleState.incompatible => copy.mobileHostIncompatible,
+    MobileHostLifecycleState.failed => copy.mobileHostBlocked,
+    _ => copy.connectingToMobileHost,
   };
 }
 
@@ -4552,33 +4652,39 @@ String _shortSessionId(String value) {
   return '${trimmed.substring(0, 12)}...';
 }
 
-String _platformTunnelCapabilitySummary(PlatformTunnelCapability capability) {
+String _platformTunnelCapabilitySummary(
+  BuildContext context,
+  PlatformTunnelCapability capability,
+) {
+  final copy = context.shellText;
   if (capability.available && capability.satisfiedPrerequisites.isNotEmpty) {
     final satisfied = capability.satisfiedPrerequisites
         .map((PlatformTunnelPrerequisite prerequisite) => prerequisite.label)
         .join(', ');
-    return 'Satisfied prerequisites: $satisfied';
+    return copy.satisfiedPrerequisites(satisfied);
   }
   if (!capability.available && capability.missingPrerequisite != null) {
-    return 'Missing prerequisite: ${capability.missingPrerequisite!.label}';
+    return copy.missingPrerequisite(capability.missingPrerequisite!.label);
   }
   if (capability.available) {
-    return 'The mobile host reports that this mode is available.';
+    return copy.mobileHostModeAvailable;
   }
-  return 'The mobile host reports that this mode is unavailable.';
+  return copy.mobileHostModeUnavailable;
 }
 
-String _platformTunnelResultSummary(PlatformTunnelStartResult result) {
+String _platformTunnelResultSummary(
+  BuildContext context,
+  PlatformTunnelStartResult result,
+) {
+  final copy = context.shellText;
   if (result.ready) {
-    return '${result.mode.label} reached ready state for the mobile host tunnel path.';
+    return copy.platformTunnelReady(result.mode.label);
   }
   final buffer = StringBuffer(
-    'Startup blocked at ${result.stage?.label ?? 'Unknown stage'}.',
+    copy.startupBlockedAt(result.stage?.label ?? copy.unknownStage),
   );
   if (result.missingPrerequisite != null) {
-    buffer.write(
-      ' Missing prerequisite: ${result.missingPrerequisite!.label}.',
-    );
+    buffer.write(' ${copy.missingPrerequisite(result.missingPrerequisite!.label)}.');
   }
   if (result.message.isNotEmpty) {
     buffer.write(' ${result.message}');
@@ -4599,57 +4705,77 @@ ProfileRecord? _selectedProfile(MobileShellController controller) {
   return null;
 }
 
-String _modeSummary(MobileShellController controller) {
+String _modeSummary(BuildContext context, MobileShellController controller) {
+  final copy = context.shellText;
   final mode = controller.activePlatformTunnelMode;
   if (mode == null) {
-    return 'No mobile tunnel mode is currently selected.';
+    return copy.noMobileTunnelModeSelected;
   }
-  final modeLabel = switch (mode) {
-    PlatformTunnelMode.androidVpnService => 'Android system VPN mode',
-    PlatformTunnelMode.appleNetworkExtension => 'Apple network extension mode',
-    PlatformTunnelMode.windowsWintun => 'Windows Wintun mode',
-    PlatformTunnelMode.linuxTun => 'Linux TUN mode',
-  };
+  final modeLabel = mode.label;
   final executionPlan = controller.activeExecutionPlan;
-  final routingSummary = _routingSummaryForHome(controller);
+  final routingSummary = _routingSummaryForHome(context, controller);
   if (executionPlan == null) {
-    return '$modeLabel. $routingSummary';
+    return copy.modeSummary(modeLabel: modeLabel, routingSummary: routingSummary);
   }
-  return '$modeLabel. $routingSummary Execution path: ${_executionPlanLabel(executionPlan)}.';
+  return copy.modeSummary(
+    modeLabel: modeLabel,
+    routingSummary: routingSummary,
+    executionPath: _executionPlanLabel(context, executionPlan),
+  );
 }
 
-String _routingSummaryForHome(MobileShellController controller) {
+String _routingSummaryForHome(
+  BuildContext context,
+  MobileShellController controller,
+) {
+  final copy = context.shellText;
   if (!controller.activeModeSupportsAppRouting) {
-    return 'Per-app routing is unavailable for this mobile mode.';
+    return copy.perAppRoutingUnavailable;
   }
   final preferences = controller.activePlatformModePreferences;
   return switch (preferences.applicationRoutingPolicy) {
-    PlatformTunnelApplicationRoutingPolicy.allApps =>
-      'Scope: all installed apps.',
+    PlatformTunnelApplicationRoutingPolicy.allApps => copy.scopeAllInstalledApps,
     PlatformTunnelApplicationRoutingPolicy.allowedPackages =>
       preferences.allowedPackages.isEmpty
-          ? 'Scope: included apps, but no apps are selected yet.'
-          : 'Scope: only ${preferences.allowedPackages.length} selected apps.',
+          ? copy.scopeIncludedAppsEmpty
+          : copy.scopeOnlySelectedApps(preferences.allowedPackages.length),
     PlatformTunnelApplicationRoutingPolicy.disallowedPackages =>
       preferences.disallowedPackages.isEmpty
-          ? 'Scope: excluded apps, but no apps are selected yet.'
-          : 'Scope: all apps except ${preferences.disallowedPackages.length} selected apps.',
+          ? copy.scopeExcludedAppsEmpty
+          : copy.scopeAllExceptSelectedApps(
+              preferences.disallowedPackages.length,
+            ),
   };
 }
 
-String _executionPlanLabel(RuntimeExecutionPlan plan) {
-  final engine = switch (plan.engineFamily) {
-    RuntimeEngineFamily.wireguardNative => 'WireGuard native',
-    RuntimeEngineFamily.customPacketOverlay => 'Custom packet overlay',
-    RuntimeEngineFamily.proxyCoreAdapter => 'Proxy core adapter',
-    RuntimeEngineFamily.trusttunnelNative => 'TrustTunnel native',
+String _executionPlanLabel(BuildContext context, RuntimeExecutionPlan plan) {
+  final copy = context.shellText;
+  return switch ((plan.engineFamily, plan.carrierFamily)) {
+    (RuntimeEngineFamily.wireguardNative, RuntimeCarrierFamily.turnDatagram) =>
+      copy.wireGuardNativeOverTurnDatagram,
+    (RuntimeEngineFamily.wireguardNative, RuntimeCarrierFamily.turnDtlsOverlay) =>
+      copy.wireGuardNativeOverTurnDtls,
+    (RuntimeEngineFamily.wireguardNative, RuntimeCarrierFamily.webrtcDataChannel) =>
+      copy.wireGuardNativeOverWebRtc,
+    (RuntimeEngineFamily.customPacketOverlay, RuntimeCarrierFamily.turnDatagram) =>
+      copy.customOverlayOverTurnDatagram,
+    (RuntimeEngineFamily.customPacketOverlay, RuntimeCarrierFamily.turnDtlsOverlay) =>
+      copy.customOverlayOverTurnDtls,
+    (RuntimeEngineFamily.customPacketOverlay, RuntimeCarrierFamily.webrtcDataChannel) =>
+      copy.customOverlayOverWebRtc,
+    (RuntimeEngineFamily.proxyCoreAdapter, RuntimeCarrierFamily.turnDatagram) =>
+      copy.proxyCoreOverTurnDatagram,
+    (RuntimeEngineFamily.proxyCoreAdapter, RuntimeCarrierFamily.turnDtlsOverlay) =>
+      copy.proxyCoreOverTurnDtls,
+    (RuntimeEngineFamily.proxyCoreAdapter, RuntimeCarrierFamily.webrtcDataChannel) =>
+      copy.proxyCoreOverWebRtc,
+    (RuntimeEngineFamily.trusttunnelNative, RuntimeCarrierFamily.turnDatagram) =>
+      copy.trustTunnelOverTurnDatagram,
+    (RuntimeEngineFamily.trusttunnelNative, RuntimeCarrierFamily.turnDtlsOverlay) =>
+      copy.trustTunnelOverTurnDtls,
+    (RuntimeEngineFamily.trusttunnelNative, RuntimeCarrierFamily.webrtcDataChannel) =>
+      copy.trustTunnelOverWebRtc,
   };
-  final carrier = switch (plan.carrierFamily) {
-    RuntimeCarrierFamily.turnDatagram => 'TURN datagram',
-    RuntimeCarrierFamily.turnDtlsOverlay => 'TURN DTLS overlay',
-    RuntimeCarrierFamily.webrtcDataChannel => 'WebRTC data channel',
-  };
-  return '$engine over $carrier';
 }
 
 bool _sameExecutionPlanForUi(

@@ -7,3 +7,13 @@
 [mcp_servers.dart]
 command = "dart"
 args = ["mcp-server", "--force-roots-fallback"]
+
+# Dedicated Dart MCP instances make it possible to keep separate DTD
+# connections for desktop and mobile work in different tool namespaces.
+[mcp_servers.dart_desktop]
+command = "dart"
+args = ["mcp-server", "--force-roots-fallback"]
+
+[mcp_servers.dart_mobile]
+command = "dart"
+args = ["mcp-server", "--force-roots-fallback"]

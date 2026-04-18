@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter_shell_core/provider_settings_form.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_models.dart';
 import 'package:mobile_gui_shell/src/control/profile_draft.dart';
@@ -71,6 +72,7 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final copy = context.shellText;
     final supportedProvider = _selectedSupportedProvider();
     final descriptor = _selectedDescriptor();
     final selectedSavedProvider = widget.selectedManagedProviderId != null;
@@ -79,11 +81,11 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
         descriptor.settingsSchema != null &&
         descriptor.providerSettingsSupportError == null;
     final editorTitle = selectedSavedProvider
-        ? 'Edit provider'
-        : 'New provider';
+        ? copy.mobileEditProvider
+        : copy.mobileNewProvider;
     final editorDetail = selectedSavedProvider
-        ? 'Edit this saved reusable provider.'
-        : 'Finish this saved reusable provider for later use in Profiles.';
+        ? copy.mobileEditSavedReusableProvider
+        : copy.mobileFinishSavedReusableProvider;
     final blockedBySchemaSupport =
         descriptor?.providerSettingsSupportError != null &&
         widget.draft.providerSettings.isNotEmpty;
@@ -127,7 +129,7 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                     key: const ValueKey<String>(
                       'managed-provider-close-button',
                     ),
-                    tooltip: 'Close provider editor',
+                    tooltip: copy.mobileCloseProviderEditor,
                     onPressed: widget.busy ? null : widget.onClose,
                     icon: const Icon(Icons.close),
                   ),
@@ -145,30 +147,30 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                   if (widget.supportedProviders.isEmpty)
                     _unavailableCard(
                       theme,
-                      'This build does not advertise any shipped provider families yet.',
+                      copy.mobileNoShippedProviderFamilies,
                     )
                   else ...<Widget>[
                     _field(
                       controller: _nameController,
-                      label: 'Provider name',
+                      label: copy.mobileProviderName,
                       onChanged: (String value) => _pushDraft(name: value),
                     ),
                     Text(
-                      'Shown in Profiles when choosing a saved reusable provider.',
+                      copy.mobileProviderShownInProfiles,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
                     const SizedBox(height: 20),
                     Text(
-                      'Provider type',
+                      copy.providerType,
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Chosen when this saved provider was created. Use this pane to name it and review reusable settings.',
+                      copy.mobileProviderTypeChosenWhenCreated,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -181,9 +183,9 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                         availability: hostAvailability,
                         descriptor: descriptor,
                         compactNote: descriptor?.settingsSchema == null
-                            ? supportedProvider.title.isEmpty
-                                  ? 'No reusable settings yet. Save this as a named provider for Profiles.'
-                                  : 'No reusable settings yet. Save ${supportedProvider.title} as a named provider for Profiles.'
+                            ? copy.mobileNoReusableSettingsYetNamedProvider(
+                                supportedProvider.title,
+                              )
                             : null,
                       ),
                     if (hostAvailability != null &&
@@ -196,19 +198,22 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                       const SizedBox(height: 16),
                       _unavailableCard(
                         theme,
-                        'This mobile shell cannot render the provider settings schema for ${descriptor!.displayName}: ${descriptor.providerSettingsSupportError}. Save stays blocked until the host advertises a supported schema subset.',
+                        copy.mobileProviderConfigSupportError(
+                          providerName: descriptor!.displayName,
+                          error: descriptor.providerSettingsSupportError!,
+                        ),
                       ),
                     ] else if (canRenderReusableSettings) ...<Widget>[
                       const SizedBox(height: 20),
                       Text(
-                        'Reusable provider settings',
+                        copy.mobileReusableProviderSettings,
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'These reusable values are applied when this provider is used in a profile.',
+                        copy.mobileReusableValuesAppliedToProfile,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -240,7 +245,7 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                   onPressed: widget.busy || blockedBySchemaSupport
                       ? null
                       : () => unawaited(widget.onSave()),
-                  child: const Text('Save provider'),
+                  child: Text(copy.mobileSaveProvider),
                 ),
                 TextButton.icon(
                   key: const ValueKey<String>(
@@ -250,7 +255,7 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                       ? null
                       : widget.onSaveAsTemplate,
                   icon: const Icon(Icons.bookmark_add_outlined),
-                  label: const Text('Save as template'),
+                  label: Text(copy.mobileSaveAsTemplate),
                 ),
                 if (widget.selectedManagedProviderId != null)
                   TextButton.icon(
@@ -263,7 +268,7 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                             widget.selectedManagedProviderId!,
                           ),
                     icon: const Icon(Icons.assignment_turned_in_outlined),
-                    label: const Text('Use in profile draft'),
+                    label: Text(copy.mobileUseInProfileDraft),
                   ),
                 if (widget.selectedManagedProviderId != null)
                   OutlinedButton(
@@ -273,7 +278,7 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                     onPressed: widget.busy
                         ? null
                         : () => unawaited(widget.onDelete()),
-                    child: const Text('Delete provider'),
+                    child: Text(copy.mobileDeleteProvider),
                   ),
               ],
             ),
@@ -307,6 +312,7 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
     String? compactNote,
   }) {
     final fieldLabel = _managedFieldSurfaceLabel(descriptor);
+    final copy = context.shellText;
     final fieldAccent =
         descriptor?.settingsSchema != null &&
         descriptor?.providerSettingsSupportError == null;
@@ -337,7 +343,9 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
               if (availability != null)
                 _metaChip(
                   theme,
-                  label: availability.isAvailable ? 'Available' : 'Unavailable',
+                  label: availability.isAvailable
+                      ? copy.available
+                      : copy.unavailable,
                   accent: availability.isAvailable,
                 ),
             ],
@@ -354,7 +362,7 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
             spacing: 8,
             runSpacing: 8,
             children: <Widget>[
-              _metaChip(theme, label: 'Selected type', accent: true),
+              _metaChip(theme, label: copy.selectedType, accent: true),
               _metaChip(theme, label: fieldLabel, accent: fieldAccent),
             ],
           ),
@@ -435,15 +443,15 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
 
   String _managedFieldSurfaceLabel(ProviderDescriptor? descriptor) {
     if (descriptor == null) {
-      return 'No reusable fields yet';
+      return context.shellText.noReusableFieldsYet;
     }
     if (descriptor.providerSettingsSupportError != null) {
-      return 'Schema blocked in this shell';
+      return context.shellText.schemaBlockedInShell;
     }
     if (descriptor.settingsSchema == null) {
-      return 'No reusable fields yet';
+      return context.shellText.noReusableFieldsYet;
     }
-    return 'Reusable fields ready';
+    return context.shellText.reusableFieldsReady;
   }
 
   void _pushDraft({
@@ -526,6 +534,7 @@ class _ProviderTemplateEditorPanelState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final copy = context.shellText;
     final supportedProvider = _selectedSupportedProvider();
     final descriptor = _selectedDescriptor();
     final selectedTemplate = widget.selectedProviderTemplateId != null;
@@ -533,10 +542,12 @@ class _ProviderTemplateEditorPanelState
         descriptor != null &&
         descriptor.settingsSchema != null &&
         descriptor.providerSettingsSupportError == null;
-    final editorTitle = selectedTemplate ? 'Edit template' : 'New template';
+    final editorTitle = selectedTemplate
+        ? copy.mobileEditTemplate
+        : copy.mobileNewTemplate;
     final editorDetail = selectedTemplate
-        ? 'Edit starting values for future providers.'
-        : 'Save a starting point for future providers.';
+        ? copy.mobileEditTemplateStartingValues
+        : copy.mobileSaveTemplateStartingPoint;
     final blockedBySchemaSupport =
         descriptor?.providerSettingsSupportError != null &&
         widget.draft.providerSettings.isNotEmpty;
@@ -580,7 +591,7 @@ class _ProviderTemplateEditorPanelState
                     key: const ValueKey<String>(
                       'provider-template-close-button',
                     ),
-                    tooltip: 'Close template editor',
+                    tooltip: copy.mobileCloseTemplateEditor,
                     onPressed: widget.busy ? null : widget.onClose,
                     icon: const Icon(Icons.close),
                   ),
@@ -598,30 +609,30 @@ class _ProviderTemplateEditorPanelState
                   if (widget.supportedProviders.isEmpty)
                     _unavailableCard(
                       theme,
-                      'This build does not advertise any shipped provider families yet.',
+                      copy.mobileNoShippedProviderFamilies,
                     )
                   else ...<Widget>[
                     _field(
                       controller: _nameController,
-                      label: 'Template name',
+                      label: copy.mobileTemplateName,
                       onChanged: (String value) => _pushDraft(name: value),
                     ),
                     Text(
-                      'Shown when choosing a starting point for new providers.',
+                      copy.mobileTemplateShownWhenChoosing,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
                     const SizedBox(height: 20),
                     Text(
-                      'Provider type',
+                      copy.providerType,
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Chosen when this template was created. Use this pane to name it and review reusable starting values.',
+                      copy.mobileTemplateTypeChosenWhenCreated,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -634,9 +645,9 @@ class _ProviderTemplateEditorPanelState
                         availability: hostAvailability,
                         descriptor: descriptor,
                         compactNote: descriptor?.settingsSchema == null
-                            ? supportedProvider.title.isEmpty
-                                  ? 'No reusable settings yet. Save this template as a named starting point.'
-                                  : 'No reusable settings yet. Save ${supportedProvider.title} as a named starting point.'
+                            ? copy.mobileNoReusableSettingsYetTemplate(
+                                supportedProvider.title,
+                              )
                             : null,
                       ),
                     if (hostAvailability != null &&
@@ -649,19 +660,22 @@ class _ProviderTemplateEditorPanelState
                       const SizedBox(height: 16),
                       _unavailableCard(
                         theme,
-                        'This mobile shell cannot render the provider settings schema for ${descriptor!.displayName}: ${descriptor.providerSettingsSupportError}. Save stays blocked until the host advertises a supported schema subset.',
+                        copy.mobileProviderConfigSupportError(
+                          providerName: descriptor!.displayName,
+                          error: descriptor.providerSettingsSupportError!,
+                        ),
                       ),
                     ] else if (canRenderReusableSettings) ...<Widget>[
                       const SizedBox(height: 20),
                       Text(
-                        'Reusable provider settings',
+                        copy.mobileReusableProviderSettings,
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'These values prefill a new provider when this template is used.',
+                        copy.mobileReusableValuesPrefillProvider,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -693,7 +707,7 @@ class _ProviderTemplateEditorPanelState
                   onPressed: widget.busy || blockedBySchemaSupport
                       ? null
                       : () => unawaited(widget.onSave()),
-                  child: const Text('Save template'),
+                  child: Text(copy.mobileSaveTemplate),
                 ),
                 if (widget.selectedProviderTemplateId != null)
                   TextButton.icon(
@@ -704,7 +718,7 @@ class _ProviderTemplateEditorPanelState
                             widget.selectedProviderTemplateId!,
                           ),
                     icon: const Icon(Icons.playlist_add_check_outlined),
-                    label: const Text('Use template'),
+                    label: Text(copy.mobileUseTemplate),
                   ),
                 if (widget.selectedProviderTemplateId != null)
                   OutlinedButton(
@@ -714,7 +728,7 @@ class _ProviderTemplateEditorPanelState
                     onPressed: widget.busy
                         ? null
                         : () => unawaited(widget.onDelete()),
-                    child: const Text('Delete template'),
+                    child: Text(copy.mobileDeleteTemplate),
                   ),
               ],
             ),
@@ -748,6 +762,7 @@ class _ProviderTemplateEditorPanelState
     String? compactNote,
   }) {
     final fieldLabel = _managedFieldSurfaceLabel(descriptor);
+    final copy = context.shellText;
     final fieldAccent =
         descriptor?.settingsSchema != null &&
         descriptor?.providerSettingsSupportError == null;
@@ -778,7 +793,9 @@ class _ProviderTemplateEditorPanelState
               if (availability != null)
                 _metaChip(
                   theme,
-                  label: availability.isAvailable ? 'Available' : 'Unavailable',
+                  label: availability.isAvailable
+                      ? copy.available
+                      : copy.unavailable,
                   accent: availability.isAvailable,
                 ),
             ],
@@ -795,7 +812,7 @@ class _ProviderTemplateEditorPanelState
             spacing: 8,
             runSpacing: 8,
             children: <Widget>[
-              _metaChip(theme, label: 'Selected type', accent: true),
+              _metaChip(theme, label: copy.selectedType, accent: true),
               _metaChip(theme, label: fieldLabel, accent: fieldAccent),
             ],
           ),
@@ -876,15 +893,15 @@ class _ProviderTemplateEditorPanelState
 
   String _managedFieldSurfaceLabel(ProviderDescriptor? descriptor) {
     if (descriptor == null) {
-      return 'No reusable fields yet';
+      return context.shellText.noReusableFieldsYet;
     }
     if (descriptor.providerSettingsSupportError != null) {
-      return 'Schema blocked in this shell';
+      return context.shellText.schemaBlockedInShell;
     }
     if (descriptor.settingsSchema == null) {
-      return 'No reusable fields yet';
+      return context.shellText.noReusableFieldsYet;
     }
-    return 'Reusable fields ready';
+    return context.shellText.reusableFieldsReady;
   }
 
   void _pushDraft({

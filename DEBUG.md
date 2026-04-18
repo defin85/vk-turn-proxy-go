@@ -4,10 +4,11 @@ Verified UI development loops for this repository. Only techniques that were exe
 
 ## Dart MCP rules
 
-- `mcp__dart__.launch_app.root` must be a plain filesystem path like `/home/egor/code/vk-turn-proxy-go/mobile/gui_shell`.
+- Use `mcp__dart_mobile__` for `mobile/gui_shell` and `mcp__dart_desktop__` for `desktop/gui_shell`. Keep `mcp__dart__` only as a backward-compatible single-target fallback.
+- `launch_app.root` must be a plain filesystem path like `/home/egor/code/vk-turn-proxy-go/mobile/gui_shell`.
 - Do not pass `file://...` URIs to `launch_app.root`; that fails before launch.
-- One Codex session can hold only one active Dart Tooling Daemon connection.
-- After you connect to one app DTD, switching to another UI target requires a fresh Codex session.
+- Each Dart MCP namespace can hold only one active Dart Tooling Daemon connection.
+- With dedicated namespaces, one Codex session can keep a desktop DTD on `mcp__dart_desktop__` and a mobile DTD on `mcp__dart_mobile__`. Use a fresh Codex session only when you need to replace an existing DTD inside the same namespace.
 - Treat `adb` as an explicit fallback path. Do not drop to `adb`-driven install/logcat/forward/input work unless the user has agreed to that switch in the current thread.
 
 ## Mobile GUI shell via Dart MCP
@@ -15,10 +16,10 @@ Verified UI development loops for this repository. Only techniques that were exe
 Verified on `2026-04-17` against Android device `192.168.0.16:40017`.
 
 1. Launch with Dart MCP:
-   `mcp__dart__.launch_app(device="192.168.0.16:40017", root="/home/egor/code/vk-turn-proxy-go/mobile/gui_shell", target="test_driver/driver_main.dart")`
-2. Connect to the returned DTD URI with `mcp__dart__.connect_dart_tooling_daemon`.
-3. Use `mcp__dart__.hot_reload` for iteration.
-4. Use `mcp__dart__.flutter_driver(command="screenshot")` and other `flutter_driver` commands for live screenshots and taps.
+   `mcp__dart_mobile__.launch_app(device="192.168.0.16:40017", root="/home/egor/code/vk-turn-proxy-go/mobile/gui_shell", target="test_driver/driver_main.dart")`
+2. Connect to the returned DTD URI with `mcp__dart_mobile__.connect_dart_tooling_daemon`.
+3. Use `mcp__dart_mobile__.hot_reload` for iteration.
+4. Use `mcp__dart_mobile__.flutter_driver(command="screenshot")` and other `flutter_driver` commands for live screenshots and taps.
 
 Verified evidence:
 - `launch_app` returned a live DTD URI and PID for the mobile app.
@@ -57,10 +58,10 @@ Verified Windows-to-WSL USB preparation:
 
 Verified Dart MCP loop after USB attach:
 1. Launch with Dart MCP from WSL:
-   `mcp__dart__.launch_app(device="<usb-serial>", root="/home/egor/code/vk-turn-proxy-go/mobile/gui_shell", target="test_driver/driver_main.dart")`
-2. Connect to the returned DTD URI with `mcp__dart__.connect_dart_tooling_daemon`.
-3. Use `mcp__dart__.hot_reload`.
-4. Use `mcp__dart__.flutter_driver(command="screenshot")` and other driver
+   `mcp__dart_mobile__.launch_app(device="<usb-serial>", root="/home/egor/code/vk-turn-proxy-go/mobile/gui_shell", target="test_driver/driver_main.dart")`
+2. Connect to the returned DTD URI with `mcp__dart_mobile__.connect_dart_tooling_daemon`.
+3. Use `mcp__dart_mobile__.hot_reload`.
+4. Use `mcp__dart_mobile__.flutter_driver(command="screenshot")` and other driver
    commands against the USB target.
 
 Verified evidence:
@@ -86,9 +87,9 @@ Operational notes:
 Verified on `2026-04-16` against the same Android tablet.
 
 1. Launch the harness instead of the normal driver entrypoint:
-   `mcp__dart__.launch_app(device="192.168.0.16:40017", root="/home/egor/code/vk-turn-proxy-go/mobile/gui_shell", target="test_driver/owned_browser_harness_main.dart")`
-2. Connect to the returned DTD URI with `mcp__dart__.connect_dart_tooling_daemon`.
-3. Use `mcp__dart__.hot_reload` and reopen the harness route to iterate on the owned-browser `WebView` path.
+   `mcp__dart_mobile__.launch_app(device="192.168.0.16:40017", root="/home/egor/code/vk-turn-proxy-go/mobile/gui_shell", target="test_driver/owned_browser_harness_main.dart")`
+2. Connect to the returned DTD URI with `mcp__dart_mobile__.connect_dart_tooling_daemon`.
+3. Use `mcp__dart_mobile__.hot_reload` and reopen the harness route to iterate on the owned-browser `WebView` path.
 4. If the current task needs live native/DOM diagnostics, temporarily flip `_showHarnessDiagnostics` in `mobile/gui_shell/test_driver/owned_browser_harness_main.dart` to `true`, `hot_reload`, and reopen the route. Turn it back off afterwards.
 
 Verified evidence:
@@ -105,13 +106,13 @@ Verified on `2026-04-16` against Linux desktop target under WSLg.
 1. Start the local control plane first:
    `go run ./cmd/clientd -listen 127.0.0.1:7777`
 2. Launch with Dart MCP:
-   `mcp__dart__.launch_app(device="linux", root="/home/egor/code/vk-turn-proxy-go/desktop/gui_shell")`
-3. Connect to the returned DTD URI in a fresh Codex session dedicated to the desktop target.
+   `mcp__dart_desktop__.launch_app(device="linux", root="/home/egor/code/vk-turn-proxy-go/desktop/gui_shell")`
+3. Connect to the returned DTD URI with `mcp__dart_desktop__.connect_dart_tooling_daemon`.
 
 Verified evidence:
 - `clientd` reached `listening` on `127.0.0.1:7777`.
 - `launch_app` built and started the Linux desktop shell and returned a live DTD URI and PID.
-- In the same Codex session, `hot_reload` against the desktop target remained blocked because Dart MCP refused to replace an existing mobile DTD connection.
+- The dedicated desktop namespace keeps its own DTD connection separate from the mobile namespace.
 
 Local workstation prerequisite:
 - The local Flutter launcher at `/opt/flutter/bin/flutter` must preserve or restore WSLg display variables when Dart MCP launches Flutter without them.
@@ -120,5 +121,6 @@ Local workstation prerequisite:
 ## Verified regression checks
 
 - `cd mobile/gui_shell && flutter test test/widget_test.dart --plain-name 'owned-browser page yields shell chrome to web content while keyboard is visible even after a web resource error'`
-- `mcp__dart__.hot_reload` on the live mobile app after a real source edit
-- `mcp__dart__.launch_app` for both mobile and desktop targets
+- `mcp__dart_mobile__.hot_reload` on the live mobile app after a real source edit
+- `mcp__dart_mobile__.launch_app` for the mobile target
+- `mcp__dart_desktop__.launch_app` for the desktop target

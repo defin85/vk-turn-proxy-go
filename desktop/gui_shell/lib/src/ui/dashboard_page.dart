@@ -493,16 +493,16 @@ class _DesktopShellBar extends StatelessWidget {
     final routineReadyChrome =
         controller.status == ShellStatus.ready && !controller.hasLiveWork;
     final statusTitle = switch (controller.status) {
-      ShellStatus.booting => context.t.desktopStatusConnectingTitle,
-      ShellStatus.ready => context.t.desktopStatusReadyTitle,
-      ShellStatus.blocked => context.t.desktopStatusBlockedTitle,
+      ShellStatus.booting => t.desktopStatusConnectingTitle,
+      ShellStatus.ready => t.desktopStatusReadyTitle,
+      ShellStatus.blocked => t.desktopStatusBlockedTitle,
     };
     final detail =
         connection?.message ??
         switch (controller.status) {
-          ShellStatus.booting => context.t.desktopStatusStartingDetail,
-          ShellStatus.ready => context.t.desktopStatusConnectedDetail,
-          ShellStatus.blocked => context.t.desktopStatusWaitingDetail,
+          ShellStatus.booting => t.desktopStatusStartingDetail,
+          ShellStatus.ready => t.desktopStatusConnectedDetail,
+          ShellStatus.blocked => t.desktopStatusWaitingDetail,
         };
     final tone = switch (connection?.state) {
       HostLifecycleState.ready => const Color(0xFFF7FAF6),
@@ -525,10 +525,10 @@ class _DesktopShellBar extends StatelessWidget {
             key: const ValueKey<String>('desktop-navigation-drawer-button'),
             onPressed: onOpenNavigation,
             icon: const Icon(Icons.menu),
-            tooltip: context.t.commonOpenWorkflowsTooltip,
+            tooltip: t.commonOpenWorkflowsTooltip,
           ),
         PopupMenuButton<String>(
-          tooltip: context.t.localeSwitchTooltip,
+          tooltip: t.localeSwitchTooltip,
           onSelected: (String value) {
             unawaited(
               controller.selectLocaleOverride(value.isEmpty ? null : value),
@@ -538,7 +538,7 @@ class _DesktopShellBar extends StatelessWidget {
             CheckedPopupMenuItem<String>(
               value: '',
               checked: controller.usesSystemLocale,
-              child: Text(context.t.localeSystemDefault),
+              child: Text(t.localeSystemDefault),
             ),
             for (final locale in AppLocale.values)
               CheckedPopupMenuItem<String>(
@@ -554,28 +554,28 @@ class _DesktopShellBar extends StatelessWidget {
         FilledButton.tonal(
           key: const ValueKey<String>('desktop-open-diagnostics-button'),
           onPressed: onOpenDiagnostics,
-          child: Text(context.t.commonDiagnostics),
+          child: Text(t.commonDiagnostics),
         ),
         FilledButton.tonal(
           key: const ValueKey<String>('desktop-open-activity-button'),
           onPressed: controller.hasLiveWork ? onOpenActivity : null,
           child: Text(
             controller.hasLiveWork
-                ? '${context.t.commonLiveWork} (${controller.resolutions.length + controller.sessions.length})'
-                : context.t.commonLiveWork,
+                ? '${t.commonLiveWork} (${controller.resolutions.length + controller.sessions.length})'
+                : t.commonLiveWork,
           ),
         ),
         FilledButton.tonal(
           onPressed: controller.busy
               ? null
               : () => unawaited(controller.reconnect()),
-          child: Text(context.t.commonReconnect),
+          child: Text(t.commonReconnect),
         ),
         FilledButton(
           onPressed: controller.busy || controller.status != ShellStatus.ready
               ? null
               : () => unawaited(controller.refresh()),
-          child: Text(context.t.commonRefresh),
+          child: Text(t.commonRefresh),
         ),
       ],
     );
@@ -756,14 +756,14 @@ class _ShellBarSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final shortDetail = controller.status == ShellStatus.ready
-        ? context.t.desktopReadyWorkflowDetail
+        ? t.desktopReadyWorkflowDetail
         : detail;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Text(
-          context.t.desktopShellLabel,
+          t.desktopShellLabel,
           style: theme.textTheme.labelLarge?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
             fontWeight: FontWeight.w700,
@@ -837,21 +837,21 @@ class _CompactNavigationDrawer extends StatelessWidget {
       children: <Widget>[
         Padding(
           padding: const EdgeInsets.fromLTRB(28, 20, 28, 12),
-          child: Text(context.t.commonWorkflows),
+          child: Text(t.commonWorkflows),
         ),
         NavigationDrawerDestination(
           key: ValueKey<String>('desktop-section-profile'),
           icon: Icon(Icons.fact_check_outlined),
-          label: Text(context.t.commonProfiles),
+          label: Text(t.commonProfiles),
         ),
         NavigationDrawerDestination(
           key: ValueKey<String>('desktop-section-provider'),
           icon: Icon(Icons.tune_outlined),
-          label: Text(context.t.commonProviders),
+          label: Text(t.commonProviders),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(28, 20, 28, 12),
-          child: Text(context.t.commonQuickActions),
+          child: Text(t.commonQuickActions),
         ),
         Padding(
           padding: EdgeInsets.fromLTRB(20, 0, 20, 20),
@@ -899,7 +899,7 @@ class _ExpandedNavigationPad extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              context.t.commonWorkflows,
+              t.commonWorkflows,
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w800,
               ),
@@ -908,8 +908,8 @@ class _ExpandedNavigationPad extends StatelessWidget {
             _SectionListTile(
               key: const ValueKey<String>('desktop-section-profile'),
               icon: Icons.fact_check_outlined,
-              title: context.t.commonProfiles,
-              subtitle: context.t.desktopSectionProfilesSubtitle,
+              title: t.commonProfiles,
+              subtitle: t.desktopSectionProfilesSubtitle,
               selected:
                   controller.activeSection ==
                   DesktopShellSection.profileWorkflow,
@@ -919,8 +919,8 @@ class _ExpandedNavigationPad extends StatelessWidget {
             _SectionListTile(
               key: const ValueKey<String>('desktop-section-provider'),
               icon: Icons.tune_outlined,
-              title: context.t.commonProviders,
-              subtitle: context.t.desktopSectionProvidersSubtitle,
+              title: t.commonProviders,
+              subtitle: t.desktopSectionProvidersSubtitle,
               selected:
                   controller.activeSection ==
                   DesktopShellSection.providerWorkflow,
@@ -928,7 +928,7 @@ class _ExpandedNavigationPad extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              context.t.commonQuickActions,
+              t.commonQuickActions,
               style: theme.textTheme.titleSmall?.copyWith(
                 fontWeight: FontWeight.w800,
               ),
@@ -982,7 +982,7 @@ class _WorkflowQuickActions extends StatelessWidget {
               ),
               onPressed: onOpenSavedProfiles,
               child: Text(
-                dense ? context.t.commonProfiles : context.t.commonSavedProfiles,
+                dense ? t.commonProfiles : t.commonSavedProfiles,
               ),
             ),
             OutlinedButton(
@@ -990,7 +990,7 @@ class _WorkflowQuickActions extends StatelessWidget {
                 'desktop-create-profile-draft-button',
               ),
               onPressed: controller.busy ? null : controller.resetDraft,
-              child: Text(context.t.commonNewDraft),
+              child: Text(t.commonNewDraft),
             ),
             OutlinedButton(
               key: const ValueKey<String>(
@@ -999,7 +999,7 @@ class _WorkflowQuickActions extends StatelessWidget {
               onPressed: controller.managedProviders.isEmpty
                   ? null
                   : onOpenManagedProvidersForProfile,
-              child: Text(context.t.commonProviderRecords),
+              child: Text(t.commonProviderRecords),
             ),
           ]
         : <Widget>[
@@ -1008,21 +1008,21 @@ class _WorkflowQuickActions extends StatelessWidget {
                 'desktop-open-preset-bootstrap-button',
               ),
               onPressed: onOpenPresetBootstrap,
-              child: Text(context.t.commonNewFromPreset),
+              child: Text(t.commonNewFromPreset),
             ),
             FilledButton.tonal(
               key: const ValueKey<String>(
                 'desktop-open-managed-provider-library-button',
               ),
               onPressed: onOpenManagedProvidersForProvider,
-              child: Text(context.t.commonProviderRecords),
+              child: Text(t.commonProviderRecords),
             ),
             OutlinedButton(
               key: const ValueKey<String>(
                 'desktop-open-provider-family-chooser-button',
               ),
               onPressed: onOpenProviderFamilies,
-              child: Text(context.t.commonProviderFamilies),
+              child: Text(t.commonProviderFamilies),
             ),
           ];
 
