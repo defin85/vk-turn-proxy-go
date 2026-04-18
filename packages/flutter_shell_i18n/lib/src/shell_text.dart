@@ -5,244 +5,174 @@ import 'i18n/strings.g.dart';
 class ShellText {
   const ShellText();
 
-  bool get _ru => LocaleSettings.currentLocale == AppLocale.ru;
-
-  String _pick(String en, String ru) => _ru ? ru : en;
-
-  String get close => _pick('Close', 'Закрыть');
-  String get cancel => _pick('Cancel', 'Отмена');
-  String get back => _pick('Back', 'Назад');
-  String get save => _pick('Save', 'Сохранить');
-  String get delete => _pick('Delete', 'Удалить');
-  String get newItem => _pick('New', 'Новый');
-  String get missing => _pick('missing', 'отсутствует');
-  String get unknownValue => _pick('unknown', 'неизвестно');
-  String get failureFallback => _pick('failure', 'сбой');
-  String get retry => _pick('Retry', 'Повторить');
-  String get activity => _pick('Activity', 'Активность');
-  String get diagnostics => _pick('Diagnostics', 'Диагностика');
-  String get overview => _pick('Overview', 'Обзор');
-  String get events => _pick('Events', 'События');
-  String get templates => _pick('Templates', 'Шаблоны');
-  String get available => _pick('Available', 'Доступно');
-  String get unavailable => _pick('Unavailable', 'Недоступно');
-  String get openActivity => _pick('Open activity', 'Открыть активность');
-  String get openDiagnostics =>
-      _pick('Open diagnostics', 'Открыть диагностику');
-  String get openProfiles => _pick('Open profiles', 'Открыть профили');
-  String get resetLocalState =>
-      _pick('Reset local state', 'Сбросить локальное состояние');
-  String get importFromFile => _pick('Import from file', 'Импорт из файла');
-  String get exportSavedProfile =>
-      _pick('Export saved profile', 'Экспортировать сохраненный профиль');
-  String get pasteEnvelope => _pick('Paste envelope', 'Вставить конверт');
-  String get copyText => _pick('Copy text', 'Копировать текст');
-  String get saveFile => _pick('Save file', 'Сохранить файл');
-  String get shareText => _pick('Share text', 'Поделиться текстом');
-  String get shareFile => _pick('Share file', 'Поделиться файлом');
-  String get previewImport => _pick('Preview import', 'Предпросмотр импорта');
-  String get importProfile => _pick('Import profile', 'Импортировать профиль');
-  String get portableProfileJson =>
-      _pick('Portable profile JSON', 'JSON переносимого профиля');
-  String get portableProfileEnvelope =>
-      _pick('Portable profile envelope', 'Конверт переносимого профиля');
-  String get noManagedProvidersAvailableYet => _pick(
-    'No managed providers are available yet.',
-    'Управляемые провайдеры пока недоступны.',
-  );
-  String get selectedProviderNotAdvertisedByConnectedHost => _pick(
-    'The selected provider is not advertised by the connected host.',
-    'Выбранный провайдер не объявлен подключенным хостом.',
-  );
-  String get selectedProviderNotAdvertisedByConnectedMobileHost => _pick(
-    'The selected provider is not advertised by the connected mobile host.',
-    'Выбранный провайдер не объявлен подключенным мобильным хостом.',
-  );
+  String get close => t.shellTextClose;
+  String get cancel => t.shellTextCancel;
+  String get back => t.shellTextBack;
+  String get save => t.shellTextSave;
+  String get delete => t.shellTextDelete;
+  String get newItem => t.shellTextNewItem;
+  String get missing => t.shellTextMissing;
+  String get unknownValue => t.shellTextUnknownValue;
+  String get failureFallback => t.shellTextFailureFallback;
+  String get retry => t.shellTextRetry;
+  String get activity => t.shellTextActivity;
+  String get diagnostics => t.shellTextDiagnostics;
+  String get overview => t.shellTextOverview;
+  String get events => t.shellTextEvents;
+  String get templates => t.shellTextTemplates;
+  String get available => t.shellTextAvailable;
+  String get unavailable => t.shellTextUnavailable;
+  String get openActivity => t.shellTextOpenActivity;
+  String get openDiagnostics => t.shellTextOpenDiagnostics;
+  String get openProfiles => t.shellTextOpenProfiles;
+  String get resetLocalState => t.shellTextResetLocalState;
+  String get importFromFile => t.shellTextImportFromFile;
+  String get exportSavedProfile => t.shellTextExportSavedProfile;
+  String get pasteEnvelope => t.shellTextPasteEnvelope;
+  String get copyText => t.shellTextCopyText;
+  String get saveFile => t.shellTextSaveFile;
+  String get shareText => t.shellTextShareText;
+  String get shareFile => t.shellTextShareFile;
+  String get previewImport => t.shellTextPreviewImport;
+  String get importProfile => t.shellTextImportProfile;
+  String get portableProfileJson => t.shellTextPortableProfileJson;
+  String get portableProfileEnvelope => t.shellTextPortableProfileEnvelope;
+  String get noManagedProvidersAvailableYet =>
+      t.shellTextNoManagedProvidersAvailableYet;
+  String get selectedProviderNotAdvertisedByConnectedHost =>
+      t.shellTextSelectedProviderNotAdvertisedByConnectedHost;
+  String get selectedProviderNotAdvertisedByConnectedMobileHost =>
+      t.shellTextSelectedProviderNotAdvertisedByConnectedMobileHost;
   String savedProfile(String profileLabel) =>
-      _pick('Saved profile $profileLabel.', 'Профиль $profileLabel сохранен.');
-  String savedMobileProfile(String profileLabel) => _pick(
-    'Saved mobile profile $profileLabel.',
-    'Мобильный профиль $profileLabel сохранен.',
-  );
+      t.shellTextSavedProfile(profileLabel: profileLabel);
+  String savedMobileProfile(String profileLabel) =>
+      t.shellTextSavedMobileProfile(profileLabel: profileLabel);
   String deletedProfile(String profileId) =>
-      _pick('Deleted profile $profileId.', 'Профиль $profileId удален.');
-  String deletedMobileProfile(String profileId) => _pick(
-    'Deleted mobile profile $profileId.',
-    'Мобильный профиль $profileId удален.',
-  );
-  String savedManagedProvider(String providerLabel) => _pick(
-    'Saved managed provider $providerLabel.',
-    'Управляемый провайдер $providerLabel сохранен.',
-  );
-  String deletedManagedProvider(String providerId) => _pick(
-    'Deleted managed provider $providerId.',
-    'Управляемый провайдер $providerId удален.',
-  );
-  String get saveOrSelectProfileBeforeExport => _pick(
-    'Save or select a profile before exporting it.',
-    'Сохраните профиль или выберите уже сохраненный профиль перед экспортом.',
-  );
-  String get selectedProfileDependsOnMissingManagedProviderSnapshot => _pick(
-    'The selected profile depends on a managed provider snapshot that is no longer available locally.',
-    'Выбранный профиль зависит от снимка управляемого провайдера, который больше недоступен локально.',
-  );
-  String copiedPortableProfile(String profileLabel) => _pick(
-    'Copied portable profile $profileLabel.',
-    'Переносимый профиль $profileLabel скопирован.',
-  );
-  String copiedSecretBearingPortableProfile(String profileLabel) => _pick(
-    'Copied secret-bearing portable profile $profileLabel. Treat the payload like a credential.',
-    'Скопирован переносимый профиль с секретами $profileLabel. Относитесь к этому пакету как к учетным данным.',
-  );
-  String savedPortableProfile(String profileLabel, String path) => _pick(
-    'Saved portable profile $profileLabel to $path.',
-    'Переносимый профиль $profileLabel сохранен в $path.',
-  );
+      t.shellTextDeletedProfile(profileId: profileId);
+  String deletedMobileProfile(String profileId) =>
+      t.shellTextDeletedMobileProfile(profileId: profileId);
+  String savedManagedProvider(String providerLabel) =>
+      t.shellTextSavedManagedProvider(providerLabel: providerLabel);
+  String deletedManagedProvider(String providerId) =>
+      t.shellTextDeletedManagedProvider(providerId: providerId);
+  String get saveOrSelectProfileBeforeExport =>
+      t.shellTextSaveOrSelectProfileBeforeExport;
+  String get selectedProfileDependsOnMissingManagedProviderSnapshot =>
+      t.shellTextSelectedProfileDependsOnMissingManagedProviderSnapshot;
+  String copiedPortableProfile(String profileLabel) =>
+      t.shellTextCopiedPortableProfile(profileLabel: profileLabel);
+  String copiedSecretBearingPortableProfile(String profileLabel) =>
+      t.shellTextCopiedSecretBearingPortableProfile(profileLabel: profileLabel);
+  String savedPortableProfile(String profileLabel, String path) =>
+      t.shellTextSavedPortableProfile(profileLabel: profileLabel, path: path);
   String savedSecretBearingPortableProfile(String profileLabel, String path) =>
-      _pick(
-        'Saved secret-bearing portable profile $profileLabel to $path.',
-        'Переносимый профиль с секретами $profileLabel сохранен в $path.',
+      t.shellTextSavedSecretBearingPortableProfile(
+        profileLabel: profileLabel,
+        path: path,
       );
-  String sharedPortableProfileAsText(String profileLabel) => _pick(
-    'Shared portable profile $profileLabel as text.',
-    'Переносимый профиль $profileLabel отправлен как текст.',
-  );
-  String sharedSecretBearingPortableProfileAsText(String profileLabel) => _pick(
-    'Shared secret-bearing portable profile $profileLabel as text.',
-    'Переносимый профиль с секретами $profileLabel отправлен как текст.',
-  );
-  String sharedPortableProfileAsFile(String profileLabel) => _pick(
-    'Shared portable profile $profileLabel as a file.',
-    'Переносимый профиль $profileLabel отправлен как файл.',
-  );
-  String sharedSecretBearingPortableProfileAsFile(String profileLabel) => _pick(
-    'Shared secret-bearing portable profile $profileLabel as a file.',
-    'Переносимый профиль с секретами $profileLabel отправлен как файл.',
-  );
-  String importedProfile(String profileLabel) => _pick(
-    'Imported profile $profileLabel.',
-    'Профиль $profileLabel импортирован.',
-  );
-  String importedSecretBearingProfile(String profileLabel) => _pick(
-    'Imported secret-bearing profile $profileLabel. Review provider input before sharing it further.',
-    'Импортирован профиль с секретами $profileLabel. Проверьте ввод провайдера, прежде чем делиться им дальше.',
-  );
+  String sharedPortableProfileAsText(String profileLabel) =>
+      t.shellTextSharedPortableProfileAsText(profileLabel: profileLabel);
+  String sharedSecretBearingPortableProfileAsText(String profileLabel) =>
+      t.shellTextSharedSecretBearingPortableProfileAsText(
+        profileLabel: profileLabel,
+      );
+  String sharedPortableProfileAsFile(String profileLabel) =>
+      t.shellTextSharedPortableProfileAsFile(profileLabel: profileLabel);
+  String sharedSecretBearingPortableProfileAsFile(String profileLabel) =>
+      t.shellTextSharedSecretBearingPortableProfileAsFile(
+        profileLabel: profileLabel,
+      );
+  String importedProfile(String profileLabel) =>
+      t.shellTextImportedProfile(profileLabel: profileLabel);
+  String importedSecretBearingProfile(String profileLabel) =>
+      t.shellTextImportedSecretBearingProfile(profileLabel: profileLabel);
   String startedSession(String sessionId) =>
-      _pick('Started session $sessionId.', 'Сессия $sessionId запущена.');
-  String startedMobileSession(String sessionId) => _pick(
-    'Started mobile session $sessionId.',
-    'Мобильная сессия $sessionId запущена.',
-  );
+      t.shellTextStartedSession(sessionId: sessionId);
+  String startedMobileSession(String sessionId) =>
+      t.shellTextStartedMobileSession(sessionId: sessionId);
   String stoppedSession(String sessionId) =>
-      _pick('Stopped session $sessionId.', 'Сессия $sessionId остановлена.');
-  String managedProviderNoLongerAvailable(String providerId) => _pick(
-    'Managed provider $providerId is no longer available.',
-    'Управляемый провайдер $providerId больше недоступен.',
-  );
-  String appliedManagedProviderToActiveProfileDraft(
-    String providerLabel,
-  ) => _pick(
-    'Applied managed provider $providerLabel to the active profile draft.',
-    'Управляемый провайдер $providerLabel применен к активному черновику профиля.',
-  );
+      t.shellTextStoppedSession(sessionId: sessionId);
+  String managedProviderNoLongerAvailable(String providerId) =>
+      t.shellTextManagedProviderNoLongerAvailable(providerId: providerId);
+  String appliedManagedProviderToActiveProfileDraft(String providerLabel) =>
+      t.shellTextAppliedManagedProviderToActiveProfileDraft(
+        providerLabel: providerLabel,
+      );
   String appliedManagedProviderToActiveMobileProfileDraft(
     String providerLabel,
-  ) => _pick(
-    'Applied managed provider $providerLabel to the active mobile profile draft.',
-    'Управляемый провайдер $providerLabel применен к активному черновику мобильного профиля.',
+  ) => t.shellTextAppliedManagedProviderToActiveMobileProfileDraft(
+    providerLabel: providerLabel,
   );
-  String seededManagedProviderDraftFromPreset(String presetTitle) => _pick(
-    'Seeded a new managed provider draft from the $presetTitle preset.',
-    'Новый черновик управляемого провайдера создан из пресета $presetTitle.',
-  );
-  String cancelledResolution(String resolutionId) => _pick(
-    'Cancelled resolution $resolutionId.',
-    'Разрешение $resolutionId отменено.',
-  );
-  String cancelledMobileResolution(String resolutionId) => _pick(
-    'Cancelled mobile resolution $resolutionId.',
-    'Мобильное разрешение $resolutionId отменено.',
-  );
-  String startedSessionFromResolution(
-    String sessionId,
-    String resolutionId,
-  ) => _pick(
-    'Started session $sessionId from resolution $resolutionId. Ready is reported only after runtime startup succeeds.',
-    'Сессия $sessionId запущена из разрешения $resolutionId. Готовность будет показана только после успешного запуска рантайма.',
-  );
+  String seededManagedProviderDraftFromPreset(String presetTitle) =>
+      t.shellTextSeededManagedProviderDraftFromPreset(presetTitle: presetTitle);
+  String cancelledResolution(String resolutionId) =>
+      t.shellTextCancelledResolution(resolutionId: resolutionId);
+  String cancelledMobileResolution(String resolutionId) =>
+      t.shellTextCancelledMobileResolution(resolutionId: resolutionId);
+  String startedSessionFromResolution(String sessionId, String resolutionId) =>
+      t.shellTextStartedSessionFromResolution(
+        sessionId: sessionId,
+        resolutionId: resolutionId,
+      );
   String startedMobileSessionFromResolution(
     String sessionId,
     String resolutionId,
-  ) => _pick(
-    'Started mobile session $sessionId from resolution $resolutionId. Ready is reported only after runtime startup succeeds.',
-    'Мобильная сессия $sessionId запущена из разрешения $resolutionId. Готовность будет показана только после успешного запуска рантайма.',
+  ) => t.shellTextStartedMobileSessionFromResolution(
+    sessionId: sessionId,
+    resolutionId: resolutionId,
   );
-  String copiedHandoffLink(String resolutionId, String expiresAt) => _pick(
-    'Copied handoff link for $resolutionId. Expires $expiresAt.',
-    'Ссылка handoff для $resolutionId скопирована. Истекает $expiresAt.',
-  );
-  String sharedHandoffLink(String resolutionId, String expiresAt) => _pick(
-    'Shared handoff link for $resolutionId. Expires $expiresAt.',
-    'Ссылка handoff для $resolutionId отправлена. Истекает $expiresAt.',
-  );
-  String resolutionNoLongerAvailable(String resolutionId) => _pick(
-    'Resolution $resolutionId is no longer available.',
-    'Разрешение $resolutionId больше недоступно.',
-  );
+  String copiedHandoffLink(String resolutionId, String expiresAt) =>
+      t.shellTextCopiedHandoffLink(
+        resolutionId: resolutionId,
+        expiresAt: expiresAt,
+      );
+  String sharedHandoffLink(String resolutionId, String expiresAt) =>
+      t.shellTextSharedHandoffLink(
+        resolutionId: resolutionId,
+        expiresAt: expiresAt,
+      );
+  String resolutionNoLongerAvailable(String resolutionId) =>
+      t.shellTextResolutionNoLongerAvailable(resolutionId: resolutionId);
   String resolutionDoesNotAdvertiseAction(
     String resolutionId,
     String actionLabel,
-  ) => _pick(
-    'Resolution $resolutionId does not advertise action "$actionLabel".',
-    'Разрешение $resolutionId не объявляет действие "$actionLabel".',
+  ) => t.shellTextResolutionDoesNotAdvertiseAction(
+    resolutionId: resolutionId,
+    actionLabel: actionLabel,
   );
   String resolutionHasNoBrowserTarget(
     String resolutionId,
     String actionLabel,
-  ) => _pick(
-    'Resolution $resolutionId does not expose a browser target for action "$actionLabel".',
-    'Разрешение $resolutionId не предоставляет браузерную цель для действия "$actionLabel".',
+  ) => t.shellTextResolutionHasNoBrowserTarget(
+    resolutionId: resolutionId,
+    actionLabel: actionLabel,
   );
   String openedResolutionAction(String resolutionId, String actionLabel) =>
-      _pick(
-        'Opened action "$actionLabel" for $resolutionId.',
-        'Открыто действие "$actionLabel" для $resolutionId.',
+      t.shellTextOpenedResolutionAction(
+        actionLabel: actionLabel,
+        resolutionId: resolutionId,
       );
   String failedToOpenResolutionAction(
     String resolutionId,
     String actionLabel,
-  ) => _pick(
-    'Failed to open action "$actionLabel" for $resolutionId.',
-    'Не удалось открыть действие "$actionLabel" для $resolutionId.',
+  ) => t.shellTextFailedToOpenResolutionAction(
+    actionLabel: actionLabel,
+    resolutionId: resolutionId,
   );
-  String cancelledChallenge(String challengeId) => _pick(
-    'Cancelled challenge $challengeId.',
-    'Проверка $challengeId отменена.',
-  );
-  String exportedDiagnostics(String path) => _pick(
-    'Exported diagnostics to $path.',
-    'Диагностика экспортирована в $path.',
-  );
-  String get eventStreamClosed =>
-      _pick('event stream closed', 'поток событий закрыт');
-  String get localHostNotReady =>
-      _pick('Local host is not ready.', 'Локальный хост не готов.');
-  String failedToRestoreDesktopShellState(Object error) => _pick(
-    'Failed to restore desktop shell state: $error',
-    'Не удалось восстановить состояние настольной оболочки: $error',
-  );
-  String failedToPersistDesktopShellState(Object error) => _pick(
-    'Failed to persist desktop shell state: $error',
-    'Не удалось сохранить состояние настольной оболочки: $error',
-  );
-  String failedToPersistMobileShellState(Object error) => _pick(
-    'Failed to persist mobile shell state: $error',
-    'Не удалось сохранить состояние мобильной оболочки: $error',
-  );
-  String platformTunnelReadyForLocalHost(String modeLabel) => _pick(
-    '$modeLabel is ready for the local host tunnel path.',
-    '$modeLabel готов для туннельного пути локального хоста.',
-  );
+  String cancelledChallenge(String challengeId) =>
+      t.shellTextCancelledChallenge(challengeId: challengeId);
+  String exportedDiagnostics(String path) =>
+      t.shellTextExportedDiagnostics(path: path);
+  String get eventStreamClosed => t.shellTextEventStreamClosed;
+  String get localHostNotReady => t.shellTextLocalHostNotReady;
+  String failedToRestoreDesktopShellState(Object error) =>
+      t.shellTextFailedToRestoreDesktopShellState(error: error);
+  String failedToPersistDesktopShellState(Object error) =>
+      t.shellTextFailedToPersistDesktopShellState(error: error);
+  String failedToPersistMobileShellState(Object error) =>
+      t.shellTextFailedToPersistMobileShellState(error: error);
+  String platformTunnelReadyForLocalHost(String modeLabel) =>
+      t.shellTextPlatformTunnelReadyForLocalHost(modeLabel: modeLabel);
   String platformTunnelBlocked({
     required String modeLabel,
     required String stageLabel,
@@ -250,16 +180,15 @@ class ShellText {
     String? message,
   }) {
     final buffer = StringBuffer(
-      _pick(
-        '$modeLabel blocked at $stageLabel.',
-        '$modeLabel заблокирован на этапе $stageLabel.',
+      t.shellTextPlatformTunnelBlockedBase(
+        modeLabel: modeLabel,
+        stageLabel: stageLabel,
       ),
     );
     if (prerequisiteLabel != null && prerequisiteLabel.isNotEmpty) {
       buffer.write(
-        _pick(
-          ' Missing prerequisite: $prerequisiteLabel.',
-          ' Отсутствует предусловие: $prerequisiteLabel.',
+        t.shellTextPlatformTunnelBlockedMissingPrerequisite(
+          prerequisiteLabel: prerequisiteLabel,
         ),
       );
     }
@@ -273,1079 +202,694 @@ class ShellText {
   String startedResolutionForProvider(
     String resolutionId,
     String providerName,
-  ) => _pick(
-    'Started resolution $resolutionId for $providerName.',
-    'Разрешение $resolutionId для $providerName запущено.',
+  ) => t.shellTextStartedResolutionForProvider(
+    resolutionId: resolutionId,
+    providerName: providerName,
   );
   String startedResolutionForProviderWithExternalBrowser(
     String resolutionId,
     String providerName,
-  ) => _pick(
-    'Started resolution $resolutionId for $providerName. Finish the required external browser steps before expecting a resolved artifact.',
-    'Разрешение $resolutionId для $providerName запущено. Завершите обязательные шаги во внешнем браузере, прежде чем ожидать готовый артефакт.',
+  ) => t.shellTextStartedResolutionForProviderWithExternalBrowser(
+    resolutionId: resolutionId,
+    providerName: providerName,
   );
   String startedResolutionForProviderWithBrowserContinuation(
     String resolutionId,
     String providerName,
-  ) => _pick(
-    'Started resolution $resolutionId for $providerName. Continue any browser challenge flow before expecting a resolved artifact.',
-    'Разрешение $resolutionId для $providerName запущено. Завершите возможный браузерный шаг проверки, прежде чем ожидать готовый артефакт.',
+  ) => t.shellTextStartedResolutionForProviderWithBrowserContinuation(
+    resolutionId: resolutionId,
+    providerName: providerName,
   );
-  String continuedChallenge(String challengeId) => _pick(
-    'Continued challenge $challengeId.',
-    'Проверка $challengeId продолжена.',
-  );
+  String continuedChallenge(String challengeId) =>
+      t.shellTextContinuedChallenge(challengeId: challengeId);
   String continuedChallengeWithExternalBrowser(
     String challengeId,
     String providerName,
-  ) => _pick(
-    'Continued challenge $challengeId. Finish the external browser flow for $providerName before expecting the next state transition.',
-    'Проверка $challengeId продолжена. Завершите внешний браузерный шаг для $providerName, прежде чем ожидать следующий переход состояния.',
+  ) => t.shellTextContinuedChallengeWithExternalBrowser(
+    challengeId: challengeId,
+    providerName: providerName,
   );
   String continuedChallengeForResolution(
     String challengeId,
     String providerName,
-  ) => _pick(
-    'Continued challenge $challengeId. Finish the provider flow for $providerName before expecting a resolved artifact.',
-    'Проверка $challengeId продолжена. Завершите поток провайдера для $providerName, прежде чем ожидать готовый артефакт.',
+  ) => t.shellTextContinuedChallengeForResolution(
+    challengeId: challengeId,
+    providerName: providerName,
   );
   String continuedChallengeForSession(
     String challengeId,
     String providerName,
-  ) => _pick(
-    'Continued challenge $challengeId. Finish the provider flow for $providerName before expecting the session to reach ready.',
-    'Проверка $challengeId продолжена. Завершите поток провайдера для $providerName, прежде чем ожидать перехода сессии в состояние готовности.',
+  ) => t.shellTextContinuedChallengeForSession(
+    challengeId: challengeId,
+    providerName: providerName,
   );
   String desktopProviderSettingsRuntimeUnsupported({
     required String providerName,
     required String error,
-  }) => _pick(
-    'The connected desktop shell cannot render provider settings for $providerName: $error',
-    'Подключенная настольная оболочка не может отрисовать настройки провайдера для $providerName: $error',
+  }) => t.shellTextDesktopProviderSettingsRuntimeUnsupported(
+    providerName: providerName,
+    error: error,
   );
   String mobileProviderSettingsRuntimeUnsupported({
     required String providerName,
     required String error,
-  }) => _pick(
-    'The connected mobile shell cannot render provider settings for $providerName: $error',
-    'Подключенная мобильная оболочка не может отрисовать настройки провайдера для $providerName: $error',
+  }) => t.shellTextMobileProviderSettingsRuntimeUnsupported(
+    providerName: providerName,
+    error: error,
   );
-  String get selectedManagedProviderFamilyNotInSupportedCatalog => _pick(
-    'The selected managed provider family is not part of the supported app catalog.',
-    'Выбранное семейство управляемого провайдера не входит в поддерживаемый каталог приложения.',
-  );
-  String get selectedManagedProviderNotInSupportedCatalog => _pick(
-    'The selected managed provider is not part of the supported app catalog.',
-    'Выбранный управляемый провайдер не входит в поддерживаемый каталог приложения.',
-  );
-  String get managedProviderNotInSupportedCatalog => _pick(
-    'This managed provider is not part of the supported app catalog.',
-    'Этот управляемый провайдер не входит в поддерживаемый каталог приложения.',
-  );
+  String get selectedManagedProviderFamilyNotInSupportedCatalog =>
+      t.shellTextSelectedManagedProviderFamilyNotInSupportedCatalog;
+  String get selectedManagedProviderNotInSupportedCatalog =>
+      t.shellTextSelectedManagedProviderNotInSupportedCatalog;
+  String get managedProviderNotInSupportedCatalog =>
+      t.shellTextManagedProviderNotInSupportedCatalog;
   String desktopReusableSettingsRuntimeUnsupported({
     required String providerName,
     required String error,
-  }) => _pick(
-    'The connected desktop shell cannot render reusable settings for $providerName: $error',
-    'Подключенная настольная оболочка не может отрисовать переиспользуемые настройки для $providerName: $error',
+  }) => t.shellTextDesktopReusableSettingsRuntimeUnsupported(
+    providerName: providerName,
+    error: error,
   );
   String mobileReusableSettingsRuntimeUnsupported({
     required String providerName,
     required String error,
-  }) => _pick(
-    'The connected mobile shell cannot render reusable settings for $providerName: $error',
-    'Подключенная мобильная оболочка не может отрисовать переиспользуемые настройки для $providerName: $error',
+  }) => t.shellTextMobileReusableSettingsRuntimeUnsupported(
+    providerName: providerName,
+    error: error,
   );
-  String connectedHostDoesNotAdvertiseProviderFamilyYet(
-    String providerTitle,
-  ) => _pick(
-    'The connected host does not advertise the $providerTitle provider family yet.',
-    'Подключенный хост пока не объявляет семейство провайдера $providerTitle.',
-  );
-  String get selectedTemplateFamilyNotInSupportedCatalog => _pick(
-    'The selected template family is not part of the supported app catalog.',
-    'Выбранное семейство шаблона не входит в поддерживаемый каталог приложения.',
-  );
-  String get templateNotInSupportedCatalog => _pick(
-    'This template is not part of the supported app catalog.',
-    'Этот шаблон не входит в поддерживаемый каталог приложения.',
-  );
+  String connectedHostDoesNotAdvertiseProviderFamilyYet(String providerTitle) =>
+      t.shellTextConnectedHostDoesNotAdvertiseProviderFamilyYet(
+        providerTitle: providerTitle,
+      );
+  String get selectedTemplateFamilyNotInSupportedCatalog =>
+      t.shellTextSelectedTemplateFamilyNotInSupportedCatalog;
+  String get templateNotInSupportedCatalog =>
+      t.shellTextTemplateNotInSupportedCatalog;
   String mobileTemplateRuntimeUnsupported({
     required String providerName,
     required String error,
-  }) => _pick(
-    'The connected mobile shell cannot render reusable settings for $providerName: $error',
-    'Подключенная мобильная оболочка не может отрисовать переиспользуемые настройки для $providerName: $error',
+  }) => t.shellTextMobileTemplateRuntimeUnsupported(
+    providerName: providerName,
+    error: error,
   );
-  String get localHostShutdownRequested => _pick(
-    'Local host shutdown requested.',
-    'Запрошено завершение локального хоста.',
-  );
-  String get noCompatibleLocalHostFound => _pick(
-    'No compatible local host was found and no launch candidates are configured.',
-    'Совместимый локальный хост не найден, и кандидаты на запуск не настроены.',
-  );
-  String get localHostLaunchFailedWithoutReportedError => _pick(
-    'Local host launch failed without a reported error.',
-    'Запуск локального хоста завершился неудачно без сообщенной ошибки.',
-  );
-  String localHostLaunchFailed(Object error) => _pick(
-    'Local host launch failed: $error',
-    'Не удалось запустить локальный хост: $error',
-  );
-  String connectedToLocalHost(String listenAddress) => _pick(
-    'Connected to local host $listenAddress',
-    'Подключено к локальному хосту $listenAddress',
-  );
-  String launchedLocalHost(String description, String listenAddress) => _pick(
-    'Launched $description on $listenAddress',
-    'Запущен $description на $listenAddress',
-  );
+  String get localHostShutdownRequested =>
+      t.shellTextLocalHostShutdownRequested;
+  String get noCompatibleLocalHostFound =>
+      t.shellTextNoCompatibleLocalHostFound;
+  String get localHostLaunchFailedWithoutReportedError =>
+      t.shellTextLocalHostLaunchFailedWithoutReportedError;
+  String localHostLaunchFailed(Object error) =>
+      t.shellTextLocalHostLaunchFailed(error: error);
+  String connectedToLocalHost(String listenAddress) =>
+      t.shellTextConnectedToLocalHost(listenAddress: listenAddress);
+  String launchedLocalHost(String description, String listenAddress) =>
+      t.shellTextLaunchedLocalHost(
+        description: description,
+        listenAddress: listenAddress,
+      );
   String sidecarLaunchCandidateEnvPath() =>
-      _pick('GUI_SHELL_CLIENTD_PATH', 'GUI_SHELL_CLIENTD_PATH');
-  String get sidecarLaunchCandidateNextToAppExecutable => _pick(
-    'sidecar next to app executable',
-    'sidecar рядом с исполняемым файлом приложения',
-  );
+      t.shellTextSidecarLaunchCandidateEnvPath;
+  String get sidecarLaunchCandidateNextToAppExecutable =>
+      t.shellTextSidecarLaunchCandidateNextToAppExecutable;
   String get sidecarLaunchCandidateBundledFrameworks =>
-      _pick('bundled sidecar in Frameworks', 'встроенный sidecar в Frameworks');
+      t.shellTextSidecarLaunchCandidateBundledFrameworks;
   String get sidecarLaunchCandidateFromPath =>
-      _pick('clientd from PATH', 'clientd из PATH');
-  String get sidecarLaunchCandidateRepoLocalGoRun => _pick(
-    'repo-local go run fallback',
-    'локальный repo fallback через go run',
-  );
-  String sidecarExitedBeforeReady(String description, int exitCode) => _pick(
-    '$description exited with code $exitCode before the control plane became ready.',
-    '$description завершился с кодом $exitCode до того, как control plane стал готов.',
-  );
+      t.shellTextSidecarLaunchCandidateFromPath;
+  String get sidecarLaunchCandidateRepoLocalGoRun =>
+      t.shellTextSidecarLaunchCandidateRepoLocalGoRun;
+  String sidecarExitedBeforeReady(String description, int exitCode) =>
+      t.shellTextSidecarExitedBeforeReady(
+        description: description,
+        exitCode: exitCode,
+      );
   String providerExpectsLinkEntryOnlyDesktop({
     required String providerName,
     required String inputKind,
-  }) => _pick(
-    '$providerName expects $inputKind input. This desktop shell currently supports link entry only.',
-    '$providerName ожидает ввод типа $inputKind. Эта настольная оболочка сейчас поддерживает только ввод ссылки.',
+  }) => t.shellTextProviderExpectsLinkEntryOnlyDesktop(
+    providerName: providerName,
+    inputKind: inputKind,
   );
-  String savedTemplate(String templateLabel) => _pick(
-    'Saved template $templateLabel.',
-    'Шаблон $templateLabel сохранен.',
-  );
+  String savedTemplate(String templateLabel) =>
+      t.shellTextSavedTemplate(templateLabel: templateLabel);
   String deletedTemplate(String templateId) =>
-      _pick('Deleted template $templateId.', 'Шаблон $templateId удален.');
-  String templateNoLongerAvailable(String templateId) => _pick(
-    'Template $templateId is no longer available.',
-    'Шаблон $templateId больше недоступен.',
-  );
-  String seededManagedProviderDraftFromTemplate(String templateLabel) => _pick(
-    'Seeded a new managed provider draft from the $templateLabel template.',
-    'Новый черновик управляемого провайдера создан из шаблона $templateLabel.',
-  );
-  String get clearedLocalMobileShellState => _pick(
-    'Cleared local mobile shell state.',
-    'Локальное состояние мобильной оболочки очищено.',
-  );
-  String failedToClearLocalMobileShellState(Object error) => _pick(
-    'Failed to clear local mobile shell state: $error',
-    'Не удалось очистить локальное состояние мобильной оболочки: $error',
-  );
+      t.shellTextDeletedTemplate(templateId: templateId);
+  String templateNoLongerAvailable(String templateId) =>
+      t.shellTextTemplateNoLongerAvailable(templateId: templateId);
+  String seededManagedProviderDraftFromTemplate(String templateLabel) =>
+      t.shellTextSeededManagedProviderDraftFromTemplate(
+        templateLabel: templateLabel,
+      );
+  String get clearedLocalMobileShellState =>
+      t.shellTextClearedLocalMobileShellState;
+  String failedToClearLocalMobileShellState(Object error) =>
+      t.shellTextFailedToClearLocalMobileShellState(error: error);
   String providerExpectsLinkEntryOnlyMobile({
     required String providerName,
     required String inputKind,
-  }) => _pick(
-    '$providerName expects $inputKind input. This mobile shell currently supports link entry only.',
-    '$providerName ожидает ввод типа $inputKind. Эта мобильная оболочка сейчас поддерживает только ввод ссылки.',
+  }) => t.shellTextProviderExpectsLinkEntryOnlyMobile(
+    providerName: providerName,
+    inputKind: inputKind,
   );
   String resolutionUnavailableForPlatformTunnel({
     required String modeLabel,
     required String resolutionId,
     required String stage,
     required String message,
-  }) => _pick(
-    'Cannot start $modeLabel because resolution $resolutionId ended at $stage: $message',
-    'Нельзя запустить $modeLabel, потому что разрешение $resolutionId завершилось на этапе $stage: $message',
+  }) => t.shellTextResolutionUnavailableForPlatformTunnel(
+    modeLabel: modeLabel,
+    resolutionId: resolutionId,
+    stage: stage,
+    message: message,
   );
-  String challengeMustCompleteBeforeStarting(String modeLabel) => _pick(
-    'Complete the current provider challenge before starting $modeLabel.',
-    'Завершите текущую проверку провайдера, прежде чем запускать $modeLabel.',
-  );
-  String waitForProviderResolutionBeforeStarting(String modeLabel) => _pick(
-    'Wait for the current provider resolution before starting $modeLabel.',
-    'Дождитесь завершения текущего разрешения провайдера, прежде чем запускать $modeLabel.',
-  );
+  String challengeMustCompleteBeforeStarting(String modeLabel) =>
+      t.shellTextChallengeMustCompleteBeforeStarting(modeLabel: modeLabel);
+  String waitForProviderResolutionBeforeStarting(String modeLabel) =>
+      t.shellTextWaitForProviderResolutionBeforeStarting(modeLabel: modeLabel);
   String startedMobileResolutionForProvider(
     String resolutionId,
     String providerName,
-  ) => _pick(
-    'Started mobile resolution $resolutionId for $providerName.',
-    'Мобильное разрешение $resolutionId для $providerName запущено.',
+  ) => t.shellTextStartedMobileResolutionForProvider(
+    resolutionId: resolutionId,
+    providerName: providerName,
   );
   String startedMobileResolutionForProviderWithExternalBrowser(
     String resolutionId,
     String providerName,
-  ) => _pick(
-    'Started mobile resolution $resolutionId for $providerName. Expect an external browser step when the provider requires it.',
-    'Мобильное разрешение $resolutionId для $providerName запущено. Ожидайте шаг во внешнем браузере, если он требуется провайдеру.',
+  ) => t.shellTextStartedMobileResolutionForProviderWithExternalBrowser(
+    resolutionId: resolutionId,
+    providerName: providerName,
   );
   String startedMobileResolutionForProviderWithBrowserContinuation(
     String resolutionId,
     String providerName,
-  ) => _pick(
-    'Started mobile resolution $resolutionId for $providerName. Complete any browser continuation before expecting a resolved artifact.',
-    'Мобильное разрешение $resolutionId для $providerName запущено. Завершите возможное продолжение в браузере, прежде чем ожидать готовый артефакт.',
+  ) => t.shellTextStartedMobileResolutionForProviderWithBrowserContinuation(
+    resolutionId: resolutionId,
+    providerName: providerName,
   );
   String resolutionStartedThenCompleteChallengeBeforeStarting(
     String startedNotice,
     String modeLabel,
-  ) => _pick(
-    '$startedNotice Complete the current provider challenge before starting $modeLabel.',
-    '$startedNotice Завершите текущую проверку провайдера, прежде чем запускать $modeLabel.',
+  ) => t.shellTextResolutionStartedThenCompleteChallengeBeforeStarting(
+    startedNotice: startedNotice,
+    modeLabel: modeLabel,
   );
-  String receivedPortableProfileForReview(String profileLabel) => _pick(
-    'Received portable profile $profileLabel. Review it before importing.',
-    'Получен переносимый профиль $profileLabel. Просмотрите его перед импортом.',
-  );
-  String receivedSecretBearingPortableProfileForReview(
-    String profileLabel,
-  ) => _pick(
-    'Received a secret-bearing portable profile $profileLabel. Review it before importing.',
-    'Получен переносимый профиль с секретами $profileLabel. Просмотрите его перед импортом.',
-  );
-  String connectedToMobileHostBridge(String baseUri) => _pick(
-    'Connected to mobile host bridge $baseUri',
-    'Подключено к мосту мобильного хоста $baseUri',
-  );
-  String get challengeHasNoBrowserHandoffUrl => _pick(
-    'This challenge does not expose a browser handoff URL.',
-    'Эта проверка не предоставляет URL для передачи в браузер.',
-  );
-  String openedMobileBrowserHandoff(String challengeKind) => _pick(
-    'Opened mobile browser handoff for $challengeKind. Return here after the browser step.',
-    'Открыт переход в мобильный браузер для $challengeKind. Вернитесь сюда после шага в браузере.',
-  );
-  String get failedToOpenMobileBrowserHandoffUrl => _pick(
-    'Failed to open the mobile browser handoff URL.',
-    'Не удалось открыть URL передачи в мобильный браузер.',
-  );
+  String receivedPortableProfileForReview(String profileLabel) =>
+      t.shellTextReceivedPortableProfileForReview(profileLabel: profileLabel);
+  String receivedSecretBearingPortableProfileForReview(String profileLabel) =>
+      t.shellTextReceivedSecretBearingPortableProfileForReview(
+        profileLabel: profileLabel,
+      );
+  String connectedToMobileHostBridge(String baseUri) =>
+      t.shellTextConnectedToMobileHostBridge(baseUri: baseUri);
+  String get challengeHasNoBrowserHandoffUrl =>
+      t.shellTextChallengeHasNoBrowserHandoffUrl;
+  String openedMobileBrowserHandoff(String challengeKind) =>
+      t.shellTextOpenedMobileBrowserHandoff(challengeKind: challengeKind);
+  String get failedToOpenMobileBrowserHandoffUrl =>
+      t.shellTextFailedToOpenMobileBrowserHandoffUrl;
   String platformTunnelDisconnected(String modeLabel) =>
-      _pick('$modeLabel disconnected.', '$modeLabel отключен.');
-  String selectAtLeastOneIncludedApp(String modeLabel) => _pick(
-    'Select at least one app before starting $modeLabel in included-apps mode.',
-    'Выберите хотя бы одно приложение перед запуском $modeLabel в режиме включенных приложений.',
-  );
-  String selectAtLeastOneExcludedApp(String modeLabel) => _pick(
-    'Select at least one app before starting $modeLabel in excluded-apps mode.',
-    'Выберите хотя бы одно приложение перед запуском $modeLabel в режиме исключенных приложений.',
-  );
-  String get selectedMobileModeNotAdvertisedByConnectedHost => _pick(
-    'The selected mobile mode is not advertised by the connected host.',
-    'Выбранный мобильный режим не объявлен подключенным хостом.',
-  );
-  String modeDoesNotAdvertiseSupportedExecutionPath(String modeLabel) => _pick(
-    '$modeLabel does not advertise a supported execution path yet.',
-    '$modeLabel пока не объявляет поддерживаемый путь выполнения.',
-  );
-  String selectExecutionPathBeforeStarting(String modeLabel) => _pick(
-    'Select an execution path before starting $modeLabel.',
-    'Выберите путь выполнения перед запуском $modeLabel.',
-  );
-  String get resetLocalMobileShellStateBeforeReconnecting => _pick(
-    'Reset local mobile shell state before reconnecting.',
-    'Сбросьте локальное состояние мобильной оболочки перед переподключением.',
-  );
+      t.shellTextPlatformTunnelDisconnected(modeLabel: modeLabel);
+  String selectAtLeastOneIncludedApp(String modeLabel) =>
+      t.shellTextSelectAtLeastOneIncludedApp(modeLabel: modeLabel);
+  String selectAtLeastOneExcludedApp(String modeLabel) =>
+      t.shellTextSelectAtLeastOneExcludedApp(modeLabel: modeLabel);
+  String get selectedMobileModeNotAdvertisedByConnectedHost =>
+      t.shellTextSelectedMobileModeNotAdvertisedByConnectedHost;
+  String modeDoesNotAdvertiseSupportedExecutionPath(String modeLabel) =>
+      t.shellTextModeDoesNotAdvertiseSupportedExecutionPath(
+        modeLabel: modeLabel,
+      );
+  String selectExecutionPathBeforeStarting(String modeLabel) =>
+      t.shellTextSelectExecutionPathBeforeStarting(modeLabel: modeLabel);
+  String get resetLocalMobileShellStateBeforeReconnecting =>
+      t.shellTextResetLocalMobileShellStateBeforeReconnecting;
   String detectedBrowserReturnAndContinuedChallenge(
     String signalLabel,
     String challengeId,
-  ) => _pick(
-    'Detected $signalLabel and continued challenge $challengeId.',
-    'Обнаружен сигнал "$signalLabel", и проверка $challengeId продолжена.',
+  ) => t.shellTextDetectedBrowserReturnAndContinuedChallenge(
+    signalLabel: signalLabel,
+    challengeId: challengeId,
   );
-  String completedInAppBrowserContinuation(String challengeId) => _pick(
-    'Completed the in-app browser continuation for challenge $challengeId.',
-    'Продолжение во встроенном браузере для проверки $challengeId завершено.',
-  );
-  String get resetLocalMobileShellStateBeforeRuntimeControlContinue => _pick(
-    'Reset local mobile shell state before runtime control can continue.',
-    'Сбросьте локальное состояние мобильной оболочки, прежде чем управление рантаймом сможет продолжиться.',
-  );
-  String get appLinkBrowserReturn =>
-      _pick('app-link browser return', 'возврат из браузера по app-link');
-  String get universalLinkBrowserReturn => _pick(
-    'universal-link browser return',
-    'возврат из браузера по universal-link',
-  );
-  String get browserReturnOnAppResume => _pick(
-    'browser return on app resume',
-    'возврат из браузера при возобновлении приложения',
-  );
-  String get browserReturn => _pick('browser return', 'возврат из браузера');
-  String get mobileHostBridgeNotReady => _pick(
-    'Mobile host bridge is not ready.',
-    'Мост мобильного хоста не готов.',
-  );
-  String get nativeMobileHostBridgeDidNotReturnHostConfiguration => _pick(
-    'Native mobile host bridge did not return a host configuration.',
-    'Нативный мост мобильного хоста не вернул конфигурацию хоста.',
-  );
-  String get nativeMobileHostBridgeReturnedEmptyHostUrl => _pick(
-    'Native mobile host bridge returned an empty host URL.',
-    'Нативный мост мобильного хоста вернул пустой URL хоста.',
-  );
-  String nativeMobileHostBridgeReturnedInvalidHostUrl(String baseUrl) => _pick(
-    'Native mobile host bridge returned an invalid host URL: $baseUrl',
-    'Нативный мост мобильного хоста вернул некорректный URL хоста: $baseUrl',
-  );
-  String get nativeMobileHostBridgePluginUnavailable => _pick(
-    'Native mobile host bridge plugin is unavailable.',
-    'Плагин нативного моста мобильного хоста недоступен.',
-  );
-  String failedToResolveMobileHostBridgeFromNativePlatform(
-    Object details,
-  ) => _pick(
-    'Failed to resolve the mobile host bridge from the native platform: $details',
-    'Не удалось определить мост мобильного хоста через нативную платформу: $details',
-  );
+  String completedInAppBrowserContinuation(String challengeId) =>
+      t.shellTextCompletedInAppBrowserContinuation(challengeId: challengeId);
+  String get resetLocalMobileShellStateBeforeRuntimeControlContinue =>
+      t.shellTextResetLocalMobileShellStateBeforeRuntimeControlContinue;
+  String get appLinkBrowserReturn => t.shellTextAppLinkBrowserReturn;
+  String get universalLinkBrowserReturn =>
+      t.shellTextUniversalLinkBrowserReturn;
+  String get browserReturnOnAppResume => t.shellTextBrowserReturnOnAppResume;
+  String get browserReturn => t.shellTextBrowserReturn;
+  String get mobileHostBridgeNotReady => t.shellTextMobileHostBridgeNotReady;
+  String get nativeMobileHostBridgeDidNotReturnHostConfiguration =>
+      t.shellTextNativeMobileHostBridgeDidNotReturnHostConfiguration;
+  String get nativeMobileHostBridgeReturnedEmptyHostUrl =>
+      t.shellTextNativeMobileHostBridgeReturnedEmptyHostUrl;
+  String nativeMobileHostBridgeReturnedInvalidHostUrl(String baseUrl) =>
+      t.shellTextNativeMobileHostBridgeReturnedInvalidHostUrl(baseUrl: baseUrl);
+  String get nativeMobileHostBridgePluginUnavailable =>
+      t.shellTextNativeMobileHostBridgePluginUnavailable;
+  String failedToResolveMobileHostBridgeFromNativePlatform(Object details) =>
+      t.shellTextFailedToResolveMobileHostBridgeFromNativePlatform(
+        details: details,
+      );
+  String get nativeMobileHostBridgePluginUnavailableForPermissionRequests =>
+      t.shellTextNativeMobileHostBridgePluginUnavailableForPermissionRequests;
+  String failedToRequestNativePlatformTunnelPermission(Object details) => t
+      .shellTextFailedToRequestNativePlatformTunnelPermission(details: details);
+  String get nativeMobileHostBridgeReturnedNoWebViewSnapshot =>
+      t.shellTextNativeMobileHostBridgeReturnedNoWebViewSnapshot;
+  String failedToInspectNativeWebView(Object details) =>
+      t.shellTextFailedToInspectNativeWebView(details: details);
+  String get vktpMobileHostUrlInvalid => t.shellTextVktpMobileHostUrlInvalid;
+  String get nativeMobileHostBridgeDidNotProvideControlPlaneEndpoint =>
+      t.shellTextNativeMobileHostBridgeDidNotProvideControlPlaneEndpoint;
+  String get mobileHostBridgeNotConfigured =>
+      t.shellTextMobileHostBridgeNotConfigured;
   String
-  get nativeMobileHostBridgePluginUnavailableForPermissionRequests => _pick(
-    'Native mobile host bridge plugin is unavailable for platform tunnel permission requests.',
-    'Плагин нативного моста мобильного хоста недоступен для запросов разрешения на платформенный туннель.',
-  );
-  String failedToRequestNativePlatformTunnelPermission(Object details) => _pick(
-    'Failed to request native platform tunnel permission: $details',
-    'Не удалось запросить разрешение на платформенный туннель у нативной платформы: $details',
-  );
-  String get nativeMobileHostBridgeReturnedNoWebViewSnapshot => _pick(
-    'Native mobile host bridge returned no WebView snapshot.',
-    'Нативный мост мобильного хоста не вернул снимок WebView.',
-  );
-  String failedToInspectNativeWebView(Object details) => _pick(
-    'Failed to inspect native WebView: $details',
-    'Не удалось проинспектировать нативный WebView: $details',
-  );
-  String get vktpMobileHostUrlInvalid => _pick(
-    'VKTP_MOBILE_HOST_URL is not a valid URI for the mobile host bridge.',
-    'VKTP_MOBILE_HOST_URL не является корректным URI для моста мобильного хоста.',
-  );
-  String get nativeMobileHostBridgeDidNotProvideControlPlaneEndpoint => _pick(
-    'Native mobile host bridge did not provide a control-plane endpoint.',
-    'Нативный мост мобильного хоста не предоставил endpoint control plane.',
-  );
-  String get mobileHostBridgeNotConfigured => _pick(
-    'Mobile host bridge is not configured. Package a compatible loopback host or set VKTP_MOBILE_HOST_URL for development.',
-    'Мост мобильного хоста не настроен. Упакуйте совместимый loopback host или задайте VKTP_MOBILE_HOST_URL для разработки.',
-  );
-  String
-  get nativeMobileHostBridgePluginUnavailableForInstalledAppInventory => _pick(
-    'Native mobile host bridge plugin is unavailable for installed-app inventory.',
-    'Плагин нативного моста мобильного хоста недоступен для инвентаря установленных приложений.',
-  );
-  String failedToListInstalledAppsFromNativePlatform(Object details) => _pick(
-    'Failed to list installed apps from the native platform: $details',
-    'Не удалось получить список установленных приложений от нативной платформы: $details',
-  );
-  String failedToRestoreMobileShellState(Object error) => _pick(
-    'Failed to restore mobile shell state: $error',
-    'Не удалось восстановить состояние мобильной оболочки: $error',
-  );
-  String get providerDidNotReturnStartableArtifact => _pick(
-    'The provider did not return a startable artifact.',
-    'Провайдер не вернул артефакт, пригодный для запуска.',
-  );
-  String loopbackPeerBlockReason(String modeLabel, String peerAddress) => _pick(
-    '$modeLabel still points to loopback peer $peerAddress. Configure an operator-managed remote peer endpoint before starting the mobile VPN path.',
-    '$modeLabel все еще указывает на loopback peer $peerAddress. Настройте оператором управляемый удаленный peer endpoint перед запуском мобильного VPN-пути.',
-  );
-  String get secureProfileSecretsUnavailable => _pick(
-    'Secure profile secrets are unavailable. Restore secure storage or clear the saved mobile shell state.',
-    'Защищенные секреты профилей недоступны. Восстановите secure storage или очистите сохраненное состояние мобильной оболочки.',
-  );
-  String secureProfileSecretsMissing(String profileId) => _pick(
-    'Secure profile secrets are missing for saved profile $profileId.',
-    'Защищенные секреты отсутствуют для сохраненного профиля $profileId.',
-  );
-  String get secureDraftSecretsUnavailable => _pick(
-    'Secure draft secrets are unavailable. Restore secure storage or reset the draft.',
-    'Защищенные секреты черновика недоступны. Восстановите secure storage или сбросьте черновик.',
-  );
+  get nativeMobileHostBridgePluginUnavailableForInstalledAppInventory => t
+      .shellTextNativeMobileHostBridgePluginUnavailableForInstalledAppInventory;
+  String failedToListInstalledAppsFromNativePlatform(Object details) =>
+      t.shellTextFailedToListInstalledAppsFromNativePlatform(details: details);
+  String failedToRestoreMobileShellState(Object error) =>
+      t.shellTextFailedToRestoreMobileShellState(error: error);
+  String get providerDidNotReturnStartableArtifact =>
+      t.shellTextProviderDidNotReturnStartableArtifact;
+  String loopbackPeerBlockReason(String modeLabel, String peerAddress) =>
+      t.shellTextLoopbackPeerBlockReason(
+        modeLabel: modeLabel,
+        peerAddress: peerAddress,
+      );
+  String get secureProfileSecretsUnavailable =>
+      t.shellTextSecureProfileSecretsUnavailable;
+  String secureProfileSecretsMissing(String profileId) =>
+      t.shellTextSecureProfileSecretsMissing(profileId: profileId);
+  String get secureDraftSecretsUnavailable =>
+      t.shellTextSecureDraftSecretsUnavailable;
   String resolutionStartedThenWaitForFinishBeforeStarting(
     String startedNotice,
     String modeLabel,
-  ) => _pick(
-    '$startedNotice Wait for the resolution to finish before starting $modeLabel.',
-    '$startedNotice Дождитесь завершения разрешения, прежде чем запускать $modeLabel.',
+  ) => t.shellTextResolutionStartedThenWaitForFinishBeforeStarting(
+    startedNotice: startedNotice,
+    modeLabel: modeLabel,
   );
-  String get noReusableFieldsYet =>
-      _pick('No reusable fields yet', 'Переиспользуемых полей пока нет');
-  String get schemaBlockedInShell => _pick(
-    'Schema blocked in this shell',
-    'Схема заблокирована в этой оболочке',
-  );
-  String get reusableFieldsReady =>
-      _pick('Reusable fields ready', 'Переиспользуемые поля готовы');
-  String get providerInput => _pick('Provider input', 'Ввод провайдера');
-  String get providerLink => _pick('Provider link', 'Ссылка провайдера');
-  String get providerFamily => _pick('Provider family', 'Семейство провайдера');
-  String get providerType => _pick('Provider type', 'Тип провайдера');
-  String get profileName => _pick('Profile name', 'Имя профиля');
-  String get localUdpListen => _pick('Local UDP listen', 'Локальный UDP-адрес');
-  String get peerAddress => _pick('Peer address', 'Адрес удаленного узла');
-  String get connections => _pick('Connections', 'Соединения');
-  String get turnMode => _pick('TURN mode', 'Режим TURN');
-  String get turnOverride => _pick('TURN override', 'Переопределение TURN');
-  String get turnPort => _pick('TURN port', 'Порт TURN');
-  String get bindInterface => _pick('Bind interface', 'Интерфейс привязки');
-  String get logLevel => _pick('Log level', 'Уровень логов');
-  String get dtlsEnabled => _pick('DTLS enabled', 'DTLS включен');
-  String get resolveInvite => _pick('Resolve invite', 'Разрешить инвайт');
-  String get resolveProfile => _pick('Resolve profile', 'Разрешить профиль');
-  String get notSet => _pick('Not set', 'Не задано');
-  String get startSession => _pick('Start session', 'Запустить сессию');
-  String get saveProfile => _pick('Save profile', 'Сохранить профиль');
-  String get deleteProfile => _pick('Delete profile', 'Удалить профиль');
-  String get freshDraft => _pick('Fresh draft', 'Новый черновик');
-  String get startSavedProfile =>
-      _pick('Start saved profile', 'Запустить сохраненный профиль');
-  String get exportPortableProfile =>
-      _pick('Export portable profile', 'Экспортировать переносимый профиль');
-  String get importPortableProfile =>
-      _pick('Import portable profile', 'Импортировать переносимый профиль');
-  String get pastePortableProfileEnvelope => _pick(
-    'Paste portable profile envelope',
-    'Вставить конверт переносимого профиля',
-  );
-  String get previewOpensBeforeRecordsCreated => _pick(
-    'Preview opens before any local records are created.',
-    'Предпросмотр открывается до создания любых локальных записей.',
-  );
-  String get payloadInvalidOrUnsupported => _pick(
-    'Payload is invalid or unsupported.',
-    'Payload невалиден или не поддерживается.',
-  );
+  String get noReusableFieldsYet => t.shellTextNoReusableFieldsYet;
+  String get schemaBlockedInShell => t.shellTextSchemaBlockedInShell;
+  String get reusableFieldsReady => t.shellTextReusableFieldsReady;
+  String get providerInput => t.shellTextProviderInput;
+  String get providerLink => t.shellTextProviderLink;
+  String get providerFamily => t.shellTextProviderFamily;
+  String get providerType => t.shellTextProviderType;
+  String get profileName => t.shellTextProfileName;
+  String get localUdpListen => t.shellTextLocalUdpListen;
+  String get peerAddress => t.shellTextPeerAddress;
+  String get connections => t.shellTextConnections;
+  String get turnMode => t.shellTextTurnMode;
+  String get turnOverride => t.shellTextTurnOverride;
+  String get turnPort => t.shellTextTurnPort;
+  String get bindInterface => t.shellTextBindInterface;
+  String get logLevel => t.shellTextLogLevel;
+  String get dtlsEnabled => t.shellTextDtlsEnabled;
+  String get resolveInvite => t.shellTextResolveInvite;
+  String get resolveProfile => t.shellTextResolveProfile;
+  String get notSet => t.shellTextNotSet;
+  String get startSession => t.shellTextStartSession;
+  String get saveProfile => t.shellTextSaveProfile;
+  String get deleteProfile => t.shellTextDeleteProfile;
+  String get freshDraft => t.shellTextFreshDraft;
+  String get startSavedProfile => t.shellTextStartSavedProfile;
+  String get exportPortableProfile => t.shellTextExportPortableProfile;
+  String get importPortableProfile => t.shellTextImportPortableProfile;
+  String get pastePortableProfileEnvelope =>
+      t.shellTextPastePortableProfileEnvelope;
+  String get previewOpensBeforeRecordsCreated =>
+      t.shellTextPreviewOpensBeforeRecordsCreated;
+  String get payloadInvalidOrUnsupported =>
+      t.shellTextPayloadInvalidOrUnsupported;
   String providerAndSource({
     required String provider,
     required String source,
-  }) => _pick(
-    'Provider: $provider · Source: $source',
-    'Провайдер: $provider · Источник: $source',
-  );
+  }) => t.shellTextProviderAndSource(provider: provider, source: source);
   String providerLabel(String provider) =>
-      _pick('Provider: $provider', 'Провайдер: $provider');
-  String sourceModeLabel(String mode) =>
-      _pick('Source mode: $mode', 'Режим источника: $mode');
-  String managedProviderSnapshot(String name) => _pick(
-    'Managed provider snapshot: $name',
-    'Снимок управляемого провайдера: $name',
-  );
-  String get portableExportSecretWarningDesktop => _pick(
-    'This payload is secret-bearing. Treat copied text, saved files, and QR screens like credentials.',
-    'Этот пакет содержит секреты. Относитесь к скопированному тексту, сохраненным файлам и QR-экрану как к учетным данным.',
-  );
-  String get portableExportSecretWarningMobile => _pick(
-    'This payload is secret-bearing. Treat shared text, files, and QR screens like credentials.',
-    'Этот пакет содержит секреты. Относитесь к отправляемому тексту, файлам и QR-экрану как к учетным данным.',
-  );
-  String get portableExportSeparateFromRuntimeDesktop => _pick(
-    'Exported payload stays separate from ordinary shell persistence and runtime handoff export.',
-    'Экспортированный пакет остается отдельным от обычного сохранения оболочки и экспорта пакета handoff рантайма.',
-  );
-  String get portableExportSeparateFromRuntimeMobile => _pick(
-    'Portable transfer stays separate from ordinary shell persistence and runtime handoff export.',
-    'Передача переносимого профиля остается отдельной от обычного сохранения оболочки и экспорта пакета handoff рантайма.',
-  );
-  String get portableQrCompactJson => _pick(
-    'QR uses the same envelope in compact JSON form.',
-    'QR использует тот же конверт в компактной форме JSON.',
-  );
-  String portableQrUnavailableDesktop(int bytes) => _pick(
-    'QR is unavailable because this payload exceeds supported QR bounds ($bytes bytes). File and text export stay available.',
-    'QR недоступен, потому что пакет превышает поддерживаемый размер QR ($bytes байт). Экспорт в файл и текст остаются доступны.',
-  );
-  String portableQrUnavailableMobile(int bytes) => _pick(
-    'QR is unavailable because this payload exceeds supported QR bounds ($bytes bytes). Text and file sharing stay available.',
-    'QR недоступен, потому что пакет превышает поддерживаемый размер QR ($bytes байт). Отправка текста и файла остается доступной.',
-  );
-  String get portableImportSecretWarning => _pick(
-    'This import payload is secret-bearing. Confirm only if the source is trusted.',
-    'Этот импортируемый пакет содержит секреты. Подтверждайте только если источник доверенный.',
-  );
-  String get portableImportCreatesFreshIdsMobile => _pick(
-    'Import creates fresh local ids and does not auto-start runtime.',
-    'Импорт создает новые локальные идентификаторы и не запускает рантайм автоматически.',
-  );
-  String get portableImportCreatesFreshIdsDesktop => _pick(
-    'Import creates new local records with fresh ids and does not auto-start runtime.',
-    'Импорт создает новые локальные записи с новыми идентификаторами и не запускает рантайм автоматически.',
-  );
-  String get scanPortableProfileQr =>
-      _pick('Scan portable profile QR', 'Сканировать QR переносимого профиля');
-  String get pointCameraAtPortableProfileQr => _pick(
-    'Point the camera at a portable profile QR code.',
-    'Наведите камеру на QR-код переносимого профиля.',
-  );
-  String tagInput(String value) => _pick('Input: $value', 'Ввод: $value');
-  String tagAuth(String value) => _pick('Auth: $value', 'Авторизация: $value');
-  String tagBrowser(String value) =>
-      _pick('Browser: $value', 'Браузер: $value');
-  String tagFamily(String value) =>
-      _pick('Family: $value', 'Семейство: $value');
-  String get browserNeedsExternal => _pick(
-    'This provider requires an external browser when challenge continuation appears.',
-    'Этот провайдер требует внешний браузер, когда появляется продолжение проверки.',
-  );
-  String get browserAllowsEmbedded => _pick(
-    'This provider allows an embedded browser surface, but the host still controls whether a browser challenge appears.',
-    'Этот провайдер разрешает встроенный браузер, но хост все равно решает, появится ли браузерная проверка.',
-  );
-  String get browserNotRequired => _pick(
-    'This provider does not report a required browser surface.',
-    'Этот провайдер не сообщает о требуемом браузерном интерфейсе.',
-  );
-  String get browserContinuationMayAppear => _pick(
-    'Browser continuation may appear for this provider.',
-    'Для этого провайдера может появиться продолжение в браузере.',
-  );
-  String get browserContinuationNotAdvertised => _pick(
-    'No browser challenge mode is currently advertised for this provider.',
-    'Для этого провайдера сейчас не объявлен режим браузерной проверки.',
-  );
+      t.shellTextProviderLabel(provider: provider);
+  String sourceModeLabel(String mode) => t.shellTextSourceModeLabel(mode: mode);
+  String managedProviderSnapshot(String name) =>
+      t.shellTextManagedProviderSnapshot(name: name);
+  String get portableExportSecretWarningDesktop =>
+      t.shellTextPortableExportSecretWarningDesktop;
+  String get portableExportSecretWarningMobile =>
+      t.shellTextPortableExportSecretWarningMobile;
+  String get portableExportSeparateFromRuntimeDesktop =>
+      t.shellTextPortableExportSeparateFromRuntimeDesktop;
+  String get portableExportSeparateFromRuntimeMobile =>
+      t.shellTextPortableExportSeparateFromRuntimeMobile;
+  String get portableQrCompactJson => t.shellTextPortableQrCompactJson;
+  String portableQrUnavailableDesktop(int bytes) =>
+      t.shellTextPortableQrUnavailableDesktop(bytes: bytes);
+  String portableQrUnavailableMobile(int bytes) =>
+      t.shellTextPortableQrUnavailableMobile(bytes: bytes);
+  String get portableImportSecretWarning =>
+      t.shellTextPortableImportSecretWarning;
+  String get portableImportCreatesFreshIdsMobile =>
+      t.shellTextPortableImportCreatesFreshIdsMobile;
+  String get portableImportCreatesFreshIdsDesktop =>
+      t.shellTextPortableImportCreatesFreshIdsDesktop;
+  String get scanPortableProfileQr => t.shellTextScanPortableProfileQr;
+  String get pointCameraAtPortableProfileQr =>
+      t.shellTextPointCameraAtPortableProfileQr;
+  String tagInput(String value) => t.shellTextTagInput(value: value);
+  String tagAuth(String value) => t.shellTextTagAuth(value: value);
+  String tagBrowser(String value) => t.shellTextTagBrowser(value: value);
+  String tagFamily(String value) => t.shellTextTagFamily(value: value);
+  String get browserNeedsExternal => t.shellTextBrowserNeedsExternal;
+  String get browserAllowsEmbedded => t.shellTextBrowserAllowsEmbedded;
+  String get browserNotRequired => t.shellTextBrowserNotRequired;
+  String get browserContinuationMayAppear =>
+      t.shellTextBrowserContinuationMayAppear;
+  String get browserContinuationNotAdvertised =>
+      t.shellTextBrowserContinuationNotAdvertised;
 
   String get desktopProfileWorkspaceTitle =>
-      _pick('Profile workspace', 'Рабочее пространство профиля');
-  String get desktopUnsavedDraft =>
-      _pick('Unsaved draft', 'Несохраненный черновик');
-  String get desktopSavedProfileWorkspace => _pick(
-    'Saved profile workspace',
-    'Рабочее пространство сохраненного профиля',
-  );
-  String get desktopSaveProfileFirst =>
-      _pick('Save profile first', 'Сначала сохраните профиль');
-  String get desktopStartSessionFromSavedProfile => _pick(
-    'Start a session from this saved profile',
-    'Запустить сессию из этого сохраненного профиля',
-  );
-  String get desktopProfileSettings =>
-      _pick('Profile settings', 'Настройки профиля');
-  String get desktopChangeSource => _pick('Change source', 'Сменить источник');
-  String get desktopChangeSourceSubtitle => _pick(
-    'Switch between a saved provider record and draft-owned input only when the profile needs a different source.',
-    'Переключайтесь между сохраненной записью провайдера и вводом, принадлежащим черновику, только когда профилю нужен другой источник.',
-  );
-  String get desktopRuntimeDefaults =>
-      _pick('Runtime defaults', 'Параметры runtime по умолчанию');
-  String get desktopRuntimeDefaultsSubtitle => _pick(
-    'These fields apply when the profile starts on this device.',
-    'Эти поля применяются, когда профиль запускается на этом устройстве.',
-  );
-  String get desktopProfileMaintenance =>
-      _pick('Profile maintenance', 'Обслуживание профиля');
-  String get desktopProfileMaintenanceSubtitle => _pick(
-    'Keep destructive actions out of the main edit flow.',
-    'Держите разрушительные действия вне основного потока редактирования.',
-  );
+      t.shellTextDesktopProfileWorkspaceTitle;
+  String get desktopUnsavedDraft => t.shellTextDesktopUnsavedDraft;
+  String get desktopSavedProfileWorkspace =>
+      t.shellTextDesktopSavedProfileWorkspace;
+  String get desktopSaveProfileFirst => t.shellTextDesktopSaveProfileFirst;
+  String get desktopStartSessionFromSavedProfile =>
+      t.shellTextDesktopStartSessionFromSavedProfile;
+  String get desktopProfileSettings => t.shellTextDesktopProfileSettings;
+  String get desktopChangeSource => t.shellTextDesktopChangeSource;
+  String get desktopChangeSourceSubtitle =>
+      t.shellTextDesktopChangeSourceSubtitle;
+  String get desktopRuntimeDefaults => t.shellTextDesktopRuntimeDefaults;
+  String get desktopRuntimeDefaultsSubtitle =>
+      t.shellTextDesktopRuntimeDefaultsSubtitle;
+  String get desktopProfileMaintenance => t.shellTextDesktopProfileMaintenance;
+  String get desktopProfileMaintenanceSubtitle =>
+      t.shellTextDesktopProfileMaintenanceSubtitle;
   String get desktopShowMaintenanceActions =>
-      _pick('Show maintenance actions', 'Показать действия обслуживания');
-  String get desktopDeleteSavedProfileHint => _pick(
-    'Delete the saved profile without crowding the action row.',
-    'Удалите сохраненный профиль, не загромождая строку действий.',
-  );
-  String get desktopPortableTransferSubtitle => _pick(
-    'Export the selected saved profile as an explicit transfer envelope, or preview an import before creating local records.',
-    'Экспортируйте выбранный сохраненный профиль как явный конверт переноса или просмотрите импорт до создания локальных записей.',
-  );
-  String get desktopBrowserHandling =>
-      _pick('Browser handling', 'Работа с браузером');
-  String get desktopBrowserHandlingSubtitle => _pick(
-    'Show this context only when the provider can hand off into a browser challenge.',
-    'Показывайте этот контекст только тогда, когда провайдер может передать управление в браузерную проверку.',
-  );
+      t.shellTextDesktopShowMaintenanceActions;
+  String get desktopDeleteSavedProfileHint =>
+      t.shellTextDesktopDeleteSavedProfileHint;
+  String get desktopPortableTransferSubtitle =>
+      t.shellTextDesktopPortableTransferSubtitle;
+  String get desktopBrowserHandling => t.shellTextDesktopBrowserHandling;
+  String get desktopBrowserHandlingSubtitle =>
+      t.shellTextDesktopBrowserHandlingSubtitle;
   String get desktopProfileProviderSettings =>
-      _pick('Profile provider settings', 'Настройки провайдера профиля');
+      t.shellTextDesktopProfileProviderSettings;
   String desktopProviderSettingsSupportError({
     required String providerName,
     required String error,
-  }) => _pick(
-    'This desktop shell cannot render the provider settings schema for $providerName: $error. Save and resolve stay blocked until the host advertises a supported schema subset.',
-    'Эта настольная оболочка не может отрисовать схему настроек провайдера для $providerName: $error. Сохранение и разрешение остаются заблокированы, пока хост не объявит поддерживаемое подмножество схемы.',
+  }) => t.shellTextDesktopProviderSettingsSupportError(
+    providerName: providerName,
+    error: error,
   );
-  String get desktopProfileProviderSettingsHelp => _pick(
-    'Saved profile settings for the selected provider. Prompt-only values stay only in the active draft.',
-    'Сохраненные настройки профиля для выбранного провайдера. Значения только для запроса остаются только в активном черновике.',
-  );
-  String get desktopNoSavedProviderRecords => _pick(
-    'No saved provider records are available yet.',
-    'Сохраненных записей провайдеров пока нет.',
-  );
-  String get directInput => _pick('Direct input', 'Прямой ввод');
-  String get savedRecord => _pick('Saved record', 'Сохраненная запись');
-  String get desktopSavedRecordAttached => _pick(
-    'A saved provider record is attached to this draft.',
-    'К этому черновику прикреплена сохраненная запись провайдера.',
-  );
-  String get desktopDraftOwnsProviderInput => _pick(
-    'This draft keeps its own provider input.',
-    'Этот черновик хранит собственный ввод провайдера.',
-  );
+  String get desktopProfileProviderSettingsHelp =>
+      t.shellTextDesktopProfileProviderSettingsHelp;
+  String get desktopNoSavedProviderRecords =>
+      t.shellTextDesktopNoSavedProviderRecords;
+  String get directInput => t.shellTextDirectInput;
+  String get savedRecord => t.shellTextSavedRecord;
+  String get desktopSavedRecordAttached =>
+      t.shellTextDesktopSavedRecordAttached;
+  String get desktopDraftOwnsProviderInput =>
+      t.shellTextDesktopDraftOwnsProviderInput;
 
-  String get mobileProfilesTitleBar => _pick('Profiles', 'Профили');
-  String get mobileProviderDetails =>
-      _pick('Provider details', 'Детали провайдера');
-  String get mobileProviderDetailsSubtitle => _pick(
-    'Browser policy, artifact families, and challenge guidance',
-    'Политика браузера, семейства артефактов и подсказки по проверке',
-  );
+  String get mobileProfilesTitleBar => t.shellTextMobileProfilesTitleBar;
+  String get mobileProviderDetails => t.shellTextMobileProviderDetails;
+  String get mobileProviderDetailsSubtitle =>
+      t.shellTextMobileProviderDetailsSubtitle;
   String get mobileProviderSettingsSection =>
-      _pick('Provider settings', 'Настройки провайдера');
-  String get mobilePortableTransfer =>
-      _pick('Portable transfer', 'Переносимый профиль');
-  String get mobileProviderSettingsUnsupportedSubtitle => _pick(
-    'Unsupported schema subset blocks save and resolve',
-    'Неподдерживаемое подмножество схемы блокирует сохранение и разрешение',
-  );
-  String get mobileProviderSettingsRetainedSubtitle => _pick(
-    'Required and retained provider-specific values',
-    'Обязательные и сохраняемые значения, специфичные для провайдера',
-  );
+      t.shellTextMobileProviderSettingsSection;
+  String get mobilePortableTransfer => t.shellTextMobilePortableTransfer;
+  String get mobileProviderSettingsUnsupportedSubtitle =>
+      t.shellTextMobileProviderSettingsUnsupportedSubtitle;
+  String get mobileProviderSettingsRetainedSubtitle =>
+      t.shellTextMobileProviderSettingsRetainedSubtitle;
   String get mobileAdvancedRuntimeControls =>
-      _pick('Advanced runtime controls', 'Расширенные настройки рантайма');
-  String get mobileAdvancedRuntimeControlsSubtitle => _pick(
-    'Transport overrides, local bind, and logging',
-    'Переопределения транспорта, локальная привязка и логирование',
-  );
-  String get mobilePortableTransferSubtitle => _pick(
-    'Export the selected saved profile through an explicit envelope, or preview an import before creating local records.',
-    'Экспортируйте выбранный сохраненный профиль через явный конверт или просмотрите импорт до создания локальных записей.',
-  );
+      t.shellTextMobileAdvancedRuntimeControls;
+  String get mobileAdvancedRuntimeControlsSubtitle =>
+      t.shellTextMobileAdvancedRuntimeControlsSubtitle;
+  String get mobilePortableTransferSubtitle =>
+      t.shellTextMobilePortableTransferSubtitle;
   String mobileProviderSettingsSupportError({
     required String providerName,
     required String error,
-  }) => _pick(
-    'This mobile shell cannot render the provider settings schema for $providerName: $error. Save and resolve stay blocked until the host advertises a supported schema subset.',
-    'Эта мобильная оболочка не может отрисовать схему настроек провайдера для $providerName: $error. Сохранение и разрешение остаются заблокированы, пока хост не объявит поддерживаемое подмножество схемы.',
+  }) => t.shellTextMobileProviderSettingsSupportError(
+    providerName: providerName,
+    error: error,
   );
-  String get mobileProviderSettingsRetainedHelp => _pick(
-    'Profile-retained settings stay with the saved profile. Prompt-only values remain only in the in-memory draft used for immediate resolution starts.',
-    'Настройки, сохраняемые вместе с профилем, остаются в сохраненном профиле. Значения только для запроса остаются только в памяти черновика для немедленного запуска разрешения.',
-  );
-  String get mobileNoSavedProfilesYetBuildDraft => _pick(
-    'No saved profiles yet. Build the draft below, then save it for repeat starts.',
-    'Сохраненных профилей пока нет. Соберите черновик ниже и сохраните его для повторных запусков.',
-  );
-  String get mobileSavedProfiles =>
-      _pick('Saved profiles', 'Сохраненные профили');
-  String get mobileProviderMode => _pick('Provider mode', 'Режим провайдера');
-  String get mobileProviderModeNoManagedProviders => _pick(
-    'No managed providers are available yet. Use custom mode for direct provider entry or create a provider record from the workflow library first.',
-    'Управляемые провайдеры пока недоступны. Используйте пользовательский режим для прямого ввода провайдера или сначала создайте запись провайдера из библиотеки рабочих процессов.',
-  );
-  String get customProvider => _pick('Custom provider', 'Свой провайдер');
-  String get managedProvider =>
-      _pick('Managed provider', 'Управляемый провайдер');
-  String get mobileManagedModeSummary => _pick(
-    'Managed mode snapshots values from a saved provider record, then keeps further profile edits local to this draft.',
-    'Управляемый режим копирует значения из сохраненной записи провайдера, а дальнейшие изменения профиля оставляет локальными для этого черновика.',
-  );
-  String get mobileCustomModeSummary => _pick(
-    'Custom mode lets you type a raw provider id and prompt-only inputs without mutating the managed provider catalog.',
-    'Пользовательский режим позволяет ввести исходный идентификатор провайдера и значения только для запроса без изменения каталога управляемых провайдеров.',
-  );
+  String get mobileProviderSettingsRetainedHelp =>
+      t.shellTextMobileProviderSettingsRetainedHelp;
+  String get mobileNoSavedProfilesYetBuildDraft =>
+      t.shellTextMobileNoSavedProfilesYetBuildDraft;
+  String get mobileSavedProfiles => t.shellTextMobileSavedProfiles;
+  String get mobileProviderMode => t.shellTextMobileProviderMode;
+  String get mobileProviderModeNoManagedProviders =>
+      t.shellTextMobileProviderModeNoManagedProviders;
+  String get customProvider => t.shellTextCustomProvider;
+  String get managedProvider => t.shellTextManagedProvider;
+  String get mobileManagedModeSummary => t.shellTextMobileManagedModeSummary;
+  String get mobileCustomModeSummary => t.shellTextMobileCustomModeSummary;
   String get mobileManagedProviderDropdown =>
-      _pick('Managed provider', 'Управляемый провайдер');
+      t.shellTextMobileManagedProviderDropdown;
 
-  String get mobileEditProvider =>
-      _pick('Edit provider', 'Редактировать провайдера');
-  String get mobileNewProvider => _pick('New provider', 'Новый провайдер');
-  String get mobileEditSavedReusableProvider => _pick(
-    'Edit this saved reusable provider.',
-    'Редактируйте этот сохраненный переиспользуемый провайдер.',
-  );
-  String get mobileFinishSavedReusableProvider => _pick(
-    'Finish this saved reusable provider for later use in Profiles.',
-    'Завершите этот сохраненный переиспользуемый провайдер для дальнейшего использования в Профилях.',
-  );
-  String get mobileCloseProviderEditor =>
-      _pick('Close provider editor', 'Закрыть редактор провайдера');
-  String get mobileNoShippedProviderFamilies => _pick(
-    'This build does not advertise any shipped provider families yet.',
-    'Эта сборка пока не объявляет ни одного встроенного семейства провайдеров.',
-  );
-  String get mobileProviderName => _pick('Provider name', 'Имя провайдера');
-  String get mobileProviderShownInProfiles => _pick(
-    'Shown in Profiles when choosing a saved reusable provider.',
-    'Показывается в Профилях при выборе сохраненного переиспользуемого провайдера.',
-  );
-  String get mobileProviderTypeChosenWhenCreated => _pick(
-    'Chosen when this saved provider was created. Use this pane to name it and review reusable settings.',
-    'Выбирается при создании этого сохраненного провайдера. Используйте эту панель, чтобы задать имя и просмотреть переиспользуемые настройки.',
-  );
+  String get mobileEditProvider => t.shellTextMobileEditProvider;
+  String get mobileNewProvider => t.shellTextMobileNewProvider;
+  String get mobileEditSavedReusableProvider =>
+      t.shellTextMobileEditSavedReusableProvider;
+  String get mobileFinishSavedReusableProvider =>
+      t.shellTextMobileFinishSavedReusableProvider;
+  String get mobileCloseProviderEditor => t.shellTextMobileCloseProviderEditor;
+  String get mobileNoShippedProviderFamilies =>
+      t.shellTextMobileNoShippedProviderFamilies;
+  String get mobileProviderName => t.shellTextMobileProviderName;
+  String get mobileProviderShownInProfiles =>
+      t.shellTextMobileProviderShownInProfiles;
+  String get mobileProviderTypeChosenWhenCreated =>
+      t.shellTextMobileProviderTypeChosenWhenCreated;
   String mobileNoReusableSettingsYetNamedProvider(String providerTitle) =>
       providerTitle.isEmpty
-      ? _pick(
-          'No reusable settings yet. Save this as a named provider for Profiles.',
-          'Переиспользуемых настроек пока нет. Сохраните это как именованный провайдер для Профилей.',
-        )
-      : _pick(
-          'No reusable settings yet. Save $providerTitle as a named provider for Profiles.',
-          'Переиспользуемых настроек пока нет. Сохраните $providerTitle как именованный провайдер для Профилей.',
+      ? t.shellTextMobileNoReusableSettingsYetNamedProviderUnnamed
+      : t.shellTextMobileNoReusableSettingsYetNamedProviderNamed(
+          providerTitle: providerTitle,
         );
+
   String mobileProviderConfigSupportError({
     required String providerName,
     required String error,
-  }) => _pick(
-    'This mobile shell cannot render the provider settings schema for $providerName: $error. Save stays blocked until the host advertises a supported schema subset.',
-    'Эта мобильная оболочка не может отрисовать схему настроек провайдера для $providerName: $error. Сохранение остается заблокированным, пока хост не объявит поддерживаемое подмножество схемы.',
+  }) => t.shellTextMobileProviderConfigSupportError(
+    providerName: providerName,
+    error: error,
   );
-  String get mobileReusableProviderSettings => _pick(
-    'Reusable provider settings',
-    'Переиспользуемые настройки провайдера',
-  );
-  String get mobileReusableValuesAppliedToProfile => _pick(
-    'These reusable values are applied when this provider is used in a profile.',
-    'Эти переиспользуемые значения применяются, когда этот провайдер используется в профиле.',
-  );
-  String get mobileSaveProvider =>
-      _pick('Save provider', 'Сохранить провайдера');
-  String get mobileSaveAsTemplate =>
-      _pick('Save as template', 'Сохранить как шаблон');
-  String get mobileUseInProfileDraft =>
-      _pick('Use in profile draft', 'Использовать в черновике профиля');
-  String get mobileDeleteProvider =>
-      _pick('Delete provider', 'Удалить провайдера');
-  String get selectedType => _pick('Selected type', 'Выбранный тип');
-  String get mobileEditTemplate =>
-      _pick('Edit template', 'Редактировать шаблон');
-  String get mobileNewTemplate => _pick('New template', 'Новый шаблон');
-  String get mobileEditTemplateStartingValues => _pick(
-    'Edit starting values for future providers.',
-    'Редактируйте стартовые значения для будущих провайдеров.',
-  );
-  String get mobileSaveTemplateStartingPoint => _pick(
-    'Save a starting point for future providers.',
-    'Сохраните стартовую точку для будущих провайдеров.',
-  );
-  String get mobileCloseTemplateEditor =>
-      _pick('Close template editor', 'Закрыть редактор шаблона');
-  String get mobileTemplateName => _pick('Template name', 'Имя шаблона');
-  String get mobileTemplateShownWhenChoosing => _pick(
-    'Shown when choosing a starting point for new providers.',
-    'Показывается при выборе стартовой точки для новых провайдеров.',
-  );
-  String get mobileTemplateTypeChosenWhenCreated => _pick(
-    'Chosen when this template was created. Use this pane to name it and review reusable starting values.',
-    'Выбирается при создании этого шаблона. Используйте эту панель, чтобы задать имя и просмотреть переиспользуемые стартовые значения.',
-  );
+  String get mobileReusableProviderSettings =>
+      t.shellTextMobileReusableProviderSettings;
+  String get mobileReusableValuesAppliedToProfile =>
+      t.shellTextMobileReusableValuesAppliedToProfile;
+  String get mobileSaveProvider => t.shellTextMobileSaveProvider;
+  String get mobileSaveAsTemplate => t.shellTextMobileSaveAsTemplate;
+  String get mobileUseInProfileDraft => t.shellTextMobileUseInProfileDraft;
+  String get mobileDeleteProvider => t.shellTextMobileDeleteProvider;
+  String get selectedType => t.shellTextSelectedType;
+  String get mobileEditTemplate => t.shellTextMobileEditTemplate;
+  String get mobileNewTemplate => t.shellTextMobileNewTemplate;
+  String get mobileEditTemplateStartingValues =>
+      t.shellTextMobileEditTemplateStartingValues;
+  String get mobileSaveTemplateStartingPoint =>
+      t.shellTextMobileSaveTemplateStartingPoint;
+  String get mobileCloseTemplateEditor => t.shellTextMobileCloseTemplateEditor;
+  String get mobileTemplateName => t.shellTextMobileTemplateName;
+  String get mobileTemplateShownWhenChoosing =>
+      t.shellTextMobileTemplateShownWhenChoosing;
+  String get mobileTemplateTypeChosenWhenCreated =>
+      t.shellTextMobileTemplateTypeChosenWhenCreated;
   String mobileNoReusableSettingsYetTemplate(String providerTitle) =>
       providerTitle.isEmpty
-      ? _pick(
-          'No reusable settings yet. Save this template as a named starting point.',
-          'Переиспользуемых настроек пока нет. Сохраните этот шаблон как именованную стартовую точку.',
-        )
-      : _pick(
-          'No reusable settings yet. Save $providerTitle as a named starting point.',
-          'Переиспользуемых настроек пока нет. Сохраните $providerTitle как именованную стартовую точку.',
+      ? t.shellTextMobileNoReusableSettingsYetTemplateUnnamed
+      : t.shellTextMobileNoReusableSettingsYetTemplateNamed(
+          providerTitle: providerTitle,
         );
-  String get mobileReusableValuesPrefillProvider => _pick(
-    'These values prefill a new provider when this template is used.',
-    'Эти значения предзаполняют нового провайдера при использовании шаблона.',
-  );
-  String get mobileSaveTemplate => _pick('Save template', 'Сохранить шаблон');
-  String get mobileUseTemplate => _pick('Use template', 'Использовать шаблон');
-  String get mobileDeleteTemplate => _pick('Delete template', 'Удалить шаблон');
 
-  String get desktopProviderRecord =>
-      _pick('Provider record', 'Запись провайдера');
-  String get desktopNewProviderRecord =>
-      _pick('New provider record', 'Новая запись провайдера');
-  String get desktopEditReusableProviderRecord => _pick(
-    'Edit one reusable provider record. The attached family is shown below and stays read-only here.',
-    'Редактируйте одну переиспользуемую запись провайдера. Прикрепленное семейство показано ниже и остается здесь только для чтения.',
-  );
-  String get desktopCreateReusableProviderRecord => _pick(
-    'Create one reusable provider record. Choose its family separately, then edit the record parameters below.',
-    'Создайте одну переиспользуемую запись провайдера. Отдельно выберите семейство, затем редактируйте параметры записи ниже.',
-  );
-  String get desktopRecordParameters =>
-      _pick('Record parameters', 'Параметры записи');
+  String get mobileReusableValuesPrefillProvider =>
+      t.shellTextMobileReusableValuesPrefillProvider;
+  String get mobileSaveTemplate => t.shellTextMobileSaveTemplate;
+  String get mobileUseTemplate => t.shellTextMobileUseTemplate;
+  String get mobileDeleteTemplate => t.shellTextMobileDeleteTemplate;
+
+  String get desktopProviderRecord => t.shellTextDesktopProviderRecord;
+  String get desktopNewProviderRecord => t.shellTextDesktopNewProviderRecord;
+  String get desktopEditReusableProviderRecord =>
+      t.shellTextDesktopEditReusableProviderRecord;
+  String get desktopCreateReusableProviderRecord =>
+      t.shellTextDesktopCreateReusableProviderRecord;
+  String get desktopRecordParameters => t.shellTextDesktopRecordParameters;
   String desktopParametersFor(String providerTitle) =>
-      _pick('Parameters for $providerTitle', 'Параметры для $providerTitle');
-  String get desktopChooseProviderFamilyFirst => _pick(
-    'Choose a provider family from the separate family list first. Record parameters will appear here afterwards.',
-    'Сначала выберите семейство провайдера в отдельном списке. После этого здесь появятся параметры записи.',
-  );
-  String desktopEditReusableParametersFor(String providerTitle) => _pick(
-    'Edit reusable parameters stored in this record for $providerTitle. This does not change the family itself.',
-    'Редактируйте переиспользуемые параметры, сохраненные в этой записи для $providerTitle. Это не меняет само семейство.',
-  );
-  String get desktopUseInProfileDraft =>
-      _pick('Use in profile draft', 'Использовать в черновике профиля');
-  String get desktopNewRecord => _pick('New record', 'Новая запись');
-  String get desktopRecordName => _pick('Record name', 'Имя записи');
-  String get desktopRecordNameHelp => _pick(
-    'Name this saved provider record first. Family choice and record parameters stay below.',
-    'Сначала задайте имя этой сохраненной записи провайдера. Выбор семейства и параметры записи находятся ниже.',
-  );
-  String get desktopAttachedFamily =>
-      _pick('Attached family', 'Прикрепленное семейство');
-  String get desktopAttachedFamilyHelp => _pick(
-    'Families live in a separate chooser. The selected family is attached to this record and described here.',
-    'Семейства выбираются в отдельном списке. Выбранное семейство прикрепляется к этой записи и описывается здесь.',
-  );
+      t.shellTextDesktopParametersFor(providerTitle: providerTitle);
+  String get desktopChooseProviderFamilyFirst =>
+      t.shellTextDesktopChooseProviderFamilyFirst;
+  String desktopEditReusableParametersFor(String providerTitle) =>
+      t.shellTextDesktopEditReusableParametersFor(providerTitle: providerTitle);
+  String get desktopUseInProfileDraft => t.shellTextDesktopUseInProfileDraft;
+  String get desktopNewRecord => t.shellTextDesktopNewRecord;
+  String get desktopRecordName => t.shellTextDesktopRecordName;
+  String get desktopRecordNameHelp => t.shellTextDesktopRecordNameHelp;
+  String get desktopAttachedFamily => t.shellTextDesktopAttachedFamily;
+  String get desktopAttachedFamilyHelp => t.shellTextDesktopAttachedFamilyHelp;
   String get desktopFamilyCharacteristics =>
-      _pick('Family characteristics', 'Характеристики семейства');
-  String get desktopFamilyCharacteristicsHelp => _pick(
-    'Read-only characteristics from the selected family and current host overlay.',
-    'Характеристики только для чтения из выбранного семейства и текущего хост-оверлея.',
-  );
+      t.shellTextDesktopFamilyCharacteristics;
+  String get desktopFamilyCharacteristicsHelp =>
+      t.shellTextDesktopFamilyCharacteristicsHelp;
   String desktopProviderRecordSupportError({
     required String providerName,
     required String error,
-  }) => _pick(
-    'This desktop shell cannot render the provider settings schema for $providerName: $error. Save stays blocked until the host advertises a supported schema subset.',
-    'Эта настольная оболочка не может отрисовать схему настроек провайдера для $providerName: $error. Сохранение остается заблокированным, пока хост не объявит поддерживаемое подмножество схемы.',
+  }) => t.shellTextDesktopProviderRecordSupportError(
+    providerName: providerName,
+    error: error,
   );
   String get desktopNoFamilyAttachedYet =>
-      _pick('No family attached yet', 'Семейство пока не прикреплено');
-  String get desktopSelectedFamily =>
-      _pick('Selected family', 'Выбранное семейство');
-  String get desktopOpenFamilyChooserFirst => _pick(
-    'Open the separate family chooser before you continue with this provider record.',
-    'Откройте отдельный список семейств, прежде чем продолжить работу с этой записью провайдера.',
-  );
-  String desktopFamilyAttachedToRecord(String providerTitle) => _pick(
-    '$providerTitle is attached to this record until you intentionally change it in the family chooser.',
-    '$providerTitle прикреплено к этой записи, пока вы намеренно не измените его в списке семейств.',
-  );
-  String get desktopShippedByApp =>
-      _pick('Shipped by app', 'Поставляется приложением');
+      t.shellTextDesktopNoFamilyAttachedYet;
+  String get desktopSelectedFamily => t.shellTextDesktopSelectedFamily;
+  String get desktopOpenFamilyChooserFirst =>
+      t.shellTextDesktopOpenFamilyChooserFirst;
+  String desktopFamilyAttachedToRecord(String providerTitle) =>
+      t.shellTextDesktopFamilyAttachedToRecord(providerTitle: providerTitle);
+  String get desktopShippedByApp => t.shellTextDesktopShippedByApp;
   String get desktopHostOverlayAvailable =>
-      _pick('Host overlay: available', 'Host overlay: доступен');
+      t.shellTextDesktopHostOverlayAvailable;
   String get desktopHostOverlayUnavailable =>
-      _pick('Host overlay: unavailable', 'Host overlay: недоступен');
-  String get desktopUseActionStripToChooseFamily => _pick(
-    'Use the action strip above to choose a family. Families are read-only here.',
-    'Используйте панель действий выше, чтобы выбрать семейство. Здесь семейства только для чтения.',
-  );
-  String get desktopFamiliesReadonlyEditBelow => _pick(
-    'Families stay read-only here. Change the attached family from the action strip above; edit this record\'s parameters below.',
-    'Здесь семейства остаются только для чтения. Меняйте прикрепленное семейство через панель действий выше, а параметры этой записи редактируйте ниже.',
-  );
-  String get desktopChooseFamily => _pick('Choose family', 'Выбрать семейство');
-  String get desktopSaveDraft => _pick('Save draft', 'Сохранить черновик');
-  String get desktopSaveRecord => _pick('Save record', 'Сохранить запись');
-  String get desktopReadOnlyFamily =>
-      _pick('Read-only family', 'Семейство только для чтения');
-  String get desktopAttachedFamilyCardHelp => _pick(
-    'This card describes the attached family. Editable record parameters are shown below.',
-    'Эта карточка описывает прикрепленное семейство. Ниже показаны редактируемые параметры записи.',
-  );
+      t.shellTextDesktopHostOverlayUnavailable;
+  String get desktopUseActionStripToChooseFamily =>
+      t.shellTextDesktopUseActionStripToChooseFamily;
+  String get desktopFamiliesReadonlyEditBelow =>
+      t.shellTextDesktopFamiliesReadonlyEditBelow;
+  String get desktopChooseFamily => t.shellTextDesktopChooseFamily;
+  String get desktopSaveDraft => t.shellTextDesktopSaveDraft;
+  String get desktopSaveRecord => t.shellTextDesktopSaveRecord;
+  String get desktopReadOnlyFamily => t.shellTextDesktopReadOnlyFamily;
+  String get desktopAttachedFamilyCardHelp =>
+      t.shellTextDesktopAttachedFamilyCardHelp;
   String get desktopNoEditableParametersYet =>
-      _pick('No editable parameters yet', 'Редактируемых параметров пока нет');
+      t.shellTextDesktopNoEditableParametersYet;
   String get desktopNoEditableParameters =>
-      _pick('No editable parameters', 'Редактируемых параметров нет');
+      t.shellTextDesktopNoEditableParameters;
   String get desktopEditableParametersReady =>
-      _pick('Editable parameters ready', 'Редактируемые параметры готовы');
+      t.shellTextDesktopEditableParametersReady;
   String get desktopNoSavedProfilesYetShort =>
-      _pick('No saved profiles yet.', 'Сохраненных профилей пока нет.');
-  String get desktopNoShippedProviderFamilies => _pick(
-    'This build does not advertise any shipped provider families yet.',
-    'Эта сборка пока не объявляет ни одного встроенного семейства провайдеров.',
-  );
-  String desktopNoEditableRecordParameters(String providerTitle) => _pick(
-    '$providerTitle has no editable record parameters in this desktop shell.',
-    '$providerTitle не имеет редактируемых параметров записи в этой настольной оболочке.',
-  );
+      t.shellTextDesktopNoSavedProfilesYetShort;
+  String get desktopNoShippedProviderFamilies =>
+      t.shellTextDesktopNoShippedProviderFamilies;
+  String desktopNoEditableRecordParameters(String providerTitle) => t
+      .shellTextDesktopNoEditableRecordParameters(providerTitle: providerTitle);
   String get desktopSavedProfilesLibraryTitle =>
-      _pick('Saved profiles', 'Сохраненные профили');
-  String get desktopSavedProfilesLibrarySubtitle => _pick(
-    'Browse saved operator workspaces intentionally, then return to the active editor without leaving the main path permanently split.',
-    'Осознанно просматривайте сохраненные рабочие пространства оператора, а затем возвращайтесь в активный редактор, не оставляя основной путь навсегда разделенным.',
-  );
+      t.shellTextDesktopSavedProfilesLibraryTitle;
+  String get desktopSavedProfilesLibrarySubtitle =>
+      t.shellTextDesktopSavedProfilesLibrarySubtitle;
   String get desktopReturnPathExplicitTitle =>
-      _pick('Return path stays explicit', 'Путь возврата остается явным');
-  String get desktopReturnPathExplicitMessage => _pick(
-    'Selecting a saved profile updates the active workflow and closes this secondary surface.',
-    'Выбор сохраненного профиля обновляет активный рабочий процесс и закрывает эту вторичную поверхность.',
-  );
+      t.shellTextDesktopReturnPathExplicitTitle;
+  String get desktopReturnPathExplicitMessage =>
+      t.shellTextDesktopReturnPathExplicitMessage;
   String get desktopProviderRecordsLibraryTitle =>
-      _pick('Provider records', 'Записи провайдеров');
-  String get desktopProviderRecordsLibrarySubtitle => _pick(
-    'Create a reusable provider record or reopen one you already saved.',
-    'Создайте переиспользуемую запись провайдера или откройте уже сохраненную.',
-  );
-  String get desktopRecordsSeparateFromFamiliesTitle => _pick(
-    'Records are separate from families',
-    'Записи отделены от семейств',
-  );
-  String get desktopRecordsSeparateFromFamiliesMessage => _pick(
-    'Create a record here, then choose its family in the separate family chooser. Open an existing record to continue editing it.',
-    'Создайте здесь запись, затем выберите ее семейство в отдельном списке семейств. Откройте существующую запись, чтобы продолжить ее редактирование.',
-  );
-  String get desktopNoProviderRecordsYet => _pick(
-    'No provider records yet. Create one to choose a family and store reusable parameters.',
-    'Записей провайдеров пока нет. Создайте запись, чтобы выбрать семейство и сохранить переиспользуемые параметры.',
-  );
-  String get desktopNewFromPresetSubtitle => _pick(
-    'Start from a curated provider seed only when you intentionally ask for it.',
-    'Начинайте с подготовленной заготовки провайдера только когда намеренно этого хотите.',
-  );
-  String get desktopPresetBootstrapExplicitTitle => _pick(
-    'Preset bootstrap stays explicit',
-    'Запуск из пресета остается явным',
-  );
-  String get desktopPresetBootstrapExplicitMessage => _pick(
-    'Unavailable presets remain visible and honest here, but they no longer occupy the default provider workspace.',
-    'Недоступные пресеты остаются здесь видимыми и честными, но больше не занимают рабочее пространство провайдера по умолчанию.',
-  );
-  String get desktopProviderFamiliesSubtitle => _pick(
-    'Choose the shipped family here, then return to the provider record editor.',
-    'Выберите здесь поставляемое семейство, затем вернитесь в редактор записи провайдера.',
-  );
+      t.shellTextDesktopProviderRecordsLibraryTitle;
+  String get desktopProviderRecordsLibrarySubtitle =>
+      t.shellTextDesktopProviderRecordsLibrarySubtitle;
+  String get desktopRecordsSeparateFromFamiliesTitle =>
+      t.shellTextDesktopRecordsSeparateFromFamiliesTitle;
+  String get desktopRecordsSeparateFromFamiliesMessage =>
+      t.shellTextDesktopRecordsSeparateFromFamiliesMessage;
+  String get desktopNoProviderRecordsYet =>
+      t.shellTextDesktopNoProviderRecordsYet;
+  String get desktopNewFromPresetSubtitle =>
+      t.shellTextDesktopNewFromPresetSubtitle;
+  String get desktopPresetBootstrapExplicitTitle =>
+      t.shellTextDesktopPresetBootstrapExplicitTitle;
+  String get desktopPresetBootstrapExplicitMessage =>
+      t.shellTextDesktopPresetBootstrapExplicitMessage;
+  String get desktopProviderFamiliesSubtitle =>
+      t.shellTextDesktopProviderFamiliesSubtitle;
   String get desktopFamiliesReadonlyHereTitle =>
-      _pick('Families are read-only here', 'Здесь семейства только для чтения');
-  String get desktopFamiliesReadonlyHereMessage => _pick(
-    'This list belongs to the shipped shell. Choose a family here, then edit the selected record back in the record editor.',
-    'Этот список принадлежит встроенной оболочке. Выберите здесь семейство, затем редактируйте выбранную запись в редакторе записи.',
-  );
-  String get desktopUsePreset => _pick('Use preset', 'Использовать пресет');
-  String get launched => _pick('launched', 'запущен');
-  String get desktopSavedProfilesRouteDetail => _pick(
-    'Choose a saved profile, or return to the active profile editor without losing the current draft.',
-    'Выберите сохраненный профиль или вернитесь в активный редактор профиля, не теряя текущий черновик.',
-  );
+      t.shellTextDesktopFamiliesReadonlyHereTitle;
+  String get desktopFamiliesReadonlyHereMessage =>
+      t.shellTextDesktopFamiliesReadonlyHereMessage;
+  String get desktopUsePreset => t.shellTextDesktopUsePreset;
+  String get launched => t.shellTextLaunched;
+  String get desktopSavedProfilesRouteDetail =>
+      t.shellTextDesktopSavedProfilesRouteDetail;
   String get desktopManagedRecordsTitle =>
-      _pick('Managed records', 'Управляемые записи');
-  String get desktopManagedRecordsRouteDetail => _pick(
-    'Choose a reusable managed record for the active profile draft, or return without changing the draft.',
-    'Выберите переиспользуемую управляемую запись для активного черновика профиля или вернитесь без изменения черновика.',
-  );
-  String get desktopProviderRecordsRouteDetail => _pick(
-    'Create a provider record here, or reopen one to edit it. Families stay in a separate chooser.',
-    'Создайте здесь запись провайдера или заново откройте существующую для редактирования. Семейства остаются в отдельном списке выбора.',
-  );
+      t.shellTextDesktopManagedRecordsTitle;
+  String get desktopManagedRecordsRouteDetail =>
+      t.shellTextDesktopManagedRecordsRouteDetail;
+  String get desktopProviderRecordsRouteDetail =>
+      t.shellTextDesktopProviderRecordsRouteDetail;
   String get desktopPresetBootstrapTitle =>
-      _pick('Preset bootstrap', 'Запуск из пресета');
-  String get desktopPresetBootstrapRouteDetail => _pick(
-    'Seed the provider workflow from a curated preset, then return to the managed-provider editor route.',
-    'Запустите рабочий процесс провайдера из подготовленного пресета, затем вернитесь в маршрут редактора управляемого провайдера.',
-  );
-  String get desktopProviderFamiliesRouteDetail => _pick(
-    'Choose a read-only shipped family here, then return to the provider record editor.',
-    'Выберите здесь встроенное семейство только для чтения, затем вернитесь в редактор записи провайдера.',
-  );
-  String get desktopWorkflowReadiness =>
-      _pick('Workflow readiness', 'Готовность рабочего процесса');
-  String desktopTunnelModesReadySummary(int ready, int total) => _pick(
-    '$ready/$total tunnel modes ready',
-    '$ready/$total туннельных режимов готовы',
-  );
-  String get desktopPlatformTunnelSummary => _pick(
-    'Platform tunnel summary',
-    'Сводка платформенных туннельных режимов',
-  );
+      t.shellTextDesktopPresetBootstrapTitle;
+  String get desktopPresetBootstrapRouteDetail =>
+      t.shellTextDesktopPresetBootstrapRouteDetail;
+  String get desktopProviderFamiliesRouteDetail =>
+      t.shellTextDesktopProviderFamiliesRouteDetail;
+  String get desktopWorkflowReadiness => t.shellTextDesktopWorkflowReadiness;
+  String desktopTunnelModesReadySummary(int ready, int total) =>
+      t.shellTextDesktopTunnelModesReadySummary(ready: ready, total: total);
+  String get desktopPlatformTunnelSummary =>
+      t.shellTextDesktopPlatformTunnelSummary;
   String desktopResolutionsSessionsCompact(int resolutions, int sessions) =>
-      _pick(
-        '$resolutions resolutions · $sessions sessions',
-        '$resolutions резолюций · $sessions сессий',
+      t.shellTextDesktopResolutionsSessionsCompact(
+        resolutions: resolutions,
+        sessions: sessions,
       );
   String get desktopSupportContextPinned =>
-      _pick('Support context pinned', 'Контекст поддержки закреплен');
+      t.shellTextDesktopSupportContextPinned;
   String get desktopSupportAttentionRequired =>
-      _pick('Support attention is required', 'Требуется внимание поддержки');
+      t.shellTextDesktopSupportAttentionRequired;
   String get desktopSupportContextWarmingUp =>
-      _pick('Support context is warming up', 'Контекст поддержки прогревается');
-  String get desktopLiveWorkActive =>
-      _pick('Live work is active', 'Текущая работа активна');
-  String get desktopSupportNote => _pick('Support note', 'Заметка поддержки');
-  String get desktopSupportBlockedDetail => _pick(
-    'The local host is blocked or incompatible. Keep the recovery path visible from the primary workflow.',
-    'Локальный хост заблокирован или несовместим. Держите путь восстановления видимым из основного рабочего процесса.',
-  );
-  String get desktopSupportBootingDetail => _pick(
-    'Host negotiation is still in progress. Diagnostics stay one action away without reclaiming the full shell.',
-    'Согласование с хостом все еще идет. Диагностика остается в одном действии, не перехватывая всю оболочку.',
-  );
-  String get desktopSupportReadyLiveDetail => _pick(
-    'Use Live work to inspect the current runtime without letting the support surface reclaim the full shell.',
-    'Используйте Текущую работу, чтобы просмотреть текущий рантайм, не позволяя поверхности поддержки перехватывать всю оболочку.',
-  );
-  String get desktopSupportReadyIdleDetail => _pick(
-    'Use Diagnostics or Live work when you need deeper inspection. The main workflow remains primary.',
-    'Используйте Диагностику или Текущую работу, когда нужна более глубокая проверка. Основной рабочий процесс остается главным.',
-  );
-  String get desktopInspector => _pick('Inspector', 'Инспектор');
-  String get desktopInspectorDiagnosticsSubtitle => _pick(
-    'Diagnostics and platform tunnel detail stay secondary to the main task canvas.',
-    'Диагностика и детали платформенного туннеля остаются вторичными по отношению к основному рабочему полотну.',
-  );
-  String get desktopInspectorActivitySubtitle => _pick(
-    'Live resolutions and sessions stay available on demand without reclaiming the full shell.',
-    'Текущие резолюции и сессии остаются доступными по запросу, не перехватывая всю оболочку.',
-  );
-  String get desktopTunnelDetail => _pick('Tunnel detail', 'Детали туннеля');
+      t.shellTextDesktopSupportContextWarmingUp;
+  String get desktopLiveWorkActive => t.shellTextDesktopLiveWorkActive;
+  String get desktopSupportNote => t.shellTextDesktopSupportNote;
+  String get desktopSupportBlockedDetail =>
+      t.shellTextDesktopSupportBlockedDetail;
+  String get desktopSupportBootingDetail =>
+      t.shellTextDesktopSupportBootingDetail;
+  String get desktopSupportReadyLiveDetail =>
+      t.shellTextDesktopSupportReadyLiveDetail;
+  String get desktopSupportReadyIdleDetail =>
+      t.shellTextDesktopSupportReadyIdleDetail;
+  String get desktopInspector => t.shellTextDesktopInspector;
+  String get desktopInspectorDiagnosticsSubtitle =>
+      t.shellTextDesktopInspectorDiagnosticsSubtitle;
+  String get desktopInspectorActivitySubtitle =>
+      t.shellTextDesktopInspectorActivitySubtitle;
+  String get desktopTunnelDetail => t.shellTextDesktopTunnelDetail;
   String get desktopPlatformTunnelModes =>
-      _pick('Platform tunnel modes', 'Платформенные туннельные режимы');
-  String get desktopFailClosedCompactUntilStartup => _pick(
-    'Fail-closed platform tunnel checks stay collapsed until you explicitly test startup.',
-    'Проверки платформенного туннеля в fail-closed режиме остаются свернутыми, пока вы явно не проверите запуск.',
-  );
-  String get desktopFailClosedSectionCompactUntilStartup => _pick(
-    'The connected host only reports fail-closed platform tunnel modes, so this section stays compact until you explicitly test startup.',
-    'Подключенный хост сообщает только о платформенных туннельных режимах в fail-closed состоянии, поэтому этот раздел остается компактным, пока вы явно не проверите запуск.',
-  );
-  String get desktopTypedHostTunnelSummary => _pick(
-    'The desktop shell reads typed host tunnel capabilities and startup stages instead of guessing system routing support from the OS or app bundle.',
-    'Настольная оболочка читает типизированные возможности туннеля и этапы запуска от хоста, а не угадывает поддержку системной маршрутизации по ОС или пакету приложения.',
-  );
-  String get desktopNoPlatformTunnelModesReported => _pick(
-    'The connected host did not report any desktop platform tunnel modes.',
-    'Подключенный хост не сообщил ни о каких платформенных туннельных режимах рабочего стола.',
-  );
-  String get desktopUseDiagnosticsForReportedModes => _pick(
-    'Use Diagnostics -> Tunnel detail to inspect startup stages and fail-closed results for the reported modes.',
-    'Используйте Диагностика -> Детали туннеля, чтобы просмотреть этапы запуска и fail-closed результаты для объявленных режимов.',
-  );
-  String get desktopAllModesFailClosedLatestEvidence => _pick(
-    'All reported tunnel modes are still fail-closed; inspect Diagnostics -> Tunnel detail for the latest startup evidence.',
-    'Все объявленные туннельные режимы все еще остаются fail-closed; откройте Диагностика -> Детали туннеля для просмотра последних данных о запуске.',
-  );
-  String get desktopAllModesFailClosedTestStartup => _pick(
-    'All reported tunnel modes are currently fail-closed. Use Diagnostics -> Tunnel detail when you want to test startup explicitly.',
-    'Все объявленные туннельные режимы сейчас находятся в fail-closed состоянии. Используйте Диагностика -> Детали туннеля, когда захотите явно проверить запуск.',
-  );
-  String get desktopHostModeAvailable => _pick(
-    'The host reports that this mode is available.',
-    'Хост сообщает, что этот режим доступен.',
-  );
-  String get desktopHostModeUnavailable => _pick(
-    'The host reports that this mode is unavailable.',
-    'Хост сообщает, что этот режим недоступен.',
-  );
-  String get desktopNoStartupRequestYet => _pick(
-    'No startup request yet. Use the typed host contract to verify the fail-closed path.',
-    'Запроса на запуск пока нет. Используйте типизированный контракт хоста, чтобы проверить fail-closed сценарий.',
-  );
-  String get desktopNoSessionsYet => _pick(
-    'No active or recent sessions yet.',
-    'Активных или недавних сессий пока нет.',
-  );
-  String get desktopEventStreamSubtitle => _pick(
-    'Typed state transitions and challenge updates from /v1/events.',
-    'Типизированные переходы состояний и обновления проверок из /v1/events.',
-  );
-  String get desktopWorkflowAssuranceBooting => _pick(
-    'The shell is reconnecting to the local host. Keep the editor surface stable while negotiation completes.',
-    'Оболочка переподключается к локальному хосту. Сохраняйте поверхность редактора стабильной, пока согласование не завершится.',
-  );
-  String get desktopWorkflowAssuranceBlocked => _pick(
-    'The local host is blocked or incompatible. Keep the recovery path visible from the primary workflow surface.',
-    'Локальный хост заблокирован или несовместим. Держите путь восстановления видимым из основной рабочей поверхности.',
-  );
-  String get desktopWorkflowAssuranceReadyLive => _pick(
-    'The local host is ready. Keep the current workflow dominant while live runtime detail stays one step away.',
-    'Локальный хост готов. Сохраняйте текущий рабочий процесс главным, пока детали живого рантайма остаются в одном шаге.',
-  );
-  String get desktopWorkflowAssuranceReadyIdle => _pick(
-    'The local host is ready. Routine support stays compact so the active workflow keeps visual priority.',
-    'Локальный хост готов. Рутинная поддержка остается компактной, чтобы активный рабочий процесс сохранял визуальный приоритет.',
-  );
+      t.shellTextDesktopPlatformTunnelModes;
+  String get desktopFailClosedCompactUntilStartup =>
+      t.shellTextDesktopFailClosedCompactUntilStartup;
+  String get desktopFailClosedSectionCompactUntilStartup =>
+      t.shellTextDesktopFailClosedSectionCompactUntilStartup;
+  String get desktopTypedHostTunnelSummary =>
+      t.shellTextDesktopTypedHostTunnelSummary;
+  String get desktopNoPlatformTunnelModesReported =>
+      t.shellTextDesktopNoPlatformTunnelModesReported;
+  String get desktopUseDiagnosticsForReportedModes =>
+      t.shellTextDesktopUseDiagnosticsForReportedModes;
+  String get desktopAllModesFailClosedLatestEvidence =>
+      t.shellTextDesktopAllModesFailClosedLatestEvidence;
+  String get desktopAllModesFailClosedTestStartup =>
+      t.shellTextDesktopAllModesFailClosedTestStartup;
+  String get desktopHostModeAvailable => t.shellTextDesktopHostModeAvailable;
+  String get desktopHostModeUnavailable =>
+      t.shellTextDesktopHostModeUnavailable;
+  String get desktopNoStartupRequestYet =>
+      t.shellTextDesktopNoStartupRequestYet;
+  String get desktopNoSessionsYet => t.shellTextDesktopNoSessionsYet;
+  String get desktopEventStreamSubtitle =>
+      t.shellTextDesktopEventStreamSubtitle;
+  String get desktopWorkflowAssuranceBooting =>
+      t.shellTextDesktopWorkflowAssuranceBooting;
+  String get desktopWorkflowAssuranceBlocked =>
+      t.shellTextDesktopWorkflowAssuranceBlocked;
+  String get desktopWorkflowAssuranceReadyLive =>
+      t.shellTextDesktopWorkflowAssuranceReadyLive;
+  String get desktopWorkflowAssuranceReadyIdle =>
+      t.shellTextDesktopWorkflowAssuranceReadyIdle;
   String desktopPlatformTunnelCapabilitySummary({
     required bool available,
     List<String> satisfiedPrerequisites = const <String>[],
@@ -1368,22 +912,22 @@ class ShellText {
   }) {
     final buffer = StringBuffer(
       available
-          ? _pick(
-              '$modeLabel is available for the connected host.',
-              '$modeLabel доступен для подключенного хоста.',
+          ? t.shellTextDesktopCompactPlatformTunnelCapabilitySummaryAvailable(
+              modeLabel: modeLabel,
             )
-          : _pick('$modeLabel is unavailable', '$modeLabel недоступен'),
+          : t.shellTextDesktopCompactPlatformTunnelCapabilitySummaryUnavailable(
+              modeLabel: modeLabel,
+            ),
     );
     if (missingPrerequisite != null && missingPrerequisite.isNotEmpty) {
       buffer.write(
-        _pick(
-          ' because $missingPrerequisite is still missing.',
-          ', потому что $missingPrerequisite все еще отсутствует.',
+        t.shellTextDesktopCompactPlatformTunnelCapabilitySummaryMissingPrerequisite(
+          missingPrerequisite: missingPrerequisite,
         ),
       );
     } else if (!available) {
       buffer.write(
-        _pick(' for the connected host.', ' для подключенного хоста.'),
+        t.shellTextDesktopCompactPlatformTunnelCapabilitySummaryUnavailableSuffix,
       );
     }
     final normalizedMessage = message?.trim() ?? '';
@@ -1399,11 +943,13 @@ class ShellText {
   }) {
     final missing = missingPrerequisite?.trim() ?? '';
     if (missing.isEmpty) {
-      return _pick('$modeLabel unavailable', '$modeLabel недоступен');
+      return t.shellTextDesktopCompactPlatformTunnelStatusLabelUnavailable(
+        modeLabel: modeLabel,
+      );
     }
-    return _pick(
-      '$modeLabel: $missing missing',
-      '$modeLabel: отсутствует $missing',
+    return t.shellTextDesktopCompactPlatformTunnelStatusLabelMissing(
+      modeLabel: modeLabel,
+      missing: missing,
     );
   }
 
@@ -1415,15 +961,13 @@ class ShellText {
     String? message,
   }) {
     if (ready) {
-      return _pick(
-        '$modeLabel reached ready state for the desktop host tunnel path.',
-        '$modeLabel достиг готового состояния для туннельного пути настольного хоста.',
+      return t.shellTextDesktopPlatformTunnelResultSummaryReady(
+        modeLabel: modeLabel,
       );
     }
     final buffer = StringBuffer(
-      _pick(
-        'Startup blocked at $stageLabel.',
-        'Запуск заблокирован на этапе $stageLabel.',
+      t.shellTextDesktopPlatformTunnelResultSummaryBlocked(
+        stageLabel: stageLabel,
       ),
     );
     final missing = missingPrerequisite?.trim() ?? '';
@@ -1437,478 +981,284 @@ class ShellText {
     return buffer.toString();
   }
 
-  String get continueAfterBrowserStep =>
-      _pick('Continue after browser step', 'Продолжить после шага в браузере');
-  String get continueInBrowser =>
-      _pick('Continue in browser', 'Продолжить в браузере');
-  String providerFamilyLabel(String familyTitle) => _pick(
-    'Provider family: $familyTitle',
-    'Семейство провайдера: $familyTitle',
-  );
-  String get appOwnedManagedRecord =>
-      _pick('App-owned managed record', 'Управляемая запись приложения');
-  String get selectedFamily => _pick('Selected family', 'Выбранное семейство');
+  String get continueAfterBrowserStep => t.shellTextContinueAfterBrowserStep;
+  String get continueInBrowser => t.shellTextContinueInBrowser;
+  String providerFamilyLabel(String familyTitle) =>
+      t.shellTextProviderFamilyLabel(familyTitle: familyTitle);
+  String get appOwnedManagedRecord => t.shellTextAppOwnedManagedRecord;
+  String get selectedFamily => t.shellTextSelectedFamily;
 
-  String get mobileOpenBrowser => _pick('Open browser', 'Открыть браузер');
-  String get mobileContinueInApp =>
-      _pick('Continue in app', 'Продолжить в приложении');
-  String challengeContinuationCancelled(String challengeId) => _pick(
-    'Cancelled the in-app browser continuation for challenge $challengeId and marked the challenge cancelled.',
-    'Продолжение проверки $challengeId во встроенном браузере отменено, проверка помечена как отмененная.',
-  );
+  String get mobileOpenBrowser => t.shellTextMobileOpenBrowser;
+  String get mobileContinueInApp => t.shellTextMobileContinueInApp;
+  String challengeContinuationCancelled(String challengeId) =>
+      t.shellTextChallengeContinuationCancelled(challengeId: challengeId);
   String challengeContinuationFailed({
     required String challengeId,
     required Object error,
-  }) => _pick(
-    'In-app browser continuation failed: $error. Marked challenge $challengeId as cancelled.',
-    'Продолжение проверки $challengeId во встроенном браузере завершилось ошибкой: $error. Проверка помечена как отмененная.',
+  }) => t.shellTextChallengeContinuationFailed(
+    error: error,
+    challengeId: challengeId,
   );
-  String get mobileEditProfile =>
-      _pick('Edit profile', 'Редактировать профиль');
-  String get mobileSelectedForHome =>
-      _pick('Selected for Home', 'Выбран для Главной');
-  String get mobileTurnOnVpn => _pick('Turn on VPN', 'Включить VPN');
-  String get mobileTurnOffVpn => _pick('Turn off VPN', 'Выключить VPN');
-  String get mobileProvidersTitle => _pick('Providers', 'Провайдеры');
-  String get mobileProvidersSubtitle => _pick(
-    'Choose a saved reusable provider or add a new one for Profiles.',
-    'Выберите сохраненный переиспользуемый провайдер или добавьте новый для Профилей.',
-  );
-  String get mobileAddProvider => _pick('Add provider', 'Добавить провайдера');
-  String get mobileBackToProviders =>
-      _pick('Back to providers', 'Назад к провайдерам');
-  String get mobileNoProvider => _pick('No provider', 'Провайдер не выбран');
-  String get mobileInputConfigured =>
-      _pick('input configured', 'ввод настроен');
-  String get supportTitle => _pick('Support', 'Поддержка');
-  String get supportSubtitle => _pick(
-    'Activity, failures, logs, and diagnostics stay explicit but secondary to the main VPN workflow.',
-    'Активность, ошибки, логи и диагностика остаются явными, но вторичными по отношению к основному VPN-потоку.',
-  );
-  String get routingTitle => _pick('Routing', 'Маршрутизация');
-  String get routingSubtitle => _pick(
-    'Choose whether Android system VPN covers all apps, only selected apps, or every app except the selected list.',
-    'Выберите, охватывает ли системный VPN Android все приложения, только выбранные приложения или все приложения кроме выбранного списка.',
-  );
+  String get mobileEditProfile => t.shellTextMobileEditProfile;
+  String get mobileSelectedForHome => t.shellTextMobileSelectedForHome;
+  String get mobileTurnOnVpn => t.shellTextMobileTurnOnVpn;
+  String get mobileTurnOffVpn => t.shellTextMobileTurnOffVpn;
+  String get mobileProvidersTitle => t.shellTextMobileProvidersTitle;
+  String get mobileProvidersSubtitle => t.shellTextMobileProvidersSubtitle;
+  String get mobileAddProvider => t.shellTextMobileAddProvider;
+  String get mobileBackToProviders => t.shellTextMobileBackToProviders;
+  String get mobileNoProvider => t.shellTextMobileNoProvider;
+  String get mobileInputConfigured => t.shellTextMobileInputConfigured;
+  String get supportTitle => t.shellTextSupportTitle;
+  String get supportSubtitle => t.shellTextSupportSubtitle;
+  String get routingTitle => t.shellTextRoutingTitle;
+  String get routingSubtitle => t.shellTextRoutingSubtitle;
   String modeScope(String modeLabel) =>
-      _pick('$modeLabel scope', '$modeLabel: охват');
-  String get allApps => _pick('All apps', 'Все приложения');
-  String get includedApps => _pick('Included apps', 'Включенные приложения');
-  String get excludedApps => _pick('Excluded apps', 'Исключенные приложения');
-  String get searchApps => _pick('Search apps', 'Поиск приложений');
-  String get allInstalledAppsUseVpnPath => _pick(
-    'All installed apps will use the Android system VPN path for this mobile mode.',
-    'Все установленные приложения будут использовать системный VPN-путь Android для этого мобильного режима.',
-  );
-  String get retryAppScan =>
-      _pick('Retry app scan', 'Повторить сканирование приложений');
-  String get noInstalledAppsReported => _pick(
-    'No installed apps were reported by the Android shell bridge.',
-    'Android shell bridge не сообщил об установленных приложениях.',
-  );
-  String get noInstalledAppsMatchSearch => _pick(
-    'No installed apps match this search.',
-    'Для этого поиска нет совпадающих установленных приложений.',
-  );
-  String get homeNoSavedProfilesYet =>
-      _pick('No saved profiles yet', 'Сохраненных профилей пока нет');
-  String get homeNoSavedProfilesMessage => _pick(
-    'Create or import a profile first, then come back here for the fast VPN toggle.',
-    'Сначала создайте или импортируйте профиль, затем вернитесь сюда для быстрого переключения VPN.',
-  );
-  String get currentProfile => _pick('Current profile', 'Текущий профиль');
+      t.shellTextModeScope(modeLabel: modeLabel);
+  String get allApps => t.shellTextAllApps;
+  String get includedApps => t.shellTextIncludedApps;
+  String get excludedApps => t.shellTextExcludedApps;
+  String get searchApps => t.shellTextSearchApps;
+  String get allInstalledAppsUseVpnPath =>
+      t.shellTextAllInstalledAppsUseVpnPath;
+  String get retryAppScan => t.shellTextRetryAppScan;
+  String get noInstalledAppsReported => t.shellTextNoInstalledAppsReported;
+  String get noInstalledAppsMatchSearch =>
+      t.shellTextNoInstalledAppsMatchSearch;
+  String get homeNoSavedProfilesYet => t.shellTextHomeNoSavedProfilesYet;
+  String get homeNoSavedProfilesMessage =>
+      t.shellTextHomeNoSavedProfilesMessage;
+  String get currentProfile => t.shellTextCurrentProfile;
   String listeningOn(String address) =>
-      _pick('Listening on $address', 'Слушает на $address');
-  String get currentMode => _pick('Current mode', 'Текущий режим');
-  String get noMobileTunnelModeAdvertised => _pick(
-    'The connected host has not advertised a mobile tunnel mode yet.',
-    'Подключенный хост пока не объявил мобильный туннельный режим.',
-  );
-  String get executionPath => _pick('Execution path', 'Путь выполнения');
-  String get providerStepTone => _pick('Provider step', 'Шаг провайдера');
-  String get connectionLiveTone =>
-      _pick('Connection live', 'Соединение активно');
-  String get setupNeededTone => _pick('Setup needed', 'Требуется настройка');
-  String get mainActionTone => _pick('Main action', 'Главное действие');
-  String get finishProviderValidation =>
-      _pick('Finish provider validation', 'Завершите проверку провайдера');
-  String get vpnIsOn => _pick('VPN is on', 'VPN включен');
-  String get profileRequired => _pick('Profile required', 'Требуется профиль');
-  String get vpnIsOff => _pick('VPN is off', 'VPN выключен');
-  String get continueProviderFlowInApp => _pick(
-    'Continue the provider flow in the in-app browser before VPN can start.',
-    'Продолжите шаг провайдера во встроенном браузере, прежде чем VPN сможет запуститься.',
-  );
-  String get openRequiredBrowserStepFromHome => _pick(
-    'Open the required browser step from Home, then return here and confirm completion before VPN can start.',
-    'Откройте обязательный шаг в браузере с Главной, затем вернитесь сюда и подтвердите завершение до запуска VPN.',
-  );
-  String get disconnectCurrentMobileVpnPath => _pick(
-    'Disconnect the current mobile VPN path from here.',
-    'Отсюда отключите текущий путь мобильного VPN.',
-  );
-  String get chooseOrFinishProfileBeforeStartingVpn => _pick(
-    'Choose or finish a profile in Profiles before starting the current mobile VPN path.',
-    'Выберите или завершите профиль в Профилях перед запуском текущего пути мобильного VPN.',
-  );
-  String get startCurrentMobileVpnPath => _pick(
-    'Start the current mobile VPN path from here.',
-    'Запустите текущий путь мобильного VPN отсюда.',
-  );
-  String get continueInProfiles =>
-      _pick('Continue in Profiles', 'Продолжить в Профилях');
-  String challengeKind(String kind) =>
-      _pick('Challenge: $kind', 'Проверка: $kind');
-  String get iveCompletedIt => _pick("I've completed it", 'Я завершил');
-  String get cancelChallenge => _pick('Cancel challenge', 'Отменить проверку');
-  String get needDeeperDetail =>
-      _pick('Need deeper detail?', 'Нужна более глубокая детализация?');
+      t.shellTextListeningOn(address: address);
+  String get currentMode => t.shellTextCurrentMode;
+  String get noMobileTunnelModeAdvertised =>
+      t.shellTextNoMobileTunnelModeAdvertised;
+  String get executionPath => t.shellTextExecutionPath;
+  String get providerStepTone => t.shellTextProviderStepTone;
+  String get connectionLiveTone => t.shellTextConnectionLiveTone;
+  String get setupNeededTone => t.shellTextSetupNeededTone;
+  String get mainActionTone => t.shellTextMainActionTone;
+  String get finishProviderValidation => t.shellTextFinishProviderValidation;
+  String get vpnIsOn => t.shellTextVpnIsOn;
+  String get profileRequired => t.shellTextProfileRequired;
+  String get vpnIsOff => t.shellTextVpnIsOff;
+  String get continueProviderFlowInApp => t.shellTextContinueProviderFlowInApp;
+  String get openRequiredBrowserStepFromHome =>
+      t.shellTextOpenRequiredBrowserStepFromHome;
+  String get disconnectCurrentMobileVpnPath =>
+      t.shellTextDisconnectCurrentMobileVpnPath;
+  String get chooseOrFinishProfileBeforeStartingVpn =>
+      t.shellTextChooseOrFinishProfileBeforeStartingVpn;
+  String get startCurrentMobileVpnPath => t.shellTextStartCurrentMobileVpnPath;
+  String get continueInProfiles => t.shellTextContinueInProfiles;
+  String challengeKind(String kind) => t.shellTextChallengeKind(kind: kind);
+  String get iveCompletedIt => t.shellTextIveCompletedIt;
+  String get cancelChallenge => t.shellTextCancelChallenge;
+  String get needDeeperDetail => t.shellTextNeedDeeperDetail;
   String resolutionsSessionsSummary({
     required int resolutions,
     required int sessions,
     required String liveSummary,
-  }) => _pick(
-    'Resolutions $resolutions · Sessions $sessions · $liveSummary',
-    'Резолюции $resolutions · Сессии $sessions · $liveSummary',
+  }) => t.shellTextResolutionsSessionsSummary(
+    resolutions: resolutions,
+    sessions: sessions,
+    liveSummary: liveSummary,
   );
-  String get noStartupRequestYetShort =>
-      _pick('No startup request yet.', 'Запроса на запуск пока не было.');
-  String get routingUnavailableForMode => _pick(
-    'Routing is unavailable for this mode',
-    'Маршрутизация недоступна для этого режима',
-  );
-  String get routingUnavailableMessage => _pick(
-    'Only mobile modes that support per-app scope expose this surface. Pick another mode from home if the host advertises one.',
-    'Только мобильные режимы с поддержкой маршрутизации по приложениям показывают эту поверхность. Выберите другой режим на Главной, если хост его объявляет.',
-  );
-  String get noSavedProvidersYet =>
-      _pick('No saved providers yet', 'Сохраненных провайдеров пока нет');
-  String get noSavedProvidersMessage => _pick(
-    'Add a provider, then reuse it from Profiles.',
-    'Добавьте провайдера, затем переиспользуйте его из Профилей.',
-  );
+  String get noStartupRequestYetShort => t.shellTextNoStartupRequestYetShort;
+  String get routingUnavailableForMode => t.shellTextRoutingUnavailableForMode;
+  String get routingUnavailableMessage => t.shellTextRoutingUnavailableMessage;
+  String get noSavedProvidersYet => t.shellTextNoSavedProvidersYet;
+  String get noSavedProvidersMessage => t.shellTextNoSavedProvidersMessage;
   String typeLabel(String familyTitle) =>
-      _pick('Type: $familyTitle', 'Тип: $familyTitle');
-  String get usedInProfiles =>
-      _pick('Used in Profiles', 'Используется в Профилях');
-  String get createProvider => _pick('Create provider', 'Создать провайдера');
-  String get createProviderChooseType => _pick(
-    'Choose a provider type and configure a new saved provider.',
-    'Выберите тип провайдера и настройте нового сохраненного провайдера.',
-  );
-  String get createProviderUseTemplate => _pick(
-    'Use a template to prefill a new provider. Templates are starting points, not saved providers.',
-    'Используйте шаблон для предзаполнения нового провайдера. Шаблоны - это стартовые точки, а не сохраненные провайдеры.',
-  );
-  String get providerTypes => _pick('Provider types', 'Типы провайдеров');
-  String get noShippedProviderTypesYet => _pick(
-    'This build does not advertise any shipped provider types yet.',
-    'Эта сборка пока не объявляет никаких встроенных типов провайдеров.',
-  );
-  String get searchTemplates => _pick('Search templates', 'Поиск шаблонов');
-  String get myTemplates => _pick('My templates', 'Мои шаблоны');
-  String get noSavedTemplatesYet => _pick(
-    'No saved templates yet. Save a provider as a template to reuse it here.',
-    'Сохраненных шаблонов пока нет. Сохраните провайдера как шаблон, чтобы переиспользовать его здесь.',
-  );
-  String get noSavedTemplatesMatchSearch => _pick(
-    'No saved templates match the current search.',
-    'Нет сохраненных шаблонов, подходящих под текущий поиск.',
-  );
-  String get prefillsNewProviders =>
-      _pick('Prefills new providers', 'Предзаполняет новых провайдеров');
-  String get shippedTemplates =>
-      _pick('Shipped templates', 'Встроенные шаблоны');
-  String get noShippedTemplatesMatchSearch => _pick(
-    'No shipped templates match the current search.',
-    'Нет встроенных шаблонов, подходящих под текущий поиск.',
-  );
-  String get startingPointForNewProviders => _pick(
-    'Starting point for new providers',
-    'Стартовая точка для новых провайдеров',
-  );
-  String get readOnlyShippedTemplate => _pick(
-    'Read-only shipped template',
-    'Встроенный шаблон только для чтения',
-  );
-  String get activityPageSubtitle => _pick(
-    'Inspect provider resolutions and session state without crowding the main workflow.',
-    'Просматривайте резолюции провайдера и состояние сессий, не загромождая основной рабочий процесс.',
-  );
+      t.shellTextTypeLabel(familyTitle: familyTitle);
+  String get usedInProfiles => t.shellTextUsedInProfiles;
+  String get createProvider => t.shellTextCreateProvider;
+  String get createProviderChooseType => t.shellTextCreateProviderChooseType;
+  String get createProviderUseTemplate => t.shellTextCreateProviderUseTemplate;
+  String get providerTypes => t.shellTextProviderTypes;
+  String get noShippedProviderTypesYet => t.shellTextNoShippedProviderTypesYet;
+  String get searchTemplates => t.shellTextSearchTemplates;
+  String get myTemplates => t.shellTextMyTemplates;
+  String get noSavedTemplatesYet => t.shellTextNoSavedTemplatesYet;
+  String get noSavedTemplatesMatchSearch =>
+      t.shellTextNoSavedTemplatesMatchSearch;
+  String get prefillsNewProviders => t.shellTextPrefillsNewProviders;
+  String get shippedTemplates => t.shellTextShippedTemplates;
+  String get noShippedTemplatesMatchSearch =>
+      t.shellTextNoShippedTemplatesMatchSearch;
+  String get startingPointForNewProviders =>
+      t.shellTextStartingPointForNewProviders;
+  String get readOnlyShippedTemplate => t.shellTextReadOnlyShippedTemplate;
+  String get activityPageSubtitle => t.shellTextActivityPageSubtitle;
   String resolutionsCount(int count) =>
-      _pick('Resolutions ($count)', 'Резолюции ($count)');
-  String sessionsCount(int count) =>
-      _pick('Sessions ($count)', 'Сессии ($count)');
-  String get diagnosticsPageSubtitle => _pick(
-    'Detailed host readiness, platform tunnel detail, and recent typed events.',
-    'Подробная готовность хоста, детали платформенного туннеля и недавние типизированные события.',
-  );
-  String eventsCount(int count) => _pick('Events ($count)', 'События ($count)');
-  String get waitingForMobileHostBridge => _pick(
-    'Waiting for mobile host bridge negotiation.',
-    'Ожидание согласования моста мобильного хоста.',
-  );
-  String guiBuildTag(String label) => _pick('GUI $label', 'GUI $label');
-  String hostBuildTag(String label) => _pick('Host $label', 'Host $label');
+      t.shellTextResolutionsCount(count: count);
+  String sessionsCount(int count) => t.shellTextSessionsCount(count: count);
+  String get diagnosticsPageSubtitle => t.shellTextDiagnosticsPageSubtitle;
+  String eventsCount(int count) => t.shellTextEventsCount(count: count);
+  String get waitingForMobileHostBridge =>
+      t.shellTextWaitingForMobileHostBridge;
+  String guiBuildTag(String label) => t.shellTextGuiBuildTag(label: label);
+  String hostBuildTag(String label) => t.shellTextHostBuildTag(label: label);
   String contractTag(String version) =>
-      _pick('Contract $version', 'Контракт $version');
-  String get reconnect => _pick('Reconnect', 'Переподключить');
-  String get refresh => _pick('Refresh', 'Обновить');
-  String get resolutionsTitle => _pick('Resolutions', 'Резолюции');
-  String get resolutionsSubtitle => _pick(
-    'Resolve the invite first, then use the capability-gated action set to start on this device, export a handoff, or open provider-native targets.',
-    'Сначала разрешите инвайт, затем используйте набор действий, ограниченный возможностями, чтобы запустить на этом устройстве, экспортировать handoff или открыть нативные цели провайдера.',
-  );
-  String get noProviderResolutionsYet =>
-      _pick('No provider resolutions yet.', 'Резолюций провайдера пока нет.');
-  String get systemTunnelBannerText => _pick(
-    'This mobile slice renders typed host capability and startup-stage results for the reported platform modes. Use the controls below to start or disconnect supported system-tunnel paths.',
-    'Этот мобильный срез отображает типизированные возможности хоста и результаты этапов запуска для объявленных платформенных режимов. Используйте элементы управления ниже, чтобы запустить или отключить поддерживаемые пути системного туннеля.',
-  );
-  String get noPlatformTunnelModesReported => _pick(
-    'The connected mobile host did not report any platform tunnel modes.',
-    'Подключенный мобильный хост не сообщил ни о каких платформенных туннельных режимах.',
-  );
-  String get availableLowercase => _pick('available', 'доступно');
-  String get unavailableLowercase => _pick('unavailable', 'недоступно');
-  String get disconnectVpn => _pick('Disconnect VPN', 'Отключить VPN');
-  String get requestStartup => _pick('Request startup', 'Запросить запуск');
-  String get noStartupRequestYet => _pick(
-    'No startup request yet. Use the typed mobile host contract to verify the fail-closed path.',
-    'Запроса на запуск пока нет. Используйте типизированный контракт мобильного хоста, чтобы проверить fail-closed сценарий.',
-  );
+      t.shellTextContractTag(version: version);
+  String get reconnect => t.shellTextReconnect;
+  String get refresh => t.shellTextRefresh;
+  String get resolutionsTitle => t.shellTextResolutionsTitle;
+  String get resolutionsSubtitle => t.shellTextResolutionsSubtitle;
+  String get noProviderResolutionsYet => t.shellTextNoProviderResolutionsYet;
+  String get systemTunnelBannerText => t.shellTextSystemTunnelBannerText;
+  String get noPlatformTunnelModesReported =>
+      t.shellTextNoPlatformTunnelModesReported;
+  String get availableLowercase => t.shellTextAvailableLowercase;
+  String get unavailableLowercase => t.shellTextUnavailableLowercase;
+  String get disconnectVpn => t.shellTextDisconnectVpn;
+  String get requestStartup => t.shellTextRequestStartup;
+  String get noStartupRequestYet => t.shellTextNoStartupRequestYet;
   String turnCredentialsSummary({
     required String address,
     required String username,
-  }) => _pick('TURN $address | $username', 'TURN $address | $username');
-  String exportExpiry({required String timestamp, String? source}) => _pick(
-    'Export expiry $timestamp${source == null ? '' : ' via $source'}',
-    'Срок действия экспорта $timestamp${source == null ? '' : ' через $source'}',
-  );
+  }) => t.shellTextTurnCredentialsSummary(address: address, username: username);
+  String exportExpiry({required String timestamp, String? source}) =>
+      source == null
+      ? t.shellTextExportExpiry(timestamp: timestamp)
+      : t.shellTextExportExpiryWithSource(timestamp: timestamp, source: source);
+
   String failureSummary({required String stage, required String message}) =>
-      _pick('$stage: $message', '$stage: $message');
+      t.shellTextFailureSummary(stage: stage, message: message);
   String sessionStateLabel(String value) => switch (value) {
-    'starting' => _pick('starting', 'запуск'),
-    'challenge_required' => _pick('challenge required', 'требуется проверка'),
-    'ready' => _pick('ready', 'готово'),
-    'retrying' => _pick('retrying', 'повтор'),
-    'stopping' => _pick('stopping', 'остановка'),
-    'stopped' => _pick('stopped', 'остановлено'),
-    'failed' => _pick('failed', 'сбой'),
+    'starting' => t.shellTextStateStarting,
+    'challenge_required' => t.shellTextStateChallengeRequired,
+    'ready' => t.shellTextStateReady,
+    'retrying' => t.shellTextStateRetrying,
+    'stopping' => t.shellTextStateStopping,
+    'stopped' => t.shellTextStateStopped,
+    'failed' => t.shellTextStateFailed,
     _ => value,
   };
+
   String resolutionStateLabel(String value) => switch (value) {
-    'starting' => _pick('starting', 'запуск'),
-    'challenge_required' => _pick('challenge required', 'требуется проверка'),
-    'resolved' => _pick('resolved', 'разрешено'),
-    'failed' => _pick('failed', 'сбой'),
-    'cancelled' => _pick('cancelled', 'отменено'),
-    'expired' => _pick('expired', 'истекло'),
+    'starting' => t.shellTextStateStarting,
+    'challenge_required' => t.shellTextStateChallengeRequired,
+    'resolved' => t.shellTextStateResolved,
+    'failed' => t.shellTextStateFailed,
+    'cancelled' => t.shellTextStateCancelled,
+    'expired' => t.shellTextStateExpired,
     _ => value,
   };
+
   String actionExecutionOwnerLabel(String value) => switch (value) {
-    'host' => _pick('host', 'хост'),
-    'shell_local' => _pick('shell local', 'локальная оболочка'),
-    'shell_external' => _pick('shell external', 'внешняя оболочка'),
+    'host' => t.shellTextExecutionOwnerHost,
+    'shell_local' => t.shellTextExecutionOwnerShellLocal,
+    'shell_external' => t.shellTextExecutionOwnerShellExternal,
     _ => value,
   };
-  String get moreChallengeActions =>
-      _pick('More challenge actions', 'Больше действий проверки');
-  String get moreResolutionActions =>
-      _pick('More resolution actions', 'Больше действий резолюции');
-  String get startOnThisDevice =>
-      _pick('Start on this device', 'Запустить на этом устройстве');
-  String get shareHandoff => _pick('Share handoff', 'Поделиться handoff');
-  String get openRoom => _pick('Open room', 'Открыть комнату');
-  String get openCamera => _pick('Open camera', 'Открыть камеру');
-  String get openArchive => _pick('Open archive', 'Открыть архив');
-  String get copyHandoff => _pick('Copy handoff', 'Копировать handoff');
-  String get cancelResolution =>
-      _pick('Cancel resolution', 'Отменить резолюцию');
-  String get sessionsTitle => _pick('Sessions', 'Сессии');
-  String get noMobileSessionsYet => _pick(
-    'No active or recent mobile sessions yet.',
-    'Активных или недавних мобильных сессий пока нет.',
-  );
+
+  String get moreChallengeActions => t.shellTextMoreChallengeActions;
+  String get moreResolutionActions => t.shellTextMoreResolutionActions;
+  String get startOnThisDevice => t.shellTextStartOnThisDevice;
+  String get shareHandoff => t.shellTextShareHandoff;
+  String get openRoom => t.shellTextOpenRoom;
+  String get openCamera => t.shellTextOpenCamera;
+  String get openArchive => t.shellTextOpenArchive;
+  String get copyHandoff => t.shellTextCopyHandoff;
+  String get cancelResolution => t.shellTextCancelResolution;
+  String get sessionsTitle => t.shellTextSessionsTitle;
+  String get noMobileSessionsYet => t.shellTextNoMobileSessionsYet;
   String sessionListenConnections({
     required String listen,
     required int connections,
-  }) => _pick(
-    'listen $listen | connections $connections',
-    'слушает $listen | соединения $connections',
+  }) => t.shellTextSessionListenConnections(
+    listen: listen,
+    connections: connections,
   );
   String sessionUpdated({
     required String timestamp,
     required String sessionId,
-  }) => _pick(
-    'Updated $timestamp | session $sessionId',
-    'Обновлено $timestamp | сессия $sessionId',
-  );
-  String get moreSessionActions =>
-      _pick('More session actions', 'Больше действий сессии');
-  String get stopSession => _pick('Stop session', 'Остановить сессию');
-  String get exportDiagnostics =>
-      _pick('Export diagnostics', 'Экспортировать диагностику');
-  String get eventStream => _pick('Event stream', 'Поток событий');
-  String get eventStreamSubtitle => _pick(
-    'Typed state transitions and challenge updates from the mobile host bridge.',
-    'Типизированные переходы состояния и обновления проверок от моста мобильного хоста.',
-  );
-  String get noEventsYet => _pick('No events yet.', 'Событий пока нет.');
-  String get resetNeeded => _pick('Reset needed', 'Требуется сброс');
-  String get hostReady => _pick('Host ready', 'Хост готов');
-  String get hostIncompatible => _pick('Host incompatible', 'Хост несовместим');
-  String get hostBlocked => _pick('Host blocked', 'Хост заблокирован');
-  String get connecting => _pick('Connecting', 'Подключение');
-  String get mobileHostReady =>
-      _pick('Mobile host ready', 'Мобильный хост готов');
-  String get mobileHostIncompatible =>
-      _pick('Mobile host incompatible', 'Мобильный хост несовместим');
-  String get mobileHostBlocked =>
-      _pick('Mobile host blocked', 'Мобильный хост заблокирован');
-  String get connectingToMobileHost =>
-      _pick('Connecting to mobile host', 'Подключение к мобильному хосту');
-  String satisfiedPrerequisites(String prerequisites) => _pick(
-    'Satisfied prerequisites: $prerequisites',
-    'Выполненные предусловия: $prerequisites',
-  );
-  String missingPrerequisite(String prerequisite) => _pick(
-    'Missing prerequisite: $prerequisite',
-    'Отсутствует предусловие: $prerequisite',
-  );
-  String get mobileHostModeAvailable => _pick(
-    'The mobile host reports that this mode is available.',
-    'Мобильный хост сообщает, что этот режим доступен.',
-  );
-  String get mobileHostModeUnavailable => _pick(
-    'The mobile host reports that this mode is unavailable.',
-    'Мобильный хост сообщает, что этот режим недоступен.',
-  );
-  String platformTunnelReady(String modeLabel) => _pick(
-    '$modeLabel reached ready state for the mobile host tunnel path.',
-    '$modeLabel достиг готового состояния для туннельного пути мобильного хоста.',
-  );
-  String startupBlockedAt(String stageLabel) => _pick(
-    'Startup blocked at $stageLabel.',
-    'Запуск заблокирован на этапе $stageLabel.',
-  );
-  String get unknownStage => _pick('Unknown stage', 'Неизвестный этап');
-  String get noMobileTunnelModeSelected => _pick(
-    'No mobile tunnel mode is currently selected.',
-    'Сейчас не выбран ни один мобильный туннельный режим.',
-  );
-  String get androidSystemVpnMode =>
-      _pick('Android system VPN mode', 'Режим системного VPN Android');
-  String get appleNetworkExtensionMode =>
-      _pick('Apple network extension mode', 'Режим сетевого расширения Apple');
-  String get windowsWintunMode =>
-      _pick('Windows Wintun mode', 'Режим Windows Wintun');
-  String get linuxTunMode => _pick('Linux TUN mode', 'Режим Linux TUN');
+  }) => t.shellTextSessionUpdated(timestamp: timestamp, sessionId: sessionId);
+  String get moreSessionActions => t.shellTextMoreSessionActions;
+  String get stopSession => t.shellTextStopSession;
+  String get exportDiagnostics => t.shellTextExportDiagnostics;
+  String get eventStream => t.shellTextEventStream;
+  String get eventStreamSubtitle => t.shellTextEventStreamSubtitle;
+  String get noEventsYet => t.shellTextNoEventsYet;
+  String get resetNeeded => t.shellTextResetNeeded;
+  String get hostReady => t.shellTextHostReady;
+  String get hostIncompatible => t.shellTextHostIncompatible;
+  String get hostBlocked => t.shellTextHostBlocked;
+  String get connecting => t.shellTextConnecting;
+  String get mobileHostReady => t.shellTextMobileHostReady;
+  String get mobileHostIncompatible => t.shellTextMobileHostIncompatible;
+  String get mobileHostBlocked => t.shellTextMobileHostBlocked;
+  String get connectingToMobileHost => t.shellTextConnectingToMobileHost;
+  String satisfiedPrerequisites(String prerequisites) =>
+      t.shellTextSatisfiedPrerequisites(prerequisites: prerequisites);
+  String missingPrerequisite(String prerequisite) =>
+      t.shellTextMissingPrerequisite(prerequisite: prerequisite);
+  String get mobileHostModeAvailable => t.shellTextMobileHostModeAvailable;
+  String get mobileHostModeUnavailable => t.shellTextMobileHostModeUnavailable;
+  String platformTunnelReady(String modeLabel) =>
+      t.shellTextPlatformTunnelReady(modeLabel: modeLabel);
+  String startupBlockedAt(String stageLabel) =>
+      t.shellTextStartupBlockedAt(stageLabel: stageLabel);
+  String get unknownStage => t.shellTextUnknownStage;
+  String get noMobileTunnelModeSelected =>
+      t.shellTextNoMobileTunnelModeSelected;
+  String get androidSystemVpnMode => t.shellTextAndroidSystemVpnMode;
+  String get appleNetworkExtensionMode => t.shellTextAppleNetworkExtensionMode;
+  String get windowsWintunMode => t.shellTextWindowsWintunMode;
+  String get linuxTunMode => t.shellTextLinuxTunMode;
   String modeSummary({
     required String modeLabel,
     required String routingSummary,
     String? executionPath,
   }) => executionPath == null
-      ? _pick('$modeLabel. $routingSummary', '$modeLabel. $routingSummary')
-      : _pick(
-          '$modeLabel. $routingSummary Execution path: $executionPath.',
-          '$modeLabel. $routingSummary Путь выполнения: $executionPath.',
+      ? t.shellTextModeSummaryWithoutExecutionPath(
+          modeLabel: modeLabel,
+          routingSummary: routingSummary,
+        )
+      : t.shellTextModeSummaryWithExecutionPath(
+          modeLabel: modeLabel,
+          routingSummary: routingSummary,
+          executionPath: executionPath,
         );
-  String get perAppRoutingUnavailable => _pick(
-    'Per-app routing is unavailable for this mobile mode.',
-    'Маршрутизация по приложениям недоступна для этого мобильного режима.',
-  );
-  String get scopeAllInstalledApps => _pick(
-    'Scope: all installed apps.',
-    'Область: все установленные приложения.',
-  );
-  String get scopeIncludedAppsEmpty => _pick(
-    'Scope: included apps, but no apps are selected yet.',
-    'Область: включенные приложения, но приложения пока не выбраны.',
-  );
-  String scopeOnlySelectedApps(int count) => _pick(
-    'Scope: only $count selected apps.',
-    'Область: только $count выбранных приложений.',
-  );
-  String get scopeExcludedAppsEmpty => _pick(
-    'Scope: excluded apps, but no apps are selected yet.',
-    'Область: исключенные приложения, но приложения пока не выбраны.',
-  );
-  String scopeAllExceptSelectedApps(int count) => _pick(
-    'Scope: all apps except $count selected apps.',
-    'Область: все приложения кроме $count выбранных приложений.',
-  );
-  String get wireGuardNativeOverTurnDatagram => _pick(
-    'WireGuard native over TURN datagram',
-    'WireGuard native поверх TURN datagram',
-  );
-  String get wireGuardNativeOverTurnDtls => _pick(
-    'WireGuard native over TURN DTLS overlay',
-    'WireGuard native поверх TURN DTLS overlay',
-  );
-  String get wireGuardNativeOverWebRtc => _pick(
-    'WireGuard native over WebRTC data channel',
-    'WireGuard native поверх WebRTC data channel',
-  );
-  String get customOverlayOverTurnDatagram => _pick(
-    'Custom packet overlay over TURN datagram',
-    'Custom packet overlay поверх TURN datagram',
-  );
-  String get customOverlayOverTurnDtls => _pick(
-    'Custom packet overlay over TURN DTLS overlay',
-    'Custom packet overlay поверх TURN DTLS overlay',
-  );
-  String get customOverlayOverWebRtc => _pick(
-    'Custom packet overlay over WebRTC data channel',
-    'Custom packet overlay поверх WebRTC data channel',
-  );
-  String get proxyCoreOverTurnDatagram => _pick(
-    'Proxy core adapter over TURN datagram',
-    'Proxy core adapter поверх TURN datagram',
-  );
-  String get proxyCoreOverTurnDtls => _pick(
-    'Proxy core adapter over TURN DTLS overlay',
-    'Proxy core adapter поверх TURN DTLS overlay',
-  );
-  String get proxyCoreOverWebRtc => _pick(
-    'Proxy core adapter over WebRTC data channel',
-    'Proxy core adapter поверх WebRTC data channel',
-  );
-  String get trustTunnelOverTurnDatagram => _pick(
-    'TrustTunnel native over TURN datagram',
-    'TrustTunnel native поверх TURN datagram',
-  );
-  String get trustTunnelOverTurnDtls => _pick(
-    'TrustTunnel native over TURN DTLS overlay',
-    'TrustTunnel native поверх TURN DTLS overlay',
-  );
-  String get trustTunnelOverWebRtc => _pick(
-    'TrustTunnel native over WebRTC data channel',
-    'TrustTunnel native поверх WebRTC data channel',
-  );
-  String get ownedBrowserMissingMetadata => _pick(
-    'This challenge does not advertise the app-owned browser metadata required for in-app continuation.',
-    'Эта проверка не объявляет метаданные браузера приложения, необходимые для продолжения внутри приложения.',
-  );
-  String get ownedBrowserMissingUrl => _pick(
-    'This challenge does not expose an in-app browser URL.',
-    'Эта проверка не предоставляет URL встроенного браузера.',
-  );
-  String get ownedBrowserNoEvidence => _pick(
-    'The embedded browser session did not expose any usable continuation evidence.',
-    'Сессия встроенного браузера не предоставила пригодных данных для продолжения.',
-  );
+
+  String get perAppRoutingUnavailable => t.shellTextPerAppRoutingUnavailable;
+  String get scopeAllInstalledApps => t.shellTextScopeAllInstalledApps;
+  String get scopeIncludedAppsEmpty => t.shellTextScopeIncludedAppsEmpty;
+  String scopeOnlySelectedApps(int count) =>
+      t.shellTextScopeOnlySelectedApps(count: count);
+  String get scopeExcludedAppsEmpty => t.shellTextScopeExcludedAppsEmpty;
+  String scopeAllExceptSelectedApps(int count) =>
+      t.shellTextScopeAllExceptSelectedApps(count: count);
+  String get wireGuardNativeOverTurnDatagram =>
+      t.shellTextWireGuardNativeOverTurnDatagram;
+  String get wireGuardNativeOverTurnDtls =>
+      t.shellTextWireGuardNativeOverTurnDtls;
+  String get wireGuardNativeOverWebRtc => t.shellTextWireGuardNativeOverWebRtc;
+  String get customOverlayOverTurnDatagram =>
+      t.shellTextCustomOverlayOverTurnDatagram;
+  String get customOverlayOverTurnDtls => t.shellTextCustomOverlayOverTurnDtls;
+  String get customOverlayOverWebRtc => t.shellTextCustomOverlayOverWebRtc;
+  String get proxyCoreOverTurnDatagram => t.shellTextProxyCoreOverTurnDatagram;
+  String get proxyCoreOverTurnDtls => t.shellTextProxyCoreOverTurnDtls;
+  String get proxyCoreOverWebRtc => t.shellTextProxyCoreOverWebRtc;
+  String get trustTunnelOverTurnDatagram =>
+      t.shellTextTrustTunnelOverTurnDatagram;
+  String get trustTunnelOverTurnDtls => t.shellTextTrustTunnelOverTurnDtls;
+  String get trustTunnelOverWebRtc => t.shellTextTrustTunnelOverWebRtc;
+  String get ownedBrowserMissingMetadata =>
+      t.shellTextOwnedBrowserMissingMetadata;
+  String get ownedBrowserMissingUrl => t.shellTextOwnedBrowserMissingUrl;
+  String get ownedBrowserNoEvidence => t.shellTextOwnedBrowserNoEvidence;
   String ownedBrowserTitle(String provider) =>
-      _pick('$provider challenge', 'Проверка провайдера $provider');
-  String get ownedBrowserOpenInvite => _pick('Open invite', 'Открыть инвайт');
-  String get ownedBrowserCollecting => _pick('Collecting...', 'Сбор...');
-  String get ownedBrowserContinue => _pick('Continue', 'Продолжить');
-  String get ownedBrowserFallbackPrompt => _pick(
-    'Complete the browser step in this in-app session, then continue.',
-    'Завершите шаг в браузере в этой встроенной сессии, затем продолжите.',
-  );
-  String get ownedBrowserHideKeyboard =>
-      _pick('Hide keyboard', 'Скрыть клавиатуру');
+      t.shellTextOwnedBrowserTitle(provider: provider);
+  String get ownedBrowserOpenInvite => t.shellTextOwnedBrowserOpenInvite;
+  String get ownedBrowserCollecting => t.shellTextOwnedBrowserCollecting;
+  String get ownedBrowserContinue => t.shellTextOwnedBrowserContinue;
+  String get ownedBrowserFallbackPrompt =>
+      t.shellTextOwnedBrowserFallbackPrompt;
+  String get ownedBrowserHideKeyboard => t.shellTextOwnedBrowserHideKeyboard;
 }
 
 ShellText get currentShellText => const ShellText();

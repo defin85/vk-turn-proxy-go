@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,12 +12,14 @@ Future<BuildContext> _pumpLocaleContext(
 
   late BuildContext capturedContext;
   await tester.pumpWidget(
-    MaterialApp(
-      home: Builder(
-        builder: (BuildContext context) {
-          capturedContext = context;
-          return const SizedBox.shrink();
-        },
+    TranslationProvider(
+      child: MaterialApp(
+        home: Builder(
+          builder: (BuildContext context) {
+            capturedContext = context;
+            return const SizedBox.shrink();
+          },
+        ),
       ),
     ),
   );
@@ -60,6 +63,12 @@ void main() {
     expect(copy.desktopPlatformTunnelModes, 'Платформенные туннельные режимы');
     expect(copy.desktopNoSessionsYet, 'Активных или недавних сессий пока нет.');
     expect(copy.continueInBrowser, 'Продолжить в браузере');
+    expect(context.t.appDesktopTitle, 'vk-turn-proxy настольная оболочка');
+    expect(
+      context.t.appDesktopReferencesTitle,
+      'vk-turn-proxy примеры настольной оболочки',
+    );
+    expect(context.t.appMobileTitle, 'vk-turn-proxy мобильная оболочка');
     expect(shellLocaleDisplayName(context, AppLocale.en), 'Английский');
   });
 
@@ -81,4 +90,14 @@ void main() {
       'Конверт переносимого профиля',
     );
   });
+
+  test(
+    'ShellText facade reads generated translations instead of hardcoded bilingual pairs',
+    () {
+      final source = File('lib/src/shell_text.dart').readAsStringSync();
+
+      expect(source, isNot(contains('_pick(')));
+      expect(source, contains('t.shellTextClose'));
+    },
+  );
 }

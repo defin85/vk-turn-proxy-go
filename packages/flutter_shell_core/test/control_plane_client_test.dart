@@ -6,6 +6,33 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
+    'control plane client sends Accept-Language on locale-aware metadata requests',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(server.close);
+
+      server.listen((HttpRequest request) async {
+        expect(request.uri.path, '/v1/providers');
+        expect(
+          request.headers.value(HttpHeaders.acceptLanguageHeader),
+          'ru-RU,ru;q=0.9,en;q=0.8',
+        );
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(jsonEncode(<Map<String, dynamic>>[]));
+        await request.response.close();
+      });
+
+      final client = ControlPlaneClient(
+        baseUri: Uri.parse('http://${server.address.address}:${server.port}'),
+        localeTagProvider: () => 'ru-RU,ru;q=0.9,en;q=0.8',
+      );
+
+      final providers = await client.providers();
+      expect(providers, isEmpty);
+    },
+  );
+
+  test(
     'control plane client parses shared negotiate and event payloads',
     () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
