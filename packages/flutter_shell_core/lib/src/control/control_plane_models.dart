@@ -1,6 +1,10 @@
 import 'dart:convert';
 
+import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
+
 import 'runtime_execution_planning.dart';
+
+typedef LocalizedTextMap = Map<String, String>;
 
 enum Capability {
   profiles('profiles'),
@@ -69,11 +73,13 @@ enum ProviderAuthPosture {
 
 extension ProviderAuthPostureDisplay on ProviderAuthPosture {
   String get label => switch (this) {
-    ProviderAuthPosture.notApplicable => 'no auth requirement reported',
-    ProviderAuthPosture.guest => 'guest auth',
-    ProviderAuthPosture.account => 'account auth',
-    ProviderAuthPosture.guestOrAccount => 'guest or account auth',
-    ProviderAuthPosture.staticSecret => 'static secret input',
+    ProviderAuthPosture.notApplicable =>
+      t.sharedProviderAuthPostureNotApplicable,
+    ProviderAuthPosture.guest => t.sharedProviderAuthPostureGuest,
+    ProviderAuthPosture.account => t.sharedProviderAuthPostureAccount,
+    ProviderAuthPosture.guestOrAccount =>
+      t.sharedProviderAuthPostureGuestOrAccount,
+    ProviderAuthPosture.staticSecret => t.sharedProviderAuthPostureStaticSecret,
   };
 }
 
@@ -98,9 +104,12 @@ enum ProviderBrowserPolicy {
 
 extension ProviderBrowserPolicyDisplay on ProviderBrowserPolicy {
   String get label => switch (this) {
-    ProviderBrowserPolicy.notRequired => 'no browser requirement reported',
-    ProviderBrowserPolicy.externalRequired => 'external browser required',
-    ProviderBrowserPolicy.embeddedAllowed => 'embedded browser allowed',
+    ProviderBrowserPolicy.notRequired =>
+      t.sharedProviderBrowserPolicyNotRequired,
+    ProviderBrowserPolicy.externalRequired =>
+      t.sharedProviderBrowserPolicyExternalRequired,
+    ProviderBrowserPolicy.embeddedAllowed =>
+      t.sharedProviderBrowserPolicyEmbeddedAllowed,
   };
 }
 
@@ -142,9 +151,9 @@ enum ArtifactFamily {
 
 extension ArtifactFamilyDisplay on ArtifactFamily {
   String get label => switch (this) {
-    ArtifactFamily.genericTurn => 'Generic TURN',
-    ArtifactFamily.conferenceRoom => 'Conference room',
-    ArtifactFamily.cameraStream => 'Camera stream',
+    ArtifactFamily.genericTurn => t.sharedArtifactFamilyGenericTurn,
+    ArtifactFamily.conferenceRoom => t.sharedArtifactFamilyConferenceRoom,
+    ArtifactFamily.cameraStream => t.sharedArtifactFamilyCameraStream,
   };
 }
 
@@ -171,11 +180,11 @@ enum ArtifactAction {
 
 extension ArtifactActionDisplay on ArtifactAction {
   String get label => switch (this) {
-    ArtifactAction.startOnThisDevice => 'Start on this device',
-    ArtifactAction.exportHandoff => 'Export handoff',
-    ArtifactAction.openRoom => 'Open room',
-    ArtifactAction.openCamera => 'Open camera',
-    ArtifactAction.openArchive => 'Open archive',
+    ArtifactAction.startOnThisDevice => t.sharedArtifactActionStartOnThisDevice,
+    ArtifactAction.exportHandoff => t.sharedArtifactActionExportHandoff,
+    ArtifactAction.openRoom => t.sharedArtifactActionOpenRoom,
+    ArtifactAction.openCamera => t.sharedArtifactActionOpenCamera,
+    ArtifactAction.openArchive => t.sharedArtifactActionOpenArchive,
   };
 }
 
@@ -308,8 +317,10 @@ enum ProviderSettingPersistence {
 class ProviderSettingProperty {
   const ProviderSettingProperty({
     required this.type,
-    this.title = '',
-    this.description = '',
+    String title = '',
+    this.titleLocalized = const <String, String>{},
+    String description = '',
+    this.descriptionLocalized = const <String, String>{},
     this.enumValues = const <dynamic>[],
     this.defaultValue,
     this.examples = const <dynamic>[],
@@ -321,13 +332,18 @@ class ProviderSettingProperty {
     this.maximum,
     this.control,
     this.persistence,
-  });
+  }) : _title = title,
+       _description = description;
 
   factory ProviderSettingProperty.fromJson(Map<String, dynamic> json) {
     return ProviderSettingProperty(
       type: ProviderSettingType.fromJson(json['type'] as String?),
       title: json['title'] as String? ?? '',
+      titleLocalized: _readLocalizedTextMap(json['title_localized']),
       description: json['description'] as String? ?? '',
+      descriptionLocalized: _readLocalizedTextMap(
+        json['description_localized'],
+      ),
       enumValues: _readScalarList(json['enum']),
       defaultValue: _scalarJsonValueOrNull(json['default']),
       examples: _readScalarList(json['examples']),
@@ -347,8 +363,10 @@ class ProviderSettingProperty {
   }
 
   final ProviderSettingType? type;
-  final String title;
-  final String description;
+  final String _title;
+  final LocalizedTextMap titleLocalized;
+  final String _description;
+  final LocalizedTextMap descriptionLocalized;
   final List<dynamic> enumValues;
   final dynamic defaultValue;
   final List<dynamic> examples;
@@ -360,6 +378,15 @@ class ProviderSettingProperty {
   final double? maximum;
   final ProviderSettingControl? control;
   final ProviderSettingPersistence? persistence;
+
+  String get baseTitle => _title;
+
+  String get title => _resolveLocalizedText(_title, titleLocalized);
+
+  String get baseDescription => _description;
+
+  String get description =>
+      _resolveLocalizedText(_description, descriptionLocalized);
 }
 
 class ProviderSettingsField {
@@ -501,22 +528,31 @@ class ProviderSettingsSchema {
 class ProviderDescriptor {
   const ProviderDescriptor({
     required this.id,
-    required this.displayName,
+    required String displayName,
     required this.inputKind,
     required this.authPosture,
     required this.browserPolicy,
-    this.description = '',
+    this.displayNameLocalized = const <String, String>{},
+    String description = '',
+    this.descriptionLocalized = const <String, String>{},
     this.settingsSchema,
     this.challengeModes = const <ProviderChallengeMode>[],
     this.artifactFamilies = const <ArtifactFamily>[],
     this.capabilityHints = const ProviderCapabilityHints(),
-  });
+  }) : _displayName = displayName,
+       _description = description;
 
   factory ProviderDescriptor.fromJson(Map<String, dynamic> json) {
     return ProviderDescriptor(
       id: json['id'] as String? ?? '',
       displayName: json['display_name'] as String? ?? '',
+      displayNameLocalized: _readLocalizedTextMap(
+        json['display_name_localized'],
+      ),
       description: json['description'] as String? ?? '',
+      descriptionLocalized: _readLocalizedTextMap(
+        json['description_localized'],
+      ),
       inputKind: ProviderInputKind.fromJson(json['input_kind'] as String?),
       authPosture: ProviderAuthPosture.fromJson(
         json['auth_posture'] as String?,
@@ -550,8 +586,10 @@ class ProviderDescriptor {
   }
 
   final String id;
-  final String displayName;
-  final String description;
+  final String _displayName;
+  final LocalizedTextMap displayNameLocalized;
+  final String _description;
+  final LocalizedTextMap descriptionLocalized;
   final ProviderInputKind inputKind;
   final ProviderAuthPosture authPosture;
   final ProviderBrowserPolicy browserPolicy;
@@ -559,6 +597,16 @@ class ProviderDescriptor {
   final List<ProviderChallengeMode> challengeModes;
   final List<ArtifactFamily> artifactFamilies;
   final ProviderCapabilityHints capabilityHints;
+
+  String get baseDisplayName => _displayName;
+
+  String get displayName =>
+      _resolveLocalizedText(_displayName, displayNameLocalized);
+
+  String get baseDescription => _description;
+
+  String get description =>
+      _resolveLocalizedText(_description, descriptionLocalized);
 
   bool get mayRequireBrowserContinuation =>
       challengeModes.contains(ProviderChallengeMode.browser);
@@ -976,10 +1024,12 @@ enum PlatformTunnelMode {
 
 extension PlatformTunnelModeDisplay on PlatformTunnelMode {
   String get label => switch (this) {
-    PlatformTunnelMode.androidVpnService => 'Android VPN Service',
-    PlatformTunnelMode.appleNetworkExtension => 'Apple Network Extension',
-    PlatformTunnelMode.windowsWintun => 'Windows Wintun',
-    PlatformTunnelMode.linuxTun => 'Linux TUN',
+    PlatformTunnelMode.androidVpnService =>
+      t.sharedPlatformTunnelModeAndroidVpnService,
+    PlatformTunnelMode.appleNetworkExtension =>
+      t.sharedPlatformTunnelModeAppleNetworkExtension,
+    PlatformTunnelMode.windowsWintun => t.sharedPlatformTunnelModeWindowsWintun,
+    PlatformTunnelMode.linuxTun => t.sharedPlatformTunnelModeLinuxTun,
   };
 }
 
@@ -1009,14 +1059,22 @@ enum PlatformTunnelPrerequisite {
 
 extension PlatformTunnelPrerequisiteDisplay on PlatformTunnelPrerequisite {
   String get label => switch (this) {
-    PlatformTunnelPrerequisite.permission => 'permission',
-    PlatformTunnelPrerequisite.entitlement => 'entitlement',
-    PlatformTunnelPrerequisite.privilegedExtension => 'privileged extension',
-    PlatformTunnelPrerequisite.driver => 'driver',
-    PlatformTunnelPrerequisite.routeExclusion => 'route exclusion',
-    PlatformTunnelPrerequisite.dnsBypass => 'DNS bypass',
-    PlatformTunnelPrerequisite.appRoutingPolicy => 'app routing policy',
-    PlatformTunnelPrerequisite.hostImplementation => 'host implementation',
+    PlatformTunnelPrerequisite.permission =>
+      t.sharedPlatformTunnelPrerequisitePermission,
+    PlatformTunnelPrerequisite.entitlement =>
+      t.sharedPlatformTunnelPrerequisiteEntitlement,
+    PlatformTunnelPrerequisite.privilegedExtension =>
+      t.sharedPlatformTunnelPrerequisitePrivilegedExtension,
+    PlatformTunnelPrerequisite.driver =>
+      t.sharedPlatformTunnelPrerequisiteDriver,
+    PlatformTunnelPrerequisite.routeExclusion =>
+      t.sharedPlatformTunnelPrerequisiteRouteExclusion,
+    PlatformTunnelPrerequisite.dnsBypass =>
+      t.sharedPlatformTunnelPrerequisiteDnsBypass,
+    PlatformTunnelPrerequisite.appRoutingPolicy =>
+      t.sharedPlatformTunnelPrerequisiteAppRoutingPolicy,
+    PlatformTunnelPrerequisite.hostImplementation =>
+      t.sharedPlatformTunnelPrerequisiteHostImplementation,
   };
 }
 
@@ -1064,13 +1122,20 @@ enum PlatformTunnelStartupStage {
 
 extension PlatformTunnelStartupStageDisplay on PlatformTunnelStartupStage {
   String get label => switch (this) {
-    PlatformTunnelStartupStage.capabilityCheck => 'Capability check',
-    PlatformTunnelStartupStage.permissionAcquire => 'Permission acquire',
-    PlatformTunnelStartupStage.entitlementAcquire => 'Entitlement acquire',
-    PlatformTunnelStartupStage.driverCheck => 'Driver check',
-    PlatformTunnelStartupStage.routeValidate => 'Route validation',
-    PlatformTunnelStartupStage.hostBringup => 'Host bring-up',
-    PlatformTunnelStartupStage.runtimeAttach => 'Runtime attach',
+    PlatformTunnelStartupStage.capabilityCheck =>
+      t.sharedPlatformTunnelStartupStageCapabilityCheck,
+    PlatformTunnelStartupStage.permissionAcquire =>
+      t.sharedPlatformTunnelStartupStagePermissionAcquire,
+    PlatformTunnelStartupStage.entitlementAcquire =>
+      t.sharedPlatformTunnelStartupStageEntitlementAcquire,
+    PlatformTunnelStartupStage.driverCheck =>
+      t.sharedPlatformTunnelStartupStageDriverCheck,
+    PlatformTunnelStartupStage.routeValidate =>
+      t.sharedPlatformTunnelStartupStageRouteValidate,
+    PlatformTunnelStartupStage.hostBringup =>
+      t.sharedPlatformTunnelStartupStageHostBringup,
+    PlatformTunnelStartupStage.runtimeAttach =>
+      t.sharedPlatformTunnelStartupStageRuntimeAttach,
   };
 }
 
@@ -1584,41 +1649,53 @@ enum ProviderConfigAvailabilityState {
 extension ProviderConfigAvailabilityStateDisplay
     on ProviderConfigAvailabilityState {
   String get label => switch (this) {
-    ProviderConfigAvailabilityState.available => 'Available',
-    ProviderConfigAvailabilityState.providerUnavailable => 'Provider missing',
-    ProviderConfigAvailabilityState.schemaUnsupported => 'Schema unsupported',
-    ProviderConfigAvailabilityState.settingsInvalid => 'Settings invalid',
+    ProviderConfigAvailabilityState.available =>
+      t.sharedProviderConfigAvailabilityStateAvailable,
+    ProviderConfigAvailabilityState.providerUnavailable =>
+      t.sharedProviderConfigAvailabilityStateProviderUnavailable,
+    ProviderConfigAvailabilityState.schemaUnsupported =>
+      t.sharedProviderConfigAvailabilityStateSchemaUnsupported,
+    ProviderConfigAvailabilityState.settingsInvalid =>
+      t.sharedProviderConfigAvailabilityStateSettingsInvalid,
   };
 }
 
 class ProviderConfigAvailability {
   const ProviderConfigAvailability({
     this.state = ProviderConfigAvailabilityState.available,
-    this.message = '',
+    String message = '',
+    this.messageLocalized = const <String, String>{},
     this.field = '',
     this.violation = '',
-  });
+  }) : _message = message;
 
   factory ProviderConfigAvailability.fromJson(Map<String, dynamic> json) {
     return ProviderConfigAvailability(
       state: ProviderConfigAvailabilityState.fromJson(json['state'] as String?),
       message: json['message'] as String? ?? '',
+      messageLocalized: _readLocalizedTextMap(json['message_localized']),
       field: json['field'] as String? ?? '',
       violation: json['violation'] as String? ?? '',
     );
   }
 
   final ProviderConfigAvailabilityState state;
-  final String message;
+  final String _message;
+  final LocalizedTextMap messageLocalized;
   final String field;
   final String violation;
 
   bool get isAvailable => state == ProviderConfigAvailabilityState.available;
 
+  String get baseMessage => _message;
+
+  String get message => _resolveLocalizedText(_message, messageLocalized);
+
   Map<String, dynamic> toJson() {
     return _compact(<String, dynamic>{
       'state': state.value,
-      'message': message.isEmpty ? null : message,
+      'message': baseMessage.isEmpty ? null : baseMessage,
+      'message_localized': messageLocalized.isEmpty ? null : messageLocalized,
       'field': field.isEmpty ? null : field,
       'violation': violation.isEmpty ? null : violation,
     });
@@ -1785,17 +1862,28 @@ class SupportedProviderAvailability {
 }
 
 class SupportedProviderDefinition {
-  const SupportedProviderDefinition({
-    required this.id,
-    required this.title,
-    required this.description,
-    required this.suggestedManagedProviderName,
-  });
+  const SupportedProviderDefinition({required this.id});
 
   final String id;
-  final String title;
-  final String description;
-  final String suggestedManagedProviderName;
+
+  String get title => switch (id.trim().toLowerCase()) {
+    'vk' => t.sharedCatalogSupportedProviderVkTitle,
+    'generic-turn' => t.sharedCatalogSupportedProviderGenericTurnTitle,
+    _ => id,
+  };
+
+  String get description => switch (id.trim().toLowerCase()) {
+    'vk' => t.sharedCatalogSupportedProviderVkDescription,
+    'generic-turn' => t.sharedCatalogSupportedProviderGenericTurnDescription,
+    _ => '',
+  };
+
+  String get suggestedManagedProviderName => switch (id.trim().toLowerCase()) {
+    'vk' => t.sharedCatalogSupportedProviderVkSuggestedManagedProviderName,
+    'generic-turn' =>
+      t.sharedCatalogSupportedProviderGenericTurnSuggestedManagedProviderName,
+    _ => id,
+  };
 
   SupportedProviderAvailability availabilityFor(
     Iterable<ProviderDescriptor> descriptors,
@@ -2021,18 +2109,32 @@ class ProviderPreset {
   const ProviderPreset({
     required this.id,
     required this.provider,
-    required this.title,
-    required this.description,
-    required this.suggestedProfileName,
     this.seedProviderSettings = const <String, dynamic>{},
   });
 
   final String id;
   final String provider;
-  final String title;
-  final String description;
-  final String suggestedProfileName;
   final Map<String, dynamic> seedProviderSettings;
+
+  String get title => switch (id.trim().toLowerCase()) {
+    'vk-default' => t.sharedCatalogPresetVkDefaultTitle,
+    'generic-turn-default' => t.sharedCatalogPresetGenericTurnDefaultTitle,
+    _ => provider,
+  };
+
+  String get description => switch (id.trim().toLowerCase()) {
+    'vk-default' => t.sharedCatalogPresetVkDefaultDescription,
+    'generic-turn-default' =>
+      t.sharedCatalogPresetGenericTurnDefaultDescription,
+    _ => '',
+  };
+
+  String get suggestedProfileName => switch (id.trim().toLowerCase()) {
+    'vk-default' => t.sharedCatalogPresetVkDefaultSuggestedProfileName,
+    'generic-turn-default' =>
+      t.sharedCatalogPresetGenericTurnDefaultSuggestedProfileName,
+    _ => provider,
+  };
 
   ProviderPresetAvailability availabilityFor(
     Iterable<ProviderDescriptor> descriptors,
@@ -2064,41 +2166,15 @@ class ProviderPreset {
 }
 
 const List<ProviderPreset> kProviderPresetCatalog = <ProviderPreset>[
-  ProviderPreset(
-    id: 'vk-default',
-    provider: 'vk',
-    title: 'VK Calls',
-    description:
-        'Seed a managed VK provider entry for browser-first invite workflows.',
-    suggestedProfileName: 'VK Calls',
-  ),
-  ProviderPreset(
-    id: 'generic-turn-default',
-    provider: 'generic-turn',
-    title: 'Generic TURN',
-    description:
-        'Seed a managed Generic TURN provider entry for static TURN handoff workflows.',
-    suggestedProfileName: 'Generic TURN',
-  ),
+  ProviderPreset(id: 'vk-default', provider: 'vk'),
+  ProviderPreset(id: 'generic-turn-default', provider: 'generic-turn'),
 ];
 
-const List<SupportedProviderDefinition>
-kSupportedProviderCatalog = <SupportedProviderDefinition>[
-  SupportedProviderDefinition(
-    id: 'vk',
-    title: 'VK Calls',
-    description:
-        'Invite-first provider with browser-mediated continuation that resolves into transport-ready TURN credentials.',
-    suggestedManagedProviderName: 'VK Calls',
-  ),
-  SupportedProviderDefinition(
-    id: 'generic-turn',
-    title: 'Generic TURN',
-    description:
-        'Static TURN handoff for deterministic transport testing and operator-driven runtime startup.',
-    suggestedManagedProviderName: 'Generic TURN',
-  ),
-];
+const List<SupportedProviderDefinition> kSupportedProviderCatalog =
+    <SupportedProviderDefinition>[
+      SupportedProviderDefinition(id: 'vk'),
+      SupportedProviderDefinition(id: 'generic-turn'),
+    ];
 
 class RuntimeDefaults {
   const RuntimeDefaults({
@@ -3378,6 +3454,60 @@ PlatformTunnelStartupStage? _readOptionalPlatformTunnelStage(
     return stage;
   }
   throw FormatException('invalid $fieldName: $value');
+}
+
+LocalizedTextMap _readLocalizedTextMap(dynamic raw) {
+  final values = raw as Map<String, dynamic>? ?? const <String, dynamic>{};
+  final localized = <String, String>{};
+  values.forEach((String key, dynamic value) {
+    final normalizedKey = _normalizeLocaleTag(key);
+    final normalizedValue = value is String ? _nonEmpty(value) : null;
+    if (normalizedKey == null || normalizedValue == null) {
+      return;
+    }
+    localized[normalizedKey] = normalizedValue;
+  });
+  return Map<String, String>.unmodifiable(localized);
+}
+
+String _resolveLocalizedText(String base, LocalizedTextMap localized) {
+  if (localized.isNotEmpty) {
+    final exactLocale = _normalizeLocaleTag(currentShellLocaleTag());
+    if (exactLocale != null) {
+      final exactValue = _nonEmpty(localized[exactLocale]);
+      if (exactValue != null) {
+        return exactValue;
+      }
+      final baseLanguage = _localeBaseLanguage(exactLocale);
+      if (baseLanguage != null) {
+        final baseValue = _nonEmpty(localized[baseLanguage]);
+        if (baseValue != null) {
+          return baseValue;
+        }
+      }
+    }
+  }
+  return base;
+}
+
+String? _normalizeLocaleTag(String? value) {
+  final normalized = value?.trim().replaceAll('_', '-') ?? '';
+  if (normalized.isEmpty) {
+    return null;
+  }
+  return normalized.toLowerCase();
+}
+
+String? _localeBaseLanguage(String? value) {
+  final normalized = _normalizeLocaleTag(value);
+  if (normalized == null) {
+    return null;
+  }
+  final separator = normalized.indexOf('-');
+  if (separator <= 0) {
+    return normalized;
+  }
+  return normalized.substring(0, separator);
 }
 
 String? _nonEmpty(String? value) {

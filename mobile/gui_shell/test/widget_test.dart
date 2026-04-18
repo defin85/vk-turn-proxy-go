@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_shell_core/portable_profile_transfer.dart';
 import 'package:mobile_gui_shell/src/app.dart';
@@ -13,6 +14,8 @@ import 'package:mobile_gui_shell/src/control/mobile_shell_controller.dart';
 import 'package:mobile_gui_shell/src/control/mobile_shell_state_store.dart';
 import 'package:mobile_gui_shell/src/control/profile_draft.dart';
 import 'package:mobile_gui_shell/src/ui/owned_browser_challenge.dart';
+
+import 'test_i18n.dart';
 
 const ProviderDescriptor _supportedProviderWithSettingsDescriptor =
     ProviderDescriptor(
@@ -191,6 +194,29 @@ void main() {
     await tester.pumpAndSettle();
     await _openProfilesTab(tester);
     expect(controller.draft.name, 'vk mobile draft');
+  });
+
+  testWidgets('mobile shell test helper pins translated chrome labels', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 1800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final controller = MobileShellController(
+      bridge: _FakeMobileHostBridge(),
+      stateStore: _InMemoryStateStore(MobileShellState.empty()),
+    );
+    await controller.initialize();
+    await pumpMobileShellTestApp(
+      tester,
+      controller: controller,
+      locale: AppLocale.ru,
+    );
+
+    expect(find.text('Главная'), findsWidgets);
+    expect(find.text('Профили'), findsWidgets);
+    expect(find.byTooltip('Сменить язык'), findsOneWidget);
   });
 
   testWidgets(

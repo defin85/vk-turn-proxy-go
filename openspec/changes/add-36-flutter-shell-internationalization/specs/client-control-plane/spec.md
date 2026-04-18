@@ -16,6 +16,9 @@ violation codes.
   the requested locale
 - **AND** the stable provider identifiers and provider-setting keys remain
   unchanged for program logic
+- **AND** the locale preference is carried with that metadata request or stream
+  subscription instead of mutating a host-global locale flag shared by other
+  shells
 
 #### Scenario: Shell receives localized validation or availability messages
 
@@ -27,6 +30,8 @@ violation codes.
 - **AND** the stable machine-readable state and violation fields remain
   locale-neutral
 - **AND** the shell does not need to recover action meaning from localized text
+- **AND** localized display text does not become a cross-shell shared mutable
+  state that forces one shell's locale onto another shell
 
 #### Scenario: Older or untranslated hosts stay compatible
 

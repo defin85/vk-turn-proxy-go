@@ -7,6 +7,7 @@ environment:
 workspace:
   - desktop/gui_shell
   - mobile/gui_shell
+  - packages/flutter_shell_i18n
   - packages/flutter_shell_core
 
 dependency_overrides:

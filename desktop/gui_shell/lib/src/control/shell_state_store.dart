@@ -18,6 +18,7 @@ class DesktopShellState {
       listenAddress: '127.0.0.1:9001',
       peerAddress: '127.0.0.1:56000',
     ),
+    this.localeTag,
   }) : managedProviders =
            managedProviders ??
            (providerConfigs ?? const <ProviderConfigRecord>[])
@@ -46,6 +47,7 @@ class DesktopShellState {
       managedProviders: _readManagedProviders(json),
       profileBindings: _readProfileBindings(json['profile_bindings']),
       selectedProfileId: json['selected_profile_id'] as String?,
+      localeTag: _readLocaleTag(json['locale_tag'] as String?),
       draft: draft,
       runtimeDefaults: json['runtime_defaults'] is Map<String, dynamic>
           ? RuntimeDefaults.fromJson(
@@ -61,6 +63,7 @@ class DesktopShellState {
   final String? selectedProfileId;
   final ProfileDraft draft;
   final RuntimeDefaults runtimeDefaults;
+  final String? localeTag;
 
   List<ManagedProviderRecord> get providerConfigs => managedProviders;
 
@@ -76,6 +79,7 @@ class DesktopShellState {
         for (final entry in profileBindings.entries)
           entry.key: entry.value.toJson(),
       },
+      'locale_tag': localeTag,
       'selected_profile_id': selectedProfileId,
       'draft': draft.toJson(),
       'runtime_defaults': runtimeDefaults.toJson(),
@@ -116,6 +120,7 @@ class DesktopShellState {
           if (profileBindings.containsKey(profile.id))
             profile.id: profileBindings[profile.id]!,
       },
+      localeTag: localeTag,
       selectedProfileId: selectedProfileId,
       draft: _sanitizeDraft(
         draft,
@@ -124,6 +129,11 @@ class DesktopShellState {
       runtimeDefaults: runtimeDefaults,
     );
   }
+}
+
+String? _readLocaleTag(String? raw) {
+  final normalized = raw?.trim() ?? '';
+  return normalized.isEmpty ? null : normalized;
 }
 
 abstract class DesktopShellStateStore {

@@ -50,7 +50,11 @@ func Handler(host *Host) http.Handler {
 			writeMethodNotAllowed(w, r.Method)
 			return
 		}
-		writeJSON(w, http.StatusOK, host.Providers())
+		writeJSON(
+			w,
+			http.StatusOK,
+			localizeProviderDescriptors(host.Providers(), requestedDisplayLocale(r)),
+		)
 	})
 	mux.HandleFunc("/v1/profiles", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -73,9 +77,14 @@ func Handler(host *Host) http.Handler {
 		}
 	})
 	mux.HandleFunc("/v1/provider-configs", func(w http.ResponseWriter, r *http.Request) {
+		requestedLocale := requestedDisplayLocale(r)
 		switch r.Method {
 		case http.MethodGet:
-			writeJSON(w, http.StatusOK, host.ProviderConfigs())
+			writeJSON(
+				w,
+				http.StatusOK,
+				localizeProviderConfigs(host.ProviderConfigs(), requestedLocale),
+			)
 		case http.MethodPost:
 			var config ProviderConfig
 			if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
@@ -87,7 +96,7 @@ func Handler(host *Host) http.Handler {
 				writeError(w, http.StatusBadRequest, errorCodeForBadRequest(err, "provider_config_invalid"), err)
 				return
 			}
-			writeJSON(w, http.StatusOK, saved)
+			writeJSON(w, http.StatusOK, localizeProviderConfig(saved, requestedLocale))
 		default:
 			writeMethodNotAllowed(w, r.Method)
 		}
@@ -107,7 +116,7 @@ func Handler(host *Host) http.Handler {
 			writeError(w, http.StatusBadRequest, errorCodeForBadRequest(err, "provider_config_invalid"), err)
 			return
 		}
-		writeJSON(w, http.StatusOK, saved)
+		writeJSON(w, http.StatusOK, localizeProviderConfig(saved, requestedDisplayLocale(r)))
 	})
 	mux.HandleFunc("/v1/profiles/", func(w http.ResponseWriter, r *http.Request) {
 		profileID := strings.TrimPrefix(r.URL.Path, "/v1/profiles/")
@@ -134,6 +143,7 @@ func Handler(host *Host) http.Handler {
 		}
 	})
 	mux.HandleFunc("/v1/provider-configs/", func(w http.ResponseWriter, r *http.Request) {
+		requestedLocale := requestedDisplayLocale(r)
 		configID := strings.TrimPrefix(r.URL.Path, "/v1/provider-configs/")
 		if configID == "" {
 			http.NotFound(w, r)
@@ -146,7 +156,7 @@ func Handler(host *Host) http.Handler {
 				writeNotFound(w, err)
 				return
 			}
-			writeJSON(w, http.StatusOK, config)
+			writeJSON(w, http.StatusOK, localizeProviderConfig(config, requestedLocale))
 		case http.MethodDelete:
 			if err := host.DeleteProviderConfig(configID); err != nil {
 				writeNotFound(w, err)

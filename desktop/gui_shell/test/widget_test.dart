@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gui_shell/src/app.dart';
 import 'package:gui_shell/src/control/control_plane_client.dart';
@@ -12,6 +13,8 @@ import 'package:gui_shell/src/control/desktop_shell_controller.dart';
 import 'package:gui_shell/src/control/profile_draft.dart';
 import 'package:gui_shell/src/control/shell_state_store.dart';
 import 'package:gui_shell/src/ui/dashboard_page.dart';
+
+import 'test_i18n.dart';
 
 const BuildIdentity _testGuiBuild = BuildIdentity(
   product: 'vk-turn-proxy-go',
@@ -132,6 +135,31 @@ const ProviderDescriptor _supportedProviderWithUnsupportedSettingsDescriptor =
     );
 
 void main() {
+  testWidgets('desktop shell test helper pins translated chrome labels', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final controller = DesktopShellController(
+      api: _FakeControlPlaneApi(),
+      supervisor: const _FakeHostSupervisor(),
+      stateStore: const _InMemoryShellStateStore(),
+      appBuild: _testGuiBuild,
+    );
+    await controller.initialize();
+    await pumpDesktopShellTestApp(
+      tester,
+      controller: controller,
+      locale: AppLocale.ru,
+    );
+
+    expect(find.text('Диагностика'), findsOneWidget);
+    expect(find.text('Профили'), findsWidgets);
+    expect(find.byTooltip('Сменить язык'), findsOneWidget);
+  });
+
   testWidgets(
     'desktop shell waits for owned host shutdown before app exit completes',
     (WidgetTester tester) async {

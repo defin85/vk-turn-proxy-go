@@ -1,5 +1,5 @@
-name: flutter_shell_core
-description: "Shared platform-neutral Flutter shell core for vk-turn-proxy-go."
+name: flutter_shell_i18n
+description: "Shared Flutter shell localization package for vk-turn-proxy-go."
 publish_to: 'none'
 version: 0.1.0+1
 
@@ -11,11 +11,13 @@ resolution: workspace
 dependencies:
   flutter:
     sdk: flutter
-  flutter_shell_i18n: ^0.1.0
+  slang: ^4.14.0
+  slang_flutter: ^4.14.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_localizations:
-    sdk: flutter
   flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

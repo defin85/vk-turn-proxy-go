@@ -171,6 +171,82 @@ func TestHandlerProvidersExposeProviderSettingsSchema(t *testing.T) {
 	}
 }
 
+func TestHandlerProvidersReturnLocalizedDisplayMetadata(t *testing.T) {
+	host := New()
+	handler := Handler(host)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/providers", nil)
+	req.Header.Set("Accept-Language", "ru-RU,ru;q=0.9,en;q=0.8")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /v1/providers code = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var providers []ProviderDescriptor
+	if err := json.Unmarshal(rec.Body.Bytes(), &providers); err != nil {
+		t.Fatalf("decode providers: %v", err)
+	}
+	if len(providers) != 2 {
+		t.Fatalf("providers len = %d, want 2", len(providers))
+	}
+
+	byID := make(map[string]ProviderDescriptor, len(providers))
+	for _, descriptor := range providers {
+		byID[descriptor.ID] = descriptor
+	}
+
+	if got := byID["vk"].DisplayNameLocalized["ru"]; got != "Звонки VK" {
+		t.Fatalf("vk display_name_localized[ru] = %q, want %q", got, "Звонки VK")
+	}
+	if got := byID["vk"].DescriptionLocalized["ru"]; got == "" {
+		t.Fatal("vk description_localized[ru] missing from /v1/providers response")
+	}
+	if got := byID["generic-turn"].DescriptionLocalized["ru"]; got == "" {
+		t.Fatal("generic-turn description_localized[ru] missing from /v1/providers response")
+	}
+}
+
+func TestHandlerProvidersReturnLocalizedSchemaLabels(t *testing.T) {
+	host := New(
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name:       "schema-provider",
+			descriptor: providerSettingsTestDescriptor("schema-provider"),
+			resolve: func(ctx context.Context, link string) (provider.Resolution, error) {
+				return provider.Resolution{}, nil
+			},
+		})),
+	)
+	handler := Handler(host)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/providers", nil)
+	req.Header.Set("Accept-Language", "ru")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /v1/providers code = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var providers []ProviderDescriptor
+	if err := json.Unmarshal(rec.Body.Bytes(), &providers); err != nil {
+		t.Fatalf("decode providers: %v", err)
+	}
+	if len(providers) != 1 || providers[0].SettingsSchema == nil {
+		t.Fatalf("providers = %#v, want one schema-bearing provider", providers)
+	}
+
+	properties := providers[0].SettingsSchema.Properties
+	if got := properties["region"].TitleLocalized["ru"]; got != "Регион" {
+		t.Fatalf("region title_localized[ru] = %q, want %q", got, "Регион")
+	}
+	if got := properties["device_index"].TitleLocalized["ru"]; got != "Индекс устройства" {
+		t.Fatalf("device_index title_localized[ru] = %q, want %q", got, "Индекс устройства")
+	}
+	if got := properties["device_pin"].TitleLocalized["ru"]; got != "PIN устройства" {
+		t.Fatalf("device_pin title_localized[ru] = %q, want %q", got, "PIN устройства")
+	}
+}
+
 func TestHandlerProvidersOmitInvalidProviderSettingsSchema(t *testing.T) {
 	host := New(
 		withRegistry(provider.NewRegistry(fakeAdapter{
@@ -199,6 +275,67 @@ func TestHandlerProvidersOmitInvalidProviderSettingsSchema(t *testing.T) {
 	}
 	if providers[0].SettingsSchema != nil {
 		t.Fatalf("provider settings schema = %#v, want nil for invalid descriptor schema", providers[0].SettingsSchema)
+	}
+}
+
+func TestHandlerRestoreProviderConfigReturnsLocalizedAvailability(t *testing.T) {
+	host := New(
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name:       "schema-provider",
+			descriptor: providerSettingsTestDescriptor("schema-provider"),
+			resolve: func(ctx context.Context, link string) (provider.Resolution, error) {
+				return provider.Resolution{}, nil
+			},
+		})),
+	)
+	handler := Handler(host)
+
+	payload, _ := json.Marshal(ProviderConfig{
+		ID:       "cfg-restore-1",
+		Provider: "schema-provider",
+		Name:     "Stored config",
+		ProviderSettings: ProviderSettings{
+			"device_pin": "1234",
+		},
+		CreatedAt: time.Date(2026, 4, 18, 10, 0, 0, 0, time.UTC),
+		UpdatedAt: time.Date(2026, 4, 18, 10, 1, 0, 0, time.UTC),
+	})
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/v1/provider-configs:restore",
+		bytes.NewReader(payload),
+	)
+	req.Header.Set("Accept-Language", "ru")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /v1/provider-configs:restore code = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var saved ProviderConfig
+	if err := json.Unmarshal(rec.Body.Bytes(), &saved); err != nil {
+		t.Fatalf("decode provider config: %v", err)
+	}
+	if saved.Availability.State != ProviderConfigAvailabilitySettingsInvalid {
+		t.Fatalf(
+			"availability.state = %q, want %q",
+			saved.Availability.State,
+			ProviderConfigAvailabilitySettingsInvalid,
+		)
+	}
+	if saved.Availability.Field != "device_pin" {
+		t.Fatalf("availability.field = %q, want %q", saved.Availability.Field, "device_pin")
+	}
+	if saved.Availability.Violation != providerSettingsViolationPersistence {
+		t.Fatalf(
+			"availability.violation = %q, want %q",
+			saved.Availability.Violation,
+			providerSettingsViolationPersistence,
+		)
+	}
+	if got := saved.Availability.MessageLocalized["ru"]; got == "" {
+		t.Fatal("availability.message_localized[ru] missing from restore response")
 	}
 }
 

@@ -265,6 +265,21 @@ void main() {
       );
     },
   );
+
+  test('mobile shell state round-trips locale override metadata', () {
+    final state = MobileShellState(
+      profiles: const <ProfileRecord>[],
+      managedProviders: const <ManagedProviderRecord>[],
+      providerTemplates: const <ProviderTemplateRecord>[],
+      draft: ProfileDraft.defaults(),
+      localeTag: 'ru',
+    );
+
+    final restored = MobileShellState.fromJson(state.toJson());
+
+    expect(restored.localeTag, 'ru');
+    expect(restored.toJson()['locale_tag'], 'ru');
+  });
 }
 
 class _MemoryBlobStore implements StringBlobStore {

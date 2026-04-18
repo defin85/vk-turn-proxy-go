@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter_shell_core/portable_profile_transfer.dart';
 import 'package:flutter/foundation.dart';
 import 'package:gui_shell/src/build/app_build_identity.dart';
@@ -143,6 +144,7 @@ class DesktopShellController extends ChangeNotifier {
   String? _persistedStateSignature;
   bool _restoredState = false;
   Future<void>? _shutdownFuture;
+  String? localeOverrideTag;
 
   List<PlatformTunnelCapability> get platformTunnels =>
       hostConnection?.info?.platformTunnels ??
@@ -207,6 +209,18 @@ class DesktopShellController extends ChangeNotifier {
       activeCanvasRoute != _canvasRouteReturnTarget;
 
   bool get hasLiveWork => resolutions.isNotEmpty || sessions.isNotEmpty;
+
+  AppLocale get activeLocale => LocaleSettings.currentLocale;
+
+  bool get usesSystemLocale => localeOverrideTag == null;
+
+  Future<void> selectLocaleOverride(String? rawLocale) async {
+    final locale = parseShellLocale(rawLocale);
+    localeOverrideTag = locale == null ? null : shellLocaleTag(locale);
+    await restoreShellLocale(localeOverrideTag);
+    _scheduleStatePersist();
+    _notify();
+  }
 
   ProviderConfigDraft get providerConfigDraft =>
       ProviderConfigDraft.fromJson(managedProviderDraft.toJson());
@@ -1373,6 +1387,7 @@ class DesktopShellController extends ChangeNotifier {
       selectedProfileId = state.selectedProfileId;
       draft = state.draft;
       materializeDefaults = state.runtimeDefaults;
+      localeOverrideTag = state.localeTag;
       managedProviderDraft = _defaultManagedProviderDraft();
       _persistedStateSignature = state.signature();
       _restoredState = true;
@@ -1408,6 +1423,7 @@ class DesktopShellController extends ChangeNotifier {
       selectedProfileId: selectedProfileId,
       draft: draft,
       runtimeDefaults: materializeDefaults,
+      localeTag: localeOverrideTag,
     );
     final sanitized = next.sanitizedForPersistence(providerDescriptors);
     final signature = sanitized.signature();

@@ -83,6 +83,7 @@ class MobileShellState {
     this.selectedPlatformTunnelMode,
     this.platformModePreferences =
         const <String, MobilePlatformModePreferences>{},
+    this.localeTag,
   }) : managedProviders =
            managedProviders ??
            (providerConfigs ?? const <ProviderConfigRecord>[])
@@ -115,6 +116,7 @@ class MobileShellState {
       selectedPlatformTunnelMode: PlatformTunnelMode.fromJson(
         json['selected_platform_tunnel_mode'] as String?,
       ),
+      localeTag: _readLocaleTag(json['locale_tag'] as String?),
       platformModePreferences: _readPlatformModePreferences(
         json['platform_mode_preferences'],
       ),
@@ -131,6 +133,7 @@ class MobileShellState {
   final String? selectedProfileId;
   final PlatformTunnelMode? selectedPlatformTunnelMode;
   final Map<String, MobilePlatformModePreferences> platformModePreferences;
+  final String? localeTag;
   final ProfileDraft draft;
 
   List<ManagedProviderRecord> get providerConfigs => managedProviders;
@@ -150,6 +153,7 @@ class MobileShellState {
         for (final entry in profileBindings.entries)
           entry.key: entry.value.toJson(),
       },
+      'locale_tag': localeTag,
       'selected_profile_id': selectedProfileId,
       'selected_platform_tunnel_mode': selectedPlatformTunnelMode?.value,
       'platform_mode_preferences': <String, dynamic>{
@@ -201,6 +205,7 @@ class MobileShellState {
           if (profileBindings.containsKey(profile.id))
             profile.id: profileBindings[profile.id]!,
       },
+      localeTag: localeTag,
       selectedProfileId: selectedProfileId,
       selectedPlatformTunnelMode: selectedPlatformTunnelMode,
       platformModePreferences: Map<String, MobilePlatformModePreferences>.from(
@@ -212,6 +217,11 @@ class MobileShellState {
       ),
     );
   }
+}
+
+String? _readLocaleTag(String? raw) {
+  final normalized = raw?.trim() ?? '';
+  return normalized.isEmpty ? null : normalized;
 }
 
 abstract class StringBlobStore {

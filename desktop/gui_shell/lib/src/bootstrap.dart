@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter/widgets.dart';
 import 'package:gui_shell/src/app.dart';
 import 'package:gui_shell/src/control/control_plane_client.dart';
@@ -11,9 +12,17 @@ const bool _designReferenceMode = bool.fromEnvironment(
   'VKTP_DESIGN_REFERENCES',
 );
 
-void runDesktopShellEntrypoint({bool ensureInitialized = true}) {
+Future<void> runDesktopShellEntrypoint({bool ensureInitialized = true}) async {
   if (ensureInitialized) {
     WidgetsFlutterBinding.ensureInitialized();
+  }
+
+  final stateStore = FileDesktopShellStateStore();
+  try {
+    final persistedState = await stateStore.load();
+    await restoreShellLocale(persistedState?.localeTag);
+  } catch (_) {
+    await restoreShellLocale(null);
   }
 
   if (_designReferenceMode) {
@@ -21,7 +30,9 @@ void runDesktopShellEntrypoint({bool ensureInitialized = true}) {
     return;
   }
 
-  final client = ControlPlaneClient.localhost();
+  final client = ControlPlaneClient.localhost(
+    localeTagProvider: currentShellLocaleTag,
+  );
   final controller = DesktopShellController(
     api: client,
     supervisor: DesktopHostSupervisor(
@@ -29,7 +40,7 @@ void runDesktopShellEntrypoint({bool ensureInitialized = true}) {
       listenAddress: ControlPlaneClient.defaultListenAddress,
       locator: const DefaultSidecarLocator(),
     ),
-    stateStore: FileDesktopShellStateStore(),
+    stateStore: stateStore,
   );
   unawaited(controller.initialize());
 

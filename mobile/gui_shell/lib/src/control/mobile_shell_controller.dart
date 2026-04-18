@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter_shell_core/portable_profile_transfer.dart';
 import 'package:flutter/widgets.dart';
 import 'package:mobile_gui_shell/src/build/app_build_identity.dart';
@@ -138,6 +139,7 @@ class MobileShellController extends ChangeNotifier {
   String? _persistedStateSignature;
   String? _browserHandoffChallengeId;
   final Set<String> _autoContinuedChallengeIds = <String>{};
+  String? localeOverrideTag;
   PortableProfileEnvelope? _pendingPortableProfileImportEnvelope;
   String? _pendingPortableProfileImportPayload;
 
@@ -178,6 +180,18 @@ class MobileShellController extends ChangeNotifier {
       return null;
     }
     return message;
+  }
+
+  AppLocale get activeLocale => LocaleSettings.currentLocale;
+
+  bool get usesSystemLocale => localeOverrideTag == null;
+
+  Future<void> selectLocaleOverride(String? rawLocale) async {
+    final locale = parseShellLocale(rawLocale);
+    localeOverrideTag = locale == null ? null : shellLocaleTag(locale);
+    await restoreShellLocale(localeOverrideTag);
+    _scheduleStatePersist();
+    _notify();
   }
 
   List<PlatformTunnelCapability> get platformTunnels =>
@@ -2403,6 +2417,7 @@ class MobileShellController extends ChangeNotifier {
       selectedProfileId = state.selectedProfileId;
       selectedPlatformTunnelMode = state.selectedPlatformTunnelMode;
       platformModePreferences = state.platformModePreferences;
+      localeOverrideTag = state.localeTag;
       draft = state.draft;
       managedProviderDraft = _defaultManagedProviderDraft();
       providerTemplateDraft = _defaultProviderTemplateDraft();
@@ -2437,6 +2452,7 @@ class MobileShellController extends ChangeNotifier {
       selectedProfileId: selectedProfileId,
       selectedPlatformTunnelMode: selectedPlatformTunnelMode,
       platformModePreferences: platformModePreferences,
+      localeTag: localeOverrideTag,
       draft: draft,
     );
     final sanitized = next.sanitizedForPersistence(providerDescriptors);

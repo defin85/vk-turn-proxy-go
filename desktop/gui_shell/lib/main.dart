@@ -1,5 +1,5 @@
 import 'package:gui_shell/src/bootstrap.dart';
 
-void main() {
-  runDesktopShellEntrypoint();
+Future<void> main() async {
+  await runDesktopShellEntrypoint();
 }

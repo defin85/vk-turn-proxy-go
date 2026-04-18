@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_models.dart';
 import 'package:mobile_gui_shell/src/control/mobile_host_bridge.dart';
 import 'package:mobile_gui_shell/src/control/mobile_platform_app_inventory.dart';
@@ -300,7 +301,7 @@ class _DashboardPageState extends State<DashboardPage> {
         controller: widget.controller,
         onOpenProfiles: _openProfiles,
         onOpenSupport: _openSupport,
-        headerAccessory: _HostStatusIndicator(
+        headerAccessory: _ShellHeaderAccessory(
           controller: widget.controller,
           onOpenDiagnostics: _openDiagnostics,
         ),
@@ -311,14 +312,14 @@ class _DashboardPageState extends State<DashboardPage> {
       _DashboardDestination.profiles => _ProfilesPage(
         controller: widget.controller,
         onOpenRouting: _openRouting,
-        headerAccessory: _HostStatusIndicator(
+        headerAccessory: _ShellHeaderAccessory(
           controller: widget.controller,
           onOpenDiagnostics: _openDiagnostics,
         ),
       ),
       _DashboardDestination.providers => _ProvidersPage(
         controller: widget.controller,
-        headerAccessory: _HostStatusIndicator(
+        headerAccessory: _ShellHeaderAccessory(
           controller: widget.controller,
           onOpenDiagnostics: _openDiagnostics,
         ),
@@ -329,7 +330,7 @@ class _DashboardPageState extends State<DashboardPage> {
         controller: widget.controller,
         onBack: compactRoutingRoute ? _openHome : null,
         onOpenProfiles: _openProfiles,
-        headerAccessory: _HostStatusIndicator(
+        headerAccessory: _ShellHeaderAccessory(
           controller: widget.controller,
           onOpenDiagnostics: _openDiagnostics,
         ),
@@ -339,7 +340,7 @@ class _DashboardPageState extends State<DashboardPage> {
         supportSurface: _supportSurface,
         activitySurface: _activitySurface,
         diagnosticsSurface: _diagnosticsSurface,
-        headerAccessory: _HostStatusIndicator(
+        headerAccessory: _ShellHeaderAccessory(
           controller: widget.controller,
           onOpenDiagnostics: _openDiagnostics,
         ),
@@ -365,64 +366,68 @@ class _DashboardPageState extends State<DashboardPage> {
     };
   }
 
-  NavigationDestination _destinationNavItem(_DashboardDestination destination) {
+  NavigationDestination _destinationNavItem(
+    BuildContext context,
+    _DashboardDestination destination,
+  ) {
     return switch (destination) {
-      _DashboardDestination.home => const NavigationDestination(
+      _DashboardDestination.home => NavigationDestination(
         icon: Icon(Icons.shield_outlined),
         selectedIcon: Icon(Icons.shield),
-        label: 'Home',
+        label: context.t.commonHome,
       ),
-      _DashboardDestination.profiles => const NavigationDestination(
+      _DashboardDestination.profiles => NavigationDestination(
         icon: Icon(Icons.folder_outlined),
         selectedIcon: Icon(Icons.folder),
-        label: 'Profiles',
+        label: context.t.commonProfiles,
       ),
-      _DashboardDestination.providers => const NavigationDestination(
+      _DashboardDestination.providers => NavigationDestination(
         icon: Icon(Icons.cloud_outlined),
         selectedIcon: Icon(Icons.cloud),
-        label: 'Providers',
+        label: context.t.commonProviders,
       ),
-      _DashboardDestination.routing => const NavigationDestination(
+      _DashboardDestination.routing => NavigationDestination(
         icon: Icon(Icons.alt_route_outlined),
         selectedIcon: Icon(Icons.alt_route),
-        label: 'Routing',
+        label: context.t.commonRouting,
       ),
-      _DashboardDestination.support => const NavigationDestination(
+      _DashboardDestination.support => NavigationDestination(
         icon: Icon(Icons.support_agent_outlined),
         selectedIcon: Icon(Icons.support_agent),
-        label: 'Support',
+        label: context.t.commonSupport,
       ),
     };
   }
 
   NavigationRailDestination _destinationRailItem(
+    BuildContext context,
     _DashboardDestination destination,
   ) {
     return switch (destination) {
-      _DashboardDestination.home => const NavigationRailDestination(
+      _DashboardDestination.home => NavigationRailDestination(
         icon: Icon(Icons.shield_outlined),
         selectedIcon: Icon(Icons.shield),
-        label: Text('Home'),
+        label: Text(context.t.commonHome),
       ),
-      _DashboardDestination.profiles => const NavigationRailDestination(
+      _DashboardDestination.profiles => NavigationRailDestination(
         icon: Icon(Icons.folder_outlined),
         selectedIcon: Icon(Icons.folder),
-        label: Text('Profiles'),
+        label: Text(context.t.commonProfiles),
       ),
-      _DashboardDestination.providers => const NavigationRailDestination(
+      _DashboardDestination.providers => NavigationRailDestination(
         icon: Icon(Icons.cloud_outlined),
         selectedIcon: Icon(Icons.cloud),
-        label: Text('Providers'),
+        label: Text(context.t.commonProviders),
       ),
-      _DashboardDestination.routing => const NavigationRailDestination(
+      _DashboardDestination.routing => NavigationRailDestination(
         icon: Icon(Icons.alt_route_outlined),
         selectedIcon: Icon(Icons.alt_route),
-        label: Text('Routing'),
+        label: Text(context.t.commonRouting),
       ),
-      _DashboardDestination.support => const NavigationRailDestination(
+      _DashboardDestination.support => NavigationRailDestination(
         icon: Icon(Icons.support_agent_outlined),
         selectedIcon: Icon(Icons.support_agent),
-        label: Text('Support'),
+        label: Text(context.t.commonSupport),
       ),
     };
   }
@@ -461,7 +466,10 @@ class _DashboardPageState extends State<DashboardPage> {
                       _selectDestination(primaryDestinations[index]);
                     },
                     destinations: primaryDestinations
-                        .map(_destinationRailItem)
+                        .map(
+                          (_DashboardDestination destination) =>
+                              _destinationRailItem(context, destination),
+                        )
                         .toList(growable: false),
                   ),
                   const VerticalDivider(width: 1),
@@ -490,7 +498,10 @@ class _DashboardPageState extends State<DashboardPage> {
                     _selectDestination(compactDestinations[index]);
                   },
                   destinations: compactDestinations
-                      .map(_destinationNavItem)
+                      .map(
+                        (_DashboardDestination destination) =>
+                            _destinationNavItem(context, destination),
+                      )
                       .toList(growable: false),
                 ),
         );
@@ -536,9 +547,8 @@ class _HomePage extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       children: <Widget>[
         _PageHeader(
-          title: 'Home',
-          subtitle:
-              'Pick a profile, finish any provider browser step from here, then turn the current mobile VPN path on or off.',
+          title: context.t.mobileHomeTitle,
+          subtitle: context.t.mobileHomeSubtitle,
           trailing: headerAccessory,
         ),
         if (notice != null) ...<Widget>[
@@ -629,11 +639,11 @@ class _ProfilesPage extends StatelessWidget {
     final menuActions = <_CardActionEntry>[
       _CardActionEntry(
         id: 'import-invite',
-        label: 'Import invite',
+        label: context.t.mobileProfilesImportInvite,
         onSelected: () async {
           _openProfileWorkspace(
             context,
-            title: 'Import invite',
+            title: context.t.mobileProfilesImportInvite,
             resetDraft: true,
           );
         },
@@ -641,7 +651,7 @@ class _ProfilesPage extends StatelessWidget {
       if (!wide && controller.activeModeSupportsAppRouting)
         _CardActionEntry(
           id: 'routing',
-          label: 'Routing',
+          label: context.t.mobileProfilesRouting,
           onSelected: () async {
             onOpenRouting();
           },
@@ -655,16 +665,16 @@ class _ProfilesPage extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Expanded(
-              child: const _PageHeader(
-                title: 'Profiles',
-                subtitle: 'Choose a saved profile or add a new one for Home.',
+              child: _PageHeader(
+                title: context.t.mobileProfilesTitle,
+                subtitle: context.t.mobileProfilesSubtitle,
               ),
             ),
             const SizedBox(width: 8),
             headerAccessory,
             const SizedBox(width: 12),
             _ActionOverflowButton(
-              tooltip: 'Profiles actions',
+              tooltip: context.t.mobileProfilesActionsTooltip,
               enabled: !controller.busy,
               actions: menuActions,
             ),
@@ -682,11 +692,11 @@ class _ProfilesPage extends StatelessWidget {
                 ? null
                 : () => _openProfileWorkspace(
                     context,
-                    title: 'Add profile',
+                    title: context.t.mobileProfilesAddProfile,
                     resetDraft: true,
                   ),
             icon: const Icon(Icons.add),
-            label: const Text('Add profile'),
+            label: Text(context.t.mobileProfilesAddProfile),
           ),
         ),
         const SizedBox(height: 20),
@@ -723,14 +733,14 @@ class _ProfilesListSection extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Text(
-                'No saved profiles yet',
+                context.t.mobileProfilesEmptyTitle,
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(height: 6),
               Text(
-                'Create or import a profile, then use Home for the one-tap VPN workflow.',
+                context.t.mobileProfilesEmptyMessage,
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -2923,6 +2933,76 @@ class _PageHeader extends StatelessWidget {
         ),
         if (trailing != null) ...<Widget>[const SizedBox(width: 12), trailing!],
       ],
+    );
+  }
+}
+
+class _ShellHeaderAccessory extends StatelessWidget {
+  const _ShellHeaderAccessory({
+    required this.controller,
+    required this.onOpenDiagnostics,
+  });
+
+  final MobileShellController controller;
+  final VoidCallback onOpenDiagnostics;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        _HostStatusIndicator(
+          controller: controller,
+          onOpenDiagnostics: onOpenDiagnostics,
+        ),
+        const SizedBox(width: 8),
+        _LocaleMenuButton(controller: controller),
+      ],
+    );
+  }
+}
+
+class _LocaleMenuButton extends StatelessWidget {
+  const _LocaleMenuButton({required this.controller});
+
+  final MobileShellController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      tooltip: context.t.localeSwitchTooltip,
+      onSelected: (String value) {
+        unawaited(controller.selectLocaleOverride(value.isEmpty ? null : value));
+      },
+      itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+        CheckedPopupMenuItem<String>(
+          value: '',
+          checked: controller.usesSystemLocale,
+          child: Text(context.t.localeSystemDefault),
+        ),
+        for (final locale in AppLocale.values)
+          CheckedPopupMenuItem<String>(
+            value: shellLocaleTag(locale),
+            checked:
+                !controller.usesSystemLocale &&
+                controller.activeLocale == locale,
+            child: Text(shellLocaleDisplayName(context, locale)),
+          ),
+      ],
+      child: Tooltip(
+        message: context.t.localeSwitchTooltip,
+        child: SizedBox.square(
+          dimension: 44,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              color: Theme.of(context).colorScheme.surfaceContainerHighest
+                  .withValues(alpha: 0.72),
+            ),
+            child: const Icon(Icons.translate_rounded),
+          ),
+        ),
+      ),
     );
   }
 }

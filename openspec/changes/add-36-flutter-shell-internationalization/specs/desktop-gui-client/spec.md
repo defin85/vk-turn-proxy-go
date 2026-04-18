@@ -17,6 +17,10 @@ override.
   override on launch
 - **AND** locale preference remains desktop-shell-local instead of becoming a
   host-global runtime setting
+- **AND** the desktop app root resolves framework localization delegates,
+  supported locales, and the localized app title from the shared shell
+  localization package instead of leaving framework chrome or title copy
+  hardcoded in English
 
 #### Scenario: Desktop falls back cleanly when localized host metadata is unavailable
 
@@ -28,3 +32,12 @@ override.
   still renders in the active shell locale
 - **AND** the desktop shell does not invent translations by parsing
   machine-readable ids, field keys, or violation codes
+
+#### Scenario: Desktop exposes locale override through compact shell chrome
+
+- **GIVEN** an operator needs to override the workstation locale on desktop
+- **WHEN** they use the first localized desktop shell slice
+- **THEN** the locale switch is reachable through a compact shell menu or
+  equivalent top-level shell chrome entry
+- **AND** the first slice does not require a dedicated settings surface only to
+  change locale

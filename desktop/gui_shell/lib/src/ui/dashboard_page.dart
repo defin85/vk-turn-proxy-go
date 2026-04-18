@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:gui_shell/src/control/control_plane_models.dart';
 import 'package:gui_shell/src/control/desktop_host_supervisor.dart';
 import 'package:gui_shell/src/control/desktop_shell_controller.dart';
@@ -492,17 +493,16 @@ class _DesktopShellBar extends StatelessWidget {
     final routineReadyChrome =
         controller.status == ShellStatus.ready && !controller.hasLiveWork;
     final statusTitle = switch (controller.status) {
-      ShellStatus.booting => 'Connecting to local host',
-      ShellStatus.ready => 'Local host ready',
-      ShellStatus.blocked => 'Local host blocked',
+      ShellStatus.booting => context.t.desktopStatusConnectingTitle,
+      ShellStatus.ready => context.t.desktopStatusReadyTitle,
+      ShellStatus.blocked => context.t.desktopStatusBlockedTitle,
     };
     final detail =
         connection?.message ??
         switch (controller.status) {
-          ShellStatus.booting =>
-            'Starting local host and negotiating capabilities.',
-          ShellStatus.ready => 'Connected to local host.',
-          ShellStatus.blocked => 'Waiting for local host negotiation.',
+          ShellStatus.booting => context.t.desktopStatusStartingDetail,
+          ShellStatus.ready => context.t.desktopStatusConnectedDetail,
+          ShellStatus.blocked => context.t.desktopStatusWaitingDetail,
         };
     final tone = switch (connection?.state) {
       HostLifecycleState.ready => const Color(0xFFF7FAF6),
@@ -525,33 +525,57 @@ class _DesktopShellBar extends StatelessWidget {
             key: const ValueKey<String>('desktop-navigation-drawer-button'),
             onPressed: onOpenNavigation,
             icon: const Icon(Icons.menu),
-            tooltip: 'Open workflows',
+            tooltip: context.t.commonOpenWorkflowsTooltip,
           ),
+        PopupMenuButton<String>(
+          tooltip: context.t.localeSwitchTooltip,
+          onSelected: (String value) {
+            unawaited(
+              controller.selectLocaleOverride(value.isEmpty ? null : value),
+            );
+          },
+          itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+            CheckedPopupMenuItem<String>(
+              value: '',
+              checked: controller.usesSystemLocale,
+              child: Text(context.t.localeSystemDefault),
+            ),
+            for (final locale in AppLocale.values)
+              CheckedPopupMenuItem<String>(
+                value: shellLocaleTag(locale),
+                checked:
+                    !controller.usesSystemLocale &&
+                    controller.activeLocale == locale,
+                child: Text(shellLocaleDisplayName(context, locale)),
+              ),
+          ],
+          child: const Icon(Icons.translate_rounded),
+        ),
         FilledButton.tonal(
           key: const ValueKey<String>('desktop-open-diagnostics-button'),
           onPressed: onOpenDiagnostics,
-          child: const Text('Diagnostics'),
+          child: Text(context.t.commonDiagnostics),
         ),
         FilledButton.tonal(
           key: const ValueKey<String>('desktop-open-activity-button'),
           onPressed: controller.hasLiveWork ? onOpenActivity : null,
           child: Text(
             controller.hasLiveWork
-                ? 'Live work (${controller.resolutions.length + controller.sessions.length})'
-                : 'Live work',
+                ? '${context.t.commonLiveWork} (${controller.resolutions.length + controller.sessions.length})'
+                : context.t.commonLiveWork,
           ),
         ),
         FilledButton.tonal(
           onPressed: controller.busy
               ? null
               : () => unawaited(controller.reconnect()),
-          child: const Text('Reconnect'),
+          child: Text(context.t.commonReconnect),
         ),
         FilledButton(
           onPressed: controller.busy || controller.status != ShellStatus.ready
               ? null
               : () => unawaited(controller.refresh()),
-          child: const Text('Refresh'),
+          child: Text(context.t.commonRefresh),
         ),
       ],
     );
@@ -732,14 +756,14 @@ class _ShellBarSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final shortDetail = controller.status == ShellStatus.ready
-        ? 'Focused editor stays primary; diagnostics and live work stay secondary until needed.'
+        ? context.t.desktopReadyWorkflowDetail
         : detail;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Text(
-          'Desktop control shell',
+          context.t.desktopShellLabel,
           style: theme.textTheme.labelLarge?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
             fontWeight: FontWeight.w700,
@@ -811,23 +835,23 @@ class _CompactNavigationDrawer extends StatelessWidget {
         }
       },
       children: <Widget>[
-        const Padding(
-          padding: EdgeInsets.fromLTRB(28, 20, 28, 12),
-          child: Text('Workflows'),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(28, 20, 28, 12),
+          child: Text(context.t.commonWorkflows),
         ),
-        const NavigationDrawerDestination(
+        NavigationDrawerDestination(
           key: ValueKey<String>('desktop-section-profile'),
           icon: Icon(Icons.fact_check_outlined),
-          label: Text('Profiles'),
+          label: Text(context.t.commonProfiles),
         ),
-        const NavigationDrawerDestination(
+        NavigationDrawerDestination(
           key: ValueKey<String>('desktop-section-provider'),
           icon: Icon(Icons.tune_outlined),
-          label: Text('Providers'),
+          label: Text(context.t.commonProviders),
         ),
-        const Padding(
-          padding: EdgeInsets.fromLTRB(28, 20, 28, 12),
-          child: Text('Quick actions'),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(28, 20, 28, 12),
+          child: Text(context.t.commonQuickActions),
         ),
         Padding(
           padding: EdgeInsets.fromLTRB(20, 0, 20, 20),
@@ -875,7 +899,7 @@ class _ExpandedNavigationPad extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              'Workflows',
+              context.t.commonWorkflows,
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w800,
               ),
@@ -884,8 +908,8 @@ class _ExpandedNavigationPad extends StatelessWidget {
             _SectionListTile(
               key: const ValueKey<String>('desktop-section-profile'),
               icon: Icons.fact_check_outlined,
-              title: 'Profiles',
-              subtitle: 'Profile editing',
+              title: context.t.commonProfiles,
+              subtitle: context.t.desktopSectionProfilesSubtitle,
               selected:
                   controller.activeSection ==
                   DesktopShellSection.profileWorkflow,
@@ -895,8 +919,8 @@ class _ExpandedNavigationPad extends StatelessWidget {
             _SectionListTile(
               key: const ValueKey<String>('desktop-section-provider'),
               icon: Icons.tune_outlined,
-              title: 'Providers',
-              subtitle: 'Provider records',
+              title: context.t.commonProviders,
+              subtitle: context.t.desktopSectionProvidersSubtitle,
               selected:
                   controller.activeSection ==
                   DesktopShellSection.providerWorkflow,
@@ -904,7 +928,7 @@ class _ExpandedNavigationPad extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              'Quick actions',
+              context.t.commonQuickActions,
               style: theme.textTheme.titleSmall?.copyWith(
                 fontWeight: FontWeight.w800,
               ),
@@ -957,14 +981,16 @@ class _WorkflowQuickActions extends StatelessWidget {
                 'desktop-open-profile-library-button',
               ),
               onPressed: onOpenSavedProfiles,
-              child: Text(dense ? 'Profiles' : 'Saved profiles'),
+              child: Text(
+                dense ? context.t.commonProfiles : context.t.commonSavedProfiles,
+              ),
             ),
             OutlinedButton(
               key: const ValueKey<String>(
                 'desktop-create-profile-draft-button',
               ),
               onPressed: controller.busy ? null : controller.resetDraft,
-              child: const Text('New draft'),
+              child: Text(context.t.commonNewDraft),
             ),
             OutlinedButton(
               key: const ValueKey<String>(
@@ -973,7 +999,7 @@ class _WorkflowQuickActions extends StatelessWidget {
               onPressed: controller.managedProviders.isEmpty
                   ? null
                   : onOpenManagedProvidersForProfile,
-              child: const Text('Provider records'),
+              child: Text(context.t.commonProviderRecords),
             ),
           ]
         : <Widget>[
@@ -982,21 +1008,21 @@ class _WorkflowQuickActions extends StatelessWidget {
                 'desktop-open-preset-bootstrap-button',
               ),
               onPressed: onOpenPresetBootstrap,
-              child: Text(dense ? 'Presets' : 'Use preset'),
+              child: Text(context.t.commonNewFromPreset),
             ),
             FilledButton.tonal(
               key: const ValueKey<String>(
                 'desktop-open-managed-provider-library-button',
               ),
               onPressed: onOpenManagedProvidersForProvider,
-              child: const Text('Provider records'),
+              child: Text(context.t.commonProviderRecords),
             ),
             OutlinedButton(
               key: const ValueKey<String>(
                 'desktop-open-provider-family-chooser-button',
               ),
               onPressed: onOpenProviderFamilies,
-              child: const Text('Families'),
+              child: Text(context.t.commonProviderFamilies),
             ),
           ];
 

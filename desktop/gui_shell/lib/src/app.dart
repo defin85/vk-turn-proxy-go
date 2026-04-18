@@ -1,6 +1,8 @@
 import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:gui_shell/src/design/design_reference_gallery_page.dart';
 import 'package:gui_shell/src/control/desktop_shell_controller.dart';
 import 'package:gui_shell/src/theme/shell_theme.dart';
@@ -40,11 +42,22 @@ class _DesktopShellAppState extends State<DesktopShellApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'vk-turn-proxy desktop shell',
-      debugShowCheckedModeBanner: false,
-      theme: buildDesktopShellTheme(),
-      home: DashboardPage(controller: widget.controller),
+    return TranslationProvider(
+      child: Builder(
+        builder: (BuildContext context) {
+          final localeData = TranslationProvider.of(context);
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            locale: localeData.flutterLocale,
+            supportedLocales: AppLocaleUtils.supportedLocales,
+            localizationsDelegates: GlobalMaterialLocalizations.delegates,
+            onGenerateTitle: (BuildContext context) =>
+                context.t.appDesktopTitle,
+            theme: buildDesktopShellTheme(),
+            home: DashboardPage(controller: widget.controller),
+          );
+        },
+      ),
     );
   }
 }
@@ -54,11 +67,22 @@ class DesktopShellDesignReferencesApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'vk-turn-proxy desktop shell references',
-      debugShowCheckedModeBanner: false,
-      theme: buildDesktopShellTheme(),
-      home: const DesignReferenceGalleryPage(),
+    return TranslationProvider(
+      child: Builder(
+        builder: (BuildContext context) {
+          final localeData = TranslationProvider.of(context);
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            locale: localeData.flutterLocale,
+            supportedLocales: AppLocaleUtils.supportedLocales,
+            localizationsDelegates: GlobalMaterialLocalizations.delegates,
+            onGenerateTitle: (BuildContext context) =>
+                context.t.appDesktopReferencesTitle,
+            theme: buildDesktopShellTheme(),
+            home: const DesignReferenceGalleryPage(),
+          );
+        },
+      ),
     );
   }
 }

@@ -68,13 +68,18 @@ class ControlPlaneClient implements ControlPlaneApi {
   ControlPlaneClient({
     required this.baseUri,
     this.timeout = const Duration(seconds: 10),
+    this.localeTagProvider,
     HttpClient Function()? httpClientFactory,
   }) : _httpClientFactory = httpClientFactory ?? HttpClient.new;
 
   factory ControlPlaneClient.localhost({
     String listenAddress = defaultListenAddress,
+    String? Function()? localeTagProvider,
   }) {
-    return ControlPlaneClient(baseUri: Uri.parse('http://$listenAddress'));
+    return ControlPlaneClient(
+      baseUri: Uri.parse('http://$listenAddress'),
+      localeTagProvider: localeTagProvider,
+    );
   }
 
   static const String defaultListenAddress = '127.0.0.1:7777';
@@ -82,6 +87,7 @@ class ControlPlaneClient implements ControlPlaneApi {
 
   final Uri baseUri;
   final Duration timeout;
+  final String? Function()? localeTagProvider;
   final HttpClient Function() _httpClientFactory;
 
   @override
@@ -363,6 +369,7 @@ class ControlPlaneClient implements ControlPlaneApi {
       final request = await client
           .getUrl(_resolve('/v1/events'))
           .timeout(timeout);
+      _applyHeaders(request);
       final response = await request.close().timeout(timeout);
       if (response.statusCode >= 400) {
         final body = await response.transform(utf8.decoder).join();
@@ -414,6 +421,7 @@ class ControlPlaneClient implements ControlPlaneApi {
     final client = _httpClientFactory();
     try {
       final request = await _open(client, method, path);
+      _applyHeaders(request);
       if (body != null) {
         request.headers.contentType = ContentType.json;
         request.write(jsonEncode(body));
@@ -461,6 +469,14 @@ class ControlPlaneClient implements ControlPlaneApi {
 
   Uri _resolve(String path) {
     return baseUri.resolve(path);
+  }
+
+  void _applyHeaders(HttpClientRequest request) {
+    final localeTag = localeTagProvider?.call()?.trim() ?? '';
+    if (localeTag.isEmpty) {
+      return;
+    }
+    request.headers.set(HttpHeaders.acceptLanguageHeader, localeTag);
   }
 
   ControlPlaneError _errorFromBody(int statusCode, String body) {

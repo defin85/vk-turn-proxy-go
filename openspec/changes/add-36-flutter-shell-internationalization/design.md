@@ -74,18 +74,47 @@ Alternative considered:
   Rejected because it leaves shared package copy without a clean ownership
   model and increases drift between shells.
 
+### Decision: First slice verifies `en` and `ru` while reserving additive locale scaffold
+
+The first rollout ships verified shell translations for `en` and `ru`, while
+the shared localization package source layout, generation config, and workspace
+wiring are shaped so additional locales can be added later without moving copy
+back into app-local packages.
+
+Why:
+
+- `en` and `ru` are enough to validate the architecture and operator-facing
+  fallback behavior in the first slice.
+- The repository should not lock the shared package design to exactly two
+  locales if more locales are added later.
+
 ### Decision: Keep locale preference shell-local, not host-global
 
 Each shell app keeps its own persisted locale override and falls back to the
 device locale when no override exists. Locale persistence remains app-local
 because desktop and mobile already own platform adapters and persistence
-plugins.
+plugins. Each app root also owns the active `MaterialApp` locale wiring,
+localized app title, and framework localization delegates for the supported
+shell locales.
 
 Why:
 
 - Locale is an operator presentation preference, not runtime transport state.
 - A host-global locale would couple multiple shells to one mutable display
   setting and complicate compatibility.
+
+### Decision: Expose locale switching through compact shell chrome in v1
+
+The first slice exposes the shell-local locale override through a compact shell
+menu or equivalent top-level shell chrome entry in both desktop and mobile
+shells instead of adding a dedicated settings surface only for locale
+selection.
+
+Why:
+
+- The current shell architecture is workflow-first rather than settings-first.
+- Locale switching needs to be explicit in the first slice without expanding
+  scope into a broader settings subsystem.
 
 ### Decision: Separate shell-owned copy from host-supplied metadata
 
@@ -106,8 +135,10 @@ descriptions, and validation or availability messages gain optional localized
 variants keyed by locale, while existing base fields remain the fallback.
 
 The shell expresses locale preference through the local HTTP control-plane
-surface, for example via `Accept-Language`, but machine-readable ids remain the
-source of truth for program logic.
+surface, for example via `Accept-Language`. That preference is request-scoped
+to the relevant metadata read or event-stream subscription and is never stored
+as a host-global mutable locale flag. Machine-readable ids remain the source of
+truth for program logic.
 
 Why:
 
@@ -154,10 +185,3 @@ Why:
 - Risk: logic accidentally depending on localized text.
   Mitigation: keep ids, field keys, and violation codes stable and
   locale-neutral in the control-plane contract.
-
-## Open Questions
-
-- Whether the first locale slice should ship with only `en` and `ru` or also
-  reserve additional locales in the shared package scaffold.
-- Whether locale switching belongs in a dedicated settings surface immediately
-  or can first ship through a compact shell menu entry.

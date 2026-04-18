@@ -27,3 +27,13 @@ typed translation API.
 - **AND** ordinary `flutter analyze` and `flutter test` runs from app package
   directories do not depend on synthetic package imports or app-local copies of
   shared translations
+
+#### Scenario: First locale slice keeps additive scaffold for later locales
+
+- **GIVEN** the first shared shell localization rollout verifies `en` and `ru`
+- **WHEN** the repository later adds another shell locale
+- **THEN** the shared localization package source layout and generation config
+  accept that locale without moving shell-owned copy back into app-local
+  packages
+- **AND** app packages do not need separate translation copies to prepare for
+  that later locale

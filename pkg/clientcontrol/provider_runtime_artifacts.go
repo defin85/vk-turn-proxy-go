@@ -69,16 +69,18 @@ type ProviderCapabilityHints struct {
 }
 
 type ProviderDescriptor struct {
-	ID               string                  `json:"id"`
-	DisplayName      string                  `json:"display_name"`
-	Description      string                  `json:"description,omitempty"`
-	InputKind        ProviderInputKind       `json:"input_kind"`
-	AuthPosture      ProviderAuthPosture     `json:"auth_posture"`
-	BrowserPolicy    ProviderBrowserPolicy   `json:"browser_policy"`
-	SettingsSchema   *ProviderSettingsSchema `json:"provider_settings_schema,omitempty"`
-	ChallengeModes   []ProviderChallengeMode `json:"challenge_modes,omitempty"`
-	ArtifactFamilies []ArtifactFamily        `json:"artifact_families,omitempty"`
-	CapabilityHints  ProviderCapabilityHints `json:"capability_hints,omitempty"`
+	ID                   string                  `json:"id"`
+	DisplayName          string                  `json:"display_name"`
+	DisplayNameLocalized LocalizedTextMap        `json:"display_name_localized,omitempty"`
+	Description          string                  `json:"description,omitempty"`
+	DescriptionLocalized LocalizedTextMap        `json:"description_localized,omitempty"`
+	InputKind            ProviderInputKind       `json:"input_kind"`
+	AuthPosture          ProviderAuthPosture     `json:"auth_posture"`
+	BrowserPolicy        ProviderBrowserPolicy   `json:"browser_policy"`
+	SettingsSchema       *ProviderSettingsSchema `json:"provider_settings_schema,omitempty"`
+	ChallengeModes       []ProviderChallengeMode `json:"challenge_modes,omitempty"`
+	ArtifactFamilies     []ArtifactFamily        `json:"artifact_families,omitempty"`
+	CapabilityHints      ProviderCapabilityHints `json:"capability_hints,omitempty"`
 }
 
 type ProviderInputEnvelope struct {

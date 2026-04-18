@@ -213,4 +213,18 @@ void main() {
       );
     },
   );
+
+  test('desktop shell state round-trips locale override metadata', () {
+    final state = DesktopShellState(
+      profiles: const <ProfileRecord>[],
+      managedProviders: const <ManagedProviderRecord>[],
+      draft: ProfileDraft.defaults(),
+      localeTag: 'ru',
+    );
+
+    final restored = DesktopShellState.fromJson(state.toJson());
+
+    expect(restored.localeTag, 'ru');
+    expect(restored.toJson()['locale_tag'], 'ru');
+  });
 }

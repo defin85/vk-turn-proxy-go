@@ -37,20 +37,22 @@ const (
 )
 
 type ProviderSettingProperty struct {
-	Type        ProviderSettingType        `json:"type"`
-	Title       string                     `json:"title,omitempty"`
-	Description string                     `json:"description,omitempty"`
-	Enum        []any                      `json:"enum,omitempty"`
-	Default     any                        `json:"default,omitempty"`
-	Examples    []any                      `json:"examples,omitempty"`
-	WriteOnly   bool                       `json:"writeOnly,omitempty"`
-	MinLength   *int                       `json:"minLength,omitempty"`
-	MaxLength   *int                       `json:"maxLength,omitempty"`
-	Pattern     string                     `json:"pattern,omitempty"`
-	Minimum     *float64                   `json:"minimum,omitempty"`
-	Maximum     *float64                   `json:"maximum,omitempty"`
-	Control     ProviderSettingControl     `json:"x-vkturn-control,omitempty"`
-	Persistence ProviderSettingPersistence `json:"x-vkturn-persistence,omitempty"`
+	Type                 ProviderSettingType        `json:"type"`
+	Title                string                     `json:"title,omitempty"`
+	TitleLocalized       LocalizedTextMap           `json:"title_localized,omitempty"`
+	Description          string                     `json:"description,omitempty"`
+	DescriptionLocalized LocalizedTextMap           `json:"description_localized,omitempty"`
+	Enum                 []any                      `json:"enum,omitempty"`
+	Default              any                        `json:"default,omitempty"`
+	Examples             []any                      `json:"examples,omitempty"`
+	WriteOnly            bool                       `json:"writeOnly,omitempty"`
+	MinLength            *int                       `json:"minLength,omitempty"`
+	MaxLength            *int                       `json:"maxLength,omitempty"`
+	Pattern              string                     `json:"pattern,omitempty"`
+	Minimum              *float64                   `json:"minimum,omitempty"`
+	Maximum              *float64                   `json:"maximum,omitempty"`
+	Control              ProviderSettingControl     `json:"x-vkturn-control,omitempty"`
+	Persistence          ProviderSettingPersistence `json:"x-vkturn-persistence,omitempty"`
 }
 
 func cloneProviderSettings(settings ProviderSettings) ProviderSettings {
@@ -86,20 +88,22 @@ func cloneProviderSettingsSchema(schema *ProviderSettingsSchema) *ProviderSettin
 
 func cloneProviderSettingProperty(property ProviderSettingProperty) ProviderSettingProperty {
 	return ProviderSettingProperty{
-		Type:        property.Type,
-		Title:       property.Title,
-		Description: property.Description,
-		Enum:        append([]any(nil), property.Enum...),
-		Default:     property.Default,
-		Examples:    append([]any(nil), property.Examples...),
-		WriteOnly:   property.WriteOnly,
-		MinLength:   cloneIntPointer(property.MinLength),
-		MaxLength:   cloneIntPointer(property.MaxLength),
-		Pattern:     property.Pattern,
-		Minimum:     cloneFloat64Pointer(property.Minimum),
-		Maximum:     cloneFloat64Pointer(property.Maximum),
-		Control:     property.Control,
-		Persistence: property.Persistence,
+		Type:                 property.Type,
+		Title:                property.Title,
+		TitleLocalized:       cloneLocalizedTextMap(property.TitleLocalized),
+		Description:          property.Description,
+		DescriptionLocalized: cloneLocalizedTextMap(property.DescriptionLocalized),
+		Enum:                 append([]any(nil), property.Enum...),
+		Default:              property.Default,
+		Examples:             append([]any(nil), property.Examples...),
+		WriteOnly:            property.WriteOnly,
+		MinLength:            cloneIntPointer(property.MinLength),
+		MaxLength:            cloneIntPointer(property.MaxLength),
+		Pattern:              property.Pattern,
+		Minimum:              cloneFloat64Pointer(property.Minimum),
+		Maximum:              cloneFloat64Pointer(property.Maximum),
+		Control:              property.Control,
+		Persistence:          property.Persistence,
 	}
 }
 

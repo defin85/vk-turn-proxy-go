@@ -209,10 +209,11 @@ const (
 )
 
 type ProviderConfigAvailability struct {
-	State     ProviderConfigAvailabilityState `json:"state"`
-	Message   string                          `json:"message,omitempty"`
-	Field     string                          `json:"field,omitempty"`
-	Violation string                          `json:"violation,omitempty"`
+	State            ProviderConfigAvailabilityState `json:"state"`
+	Message          string                          `json:"message,omitempty"`
+	MessageLocalized LocalizedTextMap                `json:"message_localized,omitempty"`
+	Field            string                          `json:"field,omitempty"`
+	Violation        string                          `json:"violation,omitempty"`
 }
 
 type ProviderConfig struct {
