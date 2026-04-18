@@ -3021,12 +3021,14 @@ class _LocaleMenuButton extends StatelessWidget {
       },
       itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
         CheckedPopupMenuItem<String>(
+          key: ValueKey<String>(shellLocaleMenuItemKey(null)),
           value: '',
           checked: controller.usesSystemLocale,
           child: Text(t.localeSystemDefault),
         ),
         for (final locale in AppLocale.values)
           CheckedPopupMenuItem<String>(
+            key: ValueKey<String>(shellLocaleMenuItemKey(locale)),
             value: shellLocaleTag(locale),
             checked:
                 !controller.usesSystemLocale &&

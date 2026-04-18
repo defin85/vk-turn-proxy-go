@@ -246,18 +246,18 @@ func localizedAvailabilityMessage(
 
 	providerLabel := strings.TrimSpace(providerID)
 	if providerLabel == "" {
-		providerLabel = "provider"
+		providerLabel = "провайдер"
 	}
 
 	switch availability.State {
 	case ProviderConfigAvailabilityProviderUnavailable:
 		return fmt.Sprintf(
-			"Провайдер %q не объявлен текущим host.",
+			"Провайдер %q не объявлен текущим хостом.",
 			providerLabel,
 		)
 	case ProviderConfigAvailabilitySchemaUnsupported:
 		return fmt.Sprintf(
-			"Провайдер %q сейчас не объявляет поддерживаемую provider_settings_schema.",
+			"Провайдер %q сейчас не объявляет поддерживаемую схему provider_settings.",
 			providerLabel,
 		)
 	case ProviderConfigAvailabilitySettingsInvalid:
@@ -283,7 +283,7 @@ func localizedAvailabilityMessage(
 			return fmt.Sprintf("Значение provider_settings.%s слишком длинное.", field)
 		case providerSettingsViolationPersistence:
 			return fmt.Sprintf(
-				"Поле provider_settings.%s нельзя сохранять в reusable provider config.",
+				"Поле provider_settings.%s нельзя сохранять в повторно используемой конфигурации провайдера.",
 				field,
 			)
 		default:
@@ -312,11 +312,11 @@ func providerDescriptionTranslations(providerID string) map[string]string {
 	switch strings.TrimSpace(strings.ToLower(providerID)) {
 	case "vk":
 		return map[string]string{
-			"ru": "Провайдер с invite-first сценарием и browser-mediated продолжением, который завершает разрешение transport-ready TURN credentials.",
+			"ru": "Провайдер со сценарием «сначала инвайт, потом браузер», который завершает разрешение и возвращает готовые для транспорта TURN-учетные данные.",
 		}
 	case "generic-turn":
 		return map[string]string{
-			"ru": "Статический TURN handoff для детерминированного transport testing и operator-driven запуска рантайма.",
+			"ru": "Статическая передача TURN-параметров для детерминированного тестирования транспорта и запуска рантайма под управлением оператора.",
 		}
 	default:
 		return nil
@@ -351,7 +351,7 @@ func providerSettingDescriptionTranslations(
 	case "region":
 		return map[string]string{"ru": "Выберите регион, который должен использовать провайдер."}
 	case "device_index":
-		return map[string]string{"ru": "Укажите индекс устройства, которое host должен использовать для этого профиля."}
+		return map[string]string{"ru": "Укажите индекс устройства, которое хост должен использовать для этого профиля."}
 	case "device_pin":
 		return map[string]string{"ru": "Введите PIN устройства только для текущего запроса."}
 	case "device_alias":

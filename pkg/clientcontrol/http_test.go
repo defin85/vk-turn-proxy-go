@@ -199,11 +199,19 @@ func TestHandlerProvidersReturnLocalizedDisplayMetadata(t *testing.T) {
 	if got := byID["vk"].DisplayNameLocalized["ru"]; got != "Звонки VK" {
 		t.Fatalf("vk display_name_localized[ru] = %q, want %q", got, "Звонки VK")
 	}
-	if got := byID["vk"].DescriptionLocalized["ru"]; got == "" {
-		t.Fatal("vk description_localized[ru] missing from /v1/providers response")
+	if got := byID["vk"].DescriptionLocalized["ru"]; got != "Провайдер со сценарием «сначала инвайт, потом браузер», который завершает разрешение и возвращает готовые для транспорта TURN-учетные данные." {
+		t.Fatalf(
+			"vk description_localized[ru] = %q, want %q",
+			got,
+			"Провайдер со сценарием «сначала инвайт, потом браузер», который завершает разрешение и возвращает готовые для транспорта TURN-учетные данные.",
+		)
 	}
-	if got := byID["generic-turn"].DescriptionLocalized["ru"]; got == "" {
-		t.Fatal("generic-turn description_localized[ru] missing from /v1/providers response")
+	if got := byID["generic-turn"].DescriptionLocalized["ru"]; got != "Статическая передача TURN-параметров для детерминированного тестирования транспорта и запуска рантайма под управлением оператора." {
+		t.Fatalf(
+			"generic-turn description_localized[ru] = %q, want %q",
+			got,
+			"Статическая передача TURN-параметров для детерминированного тестирования транспорта и запуска рантайма под управлением оператора.",
+		)
 	}
 }
 

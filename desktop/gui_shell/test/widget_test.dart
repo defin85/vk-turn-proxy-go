@@ -157,6 +157,8 @@ void main() {
 
     expect(find.text('Диагностика'), findsOneWidget);
     expect(find.text('Профили'), findsWidgets);
+    expect(find.text('Рабочие процессы'), findsOneWidget);
+    expect(find.text('Workflow'), findsNothing);
     expect(find.byTooltip('Сменить язык'), findsOneWidget);
   });
 

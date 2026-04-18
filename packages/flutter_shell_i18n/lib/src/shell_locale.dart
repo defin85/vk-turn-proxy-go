@@ -22,6 +22,14 @@ String currentShellLocaleTag() {
   return shellLocaleTag(LocaleSettings.currentLocale);
 }
 
+String shellLocaleMenuItemKey(AppLocale? locale) {
+  return switch (locale) {
+    null => 'shell-locale-system',
+    AppLocale.en => 'shell-locale-en',
+    AppLocale.ru => 'shell-locale-ru',
+  };
+}
+
 Future<void> restoreShellLocale(String? rawLocale) async {
   final locale = parseShellLocale(rawLocale);
   if (locale == null) {

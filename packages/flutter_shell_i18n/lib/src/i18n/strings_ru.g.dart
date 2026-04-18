@@ -94,7 +94,7 @@ class TranslationsRu extends Translations
   @override
   String get commonRefresh => 'Обновить';
   @override
-  String get commonWorkflows => 'Workflow';
+  String get commonWorkflows => 'Рабочие процессы';
   @override
   String get commonQuickActions => 'Быстрые действия';
   @override
@@ -108,12 +108,12 @@ class TranslationsRu extends Translations
   @override
   String get commonProviderFamilies => 'Семейства провайдеров';
   @override
-  String get commonOpenWorkflowsTooltip => 'Открыть workflow';
+  String get commonOpenWorkflowsTooltip => 'Открыть рабочие процессы';
   @override
   String get mobileHomeTitle => 'Главная';
   @override
   String get mobileHomeSubtitle =>
-      'Выберите профиль, завершите шаг провайдера в браузере и отсюда включайте или выключайте текущий mobile VPN path.';
+      'Выберите профиль, завершите шаг провайдера в браузере и отсюда включайте или выключайте текущий путь VPN на мобильном устройстве.';
   @override
   String get mobileProfilesTitle => 'Профили';
   @override
@@ -131,26 +131,26 @@ class TranslationsRu extends Translations
   String get mobileProfilesEmptyTitle => 'Сохраненных профилей пока нет';
   @override
   String get mobileProfilesEmptyMessage =>
-      'Создайте или импортируйте профиль, затем используйте главный экран для one-tap VPN workflow.';
+      'Создайте или импортируйте профиль, затем используйте главный экран для быстрого запуска VPN одним нажатием.';
   @override
-  String get desktopShellLabel => 'Desktop control shell';
+  String get desktopShellLabel => 'Настольная оболочка управления';
   @override
-  String get desktopStatusConnectingTitle => 'Подключение к локальному host';
+  String get desktopStatusConnectingTitle => 'Подключение к локальному хосту';
   @override
-  String get desktopStatusReadyTitle => 'Локальный host готов';
+  String get desktopStatusReadyTitle => 'Локальный хост готов';
   @override
-  String get desktopStatusBlockedTitle => 'Локальный host заблокирован';
+  String get desktopStatusBlockedTitle => 'Локальный хост заблокирован';
   @override
   String get desktopStatusStartingDetail =>
-      'Запуск локального host и negotiation capabilities.';
+      'Запуск локального хоста и согласование возможностей.';
   @override
-  String get desktopStatusConnectedDetail => 'Подключено к локальному host.';
+  String get desktopStatusConnectedDetail => 'Подключено к локальному хосту.';
   @override
   String get desktopStatusWaitingDetail =>
-      'Ожидание negotiation локального host.';
+      'Ожидание согласования с локальным хостом.';
   @override
   String get desktopReadyWorkflowDetail =>
-      'Основным остается focused editor; диагностика и live work остаются вторичными, пока они не нужны.';
+      'Основным остается сфокусированный редактор; диагностика и текущая работа остаются вторичными, пока не понадобятся.';
   @override
   String get desktopSectionProfilesSubtitle => 'Редактирование профилей';
   @override
@@ -184,7 +184,8 @@ class TranslationsRu extends Translations
   String get sharedArtifactActionStartOnThisDevice =>
       'Запустить на этом устройстве';
   @override
-  String get sharedArtifactActionExportHandoff => 'Экспортировать handoff';
+  String get sharedArtifactActionExportHandoff =>
+      'Экспортировать пакет handoff';
   @override
   String get sharedArtifactActionOpenRoom => 'Открыть комнату';
   @override
@@ -203,7 +204,7 @@ class TranslationsRu extends Translations
   @override
   String get sharedPlatformTunnelPrerequisitePermission => 'разрешение';
   @override
-  String get sharedPlatformTunnelPrerequisiteEntitlement => 'entitlement';
+  String get sharedPlatformTunnelPrerequisiteEntitlement => 'право доступа';
   @override
   String get sharedPlatformTunnelPrerequisitePrivilegedExtension =>
       'привилегированное расширение';
@@ -219,26 +220,26 @@ class TranslationsRu extends Translations
       'политика маршрутизации приложений';
   @override
   String get sharedPlatformTunnelPrerequisiteHostImplementation =>
-      'реализация host';
+      'реализация хоста';
   @override
   String get sharedPlatformTunnelStartupStageCapabilityCheck =>
-      'Проверка capability';
+      'Проверка возможностей';
   @override
   String get sharedPlatformTunnelStartupStagePermissionAcquire =>
       'Получение разрешения';
   @override
   String get sharedPlatformTunnelStartupStageEntitlementAcquire =>
-      'Получение entitlement';
+      'Получение права доступа';
   @override
   String get sharedPlatformTunnelStartupStageDriverCheck => 'Проверка драйвера';
   @override
   String get sharedPlatformTunnelStartupStageRouteValidate =>
       'Проверка маршрута';
   @override
-  String get sharedPlatformTunnelStartupStageHostBringup => 'Подъем host';
+  String get sharedPlatformTunnelStartupStageHostBringup => 'Подъем хоста';
   @override
   String get sharedPlatformTunnelStartupStageRuntimeAttach =>
-      'Подключение runtime';
+      'Подключение рантайма';
   @override
   String get sharedProviderConfigAvailabilityStateAvailable => 'Доступно';
   @override
@@ -254,14 +255,14 @@ class TranslationsRu extends Translations
   String get sharedCatalogPresetVkDefaultTitle => 'VK Calls';
   @override
   String get sharedCatalogPresetVkDefaultDescription =>
-      'Создать управляемую запись провайдера VK для workflow с инвайтом и шагом в браузере.';
+      'Создать управляемую запись провайдера VK для рабочего процесса с инвайтом и шагом в браузере.';
   @override
   String get sharedCatalogPresetVkDefaultSuggestedProfileName => 'VK Calls';
   @override
   String get sharedCatalogPresetGenericTurnDefaultTitle => 'Generic TURN';
   @override
   String get sharedCatalogPresetGenericTurnDefaultDescription =>
-      'Создать управляемую запись Generic TURN для статического TURN handoff workflow.';
+      'Создать управляемую запись Generic TURN для рабочего процесса со статической передачей TURN-параметров.';
   @override
   String get sharedCatalogPresetGenericTurnDefaultSuggestedProfileName =>
       'Generic TURN';
@@ -269,7 +270,7 @@ class TranslationsRu extends Translations
   String get sharedCatalogSupportedProviderVkTitle => 'VK Calls';
   @override
   String get sharedCatalogSupportedProviderVkDescription =>
-      'Провайдер с invite-first flow и браузерным продолжением, который приводит к transport-ready TURN credentials.';
+      'Провайдер с инвайтом на первом шаге и продолжением через браузер, который приводит к готовым для транспорта учетным данным TURN.';
   @override
   String get sharedCatalogSupportedProviderVkSuggestedManagedProviderName =>
       'VK Calls';
@@ -277,7 +278,7 @@ class TranslationsRu extends Translations
   String get sharedCatalogSupportedProviderGenericTurnTitle => 'Generic TURN';
   @override
   String get sharedCatalogSupportedProviderGenericTurnDescription =>
-      'Статический TURN handoff для детерминированного transport testing и operator-driven runtime startup.';
+      'Статическая передача TURN-параметров для детерминированного тестирования транспорта и запуска рантайма под управлением оператора.';
   @override
   String
   get sharedCatalogSupportedProviderGenericTurnSuggestedManagedProviderName =>
@@ -309,17 +310,17 @@ extension on TranslationsRu {
       'commonLiveWork' => 'Текущая работа',
       'commonReconnect' => 'Переподключить',
       'commonRefresh' => 'Обновить',
-      'commonWorkflows' => 'Workflow',
+      'commonWorkflows' => 'Рабочие процессы',
       'commonQuickActions' => 'Быстрые действия',
       'commonSavedProfiles' => 'Сохраненные профили',
       'commonProviderRecords' => 'Записи провайдеров',
       'commonNewDraft' => 'Новый черновик',
       'commonNewFromPreset' => 'Новый из пресета',
       'commonProviderFamilies' => 'Семейства провайдеров',
-      'commonOpenWorkflowsTooltip' => 'Открыть workflow',
+      'commonOpenWorkflowsTooltip' => 'Открыть рабочие процессы',
       'mobileHomeTitle' => 'Главная',
       'mobileHomeSubtitle' =>
-        'Выберите профиль, завершите шаг провайдера в браузере и отсюда включайте или выключайте текущий mobile VPN path.',
+        'Выберите профиль, завершите шаг провайдера в браузере и отсюда включайте или выключайте текущий путь VPN на мобильном устройстве.',
       'mobileProfilesTitle' => 'Профили',
       'mobileProfilesSubtitle' =>
         'Выберите сохраненный профиль или добавьте новый для главного экрана.',
@@ -329,17 +330,18 @@ extension on TranslationsRu {
       'mobileProfilesAddProfile' => 'Добавить профиль',
       'mobileProfilesEmptyTitle' => 'Сохраненных профилей пока нет',
       'mobileProfilesEmptyMessage' =>
-        'Создайте или импортируйте профиль, затем используйте главный экран для one-tap VPN workflow.',
-      'desktopShellLabel' => 'Desktop control shell',
-      'desktopStatusConnectingTitle' => 'Подключение к локальному host',
-      'desktopStatusReadyTitle' => 'Локальный host готов',
-      'desktopStatusBlockedTitle' => 'Локальный host заблокирован',
+        'Создайте или импортируйте профиль, затем используйте главный экран для быстрого запуска VPN одним нажатием.',
+      'desktopShellLabel' => 'Настольная оболочка управления',
+      'desktopStatusConnectingTitle' => 'Подключение к локальному хосту',
+      'desktopStatusReadyTitle' => 'Локальный хост готов',
+      'desktopStatusBlockedTitle' => 'Локальный хост заблокирован',
       'desktopStatusStartingDetail' =>
-        'Запуск локального host и negotiation capabilities.',
-      'desktopStatusConnectedDetail' => 'Подключено к локальному host.',
-      'desktopStatusWaitingDetail' => 'Ожидание negotiation локального host.',
+        'Запуск локального хоста и согласование возможностей.',
+      'desktopStatusConnectedDetail' => 'Подключено к локальному хосту.',
+      'desktopStatusWaitingDetail' =>
+        'Ожидание согласования с локальным хостом.',
       'desktopReadyWorkflowDetail' =>
-        'Основным остается focused editor; диагностика и live work остаются вторичными, пока они не нужны.',
+        'Основным остается сфокусированный редактор; диагностика и текущая работа остаются вторичными, пока не понадобятся.',
       'desktopSectionProfilesSubtitle' => 'Редактирование профилей',
       'desktopSectionProvidersSubtitle' => 'Записи провайдеров',
       'sharedProviderAuthPostureNotApplicable' =>
@@ -356,7 +358,7 @@ extension on TranslationsRu {
       'sharedArtifactFamilyConferenceRoom' => 'Комната конференции',
       'sharedArtifactFamilyCameraStream' => 'Поток камеры',
       'sharedArtifactActionStartOnThisDevice' => 'Запустить на этом устройстве',
-      'sharedArtifactActionExportHandoff' => 'Экспортировать handoff',
+      'sharedArtifactActionExportHandoff' => 'Экспортировать пакет handoff',
       'sharedArtifactActionOpenRoom' => 'Открыть комнату',
       'sharedArtifactActionOpenCamera' => 'Открыть камеру',
       'sharedArtifactActionOpenArchive' => 'Открыть архив',
@@ -366,7 +368,7 @@ extension on TranslationsRu {
       'sharedPlatformTunnelModeWindowsWintun' => 'Windows Wintun',
       'sharedPlatformTunnelModeLinuxTun' => 'Linux TUN',
       'sharedPlatformTunnelPrerequisitePermission' => 'разрешение',
-      'sharedPlatformTunnelPrerequisiteEntitlement' => 'entitlement',
+      'sharedPlatformTunnelPrerequisiteEntitlement' => 'право доступа',
       'sharedPlatformTunnelPrerequisitePrivilegedExtension' =>
         'привилегированное расширение',
       'sharedPlatformTunnelPrerequisiteDriver' => 'драйвер',
@@ -374,17 +376,18 @@ extension on TranslationsRu {
       'sharedPlatformTunnelPrerequisiteDnsBypass' => 'обход DNS',
       'sharedPlatformTunnelPrerequisiteAppRoutingPolicy' =>
         'политика маршрутизации приложений',
-      'sharedPlatformTunnelPrerequisiteHostImplementation' => 'реализация host',
+      'sharedPlatformTunnelPrerequisiteHostImplementation' =>
+        'реализация хоста',
       'sharedPlatformTunnelStartupStageCapabilityCheck' =>
-        'Проверка capability',
+        'Проверка возможностей',
       'sharedPlatformTunnelStartupStagePermissionAcquire' =>
         'Получение разрешения',
       'sharedPlatformTunnelStartupStageEntitlementAcquire' =>
-        'Получение entitlement',
+        'Получение права доступа',
       'sharedPlatformTunnelStartupStageDriverCheck' => 'Проверка драйвера',
       'sharedPlatformTunnelStartupStageRouteValidate' => 'Проверка маршрута',
-      'sharedPlatformTunnelStartupStageHostBringup' => 'Подъем host',
-      'sharedPlatformTunnelStartupStageRuntimeAttach' => 'Подключение runtime',
+      'sharedPlatformTunnelStartupStageHostBringup' => 'Подъем хоста',
+      'sharedPlatformTunnelStartupStageRuntimeAttach' => 'Подключение рантайма',
       'sharedProviderConfigAvailabilityStateAvailable' => 'Доступно',
       'sharedProviderConfigAvailabilityStateProviderUnavailable' =>
         'Провайдер недоступен',
@@ -394,21 +397,21 @@ extension on TranslationsRu {
         'Настройки невалидны',
       'sharedCatalogPresetVkDefaultTitle' => 'VK Calls',
       'sharedCatalogPresetVkDefaultDescription' =>
-        'Создать управляемую запись провайдера VK для workflow с инвайтом и шагом в браузере.',
+        'Создать управляемую запись провайдера VK для рабочего процесса с инвайтом и шагом в браузере.',
       'sharedCatalogPresetVkDefaultSuggestedProfileName' => 'VK Calls',
       'sharedCatalogPresetGenericTurnDefaultTitle' => 'Generic TURN',
       'sharedCatalogPresetGenericTurnDefaultDescription' =>
-        'Создать управляемую запись Generic TURN для статического TURN handoff workflow.',
+        'Создать управляемую запись Generic TURN для рабочего процесса со статической передачей TURN-параметров.',
       'sharedCatalogPresetGenericTurnDefaultSuggestedProfileName' =>
         'Generic TURN',
       'sharedCatalogSupportedProviderVkTitle' => 'VK Calls',
       'sharedCatalogSupportedProviderVkDescription' =>
-        'Провайдер с invite-first flow и браузерным продолжением, который приводит к transport-ready TURN credentials.',
+        'Провайдер с инвайтом на первом шаге и продолжением через браузер, который приводит к готовым для транспорта учетным данным TURN.',
       'sharedCatalogSupportedProviderVkSuggestedManagedProviderName' =>
         'VK Calls',
       'sharedCatalogSupportedProviderGenericTurnTitle' => 'Generic TURN',
       'sharedCatalogSupportedProviderGenericTurnDescription' =>
-        'Статический TURN handoff для детерминированного transport testing и operator-driven runtime startup.',
+        'Статическая передача TURN-параметров для детерминированного тестирования транспорта и запуска рантайма под управлением оператора.',
       'sharedCatalogSupportedProviderGenericTurnSuggestedManagedProviderName' =>
         'Generic TURN',
       _ => null,

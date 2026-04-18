@@ -40,7 +40,7 @@ class ShellText {
     'Export saved profile',
     'Экспортировать сохраненный профиль',
   );
-  String get pasteEnvelope => _pick('Paste envelope', 'Вставить envelope');
+  String get pasteEnvelope => _pick('Paste envelope', 'Вставить конверт');
   String get copyText => _pick('Copy text', 'Копировать текст');
   String get saveFile => _pick('Save file', 'Сохранить файл');
   String get shareText => _pick('Share text', 'Поделиться текстом');
@@ -49,7 +49,7 @@ class ShellText {
   String get importProfile => _pick('Import profile', 'Импортировать профиль');
   String get portableProfileJson => _pick(
     'Portable profile JSON',
-    'Portable profile JSON',
+    'JSON переносимого профиля',
   );
   String get noReusableFieldsYet => _pick(
     'No reusable fields yet',
@@ -68,8 +68,11 @@ class ShellText {
   String get providerFamily => _pick('Provider family', 'Семейство провайдера');
   String get providerType => _pick('Provider type', 'Тип провайдера');
   String get profileName => _pick('Profile name', 'Имя профиля');
-  String get localUdpListen => _pick('Local UDP listen', 'Локальный UDP адрес');
-  String get peerAddress => _pick('Peer address', 'Адрес peer');
+  String get localUdpListen => _pick(
+    'Local UDP listen',
+    'Локальный UDP-адрес',
+  );
+  String get peerAddress => _pick('Peer address', 'Адрес удаленного узла');
   String get connections => _pick('Connections', 'Соединения');
   String get turnMode => _pick('TURN mode', 'Режим TURN');
   String get turnOverride => _pick('TURN override', 'Переопределение TURN');
@@ -90,15 +93,15 @@ class ShellText {
   );
   String get exportPortableProfile => _pick(
     'Export portable profile',
-    'Экспорт portable profile',
+    'Экспортировать переносимый профиль',
   );
   String get importPortableProfile => _pick(
     'Import portable profile',
-    'Импорт portable profile',
+    'Импортировать переносимый профиль',
   );
   String get pastePortableProfileEnvelope => _pick(
     'Paste portable profile envelope',
-    'Вставить envelope portable profile',
+    'Вставить конверт переносимого профиля',
   );
   String get previewOpensBeforeRecordsCreated => _pick(
     'Preview opens before any local records are created.',
@@ -121,55 +124,55 @@ class ShellText {
       _pick('Source mode: $mode', 'Режим источника: $mode');
   String managedProviderSnapshot(String name) => _pick(
     'Managed provider snapshot: $name',
-    'Снимок managed provider: $name',
+    'Снимок управляемого провайдера: $name',
   );
   String get portableExportSecretWarningDesktop => _pick(
     'This payload is secret-bearing. Treat copied text, saved files, and QR screens like credentials.',
-    'Этот payload содержит секреты. Относитесь к скопированному тексту, сохраненным файлам и QR-экрану как к учетным данным.',
+    'Этот пакет содержит секреты. Относитесь к скопированному тексту, сохраненным файлам и QR-экрану как к учетным данным.',
   );
   String get portableExportSecretWarningMobile => _pick(
     'This payload is secret-bearing. Treat shared text, files, and QR screens like credentials.',
-    'Этот payload содержит секреты. Относитесь к отправляемому тексту, файлам и QR-экрану как к учетным данным.',
+    'Этот пакет содержит секреты. Относитесь к отправляемому тексту, файлам и QR-экрану как к учетным данным.',
   );
   String get portableExportSeparateFromRuntimeDesktop => _pick(
     'Exported payload stays separate from ordinary shell persistence and runtime handoff export.',
-    'Экспортированный payload остается отдельным от обычного сохранения shell и экспорта runtime handoff.',
+    'Экспортированный пакет остается отдельным от обычного сохранения оболочки и экспорта пакета handoff рантайма.',
   );
   String get portableExportSeparateFromRuntimeMobile => _pick(
     'Portable transfer stays separate from ordinary shell persistence and runtime handoff export.',
-    'Portable transfer остается отдельным от обычного сохранения shell и экспорта runtime handoff.',
+    'Передача переносимого профиля остается отдельной от обычного сохранения оболочки и экспорта пакета handoff рантайма.',
   );
   String get portableQrCompactJson => _pick(
     'QR uses the same envelope in compact JSON form.',
-    'QR использует тот же envelope в компактной форме JSON.',
+    'QR использует тот же конверт в компактной форме JSON.',
   );
   String portableQrUnavailableDesktop(int bytes) => _pick(
     'QR is unavailable because this payload exceeds supported QR bounds ($bytes bytes). File and text export stay available.',
-    'QR недоступен, потому что payload превышает поддерживаемый размер QR ($bytes байт). Экспорт в файл и текст остаются доступны.',
+    'QR недоступен, потому что пакет превышает поддерживаемый размер QR ($bytes байт). Экспорт в файл и текст остаются доступны.',
   );
   String portableQrUnavailableMobile(int bytes) => _pick(
     'QR is unavailable because this payload exceeds supported QR bounds ($bytes bytes). Text and file sharing stay available.',
-    'QR недоступен, потому что payload превышает поддерживаемый размер QR ($bytes байт). Отправка текста и файла остается доступной.',
+    'QR недоступен, потому что пакет превышает поддерживаемый размер QR ($bytes байт). Отправка текста и файла остается доступной.',
   );
   String get portableImportSecretWarning => _pick(
     'This import payload is secret-bearing. Confirm only if the source is trusted.',
-    'Этот импортируемый payload содержит секреты. Подтверждайте только если источник доверенный.',
+    'Этот импортируемый пакет содержит секреты. Подтверждайте только если источник доверенный.',
   );
   String get portableImportCreatesFreshIdsMobile => _pick(
     'Import creates fresh local ids and does not auto-start runtime.',
-    'Импорт создает новые локальные идентификаторы и не запускает runtime автоматически.',
+    'Импорт создает новые локальные идентификаторы и не запускает рантайм автоматически.',
   );
   String get portableImportCreatesFreshIdsDesktop => _pick(
     'Import creates new local records with fresh ids and does not auto-start runtime.',
-    'Импорт создает новые локальные записи с новыми идентификаторами и не запускает runtime автоматически.',
+    'Импорт создает новые локальные записи с новыми идентификаторами и не запускает рантайм автоматически.',
   );
   String get scanPortableProfileQr => _pick(
     'Scan portable profile QR',
-    'Сканировать QR portable profile',
+    'Сканировать QR переносимого профиля',
   );
   String get pointCameraAtPortableProfileQr => _pick(
     'Point the camera at a portable profile QR code.',
-    'Наведите камеру на QR-код portable profile.',
+    'Наведите камеру на QR-код переносимого профиля.',
   );
   String tagInput(String value) => _pick('Input: $value', 'Ввод: $value');
   String tagAuth(String value) => _pick('Auth: $value', 'Авторизация: $value');
@@ -179,23 +182,23 @@ class ShellText {
       _pick('Family: $value', 'Семейство: $value');
   String get browserNeedsExternal => _pick(
     'This provider requires an external browser when challenge continuation appears.',
-    'Этот провайдер требует внешний браузер, когда появляется продолжение challenge.',
+    'Этот провайдер требует внешний браузер, когда появляется продолжение проверки.',
   );
   String get browserAllowsEmbedded => _pick(
     'This provider allows an embedded browser surface, but the host still controls whether a browser challenge appears.',
-    'Этот провайдер разрешает встроенный браузер, но host все равно решает, появится ли browser challenge.',
+    'Этот провайдер разрешает встроенный браузер, но хост все равно решает, появится ли браузерная проверка.',
   );
   String get browserNotRequired => _pick(
     'This provider does not report a required browser surface.',
-    'Этот провайдер не сообщает о требуемой browser surface.',
+    'Этот провайдер не сообщает о требуемом браузерном интерфейсе.',
   );
   String get browserContinuationMayAppear => _pick(
     'Browser continuation may appear for this provider.',
-    'Для этого провайдера может появиться browser continuation.',
+    'Для этого провайдера может появиться продолжение в браузере.',
   );
   String get browserContinuationNotAdvertised => _pick(
     'No browser challenge mode is currently advertised for this provider.',
-    'Для этого провайдера сейчас не объявлен режим browser challenge.',
+    'Для этого провайдера сейчас не объявлен режим браузерной проверки.',
   );
 
   String get desktopProfileWorkspaceTitle => _pick(
@@ -250,7 +253,7 @@ class ShellText {
   );
   String get desktopPortableTransferSubtitle => _pick(
     'Export the selected saved profile as an explicit transfer envelope, or preview an import before creating local records.',
-    'Экспортируйте выбранный сохраненный профиль как явный transfer envelope или просмотрите импорт до создания локальных записей.',
+    'Экспортируйте выбранный сохраненный профиль как явный конверт переноса или просмотрите импорт до создания локальных записей.',
   );
   String get desktopBrowserHandling => _pick(
     'Browser handling',
@@ -258,7 +261,7 @@ class ShellText {
   );
   String get desktopBrowserHandlingSubtitle => _pick(
     'Show this context only when the provider can hand off into a browser challenge.',
-    'Показывайте этот контекст только тогда, когда провайдер может передать управление в browser challenge.',
+    'Показывайте этот контекст только тогда, когда провайдер может передать управление в браузерную проверку.',
   );
   String get desktopProfileProviderSettings => _pick(
     'Profile provider settings',
@@ -269,11 +272,11 @@ class ShellText {
     required String error,
   }) => _pick(
     'This desktop shell cannot render the provider settings schema for $providerName: $error. Save and resolve stay blocked until the host advertises a supported schema subset.',
-    'Эта desktop shell не может отрисовать схему настроек провайдера для $providerName: $error. Сохранение и разрешение остаются заблокированы, пока host не объявит поддерживаемое подмножество схемы.',
+    'Эта настольная оболочка не может отрисовать схему настроек провайдера для $providerName: $error. Сохранение и разрешение остаются заблокированы, пока хост не объявит поддерживаемое подмножество схемы.',
   );
   String get desktopProfileProviderSettingsHelp => _pick(
     'Saved profile settings for the selected provider. Prompt-only values stay only in the active draft.',
-    'Сохраненные настройки профиля для выбранного провайдера. Значения только для prompt остаются только в активном черновике.',
+    'Сохраненные настройки профиля для выбранного провайдера. Значения только для запроса остаются только в активном черновике.',
   );
   String get desktopNoSavedProviderRecords => _pick(
     'No saved provider records are available yet.',
@@ -297,7 +300,7 @@ class ShellText {
   );
   String get mobileProviderDetailsSubtitle => _pick(
     'Browser policy, artifact families, and challenge guidance',
-    'Политика браузера, семейства артефактов и подсказки по challenge',
+    'Политика браузера, семейства артефактов и подсказки по проверке',
   );
   String get mobileProviderSettingsSection => _pick(
     'Provider settings',
@@ -305,7 +308,7 @@ class ShellText {
   );
   String get mobilePortableTransfer => _pick(
     'Portable transfer',
-    'Portable transfer',
+    'Переносимый профиль',
   );
   String get mobileProviderSettingsUnsupportedSubtitle => _pick(
     'Unsupported schema subset blocks save and resolve',
@@ -317,7 +320,7 @@ class ShellText {
   );
   String get mobileAdvancedRuntimeControls => _pick(
     'Advanced runtime controls',
-    'Расширенные настройки runtime',
+    'Расширенные настройки рантайма',
   );
   String get mobileAdvancedRuntimeControlsSubtitle => _pick(
     'Transport overrides, local bind, and logging',
@@ -325,18 +328,18 @@ class ShellText {
   );
   String get mobilePortableTransferSubtitle => _pick(
     'Export the selected saved profile through an explicit envelope, or preview an import before creating local records.',
-    'Экспортируйте выбранный сохраненный профиль через явный envelope или просмотрите импорт до создания локальных записей.',
+    'Экспортируйте выбранный сохраненный профиль через явный конверт или просмотрите импорт до создания локальных записей.',
   );
   String mobileProviderSettingsSupportError({
     required String providerName,
     required String error,
   }) => _pick(
     'This mobile shell cannot render the provider settings schema for $providerName: $error. Save and resolve stay blocked until the host advertises a supported schema subset.',
-    'Эта mobile shell не может отрисовать схему настроек провайдера для $providerName: $error. Сохранение и разрешение остаются заблокированы, пока host не объявит поддерживаемое подмножество схемы.',
+    'Эта мобильная оболочка не может отрисовать схему настроек провайдера для $providerName: $error. Сохранение и разрешение остаются заблокированы, пока хост не объявит поддерживаемое подмножество схемы.',
   );
   String get mobileProviderSettingsRetainedHelp => _pick(
     'Profile-retained settings stay with the saved profile. Prompt-only values remain only in the in-memory draft used for immediate resolution starts.',
-    'Настройки, сохраняемые вместе с профилем, остаются в сохраненном профиле. Значения только для prompt остаются только в памяти черновика для немедленного запуска разрешения.',
+    'Настройки, сохраняемые вместе с профилем, остаются в сохраненном профиле. Значения только для запроса остаются только в памяти черновика для немедленного запуска разрешения.',
   );
   String get mobileNoSavedProfilesYetBuildDraft => _pick(
     'No saved profiles yet. Build the draft below, then save it for repeat starts.',
@@ -346,21 +349,24 @@ class ShellText {
   String get mobileProviderMode => _pick('Provider mode', 'Режим провайдера');
   String get mobileProviderModeNoManagedProviders => _pick(
     'No managed providers are available yet. Use custom mode for direct provider entry or create a provider record from the workflow library first.',
-    'Managed providers пока недоступны. Используйте custom mode для прямого ввода провайдера или сначала создайте запись провайдера из workflow library.',
+    'Управляемые провайдеры пока недоступны. Используйте пользовательский режим для прямого ввода провайдера или сначала создайте запись провайдера из библиотеки рабочих процессов.',
   );
   String get customProvider => _pick('Custom provider', 'Свой провайдер');
-  String get managedProvider => _pick('Managed provider', 'Managed provider');
+  String get managedProvider => _pick(
+    'Managed provider',
+    'Управляемый провайдер',
+  );
   String get mobileManagedModeSummary => _pick(
     'Managed mode snapshots values from a saved provider record, then keeps further profile edits local to this draft.',
-    'Managed mode копирует значения из сохраненной записи провайдера, а дальнейшие изменения профиля оставляет локальными для этого черновика.',
+    'Управляемый режим копирует значения из сохраненной записи провайдера, а дальнейшие изменения профиля оставляет локальными для этого черновика.',
   );
   String get mobileCustomModeSummary => _pick(
     'Custom mode lets you type a raw provider id and prompt-only inputs without mutating the managed provider catalog.',
-    'Custom mode позволяет ввести raw id провайдера и значения только для prompt без изменения каталога managed provider.',
+    'Пользовательский режим позволяет ввести исходный идентификатор провайдера и значения только для запроса без изменения каталога управляемых провайдеров.',
   );
   String get mobileManagedProviderDropdown => _pick(
     'Managed provider',
-    'Managed provider',
+    'Управляемый провайдер',
   );
 
   String get mobileEditProvider => _pick('Edit provider', 'Редактировать провайдера');
@@ -405,7 +411,7 @@ class ShellText {
     required String error,
   }) => _pick(
     'This mobile shell cannot render the provider settings schema for $providerName: $error. Save stays blocked until the host advertises a supported schema subset.',
-    'Эта mobile shell не может отрисовать схему настроек провайдера для $providerName: $error. Сохранение остается заблокированным, пока host не объявит поддерживаемое подмножество схемы.',
+    'Эта мобильная оболочка не может отрисовать схему настроек провайдера для $providerName: $error. Сохранение остается заблокированным, пока хост не объявит поддерживаемое подмножество схемы.',
   );
   String get mobileReusableProviderSettings => _pick(
     'Reusable provider settings',
@@ -521,7 +527,7 @@ class ShellText {
   );
   String get desktopAttachedFamilyHelp => _pick(
     'Families live in a separate chooser. The selected family is attached to this record and described here.',
-    'Семейства живут в отдельном chooser. Выбранное семейство прикрепляется к этой записи и описывается здесь.',
+    'Семейства выбираются в отдельном списке. Выбранное семейство прикрепляется к этой записи и описывается здесь.',
   );
   String get desktopFamilyCharacteristics => _pick(
     'Family characteristics',
@@ -529,14 +535,14 @@ class ShellText {
   );
   String get desktopFamilyCharacteristicsHelp => _pick(
     'Read-only characteristics from the selected family and current host overlay.',
-    'Характеристики только для чтения из выбранного семейства и текущего host overlay.',
+    'Характеристики только для чтения из выбранного семейства и текущего хост-оверлея.',
   );
   String desktopProviderRecordSupportError({
     required String providerName,
     required String error,
   }) => _pick(
     'This desktop shell cannot render the provider settings schema for $providerName: $error. Save stays blocked until the host advertises a supported schema subset.',
-    'Эта desktop shell не может отрисовать схему настроек провайдера для $providerName: $error. Сохранение остается заблокированным, пока host не объявит поддерживаемое подмножество схемы.',
+    'Эта настольная оболочка не может отрисовать схему настроек провайдера для $providerName: $error. Сохранение остается заблокированным, пока хост не объявит поддерживаемое подмножество схемы.',
   );
   String get desktopNoFamilyAttachedYet => _pick(
     'No family attached yet',
@@ -548,11 +554,11 @@ class ShellText {
   );
   String get desktopOpenFamilyChooserFirst => _pick(
     'Open the separate family chooser before you continue with this provider record.',
-    'Откройте отдельный chooser семейства, прежде чем продолжить работу с этой записью провайдера.',
+    'Откройте отдельный список семейств, прежде чем продолжить работу с этой записью провайдера.',
   );
   String desktopFamilyAttachedToRecord(String providerTitle) => _pick(
     '$providerTitle is attached to this record until you intentionally change it in the family chooser.',
-    '$providerTitle прикреплено к этой записи, пока вы намеренно не измените его в chooser семейства.',
+    '$providerTitle прикреплено к этой записи, пока вы намеренно не измените его в списке семейств.',
   );
   String get desktopShippedByApp => _pick('Shipped by app', 'Поставляется приложением');
   String get desktopHostOverlayAvailable => _pick(
@@ -604,7 +610,7 @@ class ShellText {
   );
   String desktopNoEditableRecordParameters(String providerTitle) => _pick(
     '$providerTitle has no editable record parameters in this desktop shell.',
-    '$providerTitle не имеет редактируемых параметров записи в этой desktop shell.',
+    '$providerTitle не имеет редактируемых параметров записи в этой настольной оболочке.',
   );
   String get desktopSavedProfilesLibraryTitle => _pick(
     'Saved profiles',
@@ -620,7 +626,7 @@ class ShellText {
   );
   String get desktopReturnPathExplicitMessage => _pick(
     'Selecting a saved profile updates the active workflow and closes this secondary surface.',
-    'Выбор сохраненного профиля обновляет активный workflow и закрывает эту вторичную поверхность.',
+    'Выбор сохраненного профиля обновляет активный рабочий процесс и закрывает эту вторичную поверхность.',
   );
   String get desktopProviderRecordsLibraryTitle => _pick(
     'Provider records',
@@ -636,7 +642,7 @@ class ShellText {
   );
   String get desktopRecordsSeparateFromFamiliesMessage => _pick(
     'Create a record here, then choose its family in the separate family chooser. Open an existing record to continue editing it.',
-    'Создайте здесь запись, затем выберите ее семейство в отдельном chooser семейства. Откройте существующую запись, чтобы продолжить ее редактирование.',
+    'Создайте здесь запись, затем выберите ее семейство в отдельном списке семейств. Откройте существующую запись, чтобы продолжить ее редактирование.',
   );
   String get desktopNoProviderRecordsYet => _pick(
     'No provider records yet. Create one to choose a family and store reusable parameters.',
@@ -644,7 +650,7 @@ class ShellText {
   );
   String get desktopNewFromPresetSubtitle => _pick(
     'Start from a curated provider seed only when you intentionally ask for it.',
-    'Начинайте с подготовленного seed провайдера только когда намеренно этого хотите.',
+    'Начинайте с подготовленной заготовки провайдера только когда намеренно этого хотите.',
   );
   String get desktopPresetBootstrapExplicitTitle => _pick(
     'Preset bootstrap stays explicit',
@@ -664,7 +670,7 @@ class ShellText {
   );
   String get desktopFamiliesReadonlyHereMessage => _pick(
     'This list belongs to the shipped shell. Choose a family here, then edit the selected record back in the record editor.',
-    'Этот список принадлежит поставляемой shell. Выберите здесь семейство, затем редактируйте выбранную запись обратно в редакторе записи.',
+    'Этот список принадлежит встроенной оболочке. Выберите здесь семейство, затем редактируйте выбранную запись в редакторе записи.',
   );
   String get desktopUsePreset => _pick('Use preset', 'Использовать пресет');
   String providerFamilyLabel(String familyTitle) => _pick(
@@ -673,7 +679,7 @@ class ShellText {
   );
   String get appOwnedManagedRecord => _pick(
     'App-owned managed record',
-    'Managed record, принадлежащая приложению',
+    'Управляемая запись приложения',
   );
   String get selectedFamily => _pick('Selected family', 'Выбранное семейство');
 
@@ -681,14 +687,14 @@ class ShellText {
   String get mobileContinueInApp => _pick('Continue in app', 'Продолжить в приложении');
   String challengeContinuationCancelled(String challengeId) => _pick(
     'Cancelled the in-app browser continuation for challenge $challengeId and marked the challenge cancelled.',
-    'Продолжение challenge $challengeId во встроенном браузере отменено, challenge помечен как отмененный.',
+    'Продолжение проверки $challengeId во встроенном браузере отменено, проверка помечена как отмененная.',
   );
   String challengeContinuationFailed({
     required String challengeId,
     required Object error,
   }) => _pick(
     'In-app browser continuation failed: $error. Marked challenge $challengeId as cancelled.',
-    'Продолжение challenge $challengeId во встроенном браузере завершилось ошибкой: $error. Challenge помечен как отмененный.',
+    'Продолжение проверки $challengeId во встроенном браузере завершилось ошибкой: $error. Проверка помечена как отмененная.',
   );
   String get mobileEditProfile => _pick('Edit profile', 'Редактировать профиль');
   String get mobileSelectedForHome => _pick(
@@ -715,12 +721,12 @@ class ShellText {
   String get supportTitle => _pick('Support', 'Поддержка');
   String get supportSubtitle => _pick(
     'Activity, failures, logs, and diagnostics stay explicit but secondary to the main VPN workflow.',
-    'Активность, ошибки, логи и диагностика остаются явными, но вторичными по отношению к основному VPN workflow.',
+    'Активность, ошибки, логи и диагностика остаются явными, но вторичными по отношению к основному VPN-потоку.',
   );
   String get routingTitle => _pick('Routing', 'Маршрутизация');
   String get routingSubtitle => _pick(
     'Choose whether Android system VPN covers all apps, only selected apps, or every app except the selected list.',
-    'Выберите, охватывает ли Android system VPN все приложения, только выбранные приложения или все приложения кроме выбранного списка.',
+    'Выберите, охватывает ли системный VPN Android все приложения, только выбранные приложения или все приложения кроме выбранного списка.',
   );
   String modeScope(String modeLabel) =>
       _pick('$modeLabel scope', '$modeLabel: охват');
@@ -730,7 +736,7 @@ class ShellText {
   String get searchApps => _pick('Search apps', 'Поиск приложений');
   String get allInstalledAppsUseVpnPath => _pick(
     'All installed apps will use the Android system VPN path for this mobile mode.',
-    'Все установленные приложения будут использовать Android system VPN path для этого mobile mode.',
+    'Все установленные приложения будут использовать системный VPN-путь Android для этого мобильного режима.',
   );
   String get retryAppScan => _pick('Retry app scan', 'Повторить сканирование приложений');
   String get noInstalledAppsReported => _pick(
@@ -755,7 +761,7 @@ class ShellText {
   String get currentMode => _pick('Current mode', 'Текущий режим');
   String get noMobileTunnelModeAdvertised => _pick(
     'The connected host has not advertised a mobile tunnel mode yet.',
-    'Подключенный host пока не объявил режим mobile tunnel.',
+    'Подключенный хост пока не объявил мобильный туннельный режим.',
   );
   String get executionPath => _pick('Execution path', 'Путь выполнения');
   String get providerStepTone => _pick('Provider step', 'Шаг провайдера');
@@ -771,7 +777,7 @@ class ShellText {
   String get vpnIsOff => _pick('VPN is off', 'VPN выключен');
   String get continueProviderFlowInApp => _pick(
     'Continue the provider flow in the in-app browser before VPN can start.',
-    'Продолжите flow провайдера во встроенном браузере, прежде чем VPN сможет запуститься.',
+    'Продолжите шаг провайдера во встроенном браузере, прежде чем VPN сможет запуститься.',
   );
   String get openRequiredBrowserStepFromHome => _pick(
     'Open the required browser step from Home, then return here and confirm completion before VPN can start.',
@@ -779,15 +785,15 @@ class ShellText {
   );
   String get disconnectCurrentMobileVpnPath => _pick(
     'Disconnect the current mobile VPN path from here.',
-    'Отсюда отключите текущий mobile VPN path.',
+    'Отсюда отключите текущий путь мобильного VPN.',
   );
   String get chooseOrFinishProfileBeforeStartingVpn => _pick(
     'Choose or finish a profile in Profiles before starting the current mobile VPN path.',
-    'Выберите или завершите профиль в Профилях перед запуском текущего mobile VPN path.',
+    'Выберите или завершите профиль в Профилях перед запуском текущего пути мобильного VPN.',
   );
   String get startCurrentMobileVpnPath => _pick(
     'Start the current mobile VPN path from here.',
-    'Запустите текущий mobile VPN path отсюда.',
+    'Запустите текущий путь мобильного VPN отсюда.',
   );
   String get continueInProfiles => _pick(
     'Continue in Profiles',
@@ -795,12 +801,12 @@ class ShellText {
   );
   String challengeKind(String kind) => _pick(
     'Challenge: $kind',
-    'Challenge: $kind',
+    'Проверка: $kind',
   );
   String get iveCompletedIt => _pick("I've completed it", 'Я завершил');
   String get cancelChallenge => _pick(
     'Cancel challenge',
-    'Отменить challenge',
+    'Отменить проверку',
   );
   String get needDeeperDetail => _pick(
     'Need deeper detail?',
@@ -824,7 +830,7 @@ class ShellText {
   );
   String get routingUnavailableMessage => _pick(
     'Only mobile modes that support per-app scope expose this surface. Pick another mode from home if the host advertises one.',
-    'Только mobile modes с поддержкой per-app scope показывают эту поверхность. Выберите другой режим на Главной, если host его объявляет.',
+    'Только мобильные режимы с поддержкой маршрутизации по приложениям показывают эту поверхность. Выберите другой режим на Главной, если хост его объявляет.',
   );
   String get noSavedProvidersYet => _pick(
     'No saved providers yet',
@@ -880,7 +886,7 @@ class ShellText {
   );
   String get activityPageSubtitle => _pick(
     'Inspect provider resolutions and session state without crowding the main workflow.',
-    'Просматривайте резолюции провайдера и состояние сессий, не загромождая основной workflow.',
+    'Просматривайте резолюции провайдера и состояние сессий, не загромождая основной рабочий процесс.',
   );
   String resolutionsCount(int count) =>
       _pick('Resolutions ($count)', 'Резолюции ($count)');
@@ -888,12 +894,12 @@ class ShellText {
       _pick('Sessions ($count)', 'Сессии ($count)');
   String get diagnosticsPageSubtitle => _pick(
     'Detailed host readiness, platform tunnel detail, and recent typed events.',
-    'Подробная готовность host, детали platform tunnel и недавние типизированные события.',
+    'Подробная готовность хоста, детали платформенного туннеля и недавние типизированные события.',
   );
   String eventsCount(int count) => _pick('Events ($count)', 'События ($count)');
   String get waitingForMobileHostBridge => _pick(
     'Waiting for mobile host bridge negotiation.',
-    'Ожидание negotiation mobile host bridge.',
+    'Ожидание согласования моста мобильного хоста.',
   );
   String guiBuildTag(String label) => _pick('GUI $label', 'GUI $label');
   String hostBuildTag(String label) => _pick('Host $label', 'Host $label');
@@ -904,7 +910,7 @@ class ShellText {
   String get resolutionsTitle => _pick('Resolutions', 'Резолюции');
   String get resolutionsSubtitle => _pick(
     'Resolve the invite first, then use the capability-gated action set to start on this device, export a handoff, or open provider-native targets.',
-    'Сначала разрешите инвайт, затем используйте набор действий, ограниченный capability, чтобы запустить на этом устройстве, экспортировать handoff или открыть native targets провайдера.',
+    'Сначала разрешите инвайт, затем используйте набор действий, ограниченный возможностями, чтобы запустить на этом устройстве, экспортировать handoff или открыть нативные цели провайдера.',
   );
   String get noProviderResolutionsYet => _pick(
     'No provider resolutions yet.',
@@ -912,11 +918,11 @@ class ShellText {
   );
   String get systemTunnelBannerText => _pick(
     'This mobile slice renders typed host capability and startup-stage results for the reported platform modes. Use the controls below to start or disconnect supported system-tunnel paths.',
-    'Этот mobile slice отображает типизированные capability host и результаты startup-stage для объявленных platform modes. Используйте элементы управления ниже, чтобы запустить или отключить поддерживаемые system-tunnel paths.',
+    'Этот мобильный срез отображает типизированные возможности хоста и результаты этапов запуска для объявленных платформенных режимов. Используйте элементы управления ниже, чтобы запустить или отключить поддерживаемые пути системного туннеля.',
   );
   String get noPlatformTunnelModesReported => _pick(
     'The connected mobile host did not report any platform tunnel modes.',
-    'Подключенный mobile host не сообщил ни о каких platform tunnel modes.',
+    'Подключенный мобильный хост не сообщил ни о каких платформенных туннельных режимах.',
   );
   String get availableLowercase => _pick('available', 'доступно');
   String get unavailableLowercase => _pick('unavailable', 'недоступно');
@@ -924,7 +930,7 @@ class ShellText {
   String get requestStartup => _pick('Request startup', 'Запросить запуск');
   String get noStartupRequestYet => _pick(
     'No startup request yet. Use the typed mobile host contract to verify the fail-closed path.',
-    'Запроса на запуск пока нет. Используйте типизированный контракт mobile host, чтобы проверить fail-closed path.',
+    'Запроса на запуск пока нет. Используйте типизированный контракт мобильного хоста, чтобы проверить fail-closed сценарий.',
   );
   String turnCredentialsSummary({
     required String address,
@@ -943,7 +949,7 @@ class ShellText {
   }) => _pick('$stage: $message', '$stage: $message');
   String sessionStateLabel(String value) => switch (value) {
     'starting' => _pick('starting', 'запуск'),
-    'challenge_required' => _pick('challenge required', 'требуется challenge'),
+    'challenge_required' => _pick('challenge required', 'требуется проверка'),
     'ready' => _pick('ready', 'готово'),
     'retrying' => _pick('retrying', 'повтор'),
     'stopping' => _pick('stopping', 'остановка'),
@@ -953,7 +959,7 @@ class ShellText {
   };
   String resolutionStateLabel(String value) => switch (value) {
     'starting' => _pick('starting', 'запуск'),
-    'challenge_required' => _pick('challenge required', 'требуется challenge'),
+    'challenge_required' => _pick('challenge required', 'требуется проверка'),
     'resolved' => _pick('resolved', 'разрешено'),
     'failed' => _pick('failed', 'сбой'),
     'cancelled' => _pick('cancelled', 'отменено'),
@@ -961,14 +967,14 @@ class ShellText {
     _ => value,
   };
   String actionExecutionOwnerLabel(String value) => switch (value) {
-    'host' => _pick('host', 'host'),
-    'shell_local' => _pick('shell local', 'локальная shell'),
-    'shell_external' => _pick('shell external', 'внешняя shell'),
+    'host' => _pick('host', 'хост'),
+    'shell_local' => _pick('shell local', 'локальная оболочка'),
+    'shell_external' => _pick('shell external', 'внешняя оболочка'),
     _ => value,
   };
   String get moreChallengeActions => _pick(
     'More challenge actions',
-    'Больше действий challenge',
+    'Больше действий проверки',
   );
   String get moreResolutionActions => _pick(
     'More resolution actions',
@@ -990,14 +996,14 @@ class ShellText {
   String get sessionsTitle => _pick('Sessions', 'Сессии');
   String get noMobileSessionsYet => _pick(
     'No active or recent mobile sessions yet.',
-    'Активных или недавних mobile sessions пока нет.',
+    'Активных или недавних мобильных сессий пока нет.',
   );
   String sessionListenConnections({
     required String listen,
     required int connections,
   }) => _pick(
     'listen $listen | connections $connections',
-    'listen $listen | соединения $connections',
+    'слушает $listen | соединения $connections',
   );
   String sessionUpdated({
     required String timestamp,
@@ -1018,46 +1024,52 @@ class ShellText {
   String get eventStream => _pick('Event stream', 'Поток событий');
   String get eventStreamSubtitle => _pick(
     'Typed state transitions and challenge updates from the mobile host bridge.',
-    'Типизированные переходы состояния и обновления challenge от mobile host bridge.',
+    'Типизированные переходы состояния и обновления проверок от моста мобильного хоста.',
   );
   String get noEventsYet => _pick('No events yet.', 'Событий пока нет.');
   String get resetNeeded => _pick('Reset needed', 'Требуется сброс');
-  String get hostReady => _pick('Host ready', 'Host готов');
-  String get hostIncompatible => _pick('Host incompatible', 'Host несовместим');
-  String get hostBlocked => _pick('Host blocked', 'Host заблокирован');
+  String get hostReady => _pick('Host ready', 'Хост готов');
+  String get hostIncompatible => _pick(
+    'Host incompatible',
+    'Хост несовместим',
+  );
+  String get hostBlocked => _pick('Host blocked', 'Хост заблокирован');
   String get connecting => _pick('Connecting', 'Подключение');
-  String get mobileHostReady => _pick('Mobile host ready', 'Mobile host готов');
+  String get mobileHostReady => _pick(
+    'Mobile host ready',
+    'Мобильный хост готов',
+  );
   String get mobileHostIncompatible => _pick(
     'Mobile host incompatible',
-    'Mobile host несовместим',
+    'Мобильный хост несовместим',
   );
   String get mobileHostBlocked => _pick(
     'Mobile host blocked',
-    'Mobile host заблокирован',
+    'Мобильный хост заблокирован',
   );
   String get connectingToMobileHost => _pick(
     'Connecting to mobile host',
-    'Подключение к mobile host',
+    'Подключение к мобильному хосту',
   );
   String satisfiedPrerequisites(String prerequisites) => _pick(
     'Satisfied prerequisites: $prerequisites',
-    'Удовлетворенные prerequisites: $prerequisites',
+    'Выполненные предусловия: $prerequisites',
   );
   String missingPrerequisite(String prerequisite) => _pick(
     'Missing prerequisite: $prerequisite',
-    'Отсутствует prerequisite: $prerequisite',
+    'Отсутствует предусловие: $prerequisite',
   );
   String get mobileHostModeAvailable => _pick(
     'The mobile host reports that this mode is available.',
-    'Mobile host сообщает, что этот режим доступен.',
+    'Мобильный хост сообщает, что этот режим доступен.',
   );
   String get mobileHostModeUnavailable => _pick(
     'The mobile host reports that this mode is unavailable.',
-    'Mobile host сообщает, что этот режим недоступен.',
+    'Мобильный хост сообщает, что этот режим недоступен.',
   );
   String platformTunnelReady(String modeLabel) => _pick(
     '$modeLabel reached ready state for the mobile host tunnel path.',
-    '$modeLabel достиг готового состояния для mobile host tunnel path.',
+    '$modeLabel достиг готового состояния для туннельного пути мобильного хоста.',
   );
   String startupBlockedAt(String stageLabel) => _pick(
     'Startup blocked at $stageLabel.',
@@ -1066,15 +1078,15 @@ class ShellText {
   String get unknownStage => _pick('Unknown stage', 'Неизвестный этап');
   String get noMobileTunnelModeSelected => _pick(
     'No mobile tunnel mode is currently selected.',
-    'Сейчас не выбран ни один mobile tunnel mode.',
+    'Сейчас не выбран ни один мобильный туннельный режим.',
   );
   String get androidSystemVpnMode => _pick(
     'Android system VPN mode',
-    'Режим Android system VPN',
+    'Режим системного VPN Android',
   );
   String get appleNetworkExtensionMode => _pick(
     'Apple network extension mode',
-    'Режим Apple network extension',
+    'Режим сетевого расширения Apple',
   );
   String get windowsWintunMode => _pick(
     'Windows Wintun mode',
@@ -1093,27 +1105,27 @@ class ShellText {
         );
   String get perAppRoutingUnavailable => _pick(
     'Per-app routing is unavailable for this mobile mode.',
-    'Per-app маршрутизация недоступна для этого mobile mode.',
+    'Маршрутизация по приложениям недоступна для этого мобильного режима.',
   );
   String get scopeAllInstalledApps => _pick(
     'Scope: all installed apps.',
-    'Scope: все установленные приложения.',
+    'Область: все установленные приложения.',
   );
   String get scopeIncludedAppsEmpty => _pick(
     'Scope: included apps, but no apps are selected yet.',
-    'Scope: включенные приложения, но приложения пока не выбраны.',
+    'Область: включенные приложения, но приложения пока не выбраны.',
   );
   String scopeOnlySelectedApps(int count) => _pick(
     'Scope: only $count selected apps.',
-    'Scope: только $count выбранных приложений.',
+    'Область: только $count выбранных приложений.',
   );
   String get scopeExcludedAppsEmpty => _pick(
     'Scope: excluded apps, but no apps are selected yet.',
-    'Scope: исключенные приложения, но приложения пока не выбраны.',
+    'Область: исключенные приложения, но приложения пока не выбраны.',
   );
   String scopeAllExceptSelectedApps(int count) => _pick(
     'Scope: all apps except $count selected apps.',
-    'Scope: все приложения кроме $count выбранных приложений.',
+    'Область: все приложения кроме $count выбранных приложений.',
   );
   String get wireGuardNativeOverTurnDatagram => _pick(
     'WireGuard native over TURN datagram',
@@ -1165,18 +1177,18 @@ class ShellText {
   );
   String get ownedBrowserMissingMetadata => _pick(
     'This challenge does not advertise the app-owned browser metadata required for in-app continuation.',
-    'Этот challenge не объявляет метаданные app-owned browser, необходимые для продолжения внутри приложения.',
+    'Эта проверка не объявляет метаданные браузера приложения, необходимые для продолжения внутри приложения.',
   );
   String get ownedBrowserMissingUrl => _pick(
     'This challenge does not expose an in-app browser URL.',
-    'Этот challenge не предоставляет URL встроенного браузера.',
+    'Эта проверка не предоставляет URL встроенного браузера.',
   );
   String get ownedBrowserNoEvidence => _pick(
     'The embedded browser session did not expose any usable continuation evidence.',
     'Сессия встроенного браузера не предоставила пригодных данных для продолжения.',
   );
   String ownedBrowserTitle(String provider) =>
-      _pick('$provider challenge', 'Challenge провайдера $provider');
+      _pick('$provider challenge', 'Проверка провайдера $provider');
   String get ownedBrowserOpenInvite => _pick('Open invite', 'Открыть инвайт');
   String get ownedBrowserCollecting => _pick('Collecting...', 'Сбор...');
   String get ownedBrowserContinue => _pick('Continue', 'Продолжить');

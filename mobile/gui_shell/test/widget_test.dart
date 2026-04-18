@@ -213,10 +213,25 @@ void main() {
       controller: controller,
       locale: AppLocale.ru,
     );
+    final context = tester.element(find.byType(MaterialApp));
 
     expect(find.text('Главная'), findsWidgets);
     expect(find.text('Профили'), findsWidgets);
+    expect(find.textContaining('VPN на мобильном устройстве'), findsOneWidget);
+    expect(find.textContaining('mobile VPN path'), findsNothing);
     expect(find.byTooltip('Сменить язык'), findsOneWidget);
+    expect(
+      context.shellText.startCurrentMobileVpnPath,
+      'Запустите текущий путь мобильного VPN отсюда.',
+    );
+    expect(
+      context.shellText.disconnectCurrentMobileVpnPath,
+      'Отсюда отключите текущий путь мобильного VPN.',
+    );
+    expect(
+      context.shellText.routingUnavailableMessage,
+      'Только мобильные режимы с поддержкой маршрутизации по приложениям показывают эту поверхность. Выберите другой режим на Главной, если хост его объявляет.',
+    );
   });
 
   testWidgets(

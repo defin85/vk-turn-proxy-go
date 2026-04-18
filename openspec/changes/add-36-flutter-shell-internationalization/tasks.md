@@ -36,5 +36,5 @@
       after the i18n wiring lands.
 - [x] 4.3 Run strict OpenSpec validation for
       `add-36-flutter-shell-internationalization`.
-- [ ] 4.4 Manually verify locale switch, fallback, and provider metadata
+- [x] 4.4 Manually verify locale switch, fallback, and provider metadata
       rendering on one desktop shell target and one mobile shell target.
