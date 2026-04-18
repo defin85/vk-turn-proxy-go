@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter_shell_core/portable_profile_transfer.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -1040,7 +1041,7 @@ void main() {
       expect(browser.openedUrls, <String>[
         'https://room.example.test/rooms/team-sync',
       ]);
-      expect(controller.notice, contains('Opened room'));
+      expect(controller.notice, contains('Opened action "Open room"'));
     },
   );
 
@@ -1556,6 +1557,42 @@ void main() {
       );
     },
   );
+
+  test('controller localizes shell-owned mobile notices in Russian', () async {
+    await AppLocale.ru.build();
+    LocaleSettings.setLocaleSync(AppLocale.ru);
+    addTearDown(() => LocaleSettings.setLocaleSync(AppLocale.en));
+
+    final bridge = _FakeMobileHostBridge(
+      providersList: const <ProviderDescriptor>[],
+      resolutionsList: const <ResolutionRecord>[],
+    );
+    final controller = MobileShellController(
+      bridge: bridge,
+      stateStore: _InMemoryStateStore(
+        MobileShellState(
+          profiles: const <ProfileRecord>[],
+          providerConfigs: const <ProviderConfigRecord>[],
+          draft: ProfileDraft.defaults(),
+        ),
+      ),
+      appBuild: _testGuiBuild,
+    );
+    addTearDown(controller.dispose);
+
+      await controller.initialize();
+      controller.managedProviders = const <ManagedProviderRecord>[];
+      controller.selectedManagedProviderId = null;
+      controller.draft = ProfileDraft.defaults();
+      controller.activateManagedProviderMode();
+      expect(controller.notice, 'Управляемые провайдеры пока недоступны.');
+
+    await controller.startResolutionFromDraft();
+    expect(
+      controller.notice,
+      'Выбранный провайдер не объявлен подключенным мобильным хостом.',
+    );
+  });
 
   test(
     'controller sends provider settings for mobile resolution and stores only profile-retained values',

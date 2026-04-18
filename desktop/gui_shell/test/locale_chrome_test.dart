@@ -60,6 +60,23 @@ class _ReadyHostSupervisor implements HostSupervisor {
   }
 }
 
+class _LocalizedReadyHostSupervisor implements HostSupervisor {
+  int calls = 0;
+
+  @override
+  Future<void> dispose() async {}
+
+  @override
+  Future<HostConnectionResult> ensureReady() async {
+    calls += 1;
+    return HostConnectionResult(
+      state: HostLifecycleState.ready,
+      message: currentShellText.connectedToLocalHost('127.0.0.1:7777'),
+      info: _readyHostInfo,
+    );
+  }
+}
+
 class _InMemoryDesktopShellStateStore implements DesktopShellStateStore {
   const _InMemoryDesktopShellStateStore();
 
@@ -212,6 +229,39 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
 }
 
 void main() {
+  test(
+    'desktop controller reconnects on locale switch and relocalizes host status',
+    () async {
+      await AppLocale.en.build();
+      await AppLocale.ru.build();
+      LocaleSettings.setLocaleSync(AppLocale.ru);
+      addTearDown(() => LocaleSettings.setLocaleSync(AppLocale.en));
+
+      final supervisor = _LocalizedReadyHostSupervisor();
+      final controller = DesktopShellController(
+        api: const _ReadyControlPlaneApi(),
+        supervisor: supervisor,
+        stateStore: const _InMemoryDesktopShellStateStore(),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      expect(
+        controller.hostStatusMessage,
+        'Подключено к локальному хосту 127.0.0.1:7777',
+      );
+
+      await controller.selectLocaleOverride('en');
+
+      expect(supervisor.calls, greaterThanOrEqualTo(2));
+      expect(
+        controller.hostStatusMessage,
+        'Connected to local host 127.0.0.1:7777',
+      );
+    },
+  );
+
   testWidgets('desktop shell chrome switches to Russian locale labels', (
     WidgetTester tester,
   ) async {

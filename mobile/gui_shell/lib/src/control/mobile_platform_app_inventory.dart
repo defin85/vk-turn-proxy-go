@@ -1,3 +1,4 @@
+import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter/services.dart';
 
 const String _mobileHostBridgeChannelName =
@@ -38,8 +39,7 @@ abstract class MobilePlatformAppInventory {
   Future<List<MobilePlatformApp>> listInstalledApps();
 }
 
-class PlatformMobilePlatformAppInventory
-    implements MobilePlatformAppInventory {
+class PlatformMobilePlatformAppInventory implements MobilePlatformAppInventory {
   PlatformMobilePlatformAppInventory({MethodChannel? methodChannel})
     : _methodChannel =
           methodChannel ?? const MethodChannel(_mobileHostBridgeChannelName);
@@ -52,26 +52,26 @@ class PlatformMobilePlatformAppInventory
       final payload = await _methodChannel.invokeMethod<List<dynamic>>(
         'listInstalledApps',
       );
-      final apps =
-          (payload ?? const <dynamic>[])
-              .whereType<Map<dynamic, dynamic>>()
-              .map(MobilePlatformApp.fromJson)
-              .where(
-                (MobilePlatformApp app) => app.packageName.isNotEmpty,
-              )
-              .toList(growable: false);
+      final apps = (payload ?? const <dynamic>[])
+          .whereType<Map<dynamic, dynamic>>()
+          .map(MobilePlatformApp.fromJson)
+          .where((MobilePlatformApp app) => app.packageName.isNotEmpty)
+          .toList(growable: false);
       return apps;
     } on MissingPluginException {
-      throw const MobilePlatformAppInventoryError(
-        'Native mobile host bridge plugin is unavailable for installed-app inventory.',
+      throw MobilePlatformAppInventoryError(
+        currentShellText
+            .nativeMobileHostBridgePluginUnavailableForInstalledAppInventory,
       );
     } on PlatformException catch (error) {
       throw MobilePlatformAppInventoryError(
-        'Failed to list installed apps from the native platform: ${error.message ?? error.code}',
+        currentShellText.failedToListInstalledAppsFromNativePlatform(
+          error.message ?? error.code,
+        ),
       );
     } catch (error) {
       throw MobilePlatformAppInventoryError(
-        'Failed to list installed apps from the native platform: $error',
+        currentShellText.failedToListInstalledAppsFromNativePlatform(error),
       );
     }
   }

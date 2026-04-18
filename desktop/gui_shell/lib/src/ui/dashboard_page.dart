@@ -670,7 +670,10 @@ class _CompactReadyShellBarSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final copy = context.shellText;
-    final detail = _routineConnectionDetail(controller.hostConnection?.message);
+    final detail = _routineConnectionDetail(
+      copy: copy,
+      message: controller.hostConnection?.message,
+    );
     final summary = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -985,9 +988,7 @@ class _WorkflowQuickActions extends StatelessWidget {
                 'desktop-open-profile-library-button',
               ),
               onPressed: onOpenSavedProfiles,
-              child: Text(
-                dense ? t.commonProfiles : t.commonSavedProfiles,
-              ),
+              child: Text(dense ? t.commonProfiles : t.commonSavedProfiles),
             ),
             OutlinedButton(
               key: const ValueKey<String>(
@@ -1405,8 +1406,7 @@ class _PinnedSupportSummary extends StatelessWidget {
             controller.hostConnection?.message ??
             copy.desktopSupportBlockedDetail,
       ShellStatus.booting =>
-        controller.notice ??
-            copy.desktopSupportBootingDetail,
+        controller.notice ?? copy.desktopSupportBootingDetail,
       ShellStatus.ready =>
         controller.hasLiveWork
             ? copy.desktopSupportReadyLiveDetail
@@ -2342,8 +2342,7 @@ class _ResolutionCard extends StatelessWidget {
                 Text(
                   copy.failureSummary(
                     stage: resolution.failure!.stage ?? copy.failureFallback,
-                    message:
-                        resolution.failure!.message ?? copy.unknownValue,
+                    message: resolution.failure!.message ?? copy.unknownValue,
                   ),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: const Color(0xFF7A1F16),
@@ -2838,13 +2837,18 @@ String _workflowAssuranceSummary(
   };
 }
 
-String _routineConnectionDetail(String? message) {
+String _routineConnectionDetail({required ShellText copy, String? message}) {
   if (message == null || message.isEmpty) {
     return '';
   }
-  const prefix = 'Connected to local host ';
-  if (message.startsWith(prefix)) {
-    return message.substring(prefix.length);
+  final prefixes = <String>[
+    copy.connectedToLocalHost(''),
+    const ShellText().connectedToLocalHost(''),
+  ];
+  for (final prefix in prefixes) {
+    if (prefix.isNotEmpty && message.startsWith(prefix)) {
+      return message.substring(prefix.length).trimLeft();
+    }
   }
   return message;
 }

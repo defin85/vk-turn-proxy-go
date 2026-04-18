@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_client.dart';
@@ -115,6 +116,24 @@ void main() {
     },
   );
 
+  test('http mobile host bridge localizes ready message in Russian', () async {
+    await AppLocale.ru.build();
+    LocaleSettings.setLocaleSync(AppLocale.ru);
+    addTearDown(() => LocaleSettings.setLocaleSync(AppLocale.en));
+
+    final bridge = HttpMobileHostBridge(
+      baseUri: Uri.parse('http://127.0.0.1:7777'),
+      client: _ReadyControlPlaneApi(),
+    );
+
+    final result = await bridge.ensureReady();
+
+    expect(
+      result.message,
+      'Подключено к мосту мобильного хоста http://127.0.0.1:7777',
+    );
+  });
+
   test(
     'mobile host bridge factory fails closed when the native bridge returns no configuration',
     () async {
@@ -217,10 +236,7 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (MethodCall call) async {
           expect(call.method, 'debugInspectWebView');
-          expect(
-            call.arguments,
-            <String, dynamic>{'webViewIdentifier': 42},
-          );
+          expect(call.arguments, <String, dynamic>{'webViewIdentifier': 42});
           return <String, Object?>{
             'web_view_identifier': 42,
             'ime_visible': true,
@@ -232,14 +248,11 @@ void main() {
       methodChannel: channel,
     );
 
-    expect(
-      await inspector.snapshot(webViewIdentifier: 42),
-      <String, Object?>{
-        'web_view_identifier': 42,
-        'ime_visible': true,
-        'last_no_extract_ui_flag': true,
-      },
-    );
+    expect(await inspector.snapshot(webViewIdentifier: 42), <String, Object?>{
+      'web_view_identifier': 42,
+      'ime_visible': true,
+      'last_no_extract_ui_flag': true,
+    });
   });
 
   test(

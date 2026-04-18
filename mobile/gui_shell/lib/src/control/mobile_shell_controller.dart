@@ -142,6 +142,7 @@ class MobileShellController extends ChangeNotifier {
   String? localeOverrideTag;
   PortableProfileEnvelope? _pendingPortableProfileImportEnvelope;
   String? _pendingPortableProfileImportPayload;
+  Object? _restoreStateError;
 
   static const List<Capability> requiredCapabilities = <Capability>[
     Capability.mobileHostBridge,
@@ -183,14 +184,41 @@ class MobileShellController extends ChangeNotifier {
   }
 
   AppLocale get activeLocale => LocaleSettings.currentLocale;
+  ShellText get _copy => currentShellText;
 
   bool get usesSystemLocale => localeOverrideTag == null;
 
   Future<void> selectLocaleOverride(String? rawLocale) async {
+    final previousHostMessage = hostStatusMessage;
     final locale = parseShellLocale(rawLocale);
     localeOverrideTag = locale == null ? null : shellLocaleTag(locale);
     await restoreShellLocale(localeOverrideTag);
+    if (_restoreStateError != null) {
+      _blockedLocalStateMessage = _copy.failedToRestoreMobileShellState(
+        _restoreStateError!,
+      );
+    }
     _scheduleStatePersist();
+    _relocalizeReadyHostConnection();
+    final nextHostMessage = hostStatusMessage;
+    if (previousHostMessage != null &&
+        notice?.trim() == previousHostMessage &&
+        nextHostMessage != null) {
+      notice = nextHostMessage;
+    }
+    if (status == ShellStatus.ready && hostConnection?.isReady == true) {
+      await refresh();
+      return;
+    }
+    if (_requiresLocalStateReset) {
+      await _stopRuntimeMonitoring();
+      await _connectBridge(localStateBlocked: true);
+      return;
+    }
+    if (hostConnection != null || status != ShellStatus.booting) {
+      await reconnect();
+      return;
+    }
     _notify();
   }
 
@@ -409,7 +437,7 @@ class MobileShellController extends ChangeNotifier {
     if (_requiresLocalStateReset) {
       notice =
           _blockedLocalStateMessage ??
-          'Reset local mobile shell state before reconnecting.';
+          _copy.resetLocalMobileShellStateBeforeReconnecting;
       _notify();
       return;
     }
@@ -642,7 +670,7 @@ class MobileShellController extends ChangeNotifier {
             ? (managedProviders.isEmpty ? null : managedProviders.first.id)
             : availableManagedProvidersForDraft.first.id);
     if (preferred == null || preferred.trim().isEmpty) {
-      notice = 'No managed providers are available yet.';
+      notice = _copy.noManagedProvidersAvailableYet;
       _notify();
       return;
     }
@@ -769,8 +797,7 @@ class MobileShellController extends ChangeNotifier {
         providerTemplateDraft.provider,
       );
       if (supported == null) {
-        notice =
-            'The selected template family is not part of the supported app catalog.';
+        notice = _copy.selectedTemplateFamilyNotInSupportedCatalog;
         return;
       }
       final draftToSave = _normalizeProviderTemplateDraft(
@@ -800,7 +827,7 @@ class MobileShellController extends ChangeNotifier {
       ]..sort(_providerTemplateNameSort);
       providerTemplates = _overlayProviderTemplates(next);
       showTransientNotice(
-        'Saved template ${saved.name.isEmpty ? saved.id : saved.name}.',
+        _copy.savedTemplate(saved.name.isEmpty ? saved.id : saved.name),
       );
       selectedProviderTemplateId = saved.id;
       providerTemplateDraft = ProviderTemplateDraft.fromRecord(saved);
@@ -817,7 +844,7 @@ class MobileShellController extends ChangeNotifier {
       providerTemplates = providerTemplates
           .where((ProviderTemplateRecord template) => template.id != templateId)
           .toList(growable: false);
-      notice = 'Deleted template $templateId.';
+      notice = _copy.deletedTemplate(templateId);
       selectedProviderTemplateId = null;
       providerTemplateDraft = _defaultProviderTemplateDraft();
       workflowSurface = MobileWorkflowSurface.provider;
@@ -828,7 +855,7 @@ class MobileShellController extends ChangeNotifier {
   void useProviderTemplate(String templateId) {
     final template = providerTemplateById(templateId);
     if (template == null) {
-      notice = 'Template $templateId is no longer available.';
+      notice = _copy.templateNoLongerAvailable(templateId);
       _notify();
       return;
     }
@@ -837,8 +864,9 @@ class MobileShellController extends ChangeNotifier {
     managedProviderDraft = _normalizeManagedProviderDraft(
       ManagedProviderDraft.fromTemplateRecord(template),
     );
-    notice =
-        'Seeded a new managed provider draft from the ${template.name.isEmpty ? template.id : template.name} template.';
+    notice = _copy.seededManagedProviderDraftFromTemplate(
+      template.name.isEmpty ? template.id : template.name,
+    );
     _notify();
   }
 
@@ -848,8 +876,7 @@ class MobileShellController extends ChangeNotifier {
         managedProviderDraft.provider,
       );
       if (supported == null) {
-        notice =
-            'The selected managed provider family is not part of the supported app catalog.';
+        notice = _copy.selectedManagedProviderFamilyNotInSupportedCatalog;
         return;
       }
       final draftToSave = _normalizeManagedProviderDraft(managedProviderDraft);
@@ -877,7 +904,7 @@ class MobileShellController extends ChangeNotifier {
       ]..sort(_managedProviderNameSort);
       managedProviders = _overlayManagedProviders(next);
       showTransientNotice(
-        'Saved managed provider ${saved.name.isEmpty ? saved.id : saved.name}.',
+        _copy.savedManagedProvider(saved.name.isEmpty ? saved.id : saved.name),
       );
       selectedManagedProviderId = saved.id;
       managedProviderDraft = ManagedProviderDraft.fromRecord(saved);
@@ -905,7 +932,7 @@ class MobileShellController extends ChangeNotifier {
       if (draft.providerBinding.managedProviderId == providerId) {
         draft = draft.asCustomProvider();
       }
-      notice = 'Deleted managed provider $providerId.';
+      notice = _copy.deletedManagedProvider(providerId);
       selectedManagedProviderId = null;
       managedProviderDraft = _defaultManagedProviderDraft();
       workflowSurface = MobileWorkflowSurface.provider;
@@ -920,7 +947,7 @@ class MobileShellController extends ChangeNotifier {
   void useManagedProviderForDraft(String managedProviderId) {
     final provider = managedProviderById(managedProviderId);
     if (provider == null) {
-      notice = 'Managed provider $managedProviderId is no longer available.';
+      notice = _copy.managedProviderNoLongerAvailable(managedProviderId);
       _notify();
       return;
     }
@@ -928,8 +955,9 @@ class MobileShellController extends ChangeNotifier {
     draft = _normalizeDraft(draft.applyManagedProvider(provider));
     selectedManagedProviderId = managedProviderId;
     _clearSelectedResolutionSelection();
-    notice =
-        'Applied managed provider ${provider.name.isEmpty ? provider.id : provider.name} to the active mobile profile draft.';
+    notice = _copy.appliedManagedProviderToActiveMobileProfileDraft(
+      provider.name.isEmpty ? provider.id : provider.name,
+    );
     _scheduleStatePersist();
     _notify();
   }
@@ -940,8 +968,7 @@ class MobileShellController extends ChangeNotifier {
 
   void applyPreset(ProviderPreset preset) {
     resetManagedProviderDraft(preset: preset);
-    notice =
-        'Seeded a new managed provider draft from the ${preset.title} preset.';
+    notice = _copy.seededManagedProviderDraftFromPreset(preset.title);
     _notify();
   }
 
@@ -976,11 +1003,12 @@ class MobileShellController extends ChangeNotifier {
       _persistedStateSignature = MobileShellState.empty().signature();
       _requiresLocalStateReset = false;
       _blockedLocalStateMessage = null;
-      notice = 'Cleared local mobile shell state.';
+      _restoreStateError = null;
+      notice = _copy.clearedLocalMobileShellState;
       hostConnection = null;
       status = ShellStatus.booting;
     } catch (error) {
-      notice = 'Failed to clear local mobile shell state: $error';
+      notice = _copy.failedToClearLocalMobileShellState(error);
       status = ShellStatus.blocked;
       busy = false;
       _notify();
@@ -1003,8 +1031,7 @@ class MobileShellController extends ChangeNotifier {
       final persistedDraftProfileId = selectedProfileId?.trim() ?? '';
       final descriptor = activeProviderDescriptor;
       if (descriptor == null) {
-        notice =
-            'The selected provider is not advertised by the connected mobile host.';
+        notice = _copy.selectedProviderNotAdvertisedByConnectedMobileHost;
         return;
       }
       final blockReason = _providerSettingsBlockReason(descriptor);
@@ -1051,7 +1078,9 @@ class MobileShellController extends ChangeNotifier {
       profiles = nextProfiles;
       selectProfile(profile.id);
       showTransientNotice(
-        'Saved mobile profile ${profile.name.isEmpty ? profile.id : profile.name}.',
+        _copy.savedMobileProfile(
+          profile.name.isEmpty ? profile.id : profile.name,
+        ),
       );
       if (hostConnection?.isReady == true) {
         await refresh();
@@ -1101,7 +1130,7 @@ class MobileShellController extends ChangeNotifier {
         }
       }
       resetDraft();
-      notice = 'Deleted mobile profile $profileId.';
+      notice = _copy.deletedMobileProfile(profileId);
       if (hostConnection?.isReady == true) {
         await refresh();
       }
@@ -1122,7 +1151,7 @@ class MobileShellController extends ChangeNotifier {
   PortableProfileEnvelope? selectedPortableProfileEnvelope() {
     final selected = selectedSavedProfile;
     if (selected == null) {
-      notice = 'Save or select a profile before exporting it.';
+      notice = _copy.saveOrSelectProfileBeforeExport;
       _notify();
       return null;
     }
@@ -1133,8 +1162,7 @@ class MobileShellController extends ChangeNotifier {
         ? null
         : managedProviderById(managedProviderId);
     if (binding.isManaged && managedProviderSnapshot == null) {
-      notice =
-          'The selected profile depends on a managed provider snapshot that is no longer available locally.';
+      notice = _copy.selectedProfileDependsOnMissingManagedProviderSnapshot;
       _notify();
       return null;
     }
@@ -1167,8 +1195,8 @@ class MobileShellController extends ChangeNotifier {
       );
       final profileLabel = envelope.displayName;
       notice = envelope.isSecretBearing
-          ? 'Copied secret-bearing portable profile $profileLabel. Treat the payload like a credential.'
-          : 'Copied portable profile $profileLabel.';
+          ? _copy.copiedSecretBearingPortableProfile(profileLabel)
+          : _copy.copiedPortableProfile(profileLabel);
     } catch (error) {
       notice = '$error';
     } finally {
@@ -1193,8 +1221,8 @@ class MobileShellController extends ChangeNotifier {
       );
       final profileLabel = envelope.displayName;
       notice = envelope.isSecretBearing
-          ? 'Shared secret-bearing portable profile $profileLabel as text.'
-          : 'Shared portable profile $profileLabel as text.';
+          ? _copy.sharedSecretBearingPortableProfileAsText(profileLabel)
+          : _copy.sharedPortableProfileAsText(profileLabel);
     } catch (error) {
       notice = '$error';
     } finally {
@@ -1220,8 +1248,8 @@ class MobileShellController extends ChangeNotifier {
       );
       final profileLabel = envelope.displayName;
       notice = envelope.isSecretBearing
-          ? 'Shared secret-bearing portable profile $profileLabel as a file.'
-          : 'Shared portable profile $profileLabel as a file.';
+          ? _copy.sharedSecretBearingPortableProfileAsFile(profileLabel)
+          : _copy.sharedPortableProfileAsFile(profileLabel);
     } catch (error) {
       notice = '$error';
     } finally {
@@ -1310,8 +1338,12 @@ class MobileShellController extends ChangeNotifier {
       );
       workflowSurface = MobileWorkflowSurface.profile;
       notice = envelope.isSecretBearing
-          ? 'Imported secret-bearing profile ${profile.name.isEmpty ? profile.id : profile.name}. Review provider input before sharing it further.'
-          : 'Imported profile ${profile.name.isEmpty ? profile.id : profile.name}.';
+          ? _copy.importedSecretBearingProfile(
+              profile.name.isEmpty ? profile.id : profile.name,
+            )
+          : _copy.importedProfile(
+              profile.name.isEmpty ? profile.id : profile.name,
+            );
       _scheduleStatePersist();
       if (hostConnection?.isReady == true) {
         await refresh();
@@ -1344,7 +1376,7 @@ class MobileShellController extends ChangeNotifier {
     await _runBridgeMutation(() async {
       final session = await bridge.startSession(profileId: profileId);
       selectedSessionId = session.id;
-      notice = 'Started mobile session ${session.id}.';
+      notice = _copy.startedMobileSession(session.id);
       await refresh();
     });
   }
@@ -1353,8 +1385,7 @@ class MobileShellController extends ChangeNotifier {
     await _runBridgeMutation(() async {
       final descriptor = activeProviderDescriptor;
       if (descriptor == null) {
-        notice =
-            'The selected provider is not advertised by the connected mobile host.';
+        notice = _copy.selectedProviderNotAdvertisedByConnectedMobileHost;
         return;
       }
       final resolution = await _startResolutionForCurrentDraft(descriptor);
@@ -1371,7 +1402,7 @@ class MobileShellController extends ChangeNotifier {
     await _runBridgeMutation(() async {
       final resolution = await bridge.cancelResolution(resolutionId);
       selectedResolutionId = resolution.id;
-      notice = 'Cancelled mobile resolution ${resolution.id}.';
+      notice = _copy.cancelledMobileResolution(resolution.id);
       await refresh();
     });
   }
@@ -1380,7 +1411,7 @@ class MobileShellController extends ChangeNotifier {
     await _runBridgeMutation(() async {
       final resolution = _resolutionById(resolutionId);
       if (resolution == null) {
-        notice = 'Resolution $resolutionId is no longer available.';
+        notice = _copy.resolutionNoLongerAvailable(resolutionId);
         return;
       }
       final advertised = resolution.artifact?.action(
@@ -1388,8 +1419,10 @@ class MobileShellController extends ChangeNotifier {
       );
       if (advertised == null ||
           advertised.executionOwner != ActionExecutionOwner.host) {
-        notice =
-            'Resolution $resolutionId does not advertise ${ArtifactAction.startOnThisDevice.label.toLowerCase()}.';
+        notice = _copy.resolutionDoesNotAdvertiseAction(
+          resolutionId,
+          ArtifactAction.startOnThisDevice.label,
+        );
         return;
       }
       final session = await bridge.materializeResolution(
@@ -1398,8 +1431,10 @@ class MobileShellController extends ChangeNotifier {
       );
       selectedResolutionId = resolutionId;
       selectedSessionId = session.id;
-      notice =
-          'Started mobile session ${session.id} from resolution $resolutionId. Ready is reported only after runtime startup succeeds.';
+      notice = _copy.startedMobileSessionFromResolution(
+        session.id,
+        resolutionId,
+      );
       await refresh();
     });
   }
@@ -1409,8 +1444,10 @@ class MobileShellController extends ChangeNotifier {
       final exported = await bridge.exportResolution(resolutionId);
       await _handoffAdapter.copyLink(exported.link);
       selectedResolutionId = resolutionId;
-      notice =
-          'Copied handoff link for $resolutionId. Expires ${_formatNoticeTimestamp(exported.expiresAt)}.';
+      notice = _copy.copiedHandoffLink(
+        resolutionId,
+        _formatNoticeTimestamp(exported.expiresAt),
+      );
     });
   }
 
@@ -1419,8 +1456,10 @@ class MobileShellController extends ChangeNotifier {
       final exported = await bridge.exportResolution(resolutionId);
       await _handoffAdapter.shareLink(exported.link);
       selectedResolutionId = resolutionId;
-      notice =
-          'Shared handoff link for $resolutionId. Expires ${_formatNoticeTimestamp(exported.expiresAt)}.';
+      notice = _copy.sharedHandoffLink(
+        resolutionId,
+        _formatNoticeTimestamp(exported.expiresAt),
+      );
     });
   }
 
@@ -1431,35 +1470,35 @@ class MobileShellController extends ChangeNotifier {
     await _runBridgeMutation(() async {
       final resolution = _resolutionById(resolutionId);
       if (resolution == null) {
-        notice = 'Resolution $resolutionId is no longer available.';
+        notice = _copy.resolutionNoLongerAvailable(resolutionId);
         return;
       }
       final advertised = resolution.artifact?.action(action);
       if (advertised == null ||
           advertised.executionOwner != ActionExecutionOwner.shellExternal) {
-        notice =
-            'Resolution $resolutionId does not advertise ${action.label.toLowerCase()}.';
+        notice = _copy.resolutionDoesNotAdvertiseAction(
+          resolutionId,
+          action.label,
+        );
         return;
       }
       final targetUrl = resolution.externalTargetUrl(action);
       if (targetUrl == null) {
-        notice =
-            'Resolution $resolutionId does not expose a browser target for ${action.label.toLowerCase()}.';
+        notice = _copy.resolutionHasNoBrowserTarget(resolutionId, action.label);
         return;
       }
       final opened = await _browserLauncher.open(targetUrl);
-      final targetLabel = _externalActionTargetLabel(action);
       selectedResolutionId = resolutionId;
       notice = opened
-          ? 'Opened $targetLabel for $resolutionId.'
-          : 'Failed to open $targetLabel for $resolutionId.';
+          ? _copy.openedResolutionAction(resolutionId, action.label)
+          : _copy.failedToOpenResolutionAction(resolutionId, action.label);
     });
   }
 
   Future<void> stopSession(String sessionId) async {
     await _runBridgeMutation(() async {
       await bridge.stopSession(sessionId);
-      notice = 'Stopped session $sessionId.';
+      notice = _copy.stoppedSession(sessionId);
       await refresh();
     });
   }
@@ -1467,7 +1506,7 @@ class MobileShellController extends ChangeNotifier {
   Future<void> openChallengeInBrowser(ChallengeRecord challenge) async {
     final url = challenge.openUrl?.trim() ?? '';
     if (url.isEmpty) {
-      notice = 'This challenge does not expose a browser handoff URL.';
+      notice = _copy.challengeHasNoBrowserHandoffUrl;
       _notify();
       return;
     }
@@ -1476,8 +1515,8 @@ class MobileShellController extends ChangeNotifier {
       _browserHandoffChallengeId = challenge.id;
     }
     notice = opened
-        ? 'Opened mobile browser handoff for ${challenge.kind}. Return here after the browser step.'
-        : 'Failed to open the mobile browser handoff URL.';
+        ? _copy.openedMobileBrowserHandoff(challenge.kind)
+        : _copy.failedToOpenMobileBrowserHandoffUrl;
     _notify();
   }
 
@@ -1507,7 +1546,7 @@ class MobileShellController extends ChangeNotifier {
       _browserHandoffChallengeId = null;
       final challenge = await bridge.cancelChallenge(challengeId);
       _challengeCache[challenge.id] = challenge;
-      notice = noticeOverride ?? 'Cancelled challenge $challengeId.';
+      notice = noticeOverride ?? _copy.cancelledChallenge(challengeId);
       await refresh();
     });
   }
@@ -1533,7 +1572,7 @@ class MobileShellController extends ChangeNotifier {
       );
       await file.writeAsString(enriched.toPrettyJson());
 
-      notice = 'Exported diagnostics to ${file.path}.';
+      notice = _copy.exportedDiagnostics(file.path);
       selectedSessionId = sessionId;
     });
   }
@@ -1599,7 +1638,9 @@ class MobileShellController extends ChangeNotifier {
       final result = await bridge.stopPlatformTunnel(mode: mode);
       _platformTunnelResults.remove(mode);
       final message = result.message.trim();
-      notice = message.isEmpty ? '${mode.label} disconnected.' : message;
+      notice = message.isEmpty
+          ? _copy.platformTunnelDisconnected(mode.label)
+          : message;
     });
   }
 
@@ -1655,8 +1696,10 @@ class MobileShellController extends ChangeNotifier {
     ProviderDescriptor descriptor,
   ) async {
     if (descriptor.inputKind != ProviderInputKind.link) {
-      notice =
-          '${descriptor.displayName} expects ${descriptor.inputKind.value} input. This mobile shell currently supports link entry only.';
+      notice = _copy.providerExpectsLinkEntryOnlyMobile(
+        providerName: descriptor.displayName,
+        inputKind: descriptor.inputKind.value,
+      );
       return null;
     }
     final blockReason = _providerSettingsBlockReason(descriptor);
@@ -1686,12 +1729,10 @@ class MobileShellController extends ChangeNotifier {
         case ResolutionState.resolved:
           return selectedResolution.id;
         case ResolutionState.challengeRequired:
-          notice =
-              'Complete the current provider challenge before starting ${mode.label}.';
+          notice = _copy.challengeMustCompleteBeforeStarting(mode.label);
           return null;
         case ResolutionState.starting:
-          notice =
-              'Wait for the current provider resolution before starting ${mode.label}.';
+          notice = _copy.waitForProviderResolutionBeforeStarting(mode.label);
           return null;
         case ResolutionState.failed ||
             ResolutionState.cancelled ||
@@ -1703,8 +1744,7 @@ class MobileShellController extends ChangeNotifier {
 
     final descriptor = activeProviderDescriptor;
     if (descriptor == null) {
-      notice =
-          'The selected provider is not advertised by the connected mobile host.';
+      notice = _copy.selectedProviderNotAdvertisedByConnectedMobileHost;
       return null;
     }
     final resolution = await _startResolutionForCurrentDraft(descriptor);
@@ -1718,12 +1758,16 @@ class MobileShellController extends ChangeNotifier {
       case ResolutionState.resolved:
         return refreshedResolution.id;
       case ResolutionState.challengeRequired:
-        notice =
-            '${_resolutionStartedNotice(descriptor, refreshedResolution.id)} Complete the current provider challenge before starting ${mode.label}.';
+        notice = _copy.resolutionStartedThenCompleteChallengeBeforeStarting(
+          _resolutionStartedNotice(descriptor, refreshedResolution.id),
+          mode.label,
+        );
         return null;
       case ResolutionState.starting:
-        notice =
-            '${_resolutionStartedNotice(descriptor, refreshedResolution.id)} Wait for the resolution to finish before starting ${mode.label}.';
+        notice = _copy.resolutionStartedThenWaitForFinishBeforeStarting(
+          _resolutionStartedNotice(descriptor, refreshedResolution.id),
+          mode.label,
+        );
         return null;
       case ResolutionState.failed ||
           ResolutionState.cancelled ||
@@ -1734,10 +1778,6 @@ class MobileShellController extends ChangeNotifier {
         );
         return null;
     }
-  }
-
-  String _externalActionTargetLabel(ArtifactAction action) {
-    return action.label.replaceFirst(RegExp(r'^Open\s+'), '').toLowerCase();
   }
 
   ProviderDescriptor? descriptorForProvider(String providerId) {
@@ -1858,8 +1898,10 @@ class MobileShellController extends ChangeNotifier {
       _pendingPortableProfileImportEnvelope = envelope;
       workflowSurface = MobileWorkflowSurface.profile;
       notice = envelope.isSecretBearing
-          ? 'Received a secret-bearing portable profile ${envelope.displayName}. Review it before importing.'
-          : 'Received portable profile ${envelope.displayName}. Review it before importing.';
+          ? _copy.receivedSecretBearingPortableProfileForReview(
+              envelope.displayName,
+            )
+          : _copy.receivedPortableProfileForReview(envelope.displayName);
       _notify();
     } on FormatException catch (error) {
       notice = error.message;
@@ -1972,10 +2014,10 @@ class MobileShellController extends ChangeNotifier {
         }
         unawaited(
           _handleBridgeFailure(
-            const ControlPlaneError(
+            ControlPlaneError(
               statusCode: 0,
               code: 'connection_closed',
-              message: 'event stream closed',
+              message: currentShellText.eventStreamClosed,
             ),
           ),
         );
@@ -2299,10 +2341,13 @@ class MobileShellController extends ChangeNotifier {
     }
     _challengeCache[challenge.id] = challenge;
     notice = automatic
-        ? 'Detected ${_browserReturnSignalLabel(signalKind)} and continued challenge $challengeId.'
+        ? _copy.detectedBrowserReturnAndContinuedChallenge(
+            _browserReturnSignalLabel(signalKind),
+            challengeId,
+          )
         : (browserContinuation != null
-              ? 'Completed the in-app browser continuation for challenge $challengeId.'
-              : 'Continued challenge $challengeId.');
+              ? _copy.completedInAppBrowserContinuation(challengeId)
+              : _copy.continuedChallenge(challengeId));
     await refresh();
   }
 
@@ -2314,16 +2359,16 @@ class MobileShellController extends ChangeNotifier {
 
   String _localStateResetBlockMessage() {
     return _blockedLocalStateMessage ??
-        'Reset local mobile shell state before runtime control can continue.';
+        _copy.resetLocalMobileShellStateBeforeRuntimeControlContinue;
   }
 
   String _browserReturnSignalLabel(BrowserReturnSignalKind? signalKind) {
     return switch (signalKind) {
-      BrowserReturnSignalKind.appLink => 'app-link browser return',
-      BrowserReturnSignalKind.universalLink => 'universal-link browser return',
+      BrowserReturnSignalKind.appLink => _copy.appLinkBrowserReturn,
+      BrowserReturnSignalKind.universalLink => _copy.universalLinkBrowserReturn,
       BrowserReturnSignalKind.foregroundResume =>
-        'browser return on app resume',
-      null => 'browser return',
+        _copy.browserReturnOnAppResume,
+      null => _copy.browserReturn,
     };
   }
 
@@ -2341,7 +2386,7 @@ class MobileShellController extends ChangeNotifier {
       return;
     }
     if (hostConnection?.isReady != true) {
-      notice = hostConnection?.message ?? 'Mobile host bridge is not ready.';
+      notice = hostConnection?.message ?? _copy.mobileHostBridgeNotReady;
       _notify();
       return;
     }
@@ -2367,6 +2412,32 @@ class MobileShellController extends ChangeNotifier {
     return error.statusCode == 0 ||
         error.incompatibleHost ||
         error.statusCode >= 500;
+  }
+
+  void _relocalizeReadyHostConnection() {
+    final current = hostConnection;
+    if (current == null || !current.isReady) {
+      return;
+    }
+    final endpoint = _mobileHostEndpointFromMessage(current.message);
+    if (endpoint == null) {
+      return;
+    }
+    hostConnection = MobileHostConnectionResult(
+      state: current.state,
+      message: _copy.connectedToMobileHostBridge(endpoint),
+      info: current.info,
+      description: current.description,
+    );
+  }
+
+  String? _mobileHostEndpointFromMessage(String? message) {
+    if (message == null || message.isEmpty) {
+      return null;
+    }
+    final match = RegExp(r'https?://\S+').firstMatch(message);
+    final endpoint = match?.group(0)?.trim();
+    return endpoint == null || endpoint.isEmpty ? null : endpoint;
   }
 
   Future<void> _handleBridgeFailure(Object error) async {
@@ -2407,6 +2478,7 @@ class MobileShellController extends ChangeNotifier {
   Future<void> _restorePersistedState() async {
     try {
       final state = await stateStore.load();
+      _restoreStateError = null;
       if (state == null) {
         return;
       }
@@ -2423,9 +2495,9 @@ class MobileShellController extends ChangeNotifier {
       providerTemplateDraft = _defaultProviderTemplateDraft();
       _persistedStateSignature = state.signature();
     } catch (error) {
+      _restoreStateError = error;
       _requiresLocalStateReset = true;
-      _blockedLocalStateMessage =
-          'Failed to restore mobile shell state: $error';
+      _blockedLocalStateMessage = _copy.failedToRestoreMobileShellState(error);
       notice = _blockedLocalStateMessage;
     }
   }
@@ -2464,7 +2536,7 @@ class MobileShellController extends ChangeNotifier {
       await stateStore.save(sanitized);
       _persistedStateSignature = signature;
     } catch (error) {
-      notice = 'Failed to persist mobile shell state: $error';
+      notice = _copy.failedToPersistMobileShellState(error);
       _notify();
     }
   }
@@ -2486,20 +2558,14 @@ class MobileShellController extends ChangeNotifier {
 
   String _platformTunnelNotice(PlatformTunnelStartResult result) {
     if (result.ready) {
-      return '${result.mode.label} is ready for the mobile host tunnel path.';
+      return _copy.platformTunnelReady(result.mode.label);
     }
-    final buffer = StringBuffer(
-      '${result.mode.label} blocked at ${result.stage?.label ?? 'Unknown stage'}.',
+    return _copy.platformTunnelBlocked(
+      modeLabel: result.mode.label,
+      stageLabel: result.stage?.label ?? _copy.unknownStage,
+      prerequisiteLabel: result.missingPrerequisite?.label,
+      message: result.message,
     );
-    if (result.missingPrerequisite != null) {
-      buffer.write(
-        ' Missing prerequisite: ${result.missingPrerequisite!.label}.',
-      );
-    }
-    if (result.message.isNotEmpty) {
-      buffer.write(' ${result.message}');
-    }
-    return buffer.toString();
   }
 
   String _resolutionUnavailableForPlatformTunnelNotice(
@@ -2509,8 +2575,13 @@ class MobileShellController extends ChangeNotifier {
     final stage = resolution.failure?.stage ?? resolution.state.value;
     final message =
         resolution.failure?.message ??
-        'The provider did not return a startable artifact.';
-    return 'Cannot start ${mode.label} because resolution ${resolution.id} ended at $stage: $message';
+        _copy.providerDidNotReturnStartableArtifact;
+    return _copy.resolutionUnavailableForPlatformTunnel(
+      modeLabel: mode.label,
+      resolutionId: resolution.id,
+      stage: stage,
+      message: message,
+    );
   }
 
   String _resolutionStartedNotice(
@@ -2518,12 +2589,21 @@ class MobileShellController extends ChangeNotifier {
     String resolutionId,
   ) {
     if (descriptor.browserPolicy == ProviderBrowserPolicy.externalRequired) {
-      return 'Started mobile resolution $resolutionId for ${descriptor.displayName}. Expect an external browser step when the provider requires it.';
+      return _copy.startedMobileResolutionForProviderWithExternalBrowser(
+        resolutionId,
+        descriptor.displayName,
+      );
     }
     if (descriptor.mayRequireBrowserContinuation) {
-      return 'Started mobile resolution $resolutionId for ${descriptor.displayName}. Complete any browser continuation before expecting a resolved artifact.';
+      return _copy.startedMobileResolutionForProviderWithBrowserContinuation(
+        resolutionId,
+        descriptor.displayName,
+      );
     }
-    return 'Started mobile resolution $resolutionId for ${descriptor.displayName}.';
+    return _copy.startedMobileResolutionForProvider(
+      resolutionId,
+      descriptor.displayName,
+    );
   }
 
   ProfileDraft _defaultDraft() {
@@ -2682,13 +2762,16 @@ class MobileShellController extends ChangeNotifier {
     if (reason == null) {
       return null;
     }
-    return 'The connected mobile shell cannot render provider settings for ${descriptor.displayName}: $reason';
+    return _copy.mobileProviderSettingsRuntimeUnsupported(
+      providerName: descriptor.displayName,
+      error: reason,
+    );
   }
 
   String? _managedProviderDraftBlockReason(ManagedProviderDraft provider) {
     final supported = supportedProviderDefinitionFor(provider.provider);
     if (supported == null) {
-      return 'The selected managed provider is not part of the supported app catalog.';
+      return _copy.selectedManagedProviderNotInSupportedCatalog;
     }
     final descriptor = descriptorForProvider(provider.provider);
     if (descriptor == null) {
@@ -2696,7 +2779,10 @@ class MobileShellController extends ChangeNotifier {
     }
     final schemaReason = descriptor.providerSettingsSupportError;
     if (schemaReason != null && provider.providerSettings.isNotEmpty) {
-      return 'The connected mobile shell cannot render reusable settings for ${descriptor.displayName}: $schemaReason';
+      return _copy.mobileReusableSettingsRuntimeUnsupported(
+        providerName: descriptor.displayName,
+        error: schemaReason,
+      );
     }
     return null;
   }
@@ -2704,7 +2790,7 @@ class MobileShellController extends ChangeNotifier {
   String? _providerTemplateDraftBlockReason(ProviderTemplateDraft template) {
     final supported = supportedProviderDefinitionFor(template.provider);
     if (supported == null) {
-      return 'The selected template family is not part of the supported app catalog.';
+      return _copy.selectedTemplateFamilyNotInSupportedCatalog;
     }
     final descriptor = descriptorForProvider(template.provider);
     if (descriptor == null) {
@@ -2712,7 +2798,10 @@ class MobileShellController extends ChangeNotifier {
     }
     final schemaReason = descriptor.providerSettingsSupportError;
     if (schemaReason != null && template.providerSettings.isNotEmpty) {
-      return 'The connected mobile shell cannot render reusable settings for ${descriptor.displayName}: $schemaReason';
+      return _copy.mobileTemplateRuntimeUnsupported(
+        providerName: descriptor.displayName,
+        error: schemaReason,
+      );
     }
     return null;
   }
@@ -2725,10 +2814,9 @@ class MobileShellController extends ChangeNotifier {
           final supported = supportedProviderDefinitionFor(provider.provider);
           if (supported == null) {
             return provider.copyWith(
-              availability: const ProviderConfigAvailability(
+              availability: ProviderConfigAvailability(
                 state: ProviderConfigAvailabilityState.providerUnavailable,
-                message:
-                    'This managed provider is not part of the supported app catalog.',
+                message: _copy.managedProviderNotInSupportedCatalog,
               ),
             );
           }
@@ -2737,8 +2825,9 @@ class MobileShellController extends ChangeNotifier {
             return provider.copyWith(
               availability: ProviderConfigAvailability(
                 state: ProviderConfigAvailabilityState.providerUnavailable,
-                message:
-                    'The connected host does not advertise the ${supported.title} provider family yet.',
+                message: _copy.connectedHostDoesNotAdvertiseProviderFamilyYet(
+                  supported.title,
+                ),
               ),
             );
           }
@@ -2747,8 +2836,10 @@ class MobileShellController extends ChangeNotifier {
             return provider.copyWith(
               availability: ProviderConfigAvailability(
                 state: ProviderConfigAvailabilityState.schemaUnsupported,
-                message:
-                    'The connected mobile shell cannot render reusable settings for ${descriptor.displayName}: $schemaReason',
+                message: _copy.mobileReusableSettingsRuntimeUnsupported(
+                  providerName: descriptor.displayName,
+                  error: schemaReason,
+                ),
               ),
             );
           }
@@ -2767,10 +2858,9 @@ class MobileShellController extends ChangeNotifier {
           final supported = supportedProviderDefinitionFor(template.provider);
           if (supported == null) {
             return template.copyWith(
-              availability: const ProviderConfigAvailability(
+              availability: ProviderConfigAvailability(
                 state: ProviderConfigAvailabilityState.providerUnavailable,
-                message:
-                    'This template is not part of the supported app catalog.',
+                message: _copy.templateNotInSupportedCatalog,
               ),
             );
           }
@@ -2779,8 +2869,9 @@ class MobileShellController extends ChangeNotifier {
             return template.copyWith(
               availability: ProviderConfigAvailability(
                 state: ProviderConfigAvailabilityState.providerUnavailable,
-                message:
-                    'The connected host does not advertise the ${supported.title} provider family yet.',
+                message: _copy.connectedHostDoesNotAdvertiseProviderFamilyYet(
+                  supported.title,
+                ),
               ),
             );
           }
@@ -2789,8 +2880,10 @@ class MobileShellController extends ChangeNotifier {
             return template.copyWith(
               availability: ProviderConfigAvailability(
                 state: ProviderConfigAvailabilityState.schemaUnsupported,
-                message:
-                    'The connected mobile shell cannot render reusable settings for ${descriptor.displayName}: $schemaReason',
+                message: _copy.mobileTemplateRuntimeUnsupported(
+                  providerName: descriptor.displayName,
+                  error: schemaReason,
+                ),
               ),
             );
           }
@@ -2924,7 +3017,7 @@ class MobileShellController extends ChangeNotifier {
     if (!_isLoopbackEndpoint(peerAddress)) {
       return null;
     }
-    return '${mode.label} still points to loopback peer $peerAddress. Configure an operator-managed remote peer endpoint before starting the mobile VPN path.';
+    return _copy.loopbackPeerBlockReason(mode.label, peerAddress);
   }
 
   bool _requiresRemoteWireGuardPeerEndpoint(
@@ -3010,11 +3103,11 @@ class MobileShellController extends ChangeNotifier {
         return null;
       case PlatformTunnelApplicationRoutingPolicy.allowedPackages:
         return _effectiveAllowedPackagesForMode(mode, preferences).isEmpty
-            ? 'Select at least one app before starting ${mode.label} in included-apps mode.'
+            ? _copy.selectAtLeastOneIncludedApp(mode.label)
             : null;
       case PlatformTunnelApplicationRoutingPolicy.disallowedPackages:
         return _effectiveDisallowedPackagesForMode(mode, preferences).isEmpty
-            ? 'Select at least one app before starting ${mode.label} in excluded-apps mode.'
+            ? _copy.selectAtLeastOneExcludedApp(mode.label)
             : null;
     }
   }
@@ -3022,12 +3115,12 @@ class MobileShellController extends ChangeNotifier {
   String _executionPlanSelectionRequiredMessage(PlatformTunnelMode mode) {
     final capability = capabilityForMode(mode);
     if (capability == null) {
-      return 'The selected mobile mode is not advertised by the connected host.';
+      return _copy.selectedMobileModeNotAdvertisedByConnectedHost;
     }
     if (capability.executionPlans.isEmpty) {
-      return '${mode.label} does not advertise a supported execution path yet.';
+      return _copy.modeDoesNotAdvertiseSupportedExecutionPath(mode.label);
     }
-    return 'Select an execution path before starting ${mode.label}.';
+    return _copy.selectExecutionPathBeforeStarting(mode.label);
   }
 
   void _moveModePreferences({

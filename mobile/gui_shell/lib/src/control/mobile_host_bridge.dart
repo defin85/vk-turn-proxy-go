@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_client.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_models.dart';
@@ -155,14 +156,14 @@ class PlatformMobileHostConfigResolver implements MobileHostConfigResolver {
         'resolveHost',
       );
       if (payload == null) {
-        throw const MobileHostConfigResolutionError(
-          'Native mobile host bridge did not return a host configuration.',
+        throw MobileHostConfigResolutionError(
+          currentShellText.nativeMobileHostBridgeDidNotReturnHostConfiguration,
         );
       }
       final baseUrl = (payload['base_url'] as String? ?? '').trim();
       if (baseUrl.isEmpty) {
-        throw const MobileHostConfigResolutionError(
-          'Native mobile host bridge returned an empty host URL.',
+        throw MobileHostConfigResolutionError(
+          currentShellText.nativeMobileHostBridgeReturnedEmptyHostUrl,
         );
       }
       final uri = Uri.tryParse(baseUrl);
@@ -173,7 +174,9 @@ class PlatformMobileHostConfigResolver implements MobileHostConfigResolver {
           uri.host.isNotEmpty;
       if (!validUri) {
         throw MobileHostConfigResolutionError(
-          'Native mobile host bridge returned an invalid host URL: $baseUrl',
+          currentShellText.nativeMobileHostBridgeReturnedInvalidHostUrl(
+            baseUrl,
+          ),
         );
       }
       final description = (payload['description'] as String? ?? baseUrl).trim();
@@ -182,16 +185,20 @@ class PlatformMobileHostConfigResolver implements MobileHostConfigResolver {
         description: description.isEmpty ? baseUrl : description,
       );
     } on MissingPluginException {
-      throw const MobileHostConfigResolutionError(
-        'Native mobile host bridge plugin is unavailable.',
+      throw MobileHostConfigResolutionError(
+        currentShellText.nativeMobileHostBridgePluginUnavailable,
       );
     } on PlatformException catch (error) {
       throw MobileHostConfigResolutionError(
-        'Failed to resolve the mobile host bridge from the native platform: ${error.message ?? error.code}',
+        currentShellText.failedToResolveMobileHostBridgeFromNativePlatform(
+          error.message ?? error.code,
+        ),
       );
     } catch (error) {
       throw MobileHostConfigResolutionError(
-        'Failed to resolve the mobile host bridge from the native platform: $error',
+        currentShellText.failedToResolveMobileHostBridgeFromNativePlatform(
+          error,
+        ),
       );
     }
   }
@@ -215,16 +222,19 @@ class PlatformMobilePlatformTunnelPermissionRequester
       );
       return granted ?? false;
     } on MissingPluginException {
-      throw const MobileHostPlatformActionError(
-        'Native mobile host bridge plugin is unavailable for platform tunnel permission requests.',
+      throw MobileHostPlatformActionError(
+        currentShellText
+            .nativeMobileHostBridgePluginUnavailableForPermissionRequests,
       );
     } on PlatformException catch (error) {
       throw MobileHostPlatformActionError(
-        'Failed to request native platform tunnel permission: ${error.message ?? error.code}',
+        currentShellText.failedToRequestNativePlatformTunnelPermission(
+          error.message ?? error.code,
+        ),
       );
     } catch (error) {
       throw MobileHostPlatformActionError(
-        'Failed to request native platform tunnel permission: $error',
+        currentShellText.failedToRequestNativePlatformTunnelPermission(error),
       );
     }
   }
@@ -283,10 +293,10 @@ class PlatformMobileWindowSoftInputModeController
   }
 }
 
-class PlatformMobileWebViewDebugInspector implements MobileWebViewDebugInspector {
+class PlatformMobileWebViewDebugInspector
+    implements MobileWebViewDebugInspector {
   const PlatformMobileWebViewDebugInspector({MethodChannel? methodChannel})
-    : _methodChannel =
-          methodChannel ?? const MethodChannel(_bridgeChannelName);
+    : _methodChannel = methodChannel ?? const MethodChannel(_bridgeChannelName);
 
   final MethodChannel _methodChannel;
 
@@ -301,22 +311,24 @@ class PlatformMobileWebViewDebugInspector implements MobileWebViewDebugInspector
       );
       if (payload == null) {
         return <String, Object?>{
-          'error': 'Native mobile host bridge returned no WebView snapshot.',
+          'error':
+              currentShellText.nativeMobileHostBridgeReturnedNoWebViewSnapshot,
         };
       }
       return payload;
     } on MissingPluginException {
       return <String, Object?>{
-        'error': 'Native mobile host bridge plugin is unavailable.',
+        'error': currentShellText.nativeMobileHostBridgePluginUnavailable,
       };
     } on PlatformException catch (error) {
       return <String, Object?>{
-        'error':
-            'Failed to inspect native WebView: ${error.message ?? error.code}',
+        'error': currentShellText.failedToInspectNativeWebView(
+          error.message ?? error.code,
+        ),
       };
     } catch (error) {
       return <String, Object?>{
-        'error': 'Failed to inspect native WebView: $error',
+        'error': currentShellText.failedToInspectNativeWebView(error),
       };
     }
   }
@@ -380,9 +392,8 @@ class MobileHostBridgeFactory {
     if (override.isNotEmpty) {
       final uri = Uri.tryParse(override);
       if (uri == null) {
-        return const UnavailableMobileHostBridge(
-          message:
-              'VKTP_MOBILE_HOST_URL is not a valid URI for the mobile host bridge.',
+        return UnavailableMobileHostBridge(
+          message: currentShellText.vktpMobileHostUrlInvalid,
           description: 'invalid VKTP_MOBILE_HOST_URL',
         );
       }
@@ -407,15 +418,15 @@ class MobileHostBridgeFactory {
       );
     } catch (error) {
       return UnavailableMobileHostBridge(
-        message:
-            'Failed to resolve the mobile host bridge from the native platform: $error',
+        message: currentShellText
+            .failedToResolveMobileHostBridgeFromNativePlatform(error),
         description: 'native mobile host bridge',
       );
     }
     if (resolved == null) {
-      return const UnavailableMobileHostBridge(
-        message:
-            'Native mobile host bridge did not provide a control-plane endpoint.',
+      return UnavailableMobileHostBridge(
+        message: currentShellText
+            .nativeMobileHostBridgeDidNotProvideControlPlaneEndpoint,
         description: 'native mobile host bridge',
       );
     }
@@ -600,7 +611,7 @@ class HttpMobileHostBridge implements MobileHostBridge {
       );
       return MobileHostConnectionResult(
         state: MobileHostLifecycleState.ready,
-        message: 'Connected to mobile host bridge $baseUri',
+        message: currentShellText.connectedToMobileHostBridge('$baseUri'),
         info: negotiated,
         description: _descriptionLabel,
       );
@@ -713,13 +724,13 @@ class HttpMobileHostBridge implements MobileHostBridge {
 }
 
 class UnavailableMobileHostBridge implements MobileHostBridge {
-  const UnavailableMobileHostBridge({
-    this.message = _defaultMessage,
+  UnavailableMobileHostBridge({
+    String? message,
     this.description = 'unconfigured mobile bridge',
-  });
+  }) : message = message ?? _defaultMessage;
 
-  static const String _defaultMessage =
-      'Mobile host bridge is not configured. Package a compatible loopback host or set VKTP_MOBILE_HOST_URL for development.';
+  static final String _defaultMessage =
+      currentShellText.mobileHostBridgeNotConfigured;
 
   final String message;
   final String description;

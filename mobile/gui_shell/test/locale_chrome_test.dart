@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -43,7 +45,7 @@ const HostInfo _readyHostInfo = HostInfo(
 );
 
 class _ReadyMobileHostBridge extends UnavailableMobileHostBridge {
-  const _ReadyMobileHostBridge();
+  _ReadyMobileHostBridge();
 
   @override
   Future<MobileHostConnectionResult> ensureReady() async {
@@ -57,6 +59,61 @@ class _ReadyMobileHostBridge extends UnavailableMobileHostBridge {
 
   @override
   Stream<EventRecord> events() => const Stream<EventRecord>.empty();
+
+  @override
+  Future<List<ProviderConfigRecord>> providerConfigs() async =>
+      const <ProviderConfigRecord>[];
+
+  @override
+  Future<List<ProviderDescriptor>> providers() async =>
+      const <ProviderDescriptor>[
+        ProviderDescriptor(
+          id: 'vk',
+          displayName: 'VK Calls',
+          inputKind: ProviderInputKind.link,
+          authPosture: ProviderAuthPosture.guestOrAccount,
+          browserPolicy: ProviderBrowserPolicy.externalRequired,
+          artifactFamilies: <ArtifactFamily>[ArtifactFamily.genericTurn],
+        ),
+      ];
+
+  @override
+  Future<List<ProfileRecord>> profiles() async => const <ProfileRecord>[];
+
+  @override
+  Future<List<ResolutionRecord>> resolutions() async =>
+      const <ResolutionRecord>[];
+
+  @override
+  Future<List<SessionRecord>> sessions() async => const <SessionRecord>[];
+}
+
+class _LocalizedReadyMobileHostBridge extends UnavailableMobileHostBridge {
+  final StreamController<EventRecord> _events =
+      StreamController<EventRecord>.broadcast();
+
+  int ensureReadyCalls = 0;
+
+  @override
+  Future<MobileHostConnectionResult> ensureReady() async {
+    ensureReadyCalls += 1;
+    return MobileHostConnectionResult(
+      state: MobileHostLifecycleState.ready,
+      message: currentShellText.connectedToMobileHostBridge(
+        'http://127.0.0.1:7777',
+      ),
+      info: _readyHostInfo,
+      description: 'locale-test-bridge',
+    );
+  }
+
+  @override
+  Stream<EventRecord> events() => _events.stream;
+
+  @override
+  Future<void> dispose() async {
+    await _events.close();
+  }
 
   @override
   Future<List<ProviderConfigRecord>> providerConfigs() async =>
@@ -106,6 +163,37 @@ class _InMemoryMobileShellStateStore implements MobileShellStateStore {
 }
 
 void main() {
+  test(
+    'mobile controller reconnects on locale switch and relocalizes host status',
+    () async {
+      await AppLocale.en.build();
+      await AppLocale.ru.build();
+      LocaleSettings.setLocaleSync(AppLocale.ru);
+      addTearDown(() => LocaleSettings.setLocaleSync(AppLocale.en));
+
+      final bridge = _LocalizedReadyMobileHostBridge();
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryMobileShellStateStore(MobileShellState.empty()),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      expect(
+        controller.hostStatusMessage,
+        'Подключено к мосту мобильного хоста http://127.0.0.1:7777',
+      );
+
+      await controller.selectLocaleOverride('en');
+
+      expect(bridge.ensureReadyCalls, 1);
+      expect(
+        controller.hostStatusMessage,
+        'Connected to mobile host bridge http://127.0.0.1:7777',
+      );
+    },
+  );
+
   testWidgets('mobile shell chrome switches to Russian locale labels', (
     WidgetTester tester,
   ) async {
@@ -114,7 +202,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     final controller = MobileShellController(
-      bridge: const _ReadyMobileHostBridge(),
+      bridge: _ReadyMobileHostBridge(),
       stateStore: _InMemoryMobileShellStateStore(MobileShellState.empty()),
     );
 

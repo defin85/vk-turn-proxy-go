@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_models.dart';
 import 'package:mobile_gui_shell/src/control/profile_draft.dart';
@@ -311,9 +312,7 @@ class SecureMobileShellStateStore implements MobileShellStateStore {
     final secretPayload = await secrets.read(_secureSecretsKey);
     if (secretManifest.requiresSecrets &&
         (secretPayload == null || secretPayload.trim().isEmpty)) {
-      throw StateError(
-        'Secure profile secrets are unavailable. Restore secure storage or clear the saved mobile shell state.',
-      );
+      throw StateError(currentShellText.secureProfileSecretsUnavailable);
     }
     final secretState = secretPayload == null || secretPayload.trim().isEmpty
         ? const <String, dynamic>{}
@@ -329,14 +328,12 @@ class SecureMobileShellStateStore implements MobileShellStateStore {
     for (final profileId in secretManifest.profileIds) {
       if (!profileSecrets.containsKey(profileId)) {
         throw StateError(
-          'Secure profile secrets are missing for saved profile $profileId.',
+          currentShellText.secureProfileSecretsMissing(profileId),
         );
       }
     }
     if (secretManifest.hasDraft && !secretState.containsKey('draft')) {
-      throw StateError(
-        'Secure draft secrets are unavailable. Restore secure storage or reset the draft.',
-      );
+      throw StateError(currentShellText.secureDraftSecretsUnavailable);
     }
 
     return MobileShellState(

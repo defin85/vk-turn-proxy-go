@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -23,13 +24,14 @@ class SystemMobilePortableProfileTransferAdapter
     implements MobilePortableProfileTransferAdapter {
   SystemMobilePortableProfileTransferAdapter({EventChannel? ingressChannel})
     : _ingressChannel =
-          ingressChannel ?? const EventChannel(_portableProfileIngressChannelName);
+          ingressChannel ??
+          const EventChannel(_portableProfileIngressChannelName);
 
-  static const XTypeGroup _portableProfileJsonTypeGroup = XTypeGroup(
-    label: 'Portable profile JSON',
-    extensions: <String>['json'],
-    mimeTypes: <String>['application/json', 'text/plain'],
-    uniformTypeIdentifiers: <String>['public.json', 'public.plain-text'],
+  XTypeGroup get _portableProfileJsonTypeGroup => XTypeGroup(
+    label: currentShellText.portableProfileJson,
+    extensions: const <String>['json'],
+    mimeTypes: const <String>['application/json', 'text/plain'],
+    uniformTypeIdentifiers: const <String>['public.json', 'public.plain-text'],
   );
 
   final EventChannel _ingressChannel;
@@ -51,7 +53,7 @@ class SystemMobilePortableProfileTransferAdapter
   @override
   Future<String?> openEnvelopeText() async {
     final file = await openFile(
-      acceptedTypeGroups: const <XTypeGroup>[_portableProfileJsonTypeGroup],
+      acceptedTypeGroups: <XTypeGroup>[_portableProfileJsonTypeGroup],
     );
     if (file == null) {
       return null;
@@ -69,7 +71,7 @@ class SystemMobilePortableProfileTransferAdapter
     await file.writeAsString(payload);
     await SharePlus.instance.share(
       ShareParams(
-        text: 'Portable profile envelope',
+        text: currentShellText.portableProfileEnvelope,
         files: <XFile>[XFile(file.path)],
       ),
     );

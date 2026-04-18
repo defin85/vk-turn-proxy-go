@@ -145,6 +145,7 @@ class DesktopShellController extends ChangeNotifier {
   bool _restoredState = false;
   Future<void>? _shutdownFuture;
   String? localeOverrideTag;
+  Object? _restoreStateError;
 
   List<PlatformTunnelCapability> get platformTunnels =>
       hostConnection?.info?.platformTunnels ??
@@ -210,15 +211,40 @@ class DesktopShellController extends ChangeNotifier {
 
   bool get hasLiveWork => resolutions.isNotEmpty || sessions.isNotEmpty;
 
+  String? get hostStatusMessage {
+    final message = hostConnection?.message.trim() ?? '';
+    return message.isEmpty ? null : message;
+  }
+
   AppLocale get activeLocale => LocaleSettings.currentLocale;
+  ShellText get _copy => currentShellText;
 
   bool get usesSystemLocale => localeOverrideTag == null;
 
   Future<void> selectLocaleOverride(String? rawLocale) async {
+    final previousHostMessage = hostStatusMessage;
     final locale = parseShellLocale(rawLocale);
     localeOverrideTag = locale == null ? null : shellLocaleTag(locale);
     await restoreShellLocale(localeOverrideTag);
     _scheduleStatePersist();
+    if (_restoreStateError != null) {
+      notice = _copy.failedToRestoreDesktopShellState(_restoreStateError!);
+    }
+    _relocalizeReadyHostConnection();
+    final nextHostMessage = hostStatusMessage;
+    if (previousHostMessage != null &&
+        notice?.trim() == previousHostMessage &&
+        nextHostMessage != null) {
+      notice = nextHostMessage;
+    }
+    if (status == ShellStatus.ready && hostConnection?.isReady == true) {
+      await refresh();
+      return;
+    }
+    if (hostConnection != null || status != ShellStatus.booting) {
+      await reconnect();
+      return;
+    }
     _notify();
   }
 
@@ -512,7 +538,7 @@ class DesktopShellController extends ChangeNotifier {
             ? (managedProviders.isEmpty ? null : managedProviders.first.id)
             : availableManagedProvidersForDraft.first.id);
     if (preferred == null || preferred.trim().isEmpty) {
-      notice = 'No managed providers are available yet.';
+      notice = _copy.noManagedProvidersAvailableYet;
       _notify();
       return;
     }
@@ -592,8 +618,7 @@ class DesktopShellController extends ChangeNotifier {
     await _runMutation(() async {
       final descriptor = activeProviderDescriptor;
       if (descriptor == null) {
-        notice =
-            'The selected provider is not advertised by the connected host.';
+        notice = _copy.selectedProviderNotAdvertisedByConnectedHost;
         return;
       }
       final blockReason = _providerSettingsBlockReason(descriptor);
@@ -614,7 +639,7 @@ class DesktopShellController extends ChangeNotifier {
         ...profileBindings,
         saved.id: draft.providerBinding,
       };
-      notice = 'Saved profile ${saved.name.isEmpty ? saved.id : saved.name}.';
+      notice = _copy.savedProfile(saved.name.isEmpty ? saved.id : saved.name);
       await refresh();
       selectProfile(saved.id);
     });
@@ -626,8 +651,7 @@ class DesktopShellController extends ChangeNotifier {
         managedProviderDraft.provider,
       );
       if (supported == null) {
-        notice =
-            'The selected managed provider family is not part of the supported app catalog.';
+        notice = _copy.selectedManagedProviderFamilyNotInSupportedCatalog;
         return;
       }
       final draftToSave = _normalizeManagedProviderDraft(managedProviderDraft);
@@ -654,8 +678,9 @@ class DesktopShellController extends ChangeNotifier {
         saved,
       ]..sort(_managedProviderNameSort);
       managedProviders = _overlayManagedProviders(next);
-      notice =
-          'Saved managed provider ${saved.name.isEmpty ? saved.id : saved.name}.';
+      notice = _copy.savedManagedProvider(
+        saved.name.isEmpty ? saved.id : saved.name,
+      );
       _showEditorRouteForSection(DesktopShellSection.providerWorkflow);
       selectedManagedProviderId = saved.id;
       managedProviderDraft = ManagedProviderDraft.fromRecord(saved);
@@ -678,7 +703,7 @@ class DesktopShellController extends ChangeNotifier {
         for (final entry in profileBindings.entries)
           if (entry.key != profileId) entry.key: entry.value,
       };
-      notice = 'Deleted profile $profileId.';
+      notice = _copy.deletedProfile(profileId);
       resetDraft();
       await refresh();
     });
@@ -687,7 +712,7 @@ class DesktopShellController extends ChangeNotifier {
   PortableProfileEnvelope? selectedPortableProfileEnvelope() {
     final selected = selectedSavedProfile;
     if (selected == null) {
-      notice = 'Save or select a profile before exporting it.';
+      notice = _copy.saveOrSelectProfileBeforeExport;
       _notify();
       return null;
     }
@@ -698,8 +723,7 @@ class DesktopShellController extends ChangeNotifier {
         ? null
         : managedProviderById(managedProviderId);
     if (binding.isManaged && managedProviderSnapshot == null) {
-      notice =
-          'The selected profile depends on a managed provider snapshot that is no longer available locally.';
+      notice = _copy.selectedProfileDependsOnMissingManagedProviderSnapshot;
       _notify();
       return null;
     }
@@ -725,8 +749,8 @@ class DesktopShellController extends ChangeNotifier {
       );
       final profileLabel = envelope.displayName;
       notice = envelope.isSecretBearing
-          ? 'Copied secret-bearing portable profile $profileLabel. Treat the payload like a credential.'
-          : 'Copied portable profile $profileLabel.';
+          ? _copy.copiedSecretBearingPortableProfile(profileLabel)
+          : _copy.copiedPortableProfile(profileLabel);
     });
   }
 
@@ -743,8 +767,8 @@ class DesktopShellController extends ChangeNotifier {
       }
       final profileLabel = envelope.displayName;
       notice = envelope.isSecretBearing
-          ? 'Saved secret-bearing portable profile $profileLabel to $path.'
-          : 'Saved portable profile $profileLabel to $path.';
+          ? _copy.savedSecretBearingPortableProfile(profileLabel, path)
+          : _copy.savedPortableProfile(profileLabel, path);
     });
   }
 
@@ -789,8 +813,12 @@ class DesktopShellController extends ChangeNotifier {
         savedProfile.id: imported.providerBinding,
       };
       notice = envelope.isSecretBearing
-          ? 'Imported secret-bearing profile ${savedProfile.name.isEmpty ? savedProfile.id : savedProfile.name}. Review provider input before sharing it further.'
-          : 'Imported profile ${savedProfile.name.isEmpty ? savedProfile.id : savedProfile.name}.';
+          ? _copy.importedSecretBearingProfile(
+              savedProfile.name.isEmpty ? savedProfile.id : savedProfile.name,
+            )
+          : _copy.importedProfile(
+              savedProfile.name.isEmpty ? savedProfile.id : savedProfile.name,
+            );
       _showEditorRouteForSection(DesktopShellSection.profileWorkflow);
       await refresh();
       selectProfile(savedProfile.id);
@@ -819,7 +847,7 @@ class DesktopShellController extends ChangeNotifier {
       if (draft.providerBinding.managedProviderId == providerId) {
         draft = draft.asCustomProvider();
       }
-      notice = 'Deleted managed provider $providerId.';
+      notice = _copy.deletedManagedProvider(providerId);
       selectedManagedProviderId = null;
       managedProviderDraft = _defaultManagedProviderDraft();
       _showEditorRouteForSection(DesktopShellSection.providerWorkflow);
@@ -839,7 +867,7 @@ class DesktopShellController extends ChangeNotifier {
     await _runMutation(() async {
       final session = await api.startSession(profileId: profileId);
       selectedSessionId = session.id;
-      notice = 'Started session ${session.id}.';
+      notice = _copy.startedSession(session.id);
       await refresh();
     });
   }
@@ -847,7 +875,7 @@ class DesktopShellController extends ChangeNotifier {
   void useManagedProviderForDraft(String managedProviderId) {
     final provider = managedProviderById(managedProviderId);
     if (provider == null) {
-      notice = 'Managed provider $managedProviderId is no longer available.';
+      notice = _copy.managedProviderNoLongerAvailable(managedProviderId);
       _notify();
       return;
     }
@@ -855,8 +883,9 @@ class DesktopShellController extends ChangeNotifier {
     draft = _normalizeDraft(draft.applyManagedProvider(provider));
     selectedManagedProviderId = managedProviderId;
     materializeDefaults = RuntimeDefaults.fromProfileSpec(draft.spec);
-    notice =
-        'Applied managed provider ${provider.name.isEmpty ? provider.id : provider.name} to the active profile draft.';
+    notice = _copy.appliedManagedProviderToActiveProfileDraft(
+      provider.name.isEmpty ? provider.id : provider.name,
+    );
     _scheduleStatePersist();
     _notifyWorkflow();
   }
@@ -867,8 +896,7 @@ class DesktopShellController extends ChangeNotifier {
 
   void applyPreset(ProviderPreset preset) {
     resetManagedProviderDraft(preset: preset);
-    notice =
-        'Seeded a new managed provider draft from the ${preset.title} preset.';
+    notice = _copy.seededManagedProviderDraftFromPreset(preset.title);
     _notifyWorkflow();
   }
 
@@ -876,13 +904,14 @@ class DesktopShellController extends ChangeNotifier {
     await _runMutation(() async {
       final descriptor = activeProviderDescriptor;
       if (descriptor == null) {
-        notice =
-            'The selected provider is not advertised by the connected host.';
+        notice = _copy.selectedProviderNotAdvertisedByConnectedHost;
         return;
       }
       if (descriptor.inputKind != ProviderInputKind.link) {
-        notice =
-            '${descriptor.displayName} expects ${descriptor.inputKind.value} input. This desktop shell currently supports link entry only.';
+        notice = _copy.providerExpectsLinkEntryOnlyDesktop(
+          providerName: descriptor.displayName,
+          inputKind: descriptor.inputKind.value,
+        );
         return;
       }
       final blockReason = _providerSettingsBlockReason(descriptor);
@@ -911,7 +940,7 @@ class DesktopShellController extends ChangeNotifier {
     await _runMutation(() async {
       final resolution = await api.cancelResolution(resolutionId);
       selectedResolutionId = resolution.id;
-      notice = 'Cancelled resolution ${resolution.id}.';
+      notice = _copy.cancelledResolution(resolution.id);
       await refresh();
     });
   }
@@ -924,8 +953,7 @@ class DesktopShellController extends ChangeNotifier {
       );
       selectedResolutionId = resolutionId;
       selectedSessionId = session.id;
-      notice =
-          'Started session ${session.id} from resolution $resolutionId. Ready is reported only after runtime startup succeeds.';
+      notice = _copy.startedSessionFromResolution(session.id, resolutionId);
       await refresh();
     });
   }
@@ -935,8 +963,10 @@ class DesktopShellController extends ChangeNotifier {
       final exported = await api.exportResolution(resolutionId);
       await _handoffAdapter.copyLink(exported.link);
       selectedResolutionId = resolutionId;
-      notice =
-          'Copied handoff link for $resolutionId. Expires ${_formatNoticeTimestamp(exported.expiresAt)}.';
+      notice = _copy.copiedHandoffLink(
+        resolutionId,
+        _formatNoticeTimestamp(exported.expiresAt),
+      );
     });
   }
 
@@ -947,35 +977,35 @@ class DesktopShellController extends ChangeNotifier {
     await _runMutation(() async {
       final resolution = _resolutionById(resolutionId);
       if (resolution == null) {
-        notice = 'Resolution $resolutionId is no longer available.';
+        notice = _copy.resolutionNoLongerAvailable(resolutionId);
         return;
       }
       final advertised = resolution.artifact?.action(action);
       if (advertised == null ||
           advertised.executionOwner != ActionExecutionOwner.shellExternal) {
-        notice =
-            'Resolution $resolutionId does not advertise ${action.label.toLowerCase()}.';
+        notice = _copy.resolutionDoesNotAdvertiseAction(
+          resolutionId,
+          action.label,
+        );
         return;
       }
       final targetUrl = resolution.externalTargetUrl(action);
       if (targetUrl == null) {
-        notice =
-            'Resolution $resolutionId does not expose a browser target for ${action.label.toLowerCase()}.';
+        notice = _copy.resolutionHasNoBrowserTarget(resolutionId, action.label);
         return;
       }
       final opened = await _browserLauncher.open(targetUrl);
-      final targetLabel = _externalActionTargetLabel(action);
       selectedResolutionId = resolutionId;
       notice = opened
-          ? 'Opened $targetLabel for $resolutionId.'
-          : 'Failed to open $targetLabel for $resolutionId.';
+          ? _copy.openedResolutionAction(resolutionId, action.label)
+          : _copy.failedToOpenResolutionAction(resolutionId, action.label);
     });
   }
 
   Future<void> stopSession(String sessionId) async {
     await _runMutation(() async {
       await api.stopSession(sessionId);
-      notice = 'Stopped session $sessionId.';
+      notice = _copy.stoppedSession(sessionId);
       await refresh();
     });
   }
@@ -993,7 +1023,7 @@ class DesktopShellController extends ChangeNotifier {
     await _runMutation(() async {
       final challenge = await api.cancelChallenge(challengeId);
       _challengeCache[challenge.id] = challenge;
-      notice = 'Cancelled challenge $challengeId.';
+      notice = _copy.cancelledChallenge(challengeId);
       await refresh();
     });
   }
@@ -1020,7 +1050,7 @@ class DesktopShellController extends ChangeNotifier {
       );
       await file.writeAsString(enriched.toPrettyJson());
 
-      notice = 'Exported diagnostics to ${file.path}.';
+      notice = _copy.exportedDiagnostics(file.path);
       selectedSessionId = sessionId;
     });
   }
@@ -1071,10 +1101,6 @@ class DesktopShellController extends ChangeNotifier {
       }
     }
     return null;
-  }
-
-  String _externalActionTargetLabel(ArtifactAction action) {
-    return action.label.replaceFirst(RegExp(r'^Open\s+'), '').toLowerCase();
   }
 
   ProviderDescriptor? descriptorForProvider(String providerId) {
@@ -1169,10 +1195,10 @@ class DesktopShellController extends ChangeNotifier {
         }
         unawaited(
           _handleHostFailure(
-            const ControlPlaneError(
+            ControlPlaneError(
               statusCode: 0,
               code: 'connection_closed',
-              message: 'event stream closed',
+              message: currentShellText.eventStreamClosed,
             ),
           ),
         );
@@ -1221,7 +1247,7 @@ class DesktopShellController extends ChangeNotifier {
 
   Future<void> _runMutation(Future<void> Function() action) async {
     if (status != ShellStatus.ready || hostConnection?.isReady != true) {
-      notice = hostConnection?.message ?? 'Local host is not ready.';
+      notice = hostConnection?.message ?? _copy.localHostNotReady;
       _notify();
       return;
     }
@@ -1378,6 +1404,7 @@ class DesktopShellController extends ChangeNotifier {
   Future<void> _restorePersistedState() async {
     try {
       final state = await _stateStore.load();
+      _restoreStateError = null;
       if (state == null) {
         return;
       }
@@ -1392,7 +1419,8 @@ class DesktopShellController extends ChangeNotifier {
       _persistedStateSignature = state.signature();
       _restoredState = true;
     } catch (error) {
-      notice = 'Failed to restore desktop shell state: $error';
+      _restoreStateError = error;
+      notice = _copy.failedToRestoreDesktopShellState(error);
     }
   }
 
@@ -1434,7 +1462,7 @@ class DesktopShellController extends ChangeNotifier {
       await _stateStore.save(sanitized);
       _persistedStateSignature = signature;
     } catch (error) {
-      notice = 'Failed to persist desktop shell state: $error';
+      notice = _copy.failedToPersistDesktopShellState(error);
       _notify();
     }
   }
@@ -1443,22 +1471,46 @@ class DesktopShellController extends ChangeNotifier {
     _platformTunnelResults.clear();
   }
 
+  void _relocalizeReadyHostConnection() {
+    final current = hostConnection;
+    if (current == null || !current.isReady) {
+      return;
+    }
+    final endpoint = _localHostEndpointFromMessage(current.message);
+    if (endpoint == null) {
+      return;
+    }
+    final message = current.launched && current.launchSpec != null
+        ? _copy.launchedLocalHost(current.launchSpec!.description, endpoint)
+        : _copy.connectedToLocalHost(endpoint);
+    hostConnection = HostConnectionResult(
+      state: current.state,
+      message: message,
+      info: current.info,
+      launched: current.launched,
+      launchSpec: current.launchSpec,
+    );
+  }
+
+  String? _localHostEndpointFromMessage(String? message) {
+    if (message == null || message.isEmpty) {
+      return null;
+    }
+    final match = RegExp(r'([A-Za-z0-9._:-]+:\d+)$').firstMatch(message);
+    final endpoint = match?.group(1)?.trim();
+    return endpoint == null || endpoint.isEmpty ? null : endpoint;
+  }
+
   String _platformTunnelNotice(PlatformTunnelStartResult result) {
     if (result.ready) {
-      return '${result.mode.label} is ready for the local host tunnel path.';
+      return _copy.platformTunnelReadyForLocalHost(result.mode.label);
     }
-    final buffer = StringBuffer(
-      '${result.mode.label} blocked at ${result.stage?.label ?? 'Unknown stage'}.',
+    return _copy.platformTunnelBlocked(
+      modeLabel: result.mode.label,
+      stageLabel: result.stage?.label ?? _copy.unknownStage,
+      prerequisiteLabel: result.missingPrerequisite?.label,
+      message: result.message,
     );
-    if (result.missingPrerequisite != null) {
-      buffer.write(
-        ' Missing prerequisite: ${result.missingPrerequisite!.label}.',
-      );
-    }
-    if (result.message.isNotEmpty) {
-      buffer.write(' ${result.message}');
-    }
-    return buffer.toString();
   }
 
   String _resolutionStartedNotice(
@@ -1466,26 +1518,44 @@ class DesktopShellController extends ChangeNotifier {
     String resolutionId,
   ) {
     if (descriptor.browserPolicy == ProviderBrowserPolicy.externalRequired) {
-      return 'Started resolution $resolutionId for ${descriptor.displayName}. Finish the required external browser steps before expecting a resolved artifact.';
+      return _copy.startedResolutionForProviderWithExternalBrowser(
+        resolutionId,
+        descriptor.displayName,
+      );
     }
     if (descriptor.mayRequireBrowserContinuation) {
-      return 'Started resolution $resolutionId for ${descriptor.displayName}. Continue any browser challenge flow before expecting a resolved artifact.';
+      return _copy.startedResolutionForProviderWithBrowserContinuation(
+        resolutionId,
+        descriptor.displayName,
+      );
     }
-    return 'Started resolution $resolutionId for ${descriptor.displayName}.';
+    return _copy.startedResolutionForProvider(
+      resolutionId,
+      descriptor.displayName,
+    );
   }
 
   String _challengeContinuedNotice(ChallengeRecord challenge) {
     final descriptor = descriptorForProvider(challenge.provider);
     if (descriptor == null) {
-      return 'Continued challenge ${challenge.id}.';
+      return _copy.continuedChallenge(challenge.id);
     }
     if (descriptor.browserPolicy == ProviderBrowserPolicy.externalRequired) {
-      return 'Continued challenge ${challenge.id}. Finish the external browser flow for ${descriptor.displayName} before expecting the next state transition.';
+      return _copy.continuedChallengeWithExternalBrowser(
+        challenge.id,
+        descriptor.displayName,
+      );
     }
     if ((challenge.resolutionId ?? '').isNotEmpty) {
-      return 'Continued challenge ${challenge.id}. Finish the provider flow for ${descriptor.displayName} before expecting a resolved artifact.';
+      return _copy.continuedChallengeForResolution(
+        challenge.id,
+        descriptor.displayName,
+      );
     }
-    return 'Continued challenge ${challenge.id}. Finish the provider flow for ${descriptor.displayName} before expecting the session to reach ready.';
+    return _copy.continuedChallengeForSession(
+      challenge.id,
+      descriptor.displayName,
+    );
   }
 
   ProfileDraft _defaultDraft() {
@@ -1596,13 +1666,16 @@ class DesktopShellController extends ChangeNotifier {
     if (reason == null) {
       return null;
     }
-    return 'The connected desktop shell cannot render provider settings for ${descriptor.displayName}: $reason';
+    return _copy.desktopProviderSettingsRuntimeUnsupported(
+      providerName: descriptor.displayName,
+      error: reason,
+    );
   }
 
   String? _managedProviderDraftBlockReason(ManagedProviderDraft provider) {
     final supported = supportedProviderDefinitionFor(provider.provider);
     if (supported == null) {
-      return 'The selected managed provider is not part of the supported app catalog.';
+      return _copy.selectedManagedProviderNotInSupportedCatalog;
     }
     final descriptor = descriptorForProvider(provider.provider);
     if (descriptor == null) {
@@ -1610,7 +1683,10 @@ class DesktopShellController extends ChangeNotifier {
     }
     final schemaReason = descriptor.providerSettingsSupportError;
     if (schemaReason != null && provider.providerSettings.isNotEmpty) {
-      return 'The connected desktop shell cannot render reusable settings for ${descriptor.displayName}: $schemaReason';
+      return _copy.desktopReusableSettingsRuntimeUnsupported(
+        providerName: descriptor.displayName,
+        error: schemaReason,
+      );
     }
     return null;
   }
@@ -1623,10 +1699,9 @@ class DesktopShellController extends ChangeNotifier {
           final supported = supportedProviderDefinitionFor(provider.provider);
           if (supported == null) {
             return provider.copyWith(
-              availability: const ProviderConfigAvailability(
+              availability: ProviderConfigAvailability(
                 state: ProviderConfigAvailabilityState.providerUnavailable,
-                message:
-                    'This managed provider is not part of the supported app catalog.',
+                message: _copy.managedProviderNotInSupportedCatalog,
               ),
             );
           }
@@ -1635,8 +1710,9 @@ class DesktopShellController extends ChangeNotifier {
             return provider.copyWith(
               availability: ProviderConfigAvailability(
                 state: ProviderConfigAvailabilityState.providerUnavailable,
-                message:
-                    'The connected host does not advertise the ${supported.title} provider family yet.',
+                message: _copy.connectedHostDoesNotAdvertiseProviderFamilyYet(
+                  supported.title,
+                ),
               ),
             );
           }
@@ -1645,8 +1721,10 @@ class DesktopShellController extends ChangeNotifier {
             return provider.copyWith(
               availability: ProviderConfigAvailability(
                 state: ProviderConfigAvailabilityState.schemaUnsupported,
-                message:
-                    'The connected desktop shell cannot render reusable settings for ${descriptor.displayName}: $schemaReason',
+                message: _copy.desktopReusableSettingsRuntimeUnsupported(
+                  providerName: descriptor.displayName,
+                  error: schemaReason,
+                ),
               ),
             );
           }

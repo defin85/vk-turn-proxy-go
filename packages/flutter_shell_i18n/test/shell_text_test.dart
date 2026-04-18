@@ -57,12 +57,28 @@ void main() {
       'Выберите сохраненный профиль или вернитесь в активный редактор профиля, не теряя текущий черновик.',
     );
     expect(copy.desktopInspector, 'Инспектор');
-    expect(
-      copy.desktopPlatformTunnelModes,
-      'Платформенные туннельные режимы',
-    );
+    expect(copy.desktopPlatformTunnelModes, 'Платформенные туннельные режимы');
     expect(copy.desktopNoSessionsYet, 'Активных или недавних сессий пока нет.');
     expect(copy.continueInBrowser, 'Продолжить в браузере');
     expect(shellLocaleDisplayName(context, AppLocale.en), 'Английский');
+  });
+
+  testWidgets('shared shell text is available without BuildContext', (
+    WidgetTester tester,
+  ) async {
+    await _pumpLocaleContext(tester, AppLocale.ru);
+
+    expect(
+      currentShellText.connectedToLocalHost('127.0.0.1:7777'),
+      'Подключено к локальному хосту 127.0.0.1:7777',
+    );
+    expect(
+      currentShellText.selectedProviderNotAdvertisedByConnectedMobileHost,
+      'Выбранный провайдер не объявлен подключенным мобильным хостом.',
+    );
+    expect(
+      currentShellText.portableProfileEnvelope,
+      'Конверт переносимого профиля',
+    );
   });
 }

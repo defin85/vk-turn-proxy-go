@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter_shell_core/portable_profile_transfer.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gui_shell/src/control/control_plane_client.dart';
@@ -738,6 +739,7 @@ void main() {
             info: _readyHostInfo,
           ),
         ]),
+        stateStore: _FakeShellStateStore(),
       );
       addTearDown(controller.dispose);
 
@@ -789,6 +791,43 @@ void main() {
       );
     },
   );
+
+  test('controller localizes shell-owned desktop notices in Russian', () async {
+    await AppLocale.ru.build();
+    LocaleSettings.setLocaleSync(AppLocale.ru);
+    addTearDown(() => LocaleSettings.setLocaleSync(AppLocale.en));
+
+    final api = _FakeControlPlaneApi(
+      profiles: const <ProfileRecord>[],
+      providers: const <ProviderDescriptor>[],
+      resolutions: const <ResolutionRecord>[],
+      sessions: const <SessionRecord>[],
+    );
+    final controller = DesktopShellController(
+      api: api,
+      supervisor: _SequencedHostSupervisor(const <HostConnectionResult>[
+        HostConnectionResult(
+          state: HostLifecycleState.ready,
+          message: 'ready',
+          info: _readyHostInfo,
+        ),
+      ]),
+    );
+    addTearDown(controller.dispose);
+
+      await controller.initialize();
+      controller.managedProviders = const <ManagedProviderRecord>[];
+      controller.selectedManagedProviderId = null;
+      controller.draft = ProfileDraft.defaults();
+      controller.activateManagedProviderMode();
+      expect(controller.notice, 'Управляемые провайдеры пока недоступны.');
+
+    await controller.startResolutionFromDraft();
+    expect(
+      controller.notice,
+      'Выбранный провайдер не объявлен подключенным хостом.',
+    );
+  });
 
   test(
     'controller starts, copies, and materializes typed resolutions',
@@ -883,7 +922,7 @@ void main() {
       expect(browser.openedUrls, <String>[
         'https://room.example.test/rooms/team-sync',
       ]);
-      expect(controller.notice, contains('Opened room'));
+      expect(controller.notice, contains('Opened action "Open room"'));
     },
   );
 

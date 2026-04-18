@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:gui_shell/src/control/control_plane_client.dart';
 import 'package:gui_shell/src/control/control_plane_models.dart';
 
@@ -62,7 +63,7 @@ class DefaultSidecarLocator implements SidecarLocator {
         SidecarLaunchSpec(
           executable: envPath.trim(),
           arguments: <String>['-listen', listenAddress],
-          description: 'GUI_SHELL_CLIENTD_PATH',
+          description: currentShellText.sidecarLaunchCandidateEnvPath(),
         ),
       );
     }
@@ -74,7 +75,8 @@ class DefaultSidecarLocator implements SidecarLocator {
         SidecarLaunchSpec(
           executable: sibling,
           arguments: <String>['-listen', listenAddress],
-          description: 'sidecar next to app executable',
+          description:
+              currentShellText.sidecarLaunchCandidateNextToAppExecutable,
         ),
       );
     }
@@ -86,7 +88,8 @@ class DefaultSidecarLocator implements SidecarLocator {
           SidecarLaunchSpec(
             executable: frameworks,
             arguments: <String>['-listen', listenAddress],
-            description: 'bundled sidecar in Frameworks',
+            description:
+                currentShellText.sidecarLaunchCandidateBundledFrameworks,
           ),
         );
       }
@@ -96,7 +99,7 @@ class DefaultSidecarLocator implements SidecarLocator {
       SidecarLaunchSpec(
         executable: executableName,
         arguments: <String>['-listen', listenAddress],
-        description: 'clientd from PATH',
+        description: currentShellText.sidecarLaunchCandidateFromPath,
       ),
     );
 
@@ -107,7 +110,7 @@ class DefaultSidecarLocator implements SidecarLocator {
           executable: 'go',
           arguments: <String>['run', './cmd/clientd', '-listen', listenAddress],
           workingDirectory: repoRoot.path,
-          description: 'repo-local go run fallback',
+          description: currentShellText.sidecarLaunchCandidateRepoLocalGoRun,
         ),
       );
     }
@@ -161,9 +164,9 @@ class DesktopHostSupervisor implements HostSupervisor {
   @override
   Future<HostConnectionResult> ensureReady() async {
     if (_shutdownRequested) {
-      return const HostConnectionResult(
+      return HostConnectionResult(
         state: HostLifecycleState.failed,
-        message: 'Local host shutdown requested.',
+        message: currentShellText.localHostShutdownRequested,
       );
     }
     final initial = await _probeHost();
@@ -173,10 +176,9 @@ class DesktopHostSupervisor implements HostSupervisor {
 
     final candidates = await locator.candidates(listenAddress);
     if (candidates.isEmpty) {
-      return const HostConnectionResult(
+      return HostConnectionResult(
         state: HostLifecycleState.unavailable,
-        message:
-            'No compatible local host was found and no launch candidates are configured.',
+        message: currentShellText.noCompatibleLocalHostFound,
       );
     }
 
@@ -184,9 +186,9 @@ class DesktopHostSupervisor implements HostSupervisor {
     HostConnectionResult? lastResult;
     for (final spec in candidates) {
       if (_shutdownRequested) {
-        return const HostConnectionResult(
+        return HostConnectionResult(
           state: HostLifecycleState.failed,
-          message: 'Local host shutdown requested.',
+          message: currentShellText.localHostShutdownRequested,
         );
       }
       try {
@@ -194,17 +196,17 @@ class DesktopHostSupervisor implements HostSupervisor {
         _ownedProcess = process;
         if (_shutdownRequested) {
           await _disposeOwnedProcess();
-          return const HostConnectionResult(
+          return HostConnectionResult(
             state: HostLifecycleState.failed,
-            message: 'Local host shutdown requested.',
+            message: currentShellText.localHostShutdownRequested,
           );
         }
         final result = await _waitForReady(spec, process);
         if (_shutdownRequested) {
           await _disposeOwnedProcess();
-          return const HostConnectionResult(
+          return HostConnectionResult(
             state: HostLifecycleState.failed,
-            message: 'Local host shutdown requested.',
+            message: currentShellText.localHostShutdownRequested,
           );
         }
         if (result.isReady) {
@@ -224,8 +226,8 @@ class DesktopHostSupervisor implements HostSupervisor {
     return HostConnectionResult(
       state: HostLifecycleState.failed,
       message: lastError == null
-          ? 'Local host launch failed without a reported error.'
-          : 'Local host launch failed: $lastError',
+          ? currentShellText.localHostLaunchFailedWithoutReportedError
+          : currentShellText.localHostLaunchFailed(lastError),
     );
   }
 
@@ -272,7 +274,7 @@ class DesktopHostSupervisor implements HostSupervisor {
       return HostConnectionResult(
         state: HostLifecycleState.ready,
         info: negotiated,
-        message: 'Connected to local host $listenAddress',
+        message: currentShellText.connectedToLocalHost(listenAddress),
       );
     } on ControlPlaneError catch (error) {
       if (error.incompatibleHost) {
@@ -297,9 +299,9 @@ class DesktopHostSupervisor implements HostSupervisor {
     final deadline = DateTime.now().add(startupTimeout);
     while (DateTime.now().isBefore(deadline)) {
       if (_shutdownRequested) {
-        return const HostConnectionResult(
+        return HostConnectionResult(
           state: HostLifecycleState.failed,
-          message: 'Local host shutdown requested.',
+          message: currentShellText.localHostShutdownRequested,
         );
       }
       final result = await _probeHost();
@@ -309,7 +311,10 @@ class DesktopHostSupervisor implements HostSupervisor {
           info: result.info,
           launched: true,
           launchSpec: spec,
-          message: 'Launched ${spec.description} on $listenAddress',
+          message: currentShellText.launchedLocalHost(
+            spec.description,
+            listenAddress,
+          ),
         );
       }
       if (result.state == HostLifecycleState.incompatible) {
@@ -328,8 +333,10 @@ class DesktopHostSupervisor implements HostSupervisor {
       if (exit != _processStillRunning) {
         return HostConnectionResult(
           state: HostLifecycleState.failed,
-          message:
-              '${spec.description} exited with code $exit before the control plane became ready.',
+          message: currentShellText.sidecarExitedBeforeReady(
+            spec.description,
+            exit,
+          ),
           launchSpec: spec,
         );
       }

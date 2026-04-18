@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter/services.dart';
 
 abstract class DesktopPortableProfileTransferAdapter {
@@ -16,11 +17,11 @@ class SystemDesktopPortableProfileTransferAdapter
     implements DesktopPortableProfileTransferAdapter {
   const SystemDesktopPortableProfileTransferAdapter();
 
-  static const XTypeGroup _portableProfileJsonTypeGroup = XTypeGroup(
-    label: 'Portable profile JSON',
-    extensions: <String>['json'],
-    mimeTypes: <String>['application/json', 'text/plain'],
-    uniformTypeIdentifiers: <String>['public.json', 'public.plain-text'],
+  XTypeGroup get _portableProfileJsonTypeGroup => XTypeGroup(
+    label: currentShellText.portableProfileJson,
+    extensions: const <String>['json'],
+    mimeTypes: const <String>['application/json', 'text/plain'],
+    uniformTypeIdentifiers: const <String>['public.json', 'public.plain-text'],
   );
 
   @override
@@ -35,7 +36,7 @@ class SystemDesktopPortableProfileTransferAdapter
   }) async {
     final location = await getSaveLocation(
       suggestedName: suggestedName,
-      acceptedTypeGroups: const <XTypeGroup>[_portableProfileJsonTypeGroup],
+      acceptedTypeGroups: <XTypeGroup>[_portableProfileJsonTypeGroup],
     );
     if (location == null) {
       return null;
@@ -48,7 +49,7 @@ class SystemDesktopPortableProfileTransferAdapter
   @override
   Future<String?> openEnvelopeText() async {
     final file = await openFile(
-      acceptedTypeGroups: const <XTypeGroup>[_portableProfileJsonTypeGroup],
+      acceptedTypeGroups: <XTypeGroup>[_portableProfileJsonTypeGroup],
     );
     if (file == null) {
       return null;
