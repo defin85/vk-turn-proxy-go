@@ -22,6 +22,7 @@ coverage.out
 /desktop/gui_shell/build/
 /mobile/gui_shell/build/
 /packages/flutter_shell_core/build/
+/packages/flutter_shell_i18n/build/
 
 # Local operator/runtime artifacts and captures.
 /artifacts/device/
