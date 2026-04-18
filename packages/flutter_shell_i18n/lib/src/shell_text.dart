@@ -673,6 +673,267 @@ class ShellText {
     'Этот список принадлежит встроенной оболочке. Выберите здесь семейство, затем редактируйте выбранную запись в редакторе записи.',
   );
   String get desktopUsePreset => _pick('Use preset', 'Использовать пресет');
+  String get launched => _pick('launched', 'запущен');
+  String get desktopSavedProfilesRouteDetail => _pick(
+    'Choose a saved profile, or return to the active profile editor without losing the current draft.',
+    'Выберите сохраненный профиль или вернитесь в активный редактор профиля, не теряя текущий черновик.',
+  );
+  String get desktopManagedRecordsTitle => _pick(
+    'Managed records',
+    'Управляемые записи',
+  );
+  String get desktopManagedRecordsRouteDetail => _pick(
+    'Choose a reusable managed record for the active profile draft, or return without changing the draft.',
+    'Выберите переиспользуемую управляемую запись для активного черновика профиля или вернитесь без изменения черновика.',
+  );
+  String get desktopProviderRecordsRouteDetail => _pick(
+    'Create a provider record here, or reopen one to edit it. Families stay in a separate chooser.',
+    'Создайте здесь запись провайдера или заново откройте существующую для редактирования. Семейства остаются в отдельном списке выбора.',
+  );
+  String get desktopPresetBootstrapTitle => _pick(
+    'Preset bootstrap',
+    'Запуск из пресета',
+  );
+  String get desktopPresetBootstrapRouteDetail => _pick(
+    'Seed the provider workflow from a curated preset, then return to the managed-provider editor route.',
+    'Запустите рабочий процесс провайдера из подготовленного пресета, затем вернитесь в маршрут редактора управляемого провайдера.',
+  );
+  String get desktopProviderFamiliesRouteDetail => _pick(
+    'Choose a read-only shipped family here, then return to the provider record editor.',
+    'Выберите здесь встроенное семейство только для чтения, затем вернитесь в редактор записи провайдера.',
+  );
+  String get desktopWorkflowReadiness => _pick(
+    'Workflow readiness',
+    'Готовность рабочего процесса',
+  );
+  String desktopTunnelModesReadySummary(int ready, int total) => _pick(
+    '$ready/$total tunnel modes ready',
+    '$ready/$total туннельных режимов готовы',
+  );
+  String get desktopPlatformTunnelSummary => _pick(
+    'Platform tunnel summary',
+    'Сводка платформенных туннельных режимов',
+  );
+  String desktopResolutionsSessionsCompact(int resolutions, int sessions) =>
+      _pick(
+        '$resolutions resolutions · $sessions sessions',
+        '$resolutions резолюций · $sessions сессий',
+      );
+  String get desktopSupportContextPinned => _pick(
+    'Support context pinned',
+    'Контекст поддержки закреплен',
+  );
+  String get desktopSupportAttentionRequired => _pick(
+    'Support attention is required',
+    'Требуется внимание поддержки',
+  );
+  String get desktopSupportContextWarmingUp => _pick(
+    'Support context is warming up',
+    'Контекст поддержки прогревается',
+  );
+  String get desktopLiveWorkActive => _pick(
+    'Live work is active',
+    'Текущая работа активна',
+  );
+  String get desktopSupportNote => _pick(
+    'Support note',
+    'Заметка поддержки',
+  );
+  String get desktopSupportBlockedDetail => _pick(
+    'The local host is blocked or incompatible. Keep the recovery path visible from the primary workflow.',
+    'Локальный хост заблокирован или несовместим. Держите путь восстановления видимым из основного рабочего процесса.',
+  );
+  String get desktopSupportBootingDetail => _pick(
+    'Host negotiation is still in progress. Diagnostics stay one action away without reclaiming the full shell.',
+    'Согласование с хостом все еще идет. Диагностика остается в одном действии, не перехватывая всю оболочку.',
+  );
+  String get desktopSupportReadyLiveDetail => _pick(
+    'Use Live work to inspect the current runtime without letting the support surface reclaim the full shell.',
+    'Используйте Текущую работу, чтобы просмотреть текущий рантайм, не позволяя поверхности поддержки перехватывать всю оболочку.',
+  );
+  String get desktopSupportReadyIdleDetail => _pick(
+    'Use Diagnostics or Live work when you need deeper inspection. The main workflow remains primary.',
+    'Используйте Диагностику или Текущую работу, когда нужна более глубокая проверка. Основной рабочий процесс остается главным.',
+  );
+  String get desktopInspector => _pick('Inspector', 'Инспектор');
+  String get desktopInspectorDiagnosticsSubtitle => _pick(
+    'Diagnostics and platform tunnel detail stay secondary to the main task canvas.',
+    'Диагностика и детали платформенного туннеля остаются вторичными по отношению к основному рабочему полотну.',
+  );
+  String get desktopInspectorActivitySubtitle => _pick(
+    'Live resolutions and sessions stay available on demand without reclaiming the full shell.',
+    'Текущие резолюции и сессии остаются доступными по запросу, не перехватывая всю оболочку.',
+  );
+  String get desktopTunnelDetail => _pick(
+    'Tunnel detail',
+    'Детали туннеля',
+  );
+  String get desktopPlatformTunnelModes => _pick(
+    'Platform tunnel modes',
+    'Платформенные туннельные режимы',
+  );
+  String get desktopFailClosedCompactUntilStartup => _pick(
+    'Fail-closed platform tunnel checks stay collapsed until you explicitly test startup.',
+    'Проверки платформенного туннеля в fail-closed режиме остаются свернутыми, пока вы явно не проверите запуск.',
+  );
+  String get desktopFailClosedSectionCompactUntilStartup => _pick(
+    'The connected host only reports fail-closed platform tunnel modes, so this section stays compact until you explicitly test startup.',
+    'Подключенный хост сообщает только о платформенных туннельных режимах в fail-closed состоянии, поэтому этот раздел остается компактным, пока вы явно не проверите запуск.',
+  );
+  String get desktopTypedHostTunnelSummary => _pick(
+    'The desktop shell reads typed host tunnel capabilities and startup stages instead of guessing system routing support from the OS or app bundle.',
+    'Настольная оболочка читает типизированные возможности туннеля и этапы запуска от хоста, а не угадывает поддержку системной маршрутизации по ОС или пакету приложения.',
+  );
+  String get desktopNoPlatformTunnelModesReported => _pick(
+    'The connected host did not report any desktop platform tunnel modes.',
+    'Подключенный хост не сообщил ни о каких платформенных туннельных режимах рабочего стола.',
+  );
+  String get desktopUseDiagnosticsForReportedModes => _pick(
+    'Use Diagnostics -> Tunnel detail to inspect startup stages and fail-closed results for the reported modes.',
+    'Используйте Диагностика -> Детали туннеля, чтобы просмотреть этапы запуска и fail-closed результаты для объявленных режимов.',
+  );
+  String get desktopAllModesFailClosedLatestEvidence => _pick(
+    'All reported tunnel modes are still fail-closed; inspect Diagnostics -> Tunnel detail for the latest startup evidence.',
+    'Все объявленные туннельные режимы все еще остаются fail-closed; откройте Диагностика -> Детали туннеля для просмотра последних данных о запуске.',
+  );
+  String get desktopAllModesFailClosedTestStartup => _pick(
+    'All reported tunnel modes are currently fail-closed. Use Diagnostics -> Tunnel detail when you want to test startup explicitly.',
+    'Все объявленные туннельные режимы сейчас находятся в fail-closed состоянии. Используйте Диагностика -> Детали туннеля, когда захотите явно проверить запуск.',
+  );
+  String get desktopHostModeAvailable => _pick(
+    'The host reports that this mode is available.',
+    'Хост сообщает, что этот режим доступен.',
+  );
+  String get desktopHostModeUnavailable => _pick(
+    'The host reports that this mode is unavailable.',
+    'Хост сообщает, что этот режим недоступен.',
+  );
+  String get desktopNoStartupRequestYet => _pick(
+    'No startup request yet. Use the typed host contract to verify the fail-closed path.',
+    'Запроса на запуск пока нет. Используйте типизированный контракт хоста, чтобы проверить fail-closed сценарий.',
+  );
+  String get desktopNoSessionsYet => _pick(
+    'No active or recent sessions yet.',
+    'Активных или недавних сессий пока нет.',
+  );
+  String get desktopEventStreamSubtitle => _pick(
+    'Typed state transitions and challenge updates from /v1/events.',
+    'Типизированные переходы состояний и обновления проверок из /v1/events.',
+  );
+  String get desktopWorkflowAssuranceBooting => _pick(
+    'The shell is reconnecting to the local host. Keep the editor surface stable while negotiation completes.',
+    'Оболочка переподключается к локальному хосту. Сохраняйте поверхность редактора стабильной, пока согласование не завершится.',
+  );
+  String get desktopWorkflowAssuranceBlocked => _pick(
+    'The local host is blocked or incompatible. Keep the recovery path visible from the primary workflow surface.',
+    'Локальный хост заблокирован или несовместим. Держите путь восстановления видимым из основной рабочей поверхности.',
+  );
+  String get desktopWorkflowAssuranceReadyLive => _pick(
+    'The local host is ready. Keep the current workflow dominant while live runtime detail stays one step away.',
+    'Локальный хост готов. Сохраняйте текущий рабочий процесс главным, пока детали живого рантайма остаются в одном шаге.',
+  );
+  String get desktopWorkflowAssuranceReadyIdle => _pick(
+    'The local host is ready. Routine support stays compact so the active workflow keeps visual priority.',
+    'Локальный хост готов. Рутинная поддержка остается компактной, чтобы активный рабочий процесс сохранял визуальный приоритет.',
+  );
+  String desktopPlatformTunnelCapabilitySummary({
+    required bool available,
+    List<String> satisfiedPrerequisites = const <String>[],
+    String? missingPrerequisite,
+  }) {
+    if (available && satisfiedPrerequisites.isNotEmpty) {
+      return this.satisfiedPrerequisites(satisfiedPrerequisites.join(', '));
+    }
+    if (!available && missingPrerequisite != null) {
+      return this.missingPrerequisite(missingPrerequisite);
+    }
+    return available ? desktopHostModeAvailable : desktopHostModeUnavailable;
+  }
+  String desktopCompactPlatformTunnelCapabilitySummary({
+    required String modeLabel,
+    required bool available,
+    String? missingPrerequisite,
+    String? message,
+  }) {
+    final buffer = StringBuffer(
+      available
+          ? _pick(
+              '$modeLabel is available for the connected host.',
+              '$modeLabel доступен для подключенного хоста.',
+            )
+          : _pick(
+              '$modeLabel is unavailable',
+              '$modeLabel недоступен',
+            ),
+    );
+    if (missingPrerequisite != null && missingPrerequisite.isNotEmpty) {
+      buffer.write(
+        _pick(
+          ' because $missingPrerequisite is still missing.',
+          ', потому что $missingPrerequisite все еще отсутствует.',
+        ),
+      );
+    } else if (!available) {
+      buffer.write(_pick(' for the connected host.', ' для подключенного хоста.'));
+    }
+    final normalizedMessage = message?.trim() ?? '';
+    if (normalizedMessage.isNotEmpty) {
+      buffer.write(' $normalizedMessage');
+    }
+    return buffer.toString();
+  }
+  String desktopCompactPlatformTunnelStatusLabel({
+    required String modeLabel,
+    String? missingPrerequisite,
+  }) {
+    final missing = missingPrerequisite?.trim() ?? '';
+    if (missing.isEmpty) {
+      return _pick('$modeLabel unavailable', '$modeLabel недоступен');
+    }
+    return _pick(
+      '$modeLabel: $missing missing',
+      '$modeLabel: отсутствует $missing',
+    );
+  }
+  String desktopPlatformTunnelResultSummary({
+    required String modeLabel,
+    required bool ready,
+    required String stageLabel,
+    String? missingPrerequisite,
+    String? message,
+  }) {
+    if (ready) {
+      return _pick(
+        '$modeLabel reached ready state for the desktop host tunnel path.',
+        '$modeLabel достиг готового состояния для туннельного пути настольного хоста.',
+      );
+    }
+    final buffer = StringBuffer(
+      _pick(
+        'Startup blocked at $stageLabel.',
+        'Запуск заблокирован на этапе $stageLabel.',
+      ),
+    );
+    final missing = missingPrerequisite?.trim() ?? '';
+    if (missing.isNotEmpty) {
+      buffer.write(
+        ' ${this.missingPrerequisite(missing)}.',
+      );
+    }
+    final normalizedMessage = message?.trim() ?? '';
+    if (normalizedMessage.isNotEmpty) {
+      buffer.write(' $normalizedMessage');
+    }
+    return buffer.toString();
+  }
+  String get continueAfterBrowserStep => _pick(
+    'Continue after browser step',
+    'Продолжить после шага в браузере',
+  );
+  String get continueInBrowser => _pick(
+    'Continue in browser',
+    'Продолжить в браузере',
+  );
   String providerFamilyLabel(String familyTitle) => _pick(
     'Provider family: $familyTitle',
     'Семейство провайдера: $familyTitle',

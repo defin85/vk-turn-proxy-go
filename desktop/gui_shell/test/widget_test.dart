@@ -163,6 +163,74 @@ void main() {
   });
 
   testWidgets(
+    'desktop shell localizes deep workflow and inspector surfaces in Russian',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1600, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final api = _FakeControlPlaneApi();
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: const _FakeHostSupervisor(),
+        stateStore: const _InMemoryShellStateStore(),
+        appBuild: _testGuiBuild,
+      );
+      await controller.initialize();
+      await pumpDesktopShellTestApp(
+        tester,
+        controller: controller,
+        locale: AppLocale.ru,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('desktop-open-profile-library-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Сохраненные профили'), findsWidgets);
+      expect(find.byTooltip('Назад'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('desktop-canvas-route-back-button')),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey<String>('profile-start-action')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.text('Текущая работа (1)'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('desktop-open-activity-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Сессии (1)'), findsOneWidget);
+      expect(find.text('Остановить сессию'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('desktop-open-diagnostics-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Инспектор'), findsOneWidget);
+      expect(find.text('События'), findsWidgets);
+
+      await tester.tap(find.text('Детали туннеля'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Платформенные туннельные режимы'), findsOneWidget);
+      expect(find.text('Запросить запуск'), findsWidgets);
+      expect(find.textContaining('Локальный хост'), findsWidgets);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await api.dispose();
+    },
+  );
+
+  testWidgets(
     'desktop shell waits for owned host shutdown before app exit completes',
     (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1600, 1200);
@@ -259,7 +327,7 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.text('Connecting to local host'), findsOneWidget);
+      expect(find.text('Connecting to local host'), findsWidgets);
       expect(
         find.text('Starting local host and negotiating capabilities.'),
         findsOneWidget,
@@ -306,7 +374,7 @@ void main() {
 
       expect(controller.status, ShellStatus.blocked);
       expect(controller.hostConnection?.state, HostLifecycleState.incompatible);
-      expect(find.text('Local host blocked'), findsOneWidget);
+      expect(find.text('Local host blocked'), findsWidgets);
       expect(find.textContaining('Update the desktop bundle'), findsWidgets);
       expect(
         find.byKey(const ValueKey<String>('desktop-open-diagnostics-button')),

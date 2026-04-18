@@ -669,6 +669,7 @@ class _CompactReadyShellBarSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final copy = context.shellText;
     final detail = _routineConnectionDetail(controller.hostConnection?.message);
     final summary = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -685,7 +686,7 @@ class _CompactReadyShellBarSummary extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Text(
-              'Local host ready',
+              t.desktopStatusReadyTitle,
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w800,
               ),
@@ -708,13 +709,13 @@ class _CompactReadyShellBarSummary extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: <Widget>[
-            _Tag(label: 'GUI ${controller.appBuild.shortLabel}'),
+            _Tag(label: copy.guiBuildTag(controller.appBuild.shortLabel)),
             if (hostInfo != null)
-              _Tag(label: 'Host ${hostInfo!.build.shortLabel}'),
+              _Tag(label: copy.hostBuildTag(hostInfo!.build.shortLabel)),
             if (hostInfo != null)
-              _Tag(label: 'Contract ${hostInfo!.contractVersion}'),
+              _Tag(label: copy.contractTag(hostInfo!.contractVersion)),
             if (controller.hostConnection?.launched == true)
-              const _Tag(label: 'launched'),
+              _Tag(label: copy.launched),
           ],
         ),
       ],
@@ -757,6 +758,7 @@ class _ShellBarSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final copy = context.shellText;
     final shortDetail = controller.status == ShellStatus.ready
         ? t.desktopReadyWorkflowDetail
         : detail;
@@ -790,13 +792,13 @@ class _ShellBarSummary extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: <Widget>[
-            _Tag(label: 'GUI ${controller.appBuild.shortLabel}'),
+            _Tag(label: copy.guiBuildTag(controller.appBuild.shortLabel)),
             if (hostInfo != null)
-              _Tag(label: 'Host ${hostInfo!.build.shortLabel}'),
+              _Tag(label: copy.hostBuildTag(hostInfo!.build.shortLabel)),
             if (hostInfo != null)
-              _Tag(label: 'Contract ${hostInfo!.contractVersion}'),
+              _Tag(label: copy.contractTag(hostInfo!.contractVersion)),
             if (controller.hostConnection?.launched == true)
-              const _Tag(label: 'launched'),
+              _Tag(label: copy.launched),
             if (controller.hostConnection?.launchSpec != null)
               _Tag(label: controller.hostConnection!.launchSpec!.description),
           ],
@@ -1129,9 +1131,8 @@ class _CanvasSurface extends StatelessWidget {
             );
           case DesktopCanvasRoute.savedProfilePicker:
             return _CanvasRouteFrame(
-              title: 'Saved profiles',
-              detail:
-                  'Choose a saved profile, or return to the active profile editor without losing the current draft.',
+              title: context.shellText.desktopSavedProfilesLibraryTitle,
+              detail: context.shellText.desktopSavedProfilesRouteDetail,
               onBack: onReturnFromCanvasRoute,
               child: SavedProfilesLibrarySurface(
                 profiles: controller.profiles,
@@ -1143,9 +1144,8 @@ class _CanvasSurface extends StatelessWidget {
             );
           case DesktopCanvasRoute.managedProviderPickerForProfile:
             return _CanvasRouteFrame(
-              title: 'Managed records',
-              detail:
-                  'Choose a reusable managed record for the active profile draft, or return without changing the draft.',
+              title: context.shellText.desktopManagedRecordsTitle,
+              detail: context.shellText.desktopManagedRecordsRouteDetail,
               onBack: onReturnFromCanvasRoute,
               child: ManagedProvidersLibrarySurface(
                 managedProviders: controller.managedProviders,
@@ -1156,9 +1156,8 @@ class _CanvasSurface extends StatelessWidget {
             );
           case DesktopCanvasRoute.managedProviderPicker:
             return _CanvasRouteFrame(
-              title: 'Provider records',
-              detail:
-                  'Create a provider record here, or reopen one to edit it. Families stay in a separate chooser.',
+              title: context.shellText.desktopProviderRecordsLibraryTitle,
+              detail: context.shellText.desktopProviderRecordsRouteDetail,
               onBack: onReturnFromCanvasRoute,
               child: ManagedProvidersLibrarySurface(
                 managedProviders: controller.managedProviders,
@@ -1170,9 +1169,8 @@ class _CanvasSurface extends StatelessWidget {
             );
           case DesktopCanvasRoute.presetPicker:
             return _CanvasRouteFrame(
-              title: 'Preset bootstrap',
-              detail:
-                  'Seed the provider workflow from a curated preset, then return to the managed-provider editor route.',
+              title: context.shellText.desktopPresetBootstrapTitle,
+              detail: context.shellText.desktopPresetBootstrapRouteDetail,
               onBack: onReturnFromCanvasRoute,
               child: PresetBootstrapSurface(
                 presets: controller.presetCatalog,
@@ -1183,9 +1181,8 @@ class _CanvasSurface extends StatelessWidget {
             );
           case DesktopCanvasRoute.providerFamilyPicker:
             return _CanvasRouteFrame(
-              title: 'Provider families',
-              detail:
-                  'Choose a read-only shipped family here, then return to the provider record editor.',
+              title: t.commonProviderFamilies,
+              detail: context.shellText.desktopProviderFamiliesRouteDetail,
               onBack: onReturnFromCanvasRoute,
               child: SupportedProviderChooserSurface(
                 supportedProviders: controller.supportedProviderCatalog,
@@ -1240,7 +1237,7 @@ class _CanvasRouteFrame extends StatelessWidget {
                   ),
                   onPressed: onBack,
                   icon: const Icon(Icons.arrow_back),
-                  tooltip: 'Back',
+                  tooltip: context.shellText.back,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -1282,14 +1279,15 @@ class _FocusedAssurancePane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final copy = context.shellText;
     final readyTunnelModes = controller.platformTunnels
         .where((PlatformTunnelCapability capability) => capability.available)
         .length;
     final tunnelModes = controller.platformTunnels.length;
     final stateLabel = switch (controller.status) {
-      ShellStatus.booting => 'Booting',
-      ShellStatus.ready => 'Ready',
-      ShellStatus.blocked => 'Blocked',
+      ShellStatus.booting => t.desktopStatusConnectingTitle,
+      ShellStatus.ready => t.desktopStatusReadyTitle,
+      ShellStatus.blocked => t.desktopStatusBlockedTitle,
     };
     final tone = switch (controller.hostConnection?.state) {
       HostLifecycleState.ready => const Color(0xFFF2F7EF),
@@ -1311,14 +1309,14 @@ class _FocusedAssurancePane extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
-                  'Workflow readiness',
+                  copy.desktopWorkflowReadiness,
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w800,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  _workflowAssuranceSummary(controller),
+                  _workflowAssuranceSummary(context, controller),
                   style: theme.textTheme.bodySmall,
                 ),
               ],
@@ -1331,16 +1329,21 @@ class _FocusedAssurancePane extends StatelessWidget {
                 _AssuranceChip(label: stateLabel),
                 _AssuranceChip(
                   label: readyTunnelModes > 0
-                      ? '$readyTunnelModes/$tunnelModes tunnel modes ready'
-                      : 'Platform tunnel summary',
+                      ? copy.desktopTunnelModesReadySummary(
+                          readyTunnelModes,
+                          tunnelModes,
+                        )
+                      : copy.desktopPlatformTunnelSummary,
                 ),
                 if (controller.hasLiveWork)
                   _AssuranceChip(
-                    label:
-                        '${controller.resolutions.length} resolutions · ${controller.sessions.length} sessions',
+                    label: copy.desktopResolutionsSessionsCompact(
+                      controller.resolutions.length,
+                      controller.sessions.length,
+                    ),
                   ),
                 if (controller.hostConnection?.isReady != true)
-                  _AssuranceChip(label: 'Support context pinned'),
+                  _AssuranceChip(label: copy.desktopSupportContextPinned),
               ],
             );
             return Column(
@@ -1361,7 +1364,7 @@ class _FocusedAssurancePane extends StatelessWidget {
                   ),
                 const SizedBox(height: 8),
                 Text(
-                  _platformTunnelHeaderSummary(controller),
+                  _platformTunnelHeaderSummary(context, controller),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -1387,24 +1390,27 @@ class _PinnedSupportSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final copy = context.shellText;
     final title = switch (controller.status) {
-      ShellStatus.blocked => 'Support attention is required',
-      ShellStatus.booting => 'Support context is warming up',
+      ShellStatus.blocked => copy.desktopSupportAttentionRequired,
+      ShellStatus.booting => copy.desktopSupportContextWarmingUp,
       ShellStatus.ready =>
-        controller.hasLiveWork ? 'Live work is active' : 'Support note',
+        controller.hasLiveWork
+            ? copy.desktopLiveWorkActive
+            : copy.desktopSupportNote,
     };
     final detail = switch (controller.status) {
       ShellStatus.blocked =>
         controller.notice ??
             controller.hostConnection?.message ??
-            'The local host is blocked or incompatible. Keep the recovery path visible from the primary workflow.',
+            copy.desktopSupportBlockedDetail,
       ShellStatus.booting =>
         controller.notice ??
-            'Host negotiation is still in progress. Diagnostics stay one action away without reclaiming the full shell.',
+            copy.desktopSupportBootingDetail,
       ShellStatus.ready =>
         controller.hasLiveWork
-            ? 'Use Live work to inspect the current runtime without letting the support surface reclaim the full shell.'
-            : 'Use Diagnostics or Live work when you need deeper inspection. The main workflow remains primary.',
+            ? copy.desktopSupportReadyLiveDetail
+            : copy.desktopSupportReadyIdleDetail,
     };
     return Container(
       padding: const EdgeInsets.all(10),
@@ -1549,6 +1555,7 @@ class _InspectorSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final copy = context.shellText;
     return Card(
       key: const ValueKey<String>('desktop-inspector-surface'),
       child: Padding(
@@ -1563,7 +1570,7 @@ class _InspectorSurface extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       Text(
-                        'Inspector',
+                        copy.desktopInspector,
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w800,
                         ),
@@ -1572,8 +1579,8 @@ class _InspectorSurface extends StatelessWidget {
                       Text(
                         controller.activeInspectorPane ==
                                 DesktopInspectorPane.diagnostics
-                            ? 'Diagnostics and platform tunnel detail stay secondary to the main task canvas.'
-                            : 'Live resolutions and sessions stay available on demand without reclaiming the full shell.',
+                            ? copy.desktopInspectorDiagnosticsSubtitle
+                            : copy.desktopInspectorActivitySubtitle,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -1585,21 +1592,21 @@ class _InspectorSurface extends StatelessWidget {
                   key: const ValueKey<String>('desktop-inspector-close-button'),
                   onPressed: onClose,
                   icon: const Icon(Icons.close),
-                  tooltip: 'Close inspector',
+                  tooltip: copy.close,
                 ),
               ],
             ),
             const SizedBox(height: 12),
             SegmentedButton<DesktopInspectorPane>(
-              segments: const <ButtonSegment<DesktopInspectorPane>>[
+              segments: <ButtonSegment<DesktopInspectorPane>>[
                 ButtonSegment<DesktopInspectorPane>(
                   value: DesktopInspectorPane.diagnostics,
-                  label: Text('Diagnostics'),
+                  label: Text(copy.diagnostics),
                   icon: Icon(Icons.medical_services_outlined),
                 ),
                 ButtonSegment<DesktopInspectorPane>(
                   value: DesktopInspectorPane.activity,
-                  label: Text('Live work'),
+                  label: Text(t.commonLiveWork),
                   icon: Icon(Icons.stream_outlined),
                 ),
               ],
@@ -1637,10 +1644,10 @@ class _DiagnosticsInspectorBody extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          const TabBar(
+          TabBar(
             tabs: <Widget>[
-              Tab(text: 'Events'),
-              Tab(text: 'Tunnel detail'),
+              Tab(text: context.shellText.events),
+              Tab(text: context.shellText.desktopTunnelDetail),
             ],
           ),
           const SizedBox(height: 12),
@@ -1683,8 +1690,16 @@ class _ActivityInspectorBody extends StatelessWidget {
           TabBar(
             isScrollable: true,
             tabs: <Widget>[
-              Tab(text: 'Resolutions (${controller.resolutions.length})'),
-              Tab(text: 'Sessions (${controller.sessions.length})'),
+              Tab(
+                text: context.shellText.resolutionsCount(
+                  controller.resolutions.length,
+                ),
+              ),
+              Tab(
+                text: context.shellText.sessionsCount(
+                  controller.sessions.length,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -1711,6 +1726,7 @@ class _PlatformTunnelPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final copy = context.shellText;
     final platformTunnels = controller.platformTunnels;
     final showCompactUnavailableSummary =
         platformTunnels.isNotEmpty &&
@@ -1728,7 +1744,7 @@ class _PlatformTunnelPanel extends StatelessWidget {
     )) {
       (true, _, _) => <Widget>[
         Text(
-          'The connected host did not report any desktop platform tunnel modes.',
+          copy.desktopNoPlatformTunnelModesReported,
           style: theme.textTheme.bodyMedium,
         ),
       ],
@@ -1750,7 +1766,7 @@ class _PlatformTunnelPanel extends StatelessWidget {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: <Widget>[
                   Text(
-                    _compactPlatformTunnelStatusLabel(capability),
+                    _compactPlatformTunnelStatusLabel(context, capability),
                     style: theme.textTheme.bodySmall?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -1763,7 +1779,7 @@ class _PlatformTunnelPanel extends StatelessWidget {
                         : () => unawaited(
                             controller.startPlatformTunnel(capability.mode),
                           ),
-                    child: const Text('Request startup'),
+                    child: Text(copy.requestStartup),
                   ),
                 ],
               ),
@@ -1807,7 +1823,7 @@ class _PlatformTunnelPanel extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              'Platform tunnel modes',
+              copy.desktopPlatformTunnelModes,
               style:
                   (compact
                           ? theme.textTheme.titleSmall
@@ -1818,9 +1834,9 @@ class _PlatformTunnelPanel extends StatelessWidget {
             Text(
               showCompactUnavailableSummary
                   ? compact
-                        ? 'Fail-closed platform tunnel checks stay collapsed until you explicitly test startup.'
-                        : 'The connected host only reports fail-closed platform tunnel modes, so this section stays compact until you explicitly test startup.'
-                  : 'The desktop shell reads typed host tunnel capabilities and startup stages instead of guessing system routing support from the OS or app bundle.',
+                        ? copy.desktopFailClosedCompactUntilStartup
+                        : copy.desktopFailClosedSectionCompactUntilStartup
+                  : copy.desktopTypedHostTunnelSummary,
               style:
                   (compact
                           ? theme.textTheme.bodySmall
@@ -1861,6 +1877,7 @@ class _CompactPlatformTunnelCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final copy = context.shellText;
 
     return Container(
       padding: EdgeInsets.all(compact ? 12 : 14),
@@ -1890,8 +1907,8 @@ class _CompactPlatformTunnelCard extends StatelessWidget {
                   color: const Color(0xFFFFF1D6),
                   borderRadius: BorderRadius.circular(999),
                 ),
-                child: const Text(
-                  'unavailable',
+                child: Text(
+                  copy.unavailableLowercase,
                   style: TextStyle(fontWeight: FontWeight.w700),
                 ),
               ),
@@ -1899,7 +1916,7 @@ class _CompactPlatformTunnelCard extends StatelessWidget {
           ),
           SizedBox(height: compact ? 6 : 8),
           Text(
-            _compactPlatformTunnelCapabilitySummary(capability),
+            _compactPlatformTunnelCapabilitySummary(context, capability),
             style: compact
                 ? theme.textTheme.bodySmall
                 : theme.textTheme.bodyMedium,
@@ -1909,7 +1926,7 @@ class _CompactPlatformTunnelCard extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: FilledButton.tonal(
               onPressed: busy || !ready ? null : () => unawaited(onStart()),
-              child: const Text('Request startup'),
+              child: Text(copy.requestStartup),
             ),
           ),
         ],
@@ -1936,6 +1953,7 @@ class _PlatformTunnelCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final copy = context.shellText;
     final statusColor = capability.available
         ? const Color(0xFFDEF2E1)
         : const Color(0xFFFFF1D6);
@@ -1969,7 +1987,9 @@ class _PlatformTunnelCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
-                  capability.available ? 'available' : 'unavailable',
+                  capability.available
+                      ? copy.availableLowercase
+                      : copy.unavailableLowercase,
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
               ),
@@ -1984,7 +2004,7 @@ class _PlatformTunnelCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            _platformTunnelCapabilitySummary(capability),
+            _platformTunnelCapabilitySummary(context, capability),
             style: theme.textTheme.bodyMedium,
           ),
           if (capability.message.isNotEmpty) ...<Widget>[
@@ -1994,13 +2014,13 @@ class _PlatformTunnelCard extends StatelessWidget {
           const SizedBox(height: 12),
           FilledButton.tonal(
             onPressed: busy || !ready ? null : () => unawaited(onStart()),
-            child: const Text('Request startup'),
+            child: Text(copy.requestStartup),
           ),
           const SizedBox(height: 10),
           Text(
             result == null
-                ? 'No startup request yet. Use the typed host contract to verify the fail-closed path.'
-                : _platformTunnelResultSummary(result!),
+                ? copy.desktopNoStartupRequestYet
+                : _platformTunnelResultSummary(context, result!),
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -2020,18 +2040,19 @@ class _ResolutionsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final copy = context.shellText;
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Text(
-          'Resolutions',
+          copy.resolutionsTitle,
           style: theme.textTheme.headlineSmall?.copyWith(
             fontWeight: FontWeight.w800,
           ),
         ),
         const SizedBox(height: 8),
         Text(
-          'Invite resolution stays separate from runtime sessions until you explicitly start on this device or copy a handoff link.',
+          copy.resolutionsSubtitle,
           style: theme.textTheme.bodyMedium?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
@@ -2041,7 +2062,7 @@ class _ResolutionsPanel extends StatelessWidget {
           child: controller.resolutions.isEmpty
               ? Center(
                   child: Text(
-                    'No provider resolutions yet.',
+                    copy.noProviderResolutionsYet,
                     style: theme.textTheme.bodyLarge?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -2145,11 +2166,12 @@ class _SessionsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final copy = context.shellText;
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Text(
-          'Sessions',
+          copy.sessionsTitle,
           style: theme.textTheme.headlineSmall?.copyWith(
             fontWeight: FontWeight.w800,
           ),
@@ -2159,7 +2181,7 @@ class _SessionsPanel extends StatelessWidget {
           child: controller.sessions.isEmpty
               ? Center(
                   child: Text(
-                    'No active or recent sessions yet.',
+                    copy.desktopNoSessionsYet,
                     style: theme.textTheme.bodyLarge?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -2240,6 +2262,7 @@ class _ResolutionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final copy = context.shellText;
     final containerColor = selected
         ? theme.colorScheme.primary.withValues(alpha: 0.08)
         : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45);
@@ -2278,7 +2301,10 @@ class _ResolutionCard extends StatelessWidget {
               if (resolution.credentials != null) ...<Widget>[
                 const SizedBox(height: 4),
                 Text(
-                  'TURN ${resolution.credentials!.address} | ${resolution.credentials!.usernameRedacted}',
+                  copy.turnCredentialsSummary(
+                    address: resolution.credentials!.address,
+                    username: resolution.credentials!.usernameRedacted,
+                  ),
                   style: theme.textTheme.bodySmall,
                 ),
               ],
@@ -2292,7 +2318,7 @@ class _ResolutionCard extends StatelessWidget {
                     for (final action in resolution.artifact!.actions)
                       _Tag(
                         label:
-                            '${action.id.label} · ${action.executionOwner.value}',
+                            '${action.id.label} · ${copy.actionExecutionOwnerLabel(action.executionOwner.value)}',
                       ),
                   ],
                 ),
@@ -2300,8 +2326,12 @@ class _ResolutionCard extends StatelessWidget {
               if (resolution.export.expiresAt != null) ...<Widget>[
                 const SizedBox(height: 4),
                 Text(
-                  'Export expiry ${resolution.export.expiresAt!.toLocal().toIso8601String()}'
-                  '${resolution.export.expirySource == null ? '' : ' via ${resolution.export.expirySource}'}',
+                  copy.exportExpiry(
+                    timestamp: resolution.export.expiresAt!
+                        .toLocal()
+                        .toIso8601String(),
+                    source: resolution.export.expirySource,
+                  ),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -2310,7 +2340,11 @@ class _ResolutionCard extends StatelessWidget {
               if (resolution.failure != null) ...<Widget>[
                 const SizedBox(height: 10),
                 Text(
-                  '${resolution.failure!.stage ?? 'failure'}: ${resolution.failure!.message ?? 'unknown'}',
+                  copy.failureSummary(
+                    stage: resolution.failure!.stage ?? copy.failureFallback,
+                    message:
+                        resolution.failure!.message ?? copy.unknownValue,
+                  ),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: const Color(0xFF7A1F16),
                     fontWeight: FontWeight.w600,
@@ -2329,7 +2363,7 @@ class _ResolutionCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       Text(
-                        'Challenge: ${challenge!.kind}',
+                        copy.challengeKind(challenge!.kind),
                         style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
@@ -2352,13 +2386,13 @@ class _ResolutionCard extends StatelessWidget {
                             onPressed: busy || onContinueChallenge == null
                                 ? null
                                 : () => unawaited(onContinueChallenge!.call()),
-                            child: const Text('Continue after browser step'),
+                            child: Text(copy.continueAfterBrowserStep),
                           ),
                           OutlinedButton(
                             onPressed: busy || onCancelChallenge == null
                                 ? null
                                 : () => unawaited(onCancelChallenge!.call()),
-                            child: const Text('Cancel challenge'),
+                            child: Text(copy.cancelChallenge),
                           ),
                         ],
                       ),
@@ -2375,41 +2409,41 @@ class _ResolutionCard extends StatelessWidget {
                     onPressed: busy || onMaterialize == null
                         ? null
                         : () => unawaited(onMaterialize!.call()),
-                    child: const Text('Start on this device'),
+                    child: Text(copy.startOnThisDevice),
                   ),
                   OutlinedButton(
                     onPressed: busy || onCopyExport == null
                         ? null
                         : () => unawaited(onCopyExport!.call()),
-                    child: const Text('Copy handoff'),
+                    child: Text(copy.copyHandoff),
                   ),
                   if (onOpenRoom != null)
                     OutlinedButton(
                       onPressed: busy
                           ? null
                           : () => unawaited(onOpenRoom!.call()),
-                      child: const Text('Open room'),
+                      child: Text(copy.openRoom),
                     ),
                   if (onOpenCamera != null)
                     OutlinedButton(
                       onPressed: busy
                           ? null
                           : () => unawaited(onOpenCamera!.call()),
-                      child: const Text('Open camera'),
+                      child: Text(copy.openCamera),
                     ),
                   if (onOpenArchive != null)
                     OutlinedButton(
                       onPressed: busy
                           ? null
                           : () => unawaited(onOpenArchive!.call()),
-                      child: const Text('Open archive'),
+                      child: Text(copy.openArchive),
                     ),
                   if (onCancel != null)
                     OutlinedButton(
                       onPressed: busy
                           ? null
                           : () => unawaited(onCancel!.call()),
-                      child: const Text('Cancel resolution'),
+                      child: Text(copy.cancelResolution),
                     ),
                 ],
               ),
@@ -2447,6 +2481,7 @@ class _SessionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final copy = context.shellText;
     final containerColor = selected
         ? theme.colorScheme.primary.withValues(alpha: 0.08)
         : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45);
@@ -2482,13 +2517,19 @@ class _SessionCard extends StatelessWidget {
                 '${session.profile.provider} -> ${session.profile.peerAddress}',
               ),
               Text(
-                'listen ${session.profile.listenAddress} | connections ${session.profile.connections}',
+                copy.sessionListenConnections(
+                  listen: session.profile.listenAddress,
+                  connections: session.profile.connections,
+                ),
                 style: theme.textTheme.bodySmall,
               ),
               if (session.failure != null) ...<Widget>[
                 const SizedBox(height: 10),
                 Text(
-                  '${session.failure!.stage ?? 'failure'}: ${session.failure!.message ?? 'unknown'}',
+                  copy.failureSummary(
+                    stage: session.failure!.stage ?? copy.failureFallback,
+                    message: session.failure!.message ?? copy.unknownValue,
+                  ),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: const Color(0xFF7A1F16),
                     fontWeight: FontWeight.w600,
@@ -2507,7 +2548,7 @@ class _SessionCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       Text(
-                        'Challenge: ${challenge!.kind}',
+                        copy.challengeKind(challenge!.kind),
                         style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
@@ -2523,13 +2564,13 @@ class _SessionCard extends StatelessWidget {
                             onPressed: busy || onContinueChallenge == null
                                 ? null
                                 : () => unawaited(onContinueChallenge!.call()),
-                            child: const Text('Continue in browser'),
+                            child: Text(copy.continueInBrowser),
                           ),
                           OutlinedButton(
                             onPressed: busy || onCancelChallenge == null
                                 ? null
                                 : () => unawaited(onCancelChallenge!.call()),
-                            child: const Text('Cancel challenge'),
+                            child: Text(copy.cancelChallenge),
                           ),
                         ],
                       ),
@@ -2544,13 +2585,13 @@ class _SessionCard extends StatelessWidget {
                 children: <Widget>[
                   FilledButton.tonal(
                     onPressed: busy ? null : () => unawaited(onExport()),
-                    child: const Text('Export diagnostics'),
+                    child: Text(copy.exportDiagnostics),
                   ),
                   if (session.state != SessionState.stopped &&
                       session.state != SessionState.failed)
                     OutlinedButton(
                       onPressed: busy ? null : () => unawaited(onStop()),
-                      child: const Text('Stop session'),
+                      child: Text(copy.stopSession),
                     ),
                 ],
               ),
@@ -2570,6 +2611,7 @@ class _EventsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final copy = context.shellText;
 
     return Card(
       child: Padding(
@@ -2578,14 +2620,14 @@ class _EventsPanel extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              'Event stream',
+              copy.eventStream,
               style: theme.textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.w800,
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Typed state transitions and challenge updates from /v1/events.',
+              copy.desktopEventStreamSubtitle,
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -2595,7 +2637,7 @@ class _EventsPanel extends StatelessWidget {
               child: controller.events.isEmpty
                   ? Center(
                       child: Text(
-                        'No events yet.',
+                        copy.noEventsYet,
                         style: theme.textTheme.bodyLarge?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -2677,7 +2719,7 @@ class _SessionStateChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        state.value,
+        context.shellText.sessionStateLabel(state.value),
         style: TextStyle(color: foreground, fontWeight: FontWeight.w700),
       ),
     );
@@ -2716,7 +2758,7 @@ class _ResolutionStateChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        state.value,
+        context.shellText.resolutionStateLabel(state.value),
         style: TextStyle(color: foreground, fontWeight: FontWeight.w700),
       ),
     );
@@ -2779,17 +2821,20 @@ int _sectionIndex(DesktopShellSection section) {
   };
 }
 
-String _workflowAssuranceSummary(DesktopShellController controller) {
+String _workflowAssuranceSummary(
+  BuildContext context,
+  DesktopShellController controller,
+) {
+  final copy = context.shellText;
   return switch (controller.status) {
-    ShellStatus.booting =>
-      'The shell is reconnecting to the local host. Keep the editor surface stable while negotiation completes.',
+    ShellStatus.booting => copy.desktopWorkflowAssuranceBooting,
     ShellStatus.blocked =>
       controller.hostConnection?.message ??
-          'The local host is blocked or incompatible. Keep the recovery path visible from the primary workflow surface.',
+          copy.desktopWorkflowAssuranceBlocked,
     ShellStatus.ready =>
       controller.hasLiveWork
-          ? 'The local host is ready. Keep the current workflow dominant while live runtime detail stays one step away.'
-          : 'The local host is ready. Routine support stays compact so the active workflow keeps visual priority.',
+          ? copy.desktopWorkflowAssuranceReadyLive
+          : copy.desktopWorkflowAssuranceReadyIdle,
   };
 }
 
@@ -2804,17 +2849,21 @@ String _routineConnectionDetail(String? message) {
   return message;
 }
 
-String _platformTunnelHeaderSummary(DesktopShellController controller) {
+String _platformTunnelHeaderSummary(
+  BuildContext context,
+  DesktopShellController controller,
+) {
+  final copy = context.shellText;
   final platformTunnels = controller.platformTunnels;
   if (platformTunnels.isEmpty) {
-    return 'No platform tunnel modes reported by the connected host.';
+    return copy.desktopNoPlatformTunnelModesReported;
   }
 
   final readyCount = platformTunnels
       .where((PlatformTunnelCapability capability) => capability.available)
       .length;
   if (readyCount > 0) {
-    return 'Use Diagnostics -> Tunnel detail to inspect startup stages and fail-closed results for the reported modes.';
+    return copy.desktopUseDiagnosticsForReportedModes;
   }
 
   final startupRequested = platformTunnels.any(
@@ -2822,71 +2871,57 @@ String _platformTunnelHeaderSummary(DesktopShellController controller) {
         controller.platformTunnelResultFor(capability.mode) != null,
   );
   if (startupRequested) {
-    return 'All reported tunnel modes are still fail-closed; inspect Diagnostics -> Tunnel detail for the latest startup evidence.';
+    return copy.desktopAllModesFailClosedLatestEvidence;
   }
 
-  return 'All reported tunnel modes are currently fail-closed. Use Diagnostics -> Tunnel detail when you want to test startup explicitly.';
+  return copy.desktopAllModesFailClosedTestStartup;
 }
 
-String _platformTunnelCapabilitySummary(PlatformTunnelCapability capability) {
-  if (capability.available && capability.satisfiedPrerequisites.isNotEmpty) {
-    final satisfied = capability.satisfiedPrerequisites
+String _platformTunnelCapabilitySummary(
+  BuildContext context,
+  PlatformTunnelCapability capability,
+) {
+  return context.shellText.desktopPlatformTunnelCapabilitySummary(
+    available: capability.available,
+    satisfiedPrerequisites: capability.satisfiedPrerequisites
         .map((PlatformTunnelPrerequisite prerequisite) => prerequisite.label)
-        .join(', ');
-    return 'Satisfied prerequisites: $satisfied';
-  }
-  if (!capability.available && capability.missingPrerequisite != null) {
-    return 'Missing prerequisite: ${capability.missingPrerequisite!.label}';
-  }
-  if (capability.available) {
-    return 'The host reports that this mode is available.';
-  }
-  return 'The host reports that this mode is unavailable.';
+        .toList(growable: false),
+    missingPrerequisite: capability.missingPrerequisite?.label,
+  );
 }
 
 String _compactPlatformTunnelCapabilitySummary(
+  BuildContext context,
   PlatformTunnelCapability capability,
 ) {
-  final buffer = StringBuffer(
-    capability.available
-        ? '${capability.mode.label} is available for the connected host.'
-        : '${capability.mode.label} is unavailable',
+  return context.shellText.desktopCompactPlatformTunnelCapabilitySummary(
+    modeLabel: capability.mode.label,
+    available: capability.available,
+    missingPrerequisite: capability.missingPrerequisite?.label,
+    message: capability.message,
   );
-  if (capability.missingPrerequisite != null) {
-    buffer.write(
-      ' because ${capability.missingPrerequisite!.label} is still missing.',
-    );
-  } else if (!capability.available) {
-    buffer.write(' for the connected host.');
-  }
-  if (capability.message.isNotEmpty) {
-    buffer.write(' ${capability.message}');
-  }
-  return buffer.toString();
 }
 
-String _compactPlatformTunnelStatusLabel(PlatformTunnelCapability capability) {
-  final missing = capability.missingPrerequisite;
-  if (missing == null) {
-    return '${capability.mode.label} unavailable';
-  }
-  return '${capability.mode.label}: ${missing.label} missing';
+String _compactPlatformTunnelStatusLabel(
+  BuildContext context,
+  PlatformTunnelCapability capability,
+) {
+  return context.shellText.desktopCompactPlatformTunnelStatusLabel(
+    modeLabel: capability.mode.label,
+    missingPrerequisite: capability.missingPrerequisite?.label,
+  );
 }
 
-String _platformTunnelResultSummary(PlatformTunnelStartResult result) {
-  if (result.ready) {
-    return '${result.mode.label} reached ready state for the desktop host tunnel path.';
-  }
-  final buffer = StringBuffer(
-    'Startup blocked at ${result.stage?.label ?? 'Unknown stage'}.',
+String _platformTunnelResultSummary(
+  BuildContext context,
+  PlatformTunnelStartResult result,
+) {
+  final copy = context.shellText;
+  return copy.desktopPlatformTunnelResultSummary(
+    modeLabel: result.mode.label,
+    ready: result.ready,
+    stageLabel: result.stage?.label ?? copy.unknownStage,
+    missingPrerequisite: result.missingPrerequisite?.label,
+    message: result.message,
   );
-  if (result.missingPrerequisite != null) {
-    buffer.write(
-      ' Missing prerequisite: ${result.missingPrerequisite!.label}.',
-    );
-  }
-  if (result.message.isNotEmpty) {
-    buffer.write(' ${result.message}');
-  }
-  return buffer.toString();
 }
