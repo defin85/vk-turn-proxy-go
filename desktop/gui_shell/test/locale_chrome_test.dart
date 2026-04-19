@@ -189,6 +189,8 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
     RuntimeExecutionPlan? executionPlan,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
+    PlatformTunnelUnderlayRoutePolicy underlayRoutePolicy =
+        PlatformTunnelUnderlayRoutePolicy.standard,
     List<String> allowedPackages = const <String>[],
     List<String> disallowedPackages = const <String>[],
   }) => Future<PlatformTunnelStartResult>.error(UnimplementedError());

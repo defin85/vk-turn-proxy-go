@@ -1907,6 +1907,8 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
     RuntimeExecutionPlan? executionPlan,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
+    PlatformTunnelUnderlayRoutePolicy underlayRoutePolicy =
+        PlatformTunnelUnderlayRoutePolicy.standard,
     List<String> allowedPackages = const <String>[],
     List<String> disallowedPackages = const <String>[],
   }) async {
