@@ -27,6 +27,9 @@ class ShellText {
   String get openProfiles => t.shellTextOpenProfiles;
   String get resetLocalState => t.shellTextResetLocalState;
   String get forgetEmbeddedSignIn => t.shellTextForgetEmbeddedSignIn;
+  String get embeddedBrowserStateTitle => t.shellTextEmbeddedBrowserStateTitle;
+  String get embeddedBrowserStateBody => t.shellTextEmbeddedBrowserStateBody;
+  String get embeddedBrowserStateHint => t.shellTextEmbeddedBrowserStateHint;
   String get importFromFile => t.shellTextImportFromFile;
   String get exportSavedProfile => t.shellTextExportSavedProfile;
   String get pasteEnvelope => t.shellTextPasteEnvelope;
@@ -104,8 +107,16 @@ class ShellText {
   ) => t.shellTextAppliedManagedProviderToActiveMobileProfileDraft(
     providerLabel: providerLabel,
   );
+  String duplicatedItemLabel(String sourceLabel) =>
+      t.shellTextDuplicatedItemLabel(sourceLabel: sourceLabel);
+  String get duplicatedItemFallbackLabel =>
+      t.shellTextDuplicatedItemFallbackLabel;
+  String seededProfileCopyDraft(String profileLabel) =>
+      t.shellTextSeededProfileCopyDraft(profileLabel: profileLabel);
   String seededManagedProviderDraftFromPreset(String presetTitle) =>
       t.shellTextSeededManagedProviderDraftFromPreset(presetTitle: presetTitle);
+  String seededManagedProviderCopyDraft(String providerLabel) =>
+      t.shellTextSeededManagedProviderCopyDraft(providerLabel: providerLabel);
   String cancelledResolution(String resolutionId) =>
       t.shellTextCancelledResolution(resolutionId: resolutionId);
   String cancelledMobileResolution(String resolutionId) =>
@@ -344,6 +355,8 @@ class ShellText {
       t.shellTextSeededManagedProviderDraftFromTemplate(
         templateLabel: templateLabel,
       );
+  String seededTemplateCopyDraft(String templateLabel) =>
+      t.shellTextSeededTemplateCopyDraft(templateLabel: templateLabel);
   String get clearedLocalMobileShellState =>
       t.shellTextClearedLocalMobileShellState;
   String failedToClearLocalMobileShellState(Object error) =>
@@ -621,6 +634,9 @@ class ShellText {
       t.shellTextDesktopDraftOwnsProviderInput;
 
   String get mobileProfilesTitleBar => t.shellTextMobileProfilesTitleBar;
+  String get selectedProfileActions => t.shellTextSelectedProfileActions;
+  String get makeCurrent => t.shellTextMakeCurrent;
+  String get copyProfile => t.shellTextCopyProfile;
   String get mobileProviderDetails => t.shellTextMobileProviderDetails;
   String get mobileProviderDetailsSubtitle =>
       t.shellTextMobileProviderDetailsSubtitle;
@@ -695,6 +711,9 @@ class ShellText {
   String get mobileSaveAsTemplate => t.shellTextMobileSaveAsTemplate;
   String get mobileUseInProfileDraft => t.shellTextMobileUseInProfileDraft;
   String get mobileDeleteProvider => t.shellTextMobileDeleteProvider;
+  String get savedProviders => t.shellTextSavedProviders;
+  String get selectedProviderActions => t.shellTextSelectedProviderActions;
+  String get copyProvider => t.shellTextCopyProvider;
   String get selectedType => t.shellTextSelectedType;
   String get mobileEditTemplate => t.shellTextMobileEditTemplate;
   String get mobileNewTemplate => t.shellTextMobileNewTemplate;
@@ -720,6 +739,8 @@ class ShellText {
   String get mobileSaveTemplate => t.shellTextMobileSaveTemplate;
   String get mobileUseTemplate => t.shellTextMobileUseTemplate;
   String get mobileDeleteTemplate => t.shellTextMobileDeleteTemplate;
+  String get selectedTemplateActions => t.shellTextSelectedTemplateActions;
+  String get copyTemplate => t.shellTextCopyTemplate;
 
   String get desktopProviderRecord => t.shellTextDesktopProviderRecord;
   String get desktopNewProviderRecord => t.shellTextDesktopNewProviderRecord;
@@ -1109,15 +1130,19 @@ class ShellText {
   String get createProvider => t.shellTextCreateProvider;
   String get createProviderChooseType => t.shellTextCreateProviderChooseType;
   String get createProviderUseTemplate => t.shellTextCreateProviderUseTemplate;
+  String get createProviderUsePreset => t.shellTextCreateProviderUsePreset;
   String get providerTypes => t.shellTextProviderTypes;
+  String get presets => t.shellTextPresets;
   String get noShippedProviderTypesYet => t.shellTextNoShippedProviderTypesYet;
   String get searchTemplates => t.shellTextSearchTemplates;
   String get myTemplates => t.shellTextMyTemplates;
   String get noSavedTemplatesYet => t.shellTextNoSavedTemplatesYet;
+  String get noSavedTemplatesMessage => t.shellTextNoSavedTemplatesMessage;
   String get noSavedTemplatesMatchSearch =>
       t.shellTextNoSavedTemplatesMatchSearch;
   String get prefillsNewProviders => t.shellTextPrefillsNewProviders;
   String get shippedTemplates => t.shellTextShippedTemplates;
+  String get shippedPresets => t.shellTextShippedPresets;
   String get noShippedTemplatesMatchSearch =>
       t.shellTextNoShippedTemplatesMatchSearch;
   String get startingPointForNewProviders =>

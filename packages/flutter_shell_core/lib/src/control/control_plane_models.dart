@@ -822,6 +822,7 @@ class ChallengeOwnedBrowserMetadata {
   const ChallengeOwnedBrowserMetadata({
     this.cookieUrls = const <String>[],
     this.rememberSignIn = false,
+    this.autoContinueOnTransportReady = false,
   });
 
   factory ChallengeOwnedBrowserMetadata.fromJson(Map<String, dynamic> json) {
@@ -838,16 +839,20 @@ class ChallengeOwnedBrowserMetadata {
     return ChallengeOwnedBrowserMetadata(
       cookieUrls: List<String>.unmodifiable(cookieUrls),
       rememberSignIn: json['remember_sign_in'] as bool? ?? false,
+      autoContinueOnTransportReady:
+          json['auto_continue_on_transport_ready'] as bool? ?? false,
     );
   }
 
   final List<String> cookieUrls;
   final bool rememberSignIn;
+  final bool autoContinueOnTransportReady;
 
   Map<String, dynamic> toJson() {
     return _compact(<String, dynamic>{
       'cookie_urls': cookieUrls,
       'remember_sign_in': rememberSignIn,
+      'auto_continue_on_transport_ready': autoContinueOnTransportReady,
     });
   }
 }

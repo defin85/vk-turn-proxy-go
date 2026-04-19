@@ -15,7 +15,8 @@ is materially different:
 
 - start from `https://calls.vk.com/`
 - authenticate inside the app-owned `WebView`
-- continue in the same owned-browser session until VK opens or creates a call
+- continue in the same owned-browser session until VK reaches hosted-call
+  creation
 - observe `calls.okcdn.ru/fb.do` responses for `auth.anonymLogin` and
   `vchat.startConversation(createJoinLink=true)`
 - extract transport-ready data directly from the latter response:
@@ -50,6 +51,8 @@ The authenticated `calls.vk.com` path must not redefine the old invite path as
 - Promising desktop parity for `calls.vk.com` in the same change
 - Treating every `calls.vk.com` page as supported input before live evidence
   exists for it
+- Supporting authenticated post-login branches other than the committed
+  hosted-call creation contour with `createJoinLink=true`
 
 ## Decisions
 
@@ -85,8 +88,7 @@ family plus observed contour shape.
 For the authenticated `calls.vk.com` branch, the committed contour should be:
 
 - bootstrap via `auth.anonymLogin`
-- hosted-call creation or reopen via
-  `vchat.startConversation(createJoinLink=true)`
+- hosted-call creation via `vchat.startConversation(createJoinLink=true)`
 
 The second response is the transport-bearing source of truth because it already
 contains:
@@ -98,6 +100,12 @@ contains:
 
 The resolver should parse normalized TURN credentials directly from that
 provider response rather than reconstructing them from side channels.
+
+For the first release, other authenticated post-login branches remain outside
+the supported contract, including reopen of an existing call when the observed
+contour does not yield the committed `createJoinLink=true` response shape.
+Those branches should fail closed until separate live evidence and spec updates
+exist for them.
 
 ### Decision: Keep the product flow provider-owned and browser-mediated
 

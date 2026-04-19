@@ -35,14 +35,15 @@ class _OwnedBrowserHarnessHome extends StatefulWidget {
 }
 
 class _OwnedBrowserHarnessHomeState extends State<_OwnedBrowserHarnessHome> {
+  static const bool _autoCompleteOnTransportReady = false;
   static final Uri _vkInviteUri = Uri.parse(
     'https://vk.com/call/join/nZQ-WqsQ8Fy3AOPEyc-pF_JWXzNLSqgvF3ypfP1DWJc',
   );
   static final Uri _vkLoginUri = Uri.parse(
-    'https://calls.vk.com/#codex-invite=${Uri.encodeComponent(_vkInviteUri.toString())}',
+    'https://calls.vk.com/#codex-invite=${Uri.encodeComponent(_vkInviteUri.toString())}&codex-auto-complete=${_autoCompleteOnTransportReady ? '1' : '0'}',
   );
   // Flip this locally when the Android WebView IME path needs live diagnostics again.
-  static const bool _showHarnessDiagnostics = false;
+  static const bool _showHarnessDiagnostics = true;
 
   bool _opened = false;
   String? _lastContinuationSummary;
@@ -135,29 +136,57 @@ class _OwnedBrowserHarnessHomeState extends State<_OwnedBrowserHarnessHome> {
     );
   }
 
+  bool get _lastRunCollected =>
+      _lastContinuationSummary?.contains('result=collected') ?? false;
+
   @override
   Widget build(BuildContext context) {
+    final collected = _lastRunCollected;
     return Scaffold(
-      appBar: AppBar(title: const Text('Owned Browser Harness')),
+      appBar: AppBar(
+        title: Text(
+          collected ? 'Owned Browser Harness Result' : 'Owned Browser Harness',
+        ),
+      ),
       body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            FilledButton(
-              onPressed: () => unawaited(_openHarness()),
-              child: const Text('Open owned-browser harness'),
-            ),
-            if (_lastContinuationSummary != null) ...<Widget>[
-              const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Text(
-                  _lastContinuationSummary!,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              if (collected) ...<Widget>[
+                Icon(
+                  Icons.check_circle_outline_rounded,
+                  size: 56,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Continuation collected',
+                  style: Theme.of(context).textTheme.headlineSmall,
                   textAlign: TextAlign.center,
                 ),
+                const SizedBox(height: 8),
+                const Text(
+                  'The owned-browser run finished successfully and returned to the harness home screen. This is not a crash.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 20),
+              ],
+              FilledButton(
+                onPressed: () => unawaited(_openHarness()),
+                child: Text(
+                  collected
+                      ? 'Run owned-browser harness again'
+                      : 'Open owned-browser harness',
+                ),
               ),
+              if (_lastContinuationSummary != null) ...<Widget>[
+                const SizedBox(height: 16),
+                Text(_lastContinuationSummary!, textAlign: TextAlign.center),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

@@ -7,6 +7,7 @@
     "notes": "Observed live browser contour after preview continued into OK post-preview requests without exposing normalized TURN credentials in the controlled browser session."
   },
   "input": {
+    "input_family": "invite",
     "invite_url_redacted": "https://vk.com/call/join/<redacted:vk-join-token>",
     "normalized_join_token_redacted": "<redacted:vk-join-token>"
   },

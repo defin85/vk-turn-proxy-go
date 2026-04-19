@@ -8,6 +8,7 @@
     "stage_count": 4
   },
   "input": {
+    "input_family": "invite",
     "invite_url_redacted": "https://vk.com/call/join/<redacted:vk-join-token>",
     "normalized_join_token_redacted": "<redacted:vk-join-token>"
   },

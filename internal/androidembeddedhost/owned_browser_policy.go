@@ -2,6 +2,7 @@ package androidembeddedhost
 
 import (
 	"context"
+	"net/url"
 	"strings"
 
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
@@ -26,12 +27,63 @@ func mobileChallengeMetadata(
 	if !mobileOwnedBrowserProviderApproved(challenge.ProviderName()) {
 		return metadata
 	}
-	if _, ok := challenge.(provider.BrowserOwnedStageChallenge); !ok {
+	if !mobileOwnedBrowserContinuationApproved(challenge) {
 		return metadata
 	}
 	return provider.InteractiveChallengeMetadata{
-		CompletionMode:        provider.ChallengeCompletionModeOwnedBrowserObserved,
-		AllowRememberedSignIn: true,
+		CompletionMode:                    provider.ChallengeCompletionModeOwnedBrowserObserved,
+		AllowRememberedSignIn:             true,
+		AllowAutoContinueOnTransportReady: mobileOwnedBrowserTransportReadyAutoContinueApproved(challenge),
+	}
+}
+
+func mobileOwnedBrowserContinuationApproved(
+	challenge provider.InteractiveChallenge,
+) bool {
+	if challenge == nil {
+		return false
+	}
+	if _, ok := challenge.(provider.BrowserOwnedStageChallenge); ok {
+		return true
+	}
+	if _, ok := challenge.(provider.BrowserObservedStageChallenge); ok {
+		return true
+	}
+	return false
+}
+
+func mobileOwnedBrowserTransportReadyAutoContinueApproved(
+	challenge provider.InteractiveChallenge,
+) bool {
+	if challenge == nil {
+		return false
+	}
+	if strings.TrimSpace(strings.ToLower(challenge.ProviderName())) != "vk" {
+		return false
+	}
+	if _, ok := challenge.(provider.BrowserObservedStageChallenge); !ok {
+		return false
+	}
+	return isCanonicalVKCallsRootURL(challenge.OpenURL())
+}
+
+func isCanonicalVKCallsRootURL(rawURL string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return false
+	}
+	if !strings.EqualFold(parsed.Scheme, "https") ||
+		!strings.EqualFold(parsed.Host, "calls.vk.com") {
+		return false
+	}
+	if parsed.RawQuery != "" {
+		return false
+	}
+	switch parsed.Path {
+	case "", "/":
+		return true
+	default:
+		return false
 	}
 }
 

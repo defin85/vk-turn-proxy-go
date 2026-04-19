@@ -14,27 +14,5 @@ Future<void> main() async {
     stateStore: await MobileShellStateStore.defaultStore(),
   );
   await controller.initialize();
-  await _seedDriverInvite(controller);
-
   runApp(MobileShellApp(controller: controller));
-}
-
-Future<void> _seedDriverInvite(MobileShellController controller) async {
-  const invite =
-      'https://vk.com/call/join/nZQ-WqsQ8Fy3AOPEyc-pF_JWXzNLSqgvF3ypfP1DWJc';
-
-  final profileId = controller.selectedProfileId?.trim() ?? '';
-  if (profileId.isEmpty) {
-    return;
-  }
-  if (controller.draft.spec.link.trim().isNotEmpty) {
-    return;
-  }
-
-  controller.updateDraft(
-    controller.draft.copyWith(
-      spec: controller.draft.spec.copyWith(link: invite),
-    ),
-  );
-  await controller.saveDraft();
 }

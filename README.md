@@ -159,12 +159,21 @@ Run the VK provider debug contour:
 go run ./cmd/probe -provider vk -link 'https://vk.com/call/join/<invite>' -output-dir artifacts
 ```
 
+On approved owned-browser surfaces, the same provider also supports the
+authenticated root-start contour:
+
+```bash
+go run ./cmd/probe -provider vk -link 'https://calls.vk.com/' -output-dir artifacts -interactive-provider
+```
+
 Successful runs print a normalized summary including the resolved TURN address, stage count, and artifact path.
 The probe writes a sanitized JSON artifact to `artifacts/vk/probe-artifact.json`.
 Provider-stage failures also persist a sanitized artifact before the command exits non-zero.
 
 The probe remains provider-only by design:
 - it normalizes the invite
+- it may also normalize the supported authenticated `https://calls.vk.com/`
+  root start link
 - it resolves staged VK/OK credentials
 - it does not start TURN, DTLS, or session transport loops
 

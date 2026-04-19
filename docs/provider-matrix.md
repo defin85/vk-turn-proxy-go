@@ -2,7 +2,7 @@
 
 | Provider | Status | Credential source | Notes |
 | --- | --- | --- | --- |
-| `vk` | runtime implemented | provider adapter + client runtime | Live credential resolution plus the supported one-session transport matrix (`mode=auto|udp|tcp`, pair-specific `ingress=udp|tcp`, `dtls=true|false` for UDP ingress, `dtls=true` for TCP ingress, literal-IP `bind-interface`) are implemented; replayable VK runtime assets under `test/compatibility/vk/runtime/` currently anchor the `ingress=udp` baseline, while `tcp -> tcp` overlay coverage is deterministic in `internal/session`, `internal/tunnelserver`, and `test/turnlab` |
+| `vk` | runtime implemented | provider adapter + client runtime | Live credential resolution plus the supported one-session transport matrix (`mode=auto|udp|tcp`, pair-specific `ingress=udp|tcp`, `dtls=true|false` for UDP ingress, `dtls=true` for TCP ingress, literal-IP `bind-interface`) are implemented; approved mobile owned-browser surfaces now support both the legacy `vk.com/call/join/...` invite flow and the authenticated `https://calls.vk.com/` root-start hosted-call contour, while replayable VK runtime assets under `test/compatibility/vk/runtime/` currently anchor the `ingress=udp` baseline and `tcp -> tcp` overlay coverage remains deterministic in `internal/session`, `internal/tunnelserver`, and `test/turnlab` |
 | `yandex-telemost` | legacy | provider adapter | Legacy path only; do not treat as active product target |
 | `generic-turn` | available | static provider link + client runtime | Deterministic provider for CI, harness-backed integration tests, and local pair-specific overlay checks (`udp -> udp`, `tcp -> tcp`) with no live signaling |
 

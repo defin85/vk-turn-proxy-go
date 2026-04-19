@@ -32,7 +32,9 @@ workflow or implying support for arbitrary `calls.vk.com` deep links.
 The system SHALL resolve the authenticated VK hosted-call flow from the
 provider-observed `auth.anonymLogin` bootstrap plus
 `vchat.startConversation(createJoinLink=true)` responses instead of forcing the
-flow through the legacy invite contour.
+flow through the legacy invite contour. For this first release, that
+`createJoinLink=true` contour is the only supported authenticated post-login
+branch.
 
 #### Scenario: Hosted call yields transport-ready TURN data
 
@@ -53,6 +55,16 @@ flow through the legacy invite contour.
 - **THEN** provider resolution fails explicitly
 - **AND** it does not pretend that authenticated browser state alone implies a
   resolved artifact
+
+#### Scenario: Authenticated flow reaches an unsupported post-login branch
+
+- **GIVEN** the operator authenticated inside the approved app-owned VK browser
+- **WHEN** the observed flow reaches a different authenticated post-login
+  branch and does not yield the committed
+  `vchat.startConversation(createJoinLink=true)` contour
+- **THEN** provider resolution fails explicitly
+- **AND** the product does not claim support for that alternate branch in this
+  change
 
 ### Requirement: Authenticated VK hosted-call creation stays provider-owned
 

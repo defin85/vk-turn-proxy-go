@@ -3,10 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter_shell_core/portable_profile_transfer.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_models.dart';
 import 'package:mobile_gui_shell/src/control/profile_draft.dart';
-import 'package:qr_flutter/qr_flutter.dart';
+import 'package:mobile_gui_shell/src/ui/portable_profile_transfer_dialogs.dart';
 
 class ProfileEditorPanel extends StatefulWidget {
   ProfileEditorPanel({
@@ -196,100 +195,12 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     if (envelope == null || !mounted) {
       return;
     }
-    await showDialog<void>(
+    await showPortableProfileExportDialog(
       context: context,
-      builder: (BuildContext context) {
-        final copy = context.shellText;
-        return AlertDialog(
-          title: Text(copy.exportPortableProfile),
-          content: SizedBox(
-            width: 520,
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Text(
-                    envelope.displayName,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    copy.providerAndSource(
-                      provider: envelope.profile.spec.provider,
-                      source: envelope.providerBinding.mode.value,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  if (envelope.isSecretBearing)
-                    _warningBanner(
-                      context,
-                      copy.portableExportSecretWarningMobile,
-                    ),
-                  if (!envelope.isSecretBearing)
-                    Text(
-                      copy.portableExportSeparateFromRuntimeMobile,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  const SizedBox(height: 12),
-                  if (envelope.fitsQrBounds) ...<Widget>[
-                    Center(
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: QrImageView(
-                          data: envelope.encode(),
-                          version: QrVersions.auto,
-                          size: 220,
-                          gapless: false,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      copy.portableQrCompactJson,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ] else ...<Widget>[
-                    _warningBanner(
-                      context,
-                      copy.portableQrUnavailableMobile(
-                        envelope.encodedUtf8Bytes,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(copy.close),
-            ),
-            TextButton(
-              onPressed: () =>
-                  unawaited(widget.onCopyPortableExportText(envelope)),
-              child: Text(copy.copyText),
-            ),
-            FilledButton.tonal(
-              onPressed: () =>
-                  unawaited(widget.onSharePortableExportText(envelope)),
-              child: Text(copy.shareText),
-            ),
-            FilledButton(
-              onPressed: () =>
-                  unawaited(widget.onSharePortableExportFile(envelope)),
-              child: Text(copy.shareFile),
-            ),
-          ],
-        );
-      },
+      envelope: envelope,
+      onCopyText: widget.onCopyPortableExportText,
+      onShareText: widget.onSharePortableExportText,
+      onShareFile: widget.onSharePortableExportFile,
     );
   }
 
@@ -302,11 +213,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   }
 
   Future<void> _scanPortableQr() async {
-    final payload = await Navigator.of(context).push<String>(
-      MaterialPageRoute<String>(
-        builder: (BuildContext context) => const _PortableQrScannerPage(),
-      ),
-    );
+    final payload = await showPortableProfileQrScanner(context);
     if (payload == null || payload.trim().isEmpty || !mounted) {
       return;
     }
@@ -320,143 +227,20 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   Future<void> _showPortableImportPreview(
     PortableProfileEnvelope envelope,
   ) async {
-    await showDialog<void>(
+    await showPortableProfileImportPreviewDialog(
       context: context,
-      builder: (BuildContext context) {
-        final copy = context.shellText;
-        final snapshotName =
-            envelope.managedProviderSnapshot?.name.isNotEmpty == true
-            ? envelope.managedProviderSnapshot!.name
-            : envelope.managedProviderSnapshot?.id ?? copy.missing;
-        return AlertDialog(
-          title: Text(copy.importPortableProfile),
-          content: SizedBox(
-            width: 520,
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Text(
-                    envelope.displayName,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(copy.providerLabel(envelope.profile.spec.provider)),
-                  Text(
-                    copy.sourceModeLabel(envelope.providerBinding.mode.value),
-                  ),
-                  if (envelope.providerBinding.isManaged)
-                    Text(copy.managedProviderSnapshot(snapshotName)),
-                  const SizedBox(height: 12),
-                  if (envelope.isSecretBearing)
-                    _warningBanner(context, copy.portableImportSecretWarning),
-                  if (!envelope.isSecretBearing)
-                    Text(
-                      copy.portableImportCreatesFreshIdsMobile,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                ],
-              ),
-            ),
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(copy.cancel),
-            ),
-            FilledButton(
-              onPressed: () async {
-                Navigator.of(context).pop();
-                await widget.onConfirmPortableImport(envelope);
-              },
-              child: Text(copy.importProfile),
-            ),
-          ],
-        );
-      },
+      envelope: envelope,
+      onConfirm: widget.onConfirmPortableImport,
     );
   }
 
   Future<void> _showPortablePasteDialog() async {
-    final controller = TextEditingController();
-    String? errorText;
-    PortableProfileEnvelope? previewEnvelope;
-    try {
-      await showDialog<void>(
-        context: context,
-        builder: (BuildContext context) {
-          final copy = context.shellText;
-          return StatefulBuilder(
-            builder:
-                (
-                  BuildContext context,
-                  void Function(VoidCallback fn) setState,
-                ) {
-                  final keyboardVisible =
-                      MediaQuery.viewInsetsOf(context).bottom > 0;
-                  return AlertDialog(
-                    scrollable: true,
-                    title: Text(copy.pastePortableProfileEnvelope),
-                    content: SizedBox(
-                      width: 520,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          TextField(
-                            controller: controller,
-                            keyboardType: TextInputType.multiline,
-                            minLines: keyboardVisible ? 4 : 8,
-                            maxLines: keyboardVisible ? 10 : 16,
-                            decoration: InputDecoration(
-                              labelText: copy.portableProfileJson,
-                              errorText: errorText,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            copy.previewOpensBeforeRecordsCreated,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                      ),
-                    ),
-                    actions: <Widget>[
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        child: Text(copy.cancel),
-                      ),
-                      FilledButton(
-                        onPressed: () {
-                          FocusManager.instance.primaryFocus?.unfocus();
-                          final envelope = widget.onPreviewPortableImport(
-                            controller.text,
-                          );
-                          if (envelope == null) {
-                            setState(() {
-                              errorText = copy.payloadInvalidOrUnsupported;
-                            });
-                            return;
-                          }
-                          previewEnvelope = envelope;
-                          Navigator.of(context).pop();
-                        },
-                        child: Text(copy.previewImport),
-                      ),
-                    ],
-                  );
-                },
-          );
-        },
-      );
-      if (previewEnvelope != null && mounted) {
-        await _showPortableImportPreview(previewEnvelope!);
-      }
-    } finally {
-      controller.dispose();
+    final previewEnvelope = await showPortableProfilePasteDialog(
+      context: context,
+      onPreviewImport: widget.onPreviewPortableImport,
+    );
+    if (previewEnvelope != null && mounted) {
+      await _showPortableImportPreview(previewEnvelope);
     }
   }
 
@@ -614,7 +398,6 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
               onSavePressed: widget.busy
                   ? null
                   : () => unawaited(widget.onSave()),
-              hasSavedProfile: hasSavedProfile,
             ),
           ],
         ),
@@ -911,7 +694,6 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     required String primaryLabel,
     required VoidCallback? onPrimaryPressed,
     required VoidCallback? onSavePressed,
-    required bool hasSavedProfile,
   }) {
     final theme = Theme.of(context);
     final copy = context.shellText;
@@ -931,39 +713,6 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                 icon: const Icon(Icons.save_outlined),
                 label: Text(copy.saveProfile),
               );
-        final moreButton = hasSavedProfile
-            ? PopupMenuButton<_ProfileEditorOverflowAction>(
-                key: const ValueKey<String>('profile-editor-more-actions'),
-                tooltip: MaterialLocalizations.of(context).showMenuTooltip,
-                enabled: !widget.busy,
-                onSelected: (_ProfileEditorOverflowAction action) {
-                  switch (action) {
-                    case _ProfileEditorOverflowAction.resolve:
-                      unawaited(widget.onResolve());
-                    case _ProfileEditorOverflowAction.delete:
-                      unawaited(widget.onDelete());
-                  }
-                },
-                itemBuilder: (BuildContext context) =>
-                    <PopupMenuEntry<_ProfileEditorOverflowAction>>[
-                      PopupMenuItem<_ProfileEditorOverflowAction>(
-                        key: const ValueKey<String>(
-                          'profile-editor-resolve-action',
-                        ),
-                        value: _ProfileEditorOverflowAction.resolve,
-                        child: Text(copy.resolveInvite),
-                      ),
-                      PopupMenuItem<_ProfileEditorOverflowAction>(
-                        key: const ValueKey<String>(
-                          'profile-editor-delete-action',
-                        ),
-                        value: _ProfileEditorOverflowAction.delete,
-                        child: Text(copy.deleteProfile),
-                      ),
-                    ],
-                icon: const Icon(Icons.more_horiz),
-              )
-            : null;
         return Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -983,10 +732,6 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
               ),
               const SizedBox(width: 12),
               saveButton,
-              if (moreButton != null) ...<Widget>[
-                const SizedBox(width: 8),
-                moreButton,
-              ],
             ],
           ),
         );
@@ -1212,19 +957,6 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
         name: name ?? widget.draft.name,
         spec: spec ?? widget.draft.spec,
       ),
-    );
-  }
-
-  Widget _warningBanner(BuildContext context, String message) {
-    final theme = Theme.of(context);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFE2DE),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Text(message, style: theme.textTheme.bodySmall),
     );
   }
 
@@ -1465,77 +1197,3 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     }
   }
 }
-
-class _PortableQrScannerPage extends StatefulWidget {
-  const _PortableQrScannerPage();
-
-  @override
-  State<_PortableQrScannerPage> createState() => _PortableQrScannerPageState();
-}
-
-class _PortableQrScannerPageState extends State<_PortableQrScannerPage> {
-  late final MobileScannerController _controller;
-  bool _handledDetection = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = MobileScannerController();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(context.shellText.scanPortableProfileQr)),
-      body: Stack(
-        fit: StackFit.expand,
-        children: <Widget>[
-          MobileScanner(
-            controller: _controller,
-            onDetect: (BarcodeCapture capture) {
-              if (_handledDetection) {
-                return;
-              }
-              for (final barcode in capture.barcodes) {
-                final rawValue = barcode.rawValue?.trim() ?? '';
-                if (rawValue.isEmpty) {
-                  continue;
-                }
-                _handledDetection = true;
-                Navigator.of(context).pop(rawValue);
-                return;
-              }
-            },
-          ),
-          Positioned(
-            left: 24,
-            right: 24,
-            bottom: 32,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.64),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  context.shellText.pointCameraAtPortableProfileQr,
-                  style: const TextStyle(color: Colors.white),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-enum _ProfileEditorOverflowAction { resolve, delete }

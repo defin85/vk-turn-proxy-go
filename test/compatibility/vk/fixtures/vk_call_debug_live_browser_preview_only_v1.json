@@ -7,6 +7,7 @@
     "notes": "Observed live browser contour after challenge.html reached the pre-join preview page via login.vk.com get_anonym_token(messages) and calls.getCallPreview without a repeated calls.getAnonymousToken replay."
   },
   "input": {
+    "input_family": "invite",
     "invite_url_redacted": "https://vk.com/call/join/<redacted:vk-join-token>",
     "normalized_join_token_redacted": "<redacted:vk-join-token>"
   },

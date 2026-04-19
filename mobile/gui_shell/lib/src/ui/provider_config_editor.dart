@@ -247,39 +247,6 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                       : () => unawaited(widget.onSave()),
                   child: Text(copy.mobileSaveProvider),
                 ),
-                TextButton.icon(
-                  key: const ValueKey<String>(
-                    'managed-provider-save-template-button',
-                  ),
-                  onPressed: widget.busy || blockedBySchemaSupport
-                      ? null
-                      : widget.onSaveAsTemplate,
-                  icon: const Icon(Icons.bookmark_add_outlined),
-                  label: Text(copy.mobileSaveAsTemplate),
-                ),
-                if (widget.selectedManagedProviderId != null)
-                  TextButton.icon(
-                    key: const ValueKey<String>(
-                      'managed-provider-apply-button',
-                    ),
-                    onPressed: widget.busy
-                        ? null
-                        : () => widget.onApplyToProfileDraft(
-                            widget.selectedManagedProviderId!,
-                          ),
-                    icon: const Icon(Icons.assignment_turned_in_outlined),
-                    label: Text(copy.mobileUseInProfileDraft),
-                  ),
-                if (widget.selectedManagedProviderId != null)
-                  OutlinedButton(
-                    key: const ValueKey<String>(
-                      'managed-provider-delete-button',
-                    ),
-                    onPressed: widget.busy
-                        ? null
-                        : () => unawaited(widget.onDelete()),
-                    child: Text(copy.mobileDeleteProvider),
-                  ),
               ],
             ),
           ],
@@ -709,27 +676,6 @@ class _ProviderTemplateEditorPanelState
                       : () => unawaited(widget.onSave()),
                   child: Text(copy.mobileSaveTemplate),
                 ),
-                if (widget.selectedProviderTemplateId != null)
-                  TextButton.icon(
-                    key: const ValueKey<String>('provider-template-use-button'),
-                    onPressed: widget.busy
-                        ? null
-                        : () => widget.onUseTemplate(
-                            widget.selectedProviderTemplateId!,
-                          ),
-                    icon: const Icon(Icons.playlist_add_check_outlined),
-                    label: Text(copy.mobileUseTemplate),
-                  ),
-                if (widget.selectedProviderTemplateId != null)
-                  OutlinedButton(
-                    key: const ValueKey<String>(
-                      'provider-template-delete-button',
-                    ),
-                    onPressed: widget.busy
-                        ? null
-                        : () => unawaited(widget.onDelete()),
-                    child: Text(copy.mobileDeleteTemplate),
-                  ),
               ],
             ),
           ],

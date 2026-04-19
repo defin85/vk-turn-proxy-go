@@ -774,6 +774,7 @@ void main() {
             'owned_browser': <String, dynamic>{
               'cookie_urls': <String>['https://login.vk.ru/'],
               'remember_sign_in': true,
+              'auto_continue_on_transport_ready': true,
             },
             'created_at': DateTime.utc(2026, 4, 5, 14, 0).toIso8601String(),
             'updated_at': DateTime.utc(2026, 4, 5, 14, 1).toIso8601String(),
@@ -819,6 +820,7 @@ void main() {
         'https://login.vk.ru/',
       ]);
       expect(challenge.ownedBrowser?.rememberSignIn, isTrue);
+      expect(challenge.ownedBrowser?.autoContinueOnTransportReady, isTrue);
     },
   );
 

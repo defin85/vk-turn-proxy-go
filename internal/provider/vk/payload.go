@@ -39,7 +39,16 @@ func parseSessionKey(payload map[string]any) (string, error) {
 }
 
 func parseTurnCredentials(payload map[string]any) (string, string, string, error) {
-	turnServer, err := objectField(payload, "turn_server")
+	turnPayload := payload
+	if _, ok := turnPayload["turn_server"]; !ok {
+		if response, err := objectField(payload, "response"); err == nil {
+			if _, hasTurnServer := response["turn_server"]; hasTurnServer {
+				turnPayload = response
+			}
+		}
+	}
+
+	turnServer, err := objectField(turnPayload, "turn_server")
 	if err != nil {
 		return "", "", "", err
 	}
@@ -63,6 +72,12 @@ func parseTurnCredentials(payload map[string]any) (string, string, string, error
 	}
 
 	return username, password, address, nil
+}
+
+func parseHostedCallTransportCredentials(
+	payload map[string]any,
+) (string, string, string, error) {
+	return parseTurnCredentials(payload)
 }
 
 func objectField(payload map[string]any, key string) (map[string]any, error) {

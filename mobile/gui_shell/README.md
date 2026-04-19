@@ -272,8 +272,9 @@ The current repo-owned approval gate is narrow by design:
 
 - Android embedded host upgrades only approved provider flows to
   `owned_browser_observed`
-- the shipped approval list currently covers the `vk` provider only when the
-  challenge also exposes browser-owned stage requests
+- the shipped approval list currently covers the `vk` provider when the
+  challenge exposes browser-owned stage requests or the committed
+  browser-observed authenticated hosted-call contour
 - other providers and hosts remain on the documented system-browser path unless
   they explicitly advertise the owned-browser mode through the typed challenge
   contract

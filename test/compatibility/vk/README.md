@@ -1,17 +1,20 @@
-# VK Call Debug Contour Compatibility Contract
+# VK Call Compatibility Contract
 
 ## Scope
 
-This contract covers the provider-only VK flow anchored by two separate contours:
+This contract covers the provider-only VK flow anchored by three separate contours:
 
 - the deterministic legacy `getVkCreds` implementation in `/home/egor/code/vk-turn-proxy/client/main.go`
 - the browser-observed live post-challenge preview and post-preview contours captured on April 4, 2026
+- the browser-observed authenticated hosted-call contour captured from the approved mobile owned-browser `https://calls.vk.com/` root-start path
 
 It is intentionally limited to:
 
 - invite normalization from `https://vk.com/call/join/...`
+- authenticated root-start normalization from `https://calls.vk.com/`
 - staged VK/OK HTTP resolution
 - explicit browser-observed continuation when VK requires captcha gating
+- explicit browser-observed hosted-call extraction from `auth.anonymLogin` plus `vchat.startConversation(createJoinLink=true)`
 - normalized TURN credential output
 - explicit provider-stage failures
 
@@ -34,6 +37,25 @@ If VK returns `Captcha needed` at stage 2, the rewrite may pause for an explicit
 That continuation may either yield the deterministic repeated stage-2 response or a distinct live browser contour that reaches the pre-join preview page through `login.vk.com/?act=get_anonym_token` plus `calls.getCallPreview`.
 If observation continues beyond preview into browser-observed `ok_anonym_login` or `ok_join_conversation_by_link`, the rewrite must distinguish preview-only, post-preview unsupported, and transport-ready post-preview outcomes.
 The rewrite must still fail closed until normalized TURN credentials are explicitly observed.
+
+## Authenticated hosted-call contract
+
+The authenticated root-start contour is separate from the legacy invite-first
+contract.
+
+It starts from the canonical `https://calls.vk.com/` root link on the approved
+mobile owned-browser surface, authenticates inside that same app-owned browser
+session, and resolves transport-ready data only from the observed OK contour:
+
+| Stage | Endpoint ID | Observed endpoint | Required field(s) extracted |
+| --- | --- | --- | --- |
+| 1 | `ok_anonym_login` | `POST https://calls.okcdn.ru/fb.do` with `auth.anonymLogin` | `session_key` |
+| 2 | `ok_start_conversation_create_join_link` | `POST https://calls.okcdn.ru/fb.do` with `vchat.startConversation(createJoinLink=true)` | `turn_server.username`, `turn_server.credential`, `turn_server.urls[0]` |
+
+This authenticated contour is additive.
+It does not remove the legacy invite-first path, and it does not imply support
+for arbitrary `calls.vk.com` deep links or other authenticated post-login
+branches.
 
 ## First scenarios
 
@@ -159,6 +181,44 @@ Expected behavior:
 - the machine-readable error code is `browser_post_preview_unsupported`
 - `cmd/probe` and `cmd/tunnel-client` still do not start TURN, DTLS, or session transport loops from that post-preview unsupported state
 
+### `vk_call_authenticated_success_v1`
+
+Input contract:
+
+- provider: `vk`
+- `input_family=authenticated_root`
+- the canonical supported start link is stored as `https://calls.vk.com/`
+- the authenticated owned-browser contour includes `auth.anonymLogin`
+  followed by `vchat.startConversation(createJoinLink=true)`
+
+Expected behavior:
+
+- the provider does not force the authenticated flow through legacy invite-only
+  stage-1 or stage-2 assumptions
+- the provider records sanitized browser-observed evidence for
+  `ok_anonym_login` and `ok_start_conversation_create_join_link`
+- the hosted-call response yields normalized TURN credentials with address
+  `turn.example.test:3478`
+
+### `vk_call_authenticated_transport_missing_v1`
+
+Input contract:
+
+- provider: `vk`
+- `input_family=authenticated_root`
+- the controlled browser reaches `vchat.startConversation(createJoinLink=true)`
+- the observed hosted-call response still does not expose transport-ready TURN
+  fields
+
+Expected behavior:
+
+- the provider returns an explicit provider error
+- the reported failing stage is `ok_start_conversation_create_join_link`
+- the machine-readable error code is
+  `authenticated_browser_contour_incomplete`
+- the provider does not treat authenticated browser state alone as a resolved
+  transport artifact
+
 ## Fixture layout
 
 The fixture directory for this contract is:
@@ -167,6 +227,8 @@ The fixture directory for this contract is:
 test/compatibility/vk/
   fixture.schema.json
   fixtures/
+    vk_call_authenticated_success_v1.json
+    vk_call_authenticated_transport_missing_v1.json
     .gitkeep
     vk_call_debug_browser_continuation_failed_v1.json
     vk_call_debug_captcha_required_v1.json
@@ -188,8 +250,14 @@ The live preview/post-preview fixture set is sanitized browser-observed evidence
 Fixtures and probe artifacts must preserve structure while removing live secrets.
 
 - Replace the raw invite token everywhere with `<redacted:vk-join-token>`.
+- Keep the authenticated root-start input canonical as `https://calls.vk.com/`
+  and do not infer invite-only token fields for that contour.
 - Replace stage tokens with descriptive placeholders such as `<redacted:vk-access-token-1>`, `<redacted:vk-anonym-token>`, and `<redacted:ok-session-key>`.
 - Replace TURN username and password with `<redacted:turn-username>` and `<redacted:turn-password>`.
+- Replace hosted-call join links, provider websocket endpoints, and provider
+  session tokens with descriptive placeholders such as
+  `https://vk.com/call/join/<redacted:vk-hosted-call-token>`,
+  `wss://<redacted:vk-call-endpoint>`, and `<redacted:vk-call-token>`.
 - Replace captcha continuation URLs and challenge-specific identifiers with descriptive placeholders such as `<redacted:vk-captcha-redirect-uri>` and `<redacted:vk-captcha-sid>`.
 - Do not persist raw cookies, authorization headers, browser profile paths, IP-bound session identifiers, or unredacted request bodies.
 - Preserve endpoint IDs, HTTP status codes, field names, stage ordering, and normalized TURN address semantics.
@@ -205,6 +273,13 @@ Every VK compatibility fixture must satisfy `test/compatibility/vk/fixture.schem
 - `input`
 - `stages`
 - `expected`
+
+The `input` block must identify the contour family explicitly:
+
+- `input_family=invite` with redacted invite URL plus normalized join token for
+  the legacy invite-first contour
+- `input_family=authenticated_root` with `link_redacted=https://calls.vk.com/`
+  for the authenticated hosted-call contour
 
 Each `stages[]` item must include:
 

@@ -117,8 +117,14 @@
   "shellTextOpenProfiles": "Open profiles",
   "shellTextResetLocalState": "Reset local state",
   "shellTextForgetEmbeddedSignIn": "Forget embedded sign-in",
+  "shellTextEmbeddedBrowserStateTitle": "Embedded browser cookies and session",
+  "shellTextEmbeddedBrowserStateBody": "The in-app browser keeps its own app-owned cookies and storage. Rebooting the device does not clear this state.",
+  "shellTextEmbeddedBrowserStateHint": "Use this reset before a clean provider sign-in test or when an old VK session keeps getting reused. It only clears the embedded WebView inside this app.",
   "shellTextImportFromFile": "Import from file",
   "shellTextExportSavedProfile": "Export saved profile",
+  "shellTextSelectedProfileActions": "Selected profile",
+  "shellTextMakeCurrent": "Make current",
+  "shellTextCopyProfile": "Copy profile",
   "shellTextPasteEnvelope": "Paste envelope",
   "shellTextCopyText": "Copy text",
   "shellTextSaveFile": "Save file",
@@ -135,8 +141,27 @@
   "shellTextSavedMobileProfile": "Saved mobile profile {profileLabel}.",
   "shellTextDeletedProfile": "Deleted profile {profileId}.",
   "shellTextDeletedMobileProfile": "Deleted mobile profile {profileId}.",
+  "shellTextDuplicatedItemLabel": "{sourceLabel} copy",
+  "@shellTextDuplicatedItemLabel": {
+    "placeholders": {
+      "sourceLabel": {}
+    }
+  },
+  "shellTextDuplicatedItemFallbackLabel": "Copied item",
+  "shellTextSeededProfileCopyDraft": "Seeded a new profile draft from {profileLabel}.",
+  "@shellTextSeededProfileCopyDraft": {
+    "placeholders": {
+      "profileLabel": {}
+    }
+  },
   "shellTextSavedManagedProvider": "Saved managed provider {providerLabel}.",
   "shellTextDeletedManagedProvider": "Deleted managed provider {providerId}.",
+  "shellTextSeededManagedProviderCopyDraft": "Seeded a new managed provider draft from {providerLabel}.",
+  "@shellTextSeededManagedProviderCopyDraft": {
+    "placeholders": {
+      "providerLabel": {}
+    }
+  },
   "shellTextSaveOrSelectProfileBeforeExport": "Save or select a profile before exporting it.",
   "shellTextSelectedProfileDependsOnMissingManagedProviderSnapshot": "The selected profile depends on a managed provider snapshot that is no longer available locally.",
   "shellTextCopiedPortableProfile": "Copied portable profile {profileLabel}.",
@@ -212,6 +237,12 @@
   "shellTextDeletedTemplate": "Deleted template {templateId}.",
   "shellTextTemplateNoLongerAvailable": "Template {templateId} is no longer available.",
   "shellTextSeededManagedProviderDraftFromTemplate": "Seeded a new managed provider draft from the {templateLabel} template.",
+  "shellTextSeededTemplateCopyDraft": "Seeded a new template draft from {templateLabel}.",
+  "@shellTextSeededTemplateCopyDraft": {
+    "placeholders": {
+      "templateLabel": {}
+    }
+  },
   "shellTextClearedLocalMobileShellState": "Cleared local mobile shell state.",
   "shellTextFailedToClearLocalMobileShellState": "Failed to clear local mobile shell state: {error}",
   "shellTextProviderExpectsLinkEntryOnlyMobile": "{providerName} expects {inputKind} input. This mobile shell currently supports link entry only.",
@@ -381,6 +412,9 @@
   "shellTextMobileSaveAsTemplate": "Save as template",
   "shellTextMobileUseInProfileDraft": "Use in profile draft",
   "shellTextMobileDeleteProvider": "Delete provider",
+  "shellTextSavedProviders": "Saved providers",
+  "shellTextSelectedProviderActions": "Selected provider",
+  "shellTextCopyProvider": "Copy provider",
   "shellTextSelectedType": "Selected type",
   "shellTextMobileEditTemplate": "Edit template",
   "shellTextMobileNewTemplate": "New template",
@@ -394,6 +428,8 @@
   "shellTextMobileSaveTemplate": "Save template",
   "shellTextMobileUseTemplate": "Use template",
   "shellTextMobileDeleteTemplate": "Delete template",
+  "shellTextSelectedTemplateActions": "Selected template",
+  "shellTextCopyTemplate": "Copy template",
   "shellTextDesktopProviderRecord": "Provider record",
   "shellTextDesktopNewProviderRecord": "New provider record",
   "shellTextDesktopEditReusableProviderRecord": "Edit one reusable provider record. The attached family is shown below and stays read-only here.",
@@ -568,14 +604,18 @@
   "shellTextCreateProvider": "Create provider",
   "shellTextCreateProviderChooseType": "Choose a provider type and configure a new saved provider.",
   "shellTextCreateProviderUseTemplate": "Use a template to prefill a new provider. Templates are starting points, not saved providers.",
+  "shellTextCreateProviderUsePreset": "Choose a shipped preset to prefill a new provider. Presets are read-only starting points, not editable records.",
   "shellTextProviderTypes": "Provider types",
+  "shellTextPresets": "Presets",
   "shellTextNoShippedProviderTypesYet": "This build does not advertise any shipped provider types yet.",
   "shellTextSearchTemplates": "Search templates",
   "shellTextMyTemplates": "My templates",
   "shellTextNoSavedTemplatesYet": "No saved templates yet. Save a provider as a template to reuse it here.",
+  "shellTextNoSavedTemplatesMessage": "Save a provider as a template to manage reusable starting values here.",
   "shellTextNoSavedTemplatesMatchSearch": "No saved templates match the current search.",
   "shellTextPrefillsNewProviders": "Prefills new providers",
   "shellTextShippedTemplates": "Shipped templates",
+  "shellTextShippedPresets": "Shipped presets",
   "shellTextNoShippedTemplatesMatchSearch": "No shipped templates match the current search.",
   "shellTextStartingPointForNewProviders": "Starting point for new providers",
   "shellTextReadOnlyShippedTemplate": "Read-only shipped template",

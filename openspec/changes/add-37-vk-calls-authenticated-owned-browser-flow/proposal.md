@@ -7,7 +7,7 @@ guest or preview flow into transport-ready TURN credentials.
 
 Live Android owned-browser evidence now shows a second real VK contour:
 starting from `https://calls.vk.com/`, authenticating inside the app-owned
-`WebView`, and creating or reopening a call in that same session yields
+`WebView`, and creating a hosted call in that same session yields
 provider-observed `auth.anonymLogin` bootstrap data plus
 `vchat.startConversation(createJoinLink=true)` responses containing
 `turn_server`, `stun_server`, join-link, and websocket endpoints.
@@ -33,6 +33,9 @@ behavior instead of silently replacing it.
   hosted-call path based on `auth.anonymLogin` bootstrap plus
   `vchat.startConversation(createJoinLink=true)` transport data, rather than
   forcing that flow through the legacy invite/guest contour.
+- Scope the first release to that authenticated hosted-call creation contour
+  only and keep other authenticated post-login branches, including reopen of an
+  existing call, outside the supported contract until separate evidence exists.
 - Require the mobile owned-browser approval path to cover same-session
   browser-observed continuation evidence for that committed contour instead of
   assuming only browser-owned replay requests can drive embedded continuation.

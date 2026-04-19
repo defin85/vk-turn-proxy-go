@@ -27,6 +27,18 @@ pages that make up that approved flow.
   pages
 - **AND** it does not reset app-owned cookies or storage between those steps
 
+#### Scenario: Approved authenticated flow does not require remembered sign-in
+
+- **GIVEN** an approved mobile provider-owned browser flow starts from
+  `https://calls.vk.com/`
+- **AND** the shell has no remembered embedded VK sign-in state because the
+  operator cleared it or the device has not stored one
+- **WHEN** the operator opens that flow inside the app-owned browser
+- **THEN** the shell still starts the approved continuation from a fresh
+  app-owned browser session
+- **AND** support for that flow does not depend on remembered embedded sign-in
+  from an earlier session
+
 #### Scenario: Approved provider flow continues from browser-observed evidence
 
 - **GIVEN** an approved mobile provider-owned browser flow keeps one app-owned

@@ -41,7 +41,7 @@ void main() {
   ];
 
   test(
-    'mobile state store keeps provider links out of persisted preferences and secure storage',
+    'mobile state store keeps provider links out of persisted preferences and round-trips them through secure storage',
     () async {
       final preferences = _MemoryBlobStore();
       final secrets = _MemoryBlobStore();
@@ -110,7 +110,7 @@ void main() {
         ),
       );
 
-      await store.save(state.sanitizedForPersistence(providerDescriptors));
+      await store.save(state, providerDescriptors: providerDescriptors);
 
       final preferencesPayload = preferences.values.values.single;
 
@@ -121,11 +121,20 @@ void main() {
       expect(preferencesPayload, contains('turn.example.test'));
       expect(preferencesPayload, contains('176.109.104.105:38218'));
 
-      expect(secrets.values, isEmpty);
+      expect(secrets.values, isNotEmpty);
+      final secretsPayload = secrets.values.values.single;
+      expect(secretsPayload, contains('https://vk.com/call/join/secret'));
+      expect(
+        secretsPayload,
+        contains('generic-turn://user:pass@turn.example.test:3478'),
+      );
 
       final restored = await store.load();
       expect(restored, isNotNull);
-      expect(restored!.profiles.single.spec.link, '');
+      expect(
+        restored!.profiles.single.spec.link,
+        'https://vk.com/call/join/secret',
+      );
       expect(restored.profiles.single.spec.providerSettings, <String, dynamic>{
         'region': 'eu-west',
       });
@@ -144,7 +153,10 @@ void main() {
         restored.profileBindings['profile-1']?.managedProviderId,
         'provider-config-1',
       );
-      expect(restored.draft.spec.link, '');
+      expect(
+        restored.draft.spec.link,
+        'generic-turn://user:pass@turn.example.test:3478',
+      );
       expect(restored.draft.spec.providerSettings, <String, dynamic>{
         'region': 'ru-central',
       });
@@ -179,6 +191,10 @@ void main() {
       expect(profileBindings['profile-1'], <String, dynamic>{
         'mode': 'managed',
         'managed_provider_id': 'provider-config-1',
+      });
+      expect(sanitizedJson['secret_manifest'], <String, dynamic>{
+        'profile_ids': <String>['profile-1'],
+        'has_draft': true,
       });
     },
   );

@@ -117,8 +117,14 @@
   "shellTextOpenProfiles": "Открыть профили",
   "shellTextResetLocalState": "Сбросить локальное состояние",
   "shellTextForgetEmbeddedSignIn": "Забыть вход во встроенном браузере",
+  "shellTextEmbeddedBrowserStateTitle": "Куки и сессия встроенного браузера",
+  "shellTextEmbeddedBrowserStateBody": "Встроенный браузер хранит свои app-owned куки и storage отдельно. Перезагрузка устройства это состояние не очищает.",
+  "shellTextEmbeddedBrowserStateHint": "Используйте этот сброс перед чистым тестом входа у провайдера или когда VK снова подхватывает старую сессию. Сбрасывается только встроенный WebView внутри приложения.",
   "shellTextImportFromFile": "Импорт из файла",
   "shellTextExportSavedProfile": "Экспортировать сохраненный профиль",
+  "shellTextSelectedProfileActions": "Выбранный профиль",
+  "shellTextMakeCurrent": "Сделать текущим",
+  "shellTextCopyProfile": "Копировать профиль",
   "shellTextPasteEnvelope": "Вставить конверт",
   "shellTextCopyText": "Копировать текст",
   "shellTextSaveFile": "Сохранить файл",
@@ -135,8 +141,27 @@
   "shellTextSavedMobileProfile": "Мобильный профиль {profileLabel} сохранен.",
   "shellTextDeletedProfile": "Профиль {profileId} удален.",
   "shellTextDeletedMobileProfile": "Мобильный профиль {profileId} удален.",
+  "shellTextDuplicatedItemLabel": "{sourceLabel} копия",
+  "@shellTextDuplicatedItemLabel": {
+    "placeholders": {
+      "sourceLabel": {}
+    }
+  },
+  "shellTextDuplicatedItemFallbackLabel": "Копия записи",
+  "shellTextSeededProfileCopyDraft": "Новый черновик профиля создан из {profileLabel}.",
+  "@shellTextSeededProfileCopyDraft": {
+    "placeholders": {
+      "profileLabel": {}
+    }
+  },
   "shellTextSavedManagedProvider": "Управляемый провайдер {providerLabel} сохранен.",
   "shellTextDeletedManagedProvider": "Управляемый провайдер {providerId} удален.",
+  "shellTextSeededManagedProviderCopyDraft": "Новый черновик управляемого провайдера создан из {providerLabel}.",
+  "@shellTextSeededManagedProviderCopyDraft": {
+    "placeholders": {
+      "providerLabel": {}
+    }
+  },
   "shellTextSaveOrSelectProfileBeforeExport": "Сохраните профиль или выберите уже сохраненный профиль перед экспортом.",
   "shellTextSelectedProfileDependsOnMissingManagedProviderSnapshot": "Выбранный профиль зависит от снимка управляемого провайдера, который больше недоступен локально.",
   "shellTextCopiedPortableProfile": "Переносимый профиль {profileLabel} скопирован.",
@@ -212,6 +237,12 @@
   "shellTextDeletedTemplate": "Шаблон {templateId} удален.",
   "shellTextTemplateNoLongerAvailable": "Шаблон {templateId} больше недоступен.",
   "shellTextSeededManagedProviderDraftFromTemplate": "Новый черновик управляемого провайдера создан из шаблона {templateLabel}.",
+  "shellTextSeededTemplateCopyDraft": "Новый черновик шаблона создан из {templateLabel}.",
+  "@shellTextSeededTemplateCopyDraft": {
+    "placeholders": {
+      "templateLabel": {}
+    }
+  },
   "shellTextClearedLocalMobileShellState": "Локальное состояние мобильной оболочки очищено.",
   "shellTextFailedToClearLocalMobileShellState": "Не удалось очистить локальное состояние мобильной оболочки: {error}",
   "shellTextProviderExpectsLinkEntryOnlyMobile": "{providerName} ожидает ввод типа {inputKind}. Эта мобильная оболочка сейчас поддерживает только ввод ссылки.",
@@ -381,6 +412,9 @@
   "shellTextMobileSaveAsTemplate": "Сохранить как шаблон",
   "shellTextMobileUseInProfileDraft": "Использовать в черновике профиля",
   "shellTextMobileDeleteProvider": "Удалить провайдера",
+  "shellTextSavedProviders": "Сохраненные провайдеры",
+  "shellTextSelectedProviderActions": "Выбранный провайдер",
+  "shellTextCopyProvider": "Копировать провайдера",
   "shellTextSelectedType": "Выбранный тип",
   "shellTextMobileEditTemplate": "Редактировать шаблон",
   "shellTextMobileNewTemplate": "Новый шаблон",
@@ -394,6 +428,8 @@
   "shellTextMobileSaveTemplate": "Сохранить шаблон",
   "shellTextMobileUseTemplate": "Использовать шаблон",
   "shellTextMobileDeleteTemplate": "Удалить шаблон",
+  "shellTextSelectedTemplateActions": "Выбранный шаблон",
+  "shellTextCopyTemplate": "Копировать шаблон",
   "shellTextDesktopProviderRecord": "Запись провайдера",
   "shellTextDesktopNewProviderRecord": "Новая запись провайдера",
   "shellTextDesktopEditReusableProviderRecord": "Редактируйте одну переиспользуемую запись провайдера. Прикрепленное семейство показано ниже и остается здесь только для чтения.",
@@ -568,14 +604,18 @@
   "shellTextCreateProvider": "Создать провайдера",
   "shellTextCreateProviderChooseType": "Выберите тип провайдера и настройте нового сохраненного провайдера.",
   "shellTextCreateProviderUseTemplate": "Используйте шаблон для предзаполнения нового провайдера. Шаблоны - это стартовые точки, а не сохраненные провайдеры.",
+  "shellTextCreateProviderUsePreset": "Выберите встроенный пресет для предзаполнения нового провайдера. Пресеты доступны только для чтения и не являются редактируемыми записями.",
   "shellTextProviderTypes": "Типы провайдеров",
+  "shellTextPresets": "Пресеты",
   "shellTextNoShippedProviderTypesYet": "Эта сборка пока не объявляет никаких встроенных типов провайдеров.",
   "shellTextSearchTemplates": "Поиск шаблонов",
   "shellTextMyTemplates": "Мои шаблоны",
   "shellTextNoSavedTemplatesYet": "Сохраненных шаблонов пока нет. Сохраните провайдера как шаблон, чтобы переиспользовать его здесь.",
+  "shellTextNoSavedTemplatesMessage": "Сохраните провайдера как шаблон, чтобы управлять переиспользуемыми стартовыми значениями здесь.",
   "shellTextNoSavedTemplatesMatchSearch": "Нет сохраненных шаблонов, подходящих под текущий поиск.",
   "shellTextPrefillsNewProviders": "Предзаполняет новых провайдеров",
   "shellTextShippedTemplates": "Встроенные шаблоны",
+  "shellTextShippedPresets": "Встроенные пресеты",
   "shellTextNoShippedTemplatesMatchSearch": "Нет встроенных шаблонов, подходящих под текущий поиск.",
   "shellTextStartingPointForNewProviders": "Стартовая точка для новых провайдеров",
   "shellTextReadOnlyShippedTemplate": "Встроенный шаблон только для чтения",

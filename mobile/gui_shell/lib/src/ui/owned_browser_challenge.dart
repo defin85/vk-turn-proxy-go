@@ -439,12 +439,15 @@ class _OwnedBrowserChallengePageState extends State<_OwnedBrowserChallengePage>
   late final OwnedBrowserWebSession _session;
   ui.FlutterView? _flutterView;
   Timer? _debugPollTimer;
+  Timer? _transportReadyAutoCompleteTimer;
   Timer? _viewportRefreshTimer;
   double _keyboardInsetBottom = 0;
   bool _submitting = false;
+  bool _transportReadyAutoCompleteTriggered = false;
   String? _error;
   String? _debugSnapshot;
   bool _keyboardVisible = false;
+  bool _transportReadyAutoCompleteEnabled = false;
   Uri? _openUri;
   Uri? _harnessInviteUri;
   bool _harnessInviteLoaded = false;
@@ -472,6 +475,9 @@ class _OwnedBrowserChallengePageState extends State<_OwnedBrowserChallengePage>
       widget.challenge,
       challengeUri,
     );
+    _transportReadyAutoCompleteEnabled =
+        widget.challenge.ownedBrowser?.autoContinueOnTransportReady == true ||
+        _extractHarnessAutoCompleteEnabled(widget.challenge, challengeUri);
     final openUri = _normalizeChallengeOpenUri(widget.challenge, challengeUri);
     _openUri = openUri;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -479,6 +485,7 @@ class _OwnedBrowserChallengePageState extends State<_OwnedBrowserChallengePage>
       _start(openUri);
     });
     _startDebugPolling();
+    _startTransportReadyAutoCompletePolling();
   }
 
   @override
@@ -527,6 +534,9 @@ class _OwnedBrowserChallengePageState extends State<_OwnedBrowserChallengePage>
   }
 
   void _handlePageNavigation(Uri uri) {
+    if (widget.showDebugDiagnostics) {
+      debugPrint('OWNED_BROWSER_NAVIGATED $uri');
+    }
     if (!mounted || !_shouldReturnInviteFromFeed(uri)) {
       return;
     }
@@ -553,6 +563,37 @@ class _OwnedBrowserChallengePageState extends State<_OwnedBrowserChallengePage>
     _debugPollTimer = Timer.periodic(const Duration(milliseconds: 700), (_) {
       unawaited(_refreshDebugSnapshot());
     });
+  }
+
+  void _startTransportReadyAutoCompletePolling() {
+    if (!_transportReadyAutoCompleteEnabled) {
+      return;
+    }
+    unawaited(_maybeCompleteOnTransportReady());
+    _transportReadyAutoCompleteTimer = Timer.periodic(
+      const Duration(milliseconds: 500),
+      (_) {
+        unawaited(_maybeCompleteOnTransportReady());
+      },
+    );
+  }
+
+  Future<void> _maybeCompleteOnTransportReady() async {
+    if (!_transportReadyAutoCompleteEnabled ||
+        _submitting ||
+        _transportReadyAutoCompleteTriggered ||
+        !mounted) {
+      return;
+    }
+    final observedRequests = await _session.collectObservedRequests();
+    if (!_containsTransportReadyObservation(observedRequests)) {
+      return;
+    }
+    _transportReadyAutoCompleteTriggered = true;
+    await _complete();
+    if (mounted && !_submitting) {
+      _transportReadyAutoCompleteTriggered = false;
+    }
   }
 
   Future<void> _refreshDebugSnapshot() async {
@@ -697,6 +738,7 @@ class _OwnedBrowserChallengePageState extends State<_OwnedBrowserChallengePage>
   @override
   void dispose() {
     _debugPollTimer?.cancel();
+    _transportReadyAutoCompleteTimer?.cancel();
     _viewportRefreshTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     unawaited(widget.softInputModeController.restoreDefaultMode());
@@ -894,6 +936,23 @@ Uri? _extractHarnessInviteUri(ChallengeRecord challenge, Uri openUri) {
   return Uri.tryParse(Uri.decodeComponent(encoded));
 }
 
+bool _extractHarnessAutoCompleteEnabled(
+  ChallengeRecord challenge,
+  Uri openUri,
+) {
+  if (challenge.id != 'owned-browser-ime-harness') {
+    return false;
+  }
+  final fragment = openUri.fragment.trim();
+  if (fragment.isEmpty) {
+    return false;
+  }
+  final parameters = Uri.splitQueryString(fragment);
+  final rawValue =
+      parameters['codex-auto-complete']?.trim().toLowerCase() ?? '';
+  return rawValue == '1' || rawValue == 'true' || rawValue == 'yes';
+}
+
 Future<void> nudgeOwnedBrowserViewport(WebViewController controller) async {
   await controller.runJavaScript('''
     (function() {
@@ -959,6 +1018,43 @@ Future<void> _installOwnedBrowserObserver(WebViewController controller) async {
   try {
     await controller.runJavaScript(_ownedBrowserObservedRequestBootstrap);
   } catch (_) {}
+}
+
+bool _containsTransportReadyObservation(
+  List<BrowserObservedRequestRecord> observedRequests,
+) {
+  return observedRequests.any(_isTransportReadyObservation);
+}
+
+bool _isTransportReadyObservation(BrowserObservedRequestRecord request) {
+  if (request.method.toUpperCase() != 'POST' || request.statusCode != 200) {
+    return false;
+  }
+  final uri = Uri.tryParse(request.url);
+  if (uri == null || uri.host != 'calls.okcdn.ru' || uri.path != '/fb.do') {
+    return false;
+  }
+  if (request.formValues['method'] != 'vchat.startConversation' ||
+      request.formValues['createJoinLink'] != 'true') {
+    return false;
+  }
+  final body = request.body;
+  final turnServer = body['turn_server'];
+  if (turnServer is! Map<String, dynamic>) {
+    return false;
+  }
+  final urls = turnServer['urls'];
+  return _hasNonEmptyString(body['endpoint']) &&
+      _hasNonEmptyString(body['wt_endpoint']) &&
+      _hasNonEmptyString(body['token']) &&
+      _hasNonEmptyString(turnServer['username']) &&
+      _hasNonEmptyString(turnServer['credential']) &&
+      urls is List &&
+      urls.isNotEmpty;
+}
+
+bool _hasNonEmptyString(dynamic value) {
+  return value is String && value.trim().isNotEmpty;
 }
 
 BrowserObservedRequestRecord? _parseObservedBrowserRequestMessage(

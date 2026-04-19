@@ -329,10 +329,25 @@ class TranslationsRu extends Translations
   String get shellTextForgetEmbeddedSignIn =>
       'Забыть вход во встроенном браузере';
   @override
+  String get shellTextEmbeddedBrowserStateTitle =>
+      'Куки и сессия встроенного браузера';
+  @override
+  String get shellTextEmbeddedBrowserStateBody =>
+      'Встроенный браузер хранит свои app-owned куки и storage отдельно. Перезагрузка устройства это состояние не очищает.';
+  @override
+  String get shellTextEmbeddedBrowserStateHint =>
+      'Используйте этот сброс перед чистым тестом входа у провайдера или когда VK снова подхватывает старую сессию. Сбрасывается только встроенный WebView внутри приложения.';
+  @override
   String get shellTextImportFromFile => 'Импорт из файла';
   @override
   String get shellTextExportSavedProfile =>
       'Экспортировать сохраненный профиль';
+  @override
+  String get shellTextSelectedProfileActions => 'Выбранный профиль';
+  @override
+  String get shellTextMakeCurrent => 'Сделать текущим';
+  @override
+  String get shellTextCopyProfile => 'Копировать профиль';
   @override
   String get shellTextPasteEnvelope => 'Вставить конверт';
   @override
@@ -373,11 +388,23 @@ class TranslationsRu extends Translations
   String shellTextDeletedMobileProfile({required Object profileId}) =>
       'Мобильный профиль ${profileId} удален.';
   @override
+  String shellTextDuplicatedItemLabel({required Object sourceLabel}) =>
+      '${sourceLabel} копия';
+  @override
+  String get shellTextDuplicatedItemFallbackLabel => 'Копия записи';
+  @override
+  String shellTextSeededProfileCopyDraft({required Object profileLabel}) =>
+      'Новый черновик профиля создан из ${profileLabel}.';
+  @override
   String shellTextSavedManagedProvider({required Object providerLabel}) =>
       'Управляемый провайдер ${providerLabel} сохранен.';
   @override
   String shellTextDeletedManagedProvider({required Object providerId}) =>
       'Управляемый провайдер ${providerId} удален.';
+  @override
+  String shellTextSeededManagedProviderCopyDraft({
+    required Object providerLabel,
+  }) => 'Новый черновик управляемого провайдера создан из ${providerLabel}.';
   @override
   String get shellTextSaveOrSelectProfileBeforeExport =>
       'Сохраните профиль или выберите уже сохраненный профиль перед экспортом.';
@@ -682,6 +709,9 @@ class TranslationsRu extends Translations
     required Object templateLabel,
   }) =>
       'Новый черновик управляемого провайдера создан из шаблона ${templateLabel}.';
+  @override
+  String shellTextSeededTemplateCopyDraft({required Object templateLabel}) =>
+      'Новый черновик шаблона создан из ${templateLabel}.';
   @override
   String get shellTextClearedLocalMobileShellState =>
       'Локальное состояние мобильной оболочки очищено.';
@@ -1198,6 +1228,12 @@ class TranslationsRu extends Translations
   @override
   String get shellTextMobileDeleteProvider => 'Удалить провайдера';
   @override
+  String get shellTextSavedProviders => 'Сохраненные провайдеры';
+  @override
+  String get shellTextSelectedProviderActions => 'Выбранный провайдер';
+  @override
+  String get shellTextCopyProvider => 'Копировать провайдера';
+  @override
   String get shellTextSelectedType => 'Выбранный тип';
   @override
   String get shellTextMobileEditTemplate => 'Редактировать шаблон';
@@ -1228,6 +1264,10 @@ class TranslationsRu extends Translations
   String get shellTextMobileUseTemplate => 'Использовать шаблон';
   @override
   String get shellTextMobileDeleteTemplate => 'Удалить шаблон';
+  @override
+  String get shellTextSelectedTemplateActions => 'Выбранный шаблон';
+  @override
+  String get shellTextCopyTemplate => 'Копировать шаблон';
   @override
   String get shellTextDesktopProviderRecord => 'Запись провайдера';
   @override
@@ -1709,7 +1749,12 @@ class TranslationsRu extends Translations
   String get shellTextCreateProviderUseTemplate =>
       'Используйте шаблон для предзаполнения нового провайдера. Шаблоны - это стартовые точки, а не сохраненные провайдеры.';
   @override
+  String get shellTextCreateProviderUsePreset =>
+      'Выберите встроенный пресет для предзаполнения нового провайдера. Пресеты доступны только для чтения и не являются редактируемыми записями.';
+  @override
   String get shellTextProviderTypes => 'Типы провайдеров';
+  @override
+  String get shellTextPresets => 'Пресеты';
   @override
   String get shellTextNoShippedProviderTypesYet =>
       'Эта сборка пока не объявляет никаких встроенных типов провайдеров.';
@@ -1721,12 +1766,17 @@ class TranslationsRu extends Translations
   String get shellTextNoSavedTemplatesYet =>
       'Сохраненных шаблонов пока нет. Сохраните провайдера как шаблон, чтобы переиспользовать его здесь.';
   @override
+  String get shellTextNoSavedTemplatesMessage =>
+      'Сохраните провайдера как шаблон, чтобы управлять переиспользуемыми стартовыми значениями здесь.';
+  @override
   String get shellTextNoSavedTemplatesMatchSearch =>
       'Нет сохраненных шаблонов, подходящих под текущий поиск.';
   @override
   String get shellTextPrefillsNewProviders => 'Предзаполняет новых провайдеров';
   @override
   String get shellTextShippedTemplates => 'Встроенные шаблоны';
+  @override
+  String get shellTextShippedPresets => 'Встроенные пресеты';
   @override
   String get shellTextNoShippedTemplatesMatchSearch =>
       'Нет встроенных шаблонов, подходящих под текущий поиск.';
@@ -2260,8 +2310,17 @@ extension on TranslationsRu {
           'shellTextResetLocalState' => 'Сбросить локальное состояние',
           'shellTextForgetEmbeddedSignIn' =>
             'Забыть вход во встроенном браузере',
+          'shellTextEmbeddedBrowserStateTitle' =>
+            'Куки и сессия встроенного браузера',
+          'shellTextEmbeddedBrowserStateBody' =>
+            'Встроенный браузер хранит свои app-owned куки и storage отдельно. Перезагрузка устройства это состояние не очищает.',
+          'shellTextEmbeddedBrowserStateHint' =>
+            'Используйте этот сброс перед чистым тестом входа у провайдера или когда VK снова подхватывает старую сессию. Сбрасывается только встроенный WebView внутри приложения.',
           'shellTextImportFromFile' => 'Импорт из файла',
           'shellTextExportSavedProfile' => 'Экспортировать сохраненный профиль',
+          'shellTextSelectedProfileActions' => 'Выбранный профиль',
+          'shellTextMakeCurrent' => 'Сделать текущим',
+          'shellTextCopyProfile' => 'Копировать профиль',
           'shellTextPasteEnvelope' => 'Вставить конверт',
           'shellTextCopyText' => 'Копировать текст',
           'shellTextSaveFile' => 'Сохранить файл',
@@ -2288,12 +2347,21 @@ extension on TranslationsRu {
           'shellTextDeletedMobileProfile' =>
             ({required Object profileId}) =>
                 'Мобильный профиль ${profileId} удален.',
+          'shellTextDuplicatedItemLabel' =>
+            ({required Object sourceLabel}) => '${sourceLabel} копия',
+          'shellTextDuplicatedItemFallbackLabel' => 'Копия записи',
+          'shellTextSeededProfileCopyDraft' =>
+            ({required Object profileLabel}) =>
+                'Новый черновик профиля создан из ${profileLabel}.',
           'shellTextSavedManagedProvider' =>
             ({required Object providerLabel}) =>
                 'Управляемый провайдер ${providerLabel} сохранен.',
           'shellTextDeletedManagedProvider' =>
             ({required Object providerId}) =>
                 'Управляемый провайдер ${providerId} удален.',
+          'shellTextSeededManagedProviderCopyDraft' =>
+            ({required Object providerLabel}) =>
+                'Новый черновик управляемого провайдера создан из ${providerLabel}.',
           'shellTextSaveOrSelectProfileBeforeExport' =>
             'Сохраните профиль или выберите уже сохраненный профиль перед экспортом.',
           'shellTextSelectedProfileDependsOnMissingManagedProviderSnapshot' =>
@@ -2493,6 +2561,9 @@ extension on TranslationsRu {
           'shellTextSeededManagedProviderDraftFromTemplate' =>
             ({required Object templateLabel}) =>
                 'Новый черновик управляемого провайдера создан из шаблона ${templateLabel}.',
+          'shellTextSeededTemplateCopyDraft' =>
+            ({required Object templateLabel}) =>
+                'Новый черновик шаблона создан из ${templateLabel}.',
           'shellTextClearedLocalMobileShellState' =>
             'Локальное состояние мобильной оболочки очищено.',
           'shellTextFailedToClearLocalMobileShellState' =>
@@ -2819,6 +2890,9 @@ extension on TranslationsRu {
           'shellTextMobileUseInProfileDraft' =>
             'Использовать в черновике профиля',
           'shellTextMobileDeleteProvider' => 'Удалить провайдера',
+          'shellTextSavedProviders' => 'Сохраненные провайдеры',
+          'shellTextSelectedProviderActions' => 'Выбранный провайдер',
+          'shellTextCopyProvider' => 'Копировать провайдера',
           'shellTextSelectedType' => 'Выбранный тип',
           'shellTextMobileEditTemplate' => 'Редактировать шаблон',
           'shellTextMobileNewTemplate' => 'Новый шаблон',
@@ -2837,6 +2911,8 @@ extension on TranslationsRu {
           'shellTextMobileSaveTemplate' => 'Сохранить шаблон',
           'shellTextMobileUseTemplate' => 'Использовать шаблон',
           'shellTextMobileDeleteTemplate' => 'Удалить шаблон',
+          'shellTextSelectedTemplateActions' => 'Выбранный шаблон',
+          'shellTextCopyTemplate' => 'Копировать шаблон',
           'shellTextDesktopProviderRecord' => 'Запись провайдера',
           'shellTextDesktopNewProviderRecord' => 'Новая запись провайдера',
           'shellTextDesktopEditReusableProviderRecord' =>
@@ -3018,6 +3094,9 @@ extension on TranslationsRu {
           'shellTextAppOwnedManagedRecord' => 'Управляемая запись приложения',
           'shellTextSelectedFamily' => 'Выбранное семейство',
           'shellTextMobileOpenBrowser' => 'Открыть браузер',
+          _ => null,
+        } ??
+        switch (path) {
           'shellTextMobileContinueInApp' => 'Продолжить в приложении',
           'shellTextChallengeContinuationCancelled' =>
             ({required Object challengeId}) =>
@@ -3040,9 +3119,6 @@ extension on TranslationsRu {
           'shellTextSupportSubtitle' =>
             'Активность, ошибки, логи и диагностика остаются явными, но вторичными по отношению к основному VPN-потоку.',
           'shellTextRoutingTitle' => 'Маршрутизация',
-          _ => null,
-        } ??
-        switch (path) {
           'shellTextRoutingSubtitle' =>
             'Выберите профиль VPN и охват приложений.',
           'shellTextRoutingProfile' => 'Профиль маршрутизации',
@@ -3138,17 +3214,23 @@ extension on TranslationsRu {
             'Выберите тип провайдера и настройте нового сохраненного провайдера.',
           'shellTextCreateProviderUseTemplate' =>
             'Используйте шаблон для предзаполнения нового провайдера. Шаблоны - это стартовые точки, а не сохраненные провайдеры.',
+          'shellTextCreateProviderUsePreset' =>
+            'Выберите встроенный пресет для предзаполнения нового провайдера. Пресеты доступны только для чтения и не являются редактируемыми записями.',
           'shellTextProviderTypes' => 'Типы провайдеров',
+          'shellTextPresets' => 'Пресеты',
           'shellTextNoShippedProviderTypesYet' =>
             'Эта сборка пока не объявляет никаких встроенных типов провайдеров.',
           'shellTextSearchTemplates' => 'Поиск шаблонов',
           'shellTextMyTemplates' => 'Мои шаблоны',
           'shellTextNoSavedTemplatesYet' =>
             'Сохраненных шаблонов пока нет. Сохраните провайдера как шаблон, чтобы переиспользовать его здесь.',
+          'shellTextNoSavedTemplatesMessage' =>
+            'Сохраните провайдера как шаблон, чтобы управлять переиспользуемыми стартовыми значениями здесь.',
           'shellTextNoSavedTemplatesMatchSearch' =>
             'Нет сохраненных шаблонов, подходящих под текущий поиск.',
           'shellTextPrefillsNewProviders' => 'Предзаполняет новых провайдеров',
           'shellTextShippedTemplates' => 'Встроенные шаблоны',
+          'shellTextShippedPresets' => 'Встроенные пресеты',
           'shellTextNoShippedTemplatesMatchSearch' =>
             'Нет встроенных шаблонов, подходящих под текущий поиск.',
           'shellTextStartingPointForNewProviders' =>

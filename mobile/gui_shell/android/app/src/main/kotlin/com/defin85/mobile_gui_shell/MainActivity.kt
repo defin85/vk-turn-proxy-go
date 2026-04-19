@@ -12,6 +12,8 @@ import android.net.Uri
 import android.os.Build
 import android.net.VpnService
 import android.webkit.CookieManager
+import android.webkit.WebView
+import android.webkit.WebViewDatabase
 import android.webkit.WebStorage
 import android.view.WindowInsets
 import android.view.WindowManager
@@ -416,26 +418,15 @@ class MainActivity : FlutterActivity() {
         try {
             val webStorage = WebStorage.getInstance()
             val cookieManager = CookieManager.getInstance()
-            if (WebViewFeature.isFeatureSupported(WebViewFeature.DELETE_BROWSING_DATA)) {
-                WebStorageCompat.deleteBrowsingData(
-                    webStorage,
-                    Runnable {
-                        try {
-                            cookieManager.flush()
-                        } catch (_: RuntimeException) {
-                        }
-                        result.success(null)
-                    },
-                )
-                return
-            }
-            webStorage.deleteAllData()
-            cookieManager.removeAllCookies {
-                try {
-                    cookieManager.flush()
-                } catch (_: RuntimeException) {
+            val finishReset =
+                Runnable {
+                    clearLegacyOwnedBrowserState(cookieManager, result)
                 }
-                result.success(null)
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.DELETE_BROWSING_DATA)) {
+                WebStorageCompat.deleteBrowsingData(webStorage, finishReset)
+            } else {
+                webStorage.deleteAllData()
+                finishReset.run()
             }
         } catch (error: Exception) {
             result.error(
@@ -443,6 +434,61 @@ class MainActivity : FlutterActivity() {
                 error.message ?: "Unable to clear app-owned browser session state.",
                 null,
             )
+        }
+    }
+
+    private fun clearLegacyOwnedBrowserState(
+        cookieManager: CookieManager,
+        result: MethodChannel.Result,
+    ) {
+        try {
+            cookieManager.removeAllCookies {
+                try {
+                    clearAdditionalOwnedBrowserState()
+                    cookieManager.flush()
+                    WebView.clearClientCertPreferences {
+                        result.success(null)
+                    }
+                } catch (error: Exception) {
+                    result.error(
+                        "owned_browser_session_clear_failed",
+                        error.message ?: "Unable to clear app-owned browser session state.",
+                        null,
+                    )
+                }
+            }
+        } catch (error: Exception) {
+            result.error(
+                "owned_browser_session_clear_failed",
+                error.message ?: "Unable to clear app-owned browser session state.",
+                null,
+            )
+        }
+    }
+
+    private fun clearAdditionalOwnedBrowserState() {
+        val webViewDatabase = WebViewDatabase.getInstance(applicationContext)
+        try {
+            webViewDatabase.clearHttpAuthUsernamePassword()
+        } catch (_: RuntimeException) {
+        }
+        try {
+            webViewDatabase.clearFormData()
+        } catch (_: RuntimeException) {
+        }
+        try {
+            webViewDatabase.clearUsernamePassword()
+        } catch (_: RuntimeException) {
+        }
+
+        val clearingWebView = WebView(applicationContext)
+        try {
+            clearingWebView.clearCache(true)
+            clearingWebView.clearHistory()
+            clearingWebView.clearSslPreferences()
+            clearingWebView.clearFormData()
+        } finally {
+            clearingWebView.destroy()
         }
     }
 

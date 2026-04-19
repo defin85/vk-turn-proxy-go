@@ -90,18 +90,22 @@ class MobileShellState {
     List<ProviderConfigRecord>? providerConfigs,
     required this.draft,
     this.profileBindings = const <String, ProfileProviderBinding>{},
-    this.selectedProfileId,
+    String? initialCurrentProfileId,
+    String? initialFocusedProfileId,
+    String? selectedProfileId,
     this.selectedPlatformTunnelMode,
     this.platformModePreferences =
         const <String, MobilePlatformModePreferences>{},
     this.localeTag,
   }) : managedProviders =
-           managedProviders ??
+       managedProviders ??
            (providerConfigs ?? const <ProviderConfigRecord>[])
                .map(ManagedProviderRecord.fromLegacyProviderConfig)
                .toList(growable: false),
        providerTemplates =
-           providerTemplates ?? const <ProviderTemplateRecord>[];
+           providerTemplates ?? const <ProviderTemplateRecord>[],
+       currentProfileId = initialCurrentProfileId ?? selectedProfileId,
+       focusedProfileId = initialFocusedProfileId;
 
   factory MobileShellState.empty() {
     return MobileShellState(
@@ -123,6 +127,8 @@ class MobileShellState {
       managedProviders: _readManagedProviders(json),
       providerTemplates: _readProviderTemplates(json),
       profileBindings: _readProfileBindings(json['profile_bindings']),
+      initialCurrentProfileId: json['current_profile_id'] as String?,
+      initialFocusedProfileId: json['focused_profile_id'] as String?,
       selectedProfileId: json['selected_profile_id'] as String?,
       selectedPlatformTunnelMode: PlatformTunnelMode.fromJson(
         json['selected_platform_tunnel_mode'] as String?,
@@ -141,13 +147,15 @@ class MobileShellState {
   final List<ManagedProviderRecord> managedProviders;
   final List<ProviderTemplateRecord> providerTemplates;
   final Map<String, ProfileProviderBinding> profileBindings;
-  final String? selectedProfileId;
+  final String? currentProfileId;
+  final String? focusedProfileId;
   final PlatformTunnelMode? selectedPlatformTunnelMode;
   final Map<String, MobilePlatformModePreferences> platformModePreferences;
   final String? localeTag;
   final ProfileDraft draft;
 
   List<ManagedProviderRecord> get providerConfigs => managedProviders;
+  String? get selectedProfileId => currentProfileId;
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
@@ -165,7 +173,8 @@ class MobileShellState {
           entry.key: entry.value.toJson(),
       },
       'locale_tag': localeTag,
-      'selected_profile_id': selectedProfileId,
+      'current_profile_id': currentProfileId,
+      'focused_profile_id': focusedProfileId,
       'selected_platform_tunnel_mode': selectedPlatformTunnelMode?.value,
       'platform_mode_preferences': <String, dynamic>{
         for (final entry in platformModePreferences.entries)
@@ -217,7 +226,8 @@ class MobileShellState {
             profile.id: profileBindings[profile.id]!,
       },
       localeTag: localeTag,
-      selectedProfileId: selectedProfileId,
+      initialCurrentProfileId: currentProfileId,
+      initialFocusedProfileId: focusedProfileId,
       selectedPlatformTunnelMode: selectedPlatformTunnelMode,
       platformModePreferences: Map<String, MobilePlatformModePreferences>.from(
         platformModePreferences,
@@ -285,7 +295,10 @@ class FlutterSecureBlobStore implements StringBlobStore {
 
 abstract class MobileShellStateStore {
   Future<MobileShellState?> load();
-  Future<void> save(MobileShellState state);
+  Future<void> save(
+    MobileShellState state, {
+    Iterable<ProviderDescriptor> providerDescriptors,
+  });
   Future<void> clear();
 
   static Future<MobileShellStateStore> defaultStore() async {
@@ -356,7 +369,8 @@ class SecureMobileShellStateStore implements MobileShellStateStore {
       managedProviders: sanitized.managedProviders,
       providerTemplates: sanitized.providerTemplates,
       profileBindings: sanitized.profileBindings,
-      selectedProfileId: sanitized.selectedProfileId,
+      initialCurrentProfileId: sanitized.currentProfileId,
+      initialFocusedProfileId: sanitized.focusedProfileId,
       selectedPlatformTunnelMode: sanitized.selectedPlatformTunnelMode,
       platformModePreferences: sanitized.platformModePreferences,
       draft: ProfileDraft.fromJson(
@@ -366,14 +380,26 @@ class SecureMobileShellStateStore implements MobileShellStateStore {
   }
 
   @override
-  Future<void> save(MobileShellState state) async {
+  Future<void> save(
+    MobileShellState state, {
+    Iterable<ProviderDescriptor> providerDescriptors =
+        const <ProviderDescriptor>[],
+  }) async {
+    final sanitized = state.sanitizedForPersistence(providerDescriptors);
     final secretManifest = _SecretManifest.fromState(state);
-    final sanitizedJson = state.toJson()
+    final sanitizedJson = sanitized.toJson()
       ..['secret_manifest'] = secretManifest.toJson();
 
     final encoder = const JsonEncoder.withIndent('  ');
     await preferences.write(_prefsStateKey, encoder.convert(sanitizedJson));
-    await secrets.delete(_secureSecretsKey);
+    if (!secretManifest.requiresSecrets) {
+      await secrets.delete(_secureSecretsKey);
+      return;
+    }
+    await secrets.write(
+      _secureSecretsKey,
+      encoder.convert(_secretStateFromState(state)),
+    );
   }
 
   @override
@@ -411,7 +437,14 @@ class _SecretManifest {
   }
 
   factory _SecretManifest.fromState(MobileShellState state) {
-    return const _SecretManifest(profileIds: <String>[], hasDraft: false);
+    return _SecretManifest(
+      profileIds: state.profiles
+          .where(_profileRequiresSecretState)
+          .map((ProfileRecord profile) => profile.id.trim())
+          .where((String id) => id.isNotEmpty)
+          .toList(growable: false),
+      hasDraft: _draftRequiresSecretState(state.draft),
+    );
   }
 
   final List<String> profileIds;
@@ -426,6 +459,33 @@ class _SecretManifest {
 
 bool _draftRequiresSecretState(ProfileDraft draft) {
   return draft.spec.link.trim().isNotEmpty;
+}
+
+bool _profileRequiresSecretState(ProfileRecord profile) {
+  return _specRequiresSecretState(profile.spec);
+}
+
+bool _specRequiresSecretState(ProfileSpec spec) {
+  return spec.link.trim().isNotEmpty;
+}
+
+Map<String, dynamic> _secretStateFromState(MobileShellState state) {
+  final profiles = <String, dynamic>{};
+  for (final profile in state.profiles) {
+    if (!_profileRequiresSecretState(profile)) {
+      continue;
+    }
+    profiles[profile.id] = _specSecretState(profile.spec);
+  }
+  return <String, dynamic>{
+    'profiles': profiles,
+    if (_draftRequiresSecretState(state.draft))
+      'draft': _specSecretState(state.draft.spec),
+  };
+}
+
+Map<String, dynamic> _specSecretState(ProfileSpec spec) {
+  return <String, dynamic>{if (spec.link.trim().isNotEmpty) 'link': spec.link};
 }
 
 ProfileRecord _sanitizeProfile(

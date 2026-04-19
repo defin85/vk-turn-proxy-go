@@ -157,7 +157,11 @@ class _InMemoryMobileShellStateStore implements MobileShellStateStore {
   Future<MobileShellState?> load() async => _state;
 
   @override
-  Future<void> save(MobileShellState state) async {
+  Future<void> save(
+    MobileShellState state, {
+    Iterable<ProviderDescriptor> providerDescriptors =
+        const <ProviderDescriptor>[],
+  }) async {
     _state = state;
   }
 }

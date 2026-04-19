@@ -85,8 +85,9 @@ func TestChallengeContractMetadataExposesOwnedBrowserCookieURLs(t *testing.T) {
 		fakeOwnedBrowserChallenge{
 			fakeChallenge: fakeChallenge{
 				metadata: provider.InteractiveChallengeMetadata{
-					CompletionMode:        provider.ChallengeCompletionModeOwnedBrowserObserved,
-					AllowRememberedSignIn: true,
+					CompletionMode:                    provider.ChallengeCompletionModeOwnedBrowserObserved,
+					AllowRememberedSignIn:             true,
+					AllowAutoContinueOnTransportReady: true,
 				},
 			},
 			cookieURLs: []string{
@@ -111,5 +112,8 @@ func TestChallengeContractMetadataExposesOwnedBrowserCookieURLs(t *testing.T) {
 	}
 	if !ownedBrowser.RememberSignIn {
 		t.Fatal("owned_browser.remember_sign_in = false, want true")
+	}
+	if !ownedBrowser.AutoContinueOnTransportReady {
+		t.Fatal("owned_browser.auto_continue_on_transport_ready = false, want true")
 	}
 }

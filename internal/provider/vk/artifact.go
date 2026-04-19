@@ -8,11 +8,13 @@ import (
 
 const (
 	placeholderInviteURL                 = "https://vk.com/call/join/<redacted:vk-join-token>"
+	placeholderAuthenticatedRootLink     = "https://calls.vk.com/"
 	placeholderJoinToken                 = "<redacted:vk-join-token>"
 	placeholderAccessToken1              = "<redacted:vk-access-token-1>"
 	placeholderBrowserAccessToken        = "<redacted:vk-browser-access-token>"
 	placeholderAnonymousToken            = "<redacted:vk-anonym-token>"
 	placeholderSessionKey                = "<redacted:ok-session-key>"
+	placeholderSessionSecretKey          = "<redacted:ok-session-secret-key>"
 	placeholderTurnUsername              = "<redacted:turn-username>"
 	placeholderTurnPassword              = "<redacted:turn-password>"
 	placeholderCaptchaURL                = "<redacted:vk-captcha-redirect-uri>"
@@ -31,10 +33,14 @@ const (
 	placeholderProfileID                 = "<redacted:vk-profile-id>"
 	placeholderProfilePhoto              = "<redacted:vk-profile-photo-uri>"
 	placeholderOKJoinLink                = "<redacted:vk-ok-join-link>"
+	placeholderHostedCallJoinLink        = "https://vk.com/call/join/<redacted:vk-hosted-call-token>"
 	placeholderShortCallID               = "<redacted:vk-short-call-id>"
 	placeholderShortCallLink             = "https://vk.com/call/<redacted:vk-short-call-id>"
 	placeholderShortCallLinkWithPassword = "https://vk.com/call/<redacted:vk-short-call-id>?p=<redacted:vk-short-call-password>"
 	placeholderShortCallPassword         = "<redacted:vk-short-call-password>"
+	placeholderCallEndpoint              = "wss://<redacted:vk-call-endpoint>"
+	placeholderCallWTEndpoint            = "https://<redacted:vk-call-webtransport-endpoint>"
+	placeholderCallToken                 = "<redacted:vk-call-token>"
 )
 
 type artifactBuilder struct {
@@ -49,6 +55,21 @@ func newArtifactBuilder() *artifactBuilder {
 			Input: provider.ProbeArtifactInput{
 				InviteURLRedacted:           placeholderInviteURL,
 				NormalizedJoinTokenRedacted: placeholderJoinToken,
+			},
+		},
+	}
+}
+
+func newAuthenticatedArtifactBuilder(link string) *artifactBuilder {
+	if link == "" {
+		link = placeholderAuthenticatedRootLink
+	}
+	return &artifactBuilder{
+		artifact: &provider.ProbeArtifact{
+			Provider:         "vk",
+			ResolutionMethod: "browser_observed",
+			Input: provider.ProbeArtifactInput{
+				LinkRedacted: link,
 			},
 		},
 	}
@@ -166,16 +187,65 @@ func sanitizeResponseBody(stage string, payload map[string]any) map[string]any {
 		}))
 	case stageOKAnonymLogin:
 		return redactKeys(payload, map[string]string{
-			"session_key": placeholderSessionKey,
+			"session_key":        placeholderSessionKey,
+			"session_secret_key": placeholderSessionSecretKey,
 		})
 	case stageJoinConversationByURL:
 		return redactKeys(payload, map[string]string{
 			"username":   placeholderTurnUsername,
 			"credential": placeholderTurnPassword,
 		})
+	case stageAuthenticatedStartConversationCreateLink:
+		return sanitizeHostedCallResponseBody(redactKeys(payload, map[string]string{
+			"join_link":             placeholderHostedCallJoinLink,
+			"join_url":              placeholderHostedCallJoinLink,
+			"invite_url":            placeholderHostedCallJoinLink,
+			"link_with_password":    placeholderShortCallLinkWithPassword,
+			"link_without_password": placeholderShortCallLink,
+			"password":              placeholderShortCallPassword,
+			"endpoint":              placeholderCallEndpoint,
+			"wt_endpoint":           placeholderCallWTEndpoint,
+			"token":                 placeholderCallToken,
+			"username":              placeholderTurnUsername,
+			"credential":            placeholderTurnPassword,
+			"session_key":           placeholderSessionKey,
+		}))
 	default:
 		return map[string]any{}
 	}
+}
+
+func sanitizeHostedCallResponseBody(payload map[string]any) map[string]any {
+	response, ok := payload["response"].(map[string]any)
+	if ok && response != nil {
+		if _, hasTurnServer := response["turn_server"]; hasTurnServer {
+			payload["response"] = sanitizeHostedCallPayloadObject(response)
+			return payload
+		}
+	}
+
+	return sanitizeHostedCallPayloadObject(payload)
+}
+
+func sanitizeHostedCallPayloadObject(payload map[string]any) map[string]any {
+	if payload == nil {
+		return map[string]any{}
+	}
+
+	if _, ok := payload["join_link"]; ok {
+		payload["join_link"] = placeholderHostedCallJoinLink
+	}
+	if _, ok := payload["endpoint"]; ok {
+		payload["endpoint"] = placeholderCallEndpoint
+	}
+	if _, ok := payload["wt_endpoint"]; ok {
+		payload["wt_endpoint"] = placeholderCallWTEndpoint
+	}
+	if _, ok := payload["token"]; ok {
+		payload["token"] = placeholderCallToken
+	}
+
+	return payload
 }
 
 func sanitizeCallPreviewResponseBody(payload map[string]any) map[string]any {

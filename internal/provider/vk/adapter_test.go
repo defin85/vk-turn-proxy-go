@@ -266,6 +266,73 @@ func TestResolveRejectsMalformedVKLinkBeforeNetwork(t *testing.T) {
 	}
 }
 
+func TestResolveRejectsUnsupportedAuthenticatedVKRootParametersBeforeNetwork(t *testing.T) {
+	doer := &fixtureDoer{t: t}
+	adapter := NewWithHTTPDoer(doer)
+
+	_, err := adapter.Resolve(context.Background(), "https://calls.vk.com/rooms/test")
+	if err == nil {
+		t.Fatal("Resolve() expected error for unsupported calls.vk.com path")
+	}
+	_, err = adapter.Resolve(context.Background(), "https://calls.vk.com/?deep=1")
+	if err == nil {
+		t.Fatal("Resolve() expected error for unsupported calls.vk.com parameters")
+	}
+	if doer.calls != 0 {
+		t.Fatalf("expected no HTTP calls, got %d", doer.calls)
+	}
+}
+
+func TestResolveRequiresInteractiveBrowserForAuthenticatedVKRootStart(t *testing.T) {
+	doer := &fixtureDoer{t: t}
+	adapter := NewWithHTTPDoer(doer)
+
+	_, err := adapter.Resolve(context.Background(), authenticatedHostedCallRootURL)
+	if err == nil {
+		t.Fatal("Resolve() expected error")
+	}
+
+	var browserErr *authenticatedBrowserStartRequiredError
+	if !errors.As(err, &browserErr) {
+		t.Fatalf("expected authenticatedBrowserStartRequiredError, got %T", err)
+	}
+	if browserErr.Challenge() == nil {
+		t.Fatal("authenticated hosted-call challenge is required")
+	}
+	if browserErr.Challenge().OpenURL() != authenticatedHostedCallRootURL {
+		t.Fatalf("challenge open URL = %q, want %q", browserErr.Challenge().OpenURL(), authenticatedHostedCallRootURL)
+	}
+	stageChallenge, ok := interface{}(browserErr.Challenge()).(provider.BrowserObservedStageChallenge)
+	if !ok {
+		t.Fatalf("expected browser-observed stage challenge, got %T", browserErr.Challenge())
+	}
+	observations := stageChallenge.BrowserStageObservations()
+	assertObservedStage(t, observations, stageOKAnonymLogin, okAPIURL)
+	assertObservedStageRequiredFormKey(t, observations, stageOKAnonymLogin, "session_data")
+	assertObservedStage(t, observations, stageAuthenticatedStartConversationCreateLink, okAPIURL)
+	assertObservedStageRequiredFormKey(t, observations, stageAuthenticatedStartConversationCreateLink, "session_key")
+	assertObservedStageExactFormValue(t, observations, stageAuthenticatedStartConversationCreateLink, "method", "vchat.startConversation")
+	assertObservedStageExactFormValue(t, observations, stageAuthenticatedStartConversationCreateLink, "createJoinLink", "true")
+
+	var carrier provider.ArtifactCarrier
+	if !errors.As(err, &carrier) {
+		t.Fatalf("expected artifact carrier, got %T", err)
+	}
+	artifact := carrier.Artifact()
+	if artifact == nil || artifact.Outcome.ProviderError == nil {
+		t.Fatalf("expected provider error artifact, got %#v", artifact)
+	}
+	if artifact.Input.LinkRedacted != authenticatedHostedCallRootURL {
+		t.Fatalf("artifact input link = %q, want %q", artifact.Input.LinkRedacted, authenticatedHostedCallRootURL)
+	}
+	if artifact.Outcome.ProviderError.Code != authenticatedBrowserStartRequiredCode {
+		t.Fatalf("artifact code = %q, want %q", artifact.Outcome.ProviderError.Code, authenticatedBrowserStartRequiredCode)
+	}
+	if doer.calls != 0 {
+		t.Fatalf("expected no HTTP calls, got %d", doer.calls)
+	}
+}
+
 func TestResolveReturnsExplicitStageErrorForMissingTurnURL(t *testing.T) {
 	fixture := loadFixture(t, "vk_call_debug_stage4_missing_turn_url_v1.json")
 	doer := &fixtureDoer{t: t, stages: fixture.Stages}
@@ -288,6 +355,121 @@ func TestResolveReturnsExplicitStageErrorForMissingTurnURL(t *testing.T) {
 	}
 	if doer.calls != len(fixture.Stages) {
 		t.Fatalf("unexpected HTTP call count %d", doer.calls)
+	}
+}
+
+func TestResolveReturnsTurnCredentialsFromAuthenticatedHostedCallContour(t *testing.T) {
+	fixture := loadFixture(t, "vk_call_authenticated_success_v1.json")
+	doer := &fixtureDoer{t: t}
+	adapter := NewWithHTTPDoer(doer)
+
+	handlerCalls := 0
+	ctx := provider.WithBrowserContinuationHandler(context.Background(), provider.BrowserContinuationHandlerFunc(func(ctx context.Context, challenge provider.InteractiveChallenge) (*provider.BrowserContinuation, error) {
+		handlerCalls++
+		if challenge.ProviderName() != "vk" {
+			t.Fatalf("challenge provider = %q", challenge.ProviderName())
+		}
+		if challenge.StageName() != "provider_resolve" {
+			t.Fatalf("challenge stage = %q", challenge.StageName())
+		}
+		if challenge.OpenURL() != authenticatedHostedCallRootURL {
+			t.Fatalf("challenge open URL = %q", challenge.OpenURL())
+		}
+		stageChallenge, ok := challenge.(provider.BrowserObservedStageChallenge)
+		if !ok {
+			t.Fatalf("expected browser-observed stage challenge, got %T", challenge)
+		}
+		observations := stageChallenge.BrowserStageObservations()
+		assertObservedStage(t, observations, stageOKAnonymLogin, okAPIURL)
+		assertObservedStage(t, observations, stageAuthenticatedStartConversationCreateLink, okAPIURL)
+
+		return &provider.BrowserContinuation{
+			StageResults: []provider.BrowserStageResult{
+				browserObservedResultFromFixture(fixture.Stages[0]),
+				browserObservedResultFromFixture(fixture.Stages[1]),
+			},
+		}, nil
+	}))
+
+	resolution, err := adapter.Resolve(ctx, authenticatedHostedCallRootURL)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if handlerCalls != 1 {
+		t.Fatalf("interactive handler calls = %d, want 1", handlerCalls)
+	}
+	if resolution.Credentials.Username != fixture.Expected.Resolution.Username {
+		t.Fatalf("unexpected username %q", resolution.Credentials.Username)
+	}
+	if resolution.Credentials.Password != fixture.Expected.Resolution.Password {
+		t.Fatalf("unexpected password %q", resolution.Credentials.Password)
+	}
+	if resolution.Credentials.Address != fixture.Expected.Resolution.Address {
+		t.Fatalf("unexpected address %q", resolution.Credentials.Address)
+	}
+	if got := resolution.Metadata["resolution_method"]; got != "browser_observed" {
+		t.Fatalf("unexpected resolution method %q", got)
+	}
+	if doer.calls != 0 {
+		t.Fatalf("unexpected HTTP call count %d", doer.calls)
+	}
+	if resolution.Artifact == nil || len(resolution.Artifact.Stages) != len(fixture.Stages) {
+		t.Fatalf("unexpected artifact %#v", resolution.Artifact)
+	}
+	if resolution.Artifact.Input.LinkRedacted != authenticatedHostedCallRootURL {
+		t.Fatalf("artifact input link = %q, want %q", resolution.Artifact.Input.LinkRedacted, authenticatedHostedCallRootURL)
+	}
+}
+
+func TestResolveFailsClosedWhenAuthenticatedHostedCallContourStopsBeforeTransportReadyData(t *testing.T) {
+	fixture := loadFixture(t, "vk_call_authenticated_transport_missing_v1.json")
+	doer := &fixtureDoer{t: t}
+	adapter := NewWithHTTPDoer(doer)
+
+	ctx := provider.WithBrowserContinuationHandler(context.Background(), provider.BrowserContinuationHandlerFunc(func(ctx context.Context, challenge provider.InteractiveChallenge) (*provider.BrowserContinuation, error) {
+		return &provider.BrowserContinuation{
+			StageResults: []provider.BrowserStageResult{
+				browserObservedResultFromFixture(fixture.Stages[0]),
+				browserObservedResultFromFixture(fixture.Stages[1]),
+			},
+		}, nil
+	}))
+
+	_, err := adapter.Resolve(ctx, authenticatedHostedCallRootURL)
+	if err == nil {
+		t.Fatal("Resolve() expected error")
+	}
+
+	var stageErr *stageError
+	if !errors.As(err, &stageErr) {
+		t.Fatalf("expected stageError, got %T", err)
+	}
+	if stageErr.stage != fixture.Expected.ProviderError.Stage {
+		t.Fatalf("unexpected stage %q", stageErr.stage)
+	}
+	if stageErr.code != fixture.Expected.ProviderError.Code {
+		t.Fatalf("unexpected code %q", stageErr.code)
+	}
+	if doer.calls != 0 {
+		t.Fatalf("unexpected HTTP call count %d", doer.calls)
+	}
+
+	var carrier provider.ArtifactCarrier
+	if !errors.As(err, &carrier) {
+		t.Fatalf("expected artifact carrier, got %T", err)
+	}
+	artifact := carrier.Artifact()
+	if artifact == nil || len(artifact.Stages) != len(fixture.Stages) {
+		t.Fatalf("unexpected artifact %#v", artifact)
+	}
+	if artifact.Outcome.ProviderError == nil {
+		t.Fatalf("expected provider error outcome, got %#v", artifact.Outcome)
+	}
+	if artifact.Outcome.ProviderError.Stage != fixture.Expected.ProviderError.Stage {
+		t.Fatalf("artifact stage = %q, want %q", artifact.Outcome.ProviderError.Stage, fixture.Expected.ProviderError.Stage)
+	}
+	if artifact.Outcome.ProviderError.Code != fixture.Expected.ProviderError.Code {
+		t.Fatalf("artifact code = %q, want %q", artifact.Outcome.ProviderError.Code, fixture.Expected.ProviderError.Code)
 	}
 }
 
@@ -877,7 +1059,7 @@ func endpointURL(endpointID string) string {
 		return loginAnonymTokenURL
 	case stageGetAnonymousToken:
 		return getAnonymousTokenURL
-	case stageOKAnonymLogin, stageJoinConversationByURL:
+	case stageOKAnonymLogin, stageJoinConversationByURL, stageAuthenticatedStartConversationCreateLink:
 		return okAPIURL
 	default:
 		return ""
@@ -890,7 +1072,7 @@ func browserObservedStageURL(stage fixtureStage) string {
 		return liveLoginAnonymTokenURL + "&app_id=6287487"
 	case stageGetCallPreview:
 		return getCallPreviewURL + "?v=5.275&client_id=6287487"
-	case stageOKAnonymLogin, stageJoinConversationByURL:
+	case stageOKAnonymLogin, stageJoinConversationByURL, stageAuthenticatedStartConversationCreateLink:
 		return okAPIURL
 	default:
 		return endpointURL(stage.EndpointID)

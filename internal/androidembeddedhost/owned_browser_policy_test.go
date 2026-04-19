@@ -21,6 +21,38 @@ func (f fakeNonOwnedChallenge) ChallengeMetadata() provider.InteractiveChallenge
 	return f.metadata
 }
 
+type fakeObservedChallenge struct {
+	provider string
+	metadata provider.InteractiveChallengeMetadata
+	openURL  string
+}
+
+func (f fakeObservedChallenge) ProviderName() string { return f.provider }
+func (f fakeObservedChallenge) StageName() string    { return "provider_resolve" }
+func (f fakeObservedChallenge) Kind() string         { return "browser" }
+func (f fakeObservedChallenge) Prompt() string       { return "return after browser" }
+func (f fakeObservedChallenge) OpenURL() string {
+	if f.openURL != "" {
+		return f.openURL
+	}
+	return "https://calls.vk.com/"
+}
+func (f fakeObservedChallenge) CookieURLs() []string {
+	return []string{"https://calls.vk.com/"}
+}
+func (f fakeObservedChallenge) BrowserStageObservations() []provider.BrowserStageObservation {
+	return []provider.BrowserStageObservation{
+		{
+			Stage:     "ok_anonym_login",
+			Method:    "POST",
+			URLPrefix: "https://calls.okcdn.ru/fb.do",
+		},
+	}
+}
+func (f fakeObservedChallenge) ChallengeMetadata() provider.InteractiveChallengeMetadata {
+	return f.metadata
+}
+
 func TestMobileProviderRegistryAdvertisesEmbeddedBrowserOnlyForApprovedProviders(t *testing.T) {
 	registry := mobileProviderRegistry()
 
@@ -51,6 +83,40 @@ func TestMobileChallengeMetadataOverridesApprovedOwnedBrowserChallenges(t *testi
 	}
 	if metadata.BrowserReturn != nil {
 		t.Fatalf("browser_return = %#v, want nil", metadata.BrowserReturn)
+	}
+	if metadata.AllowAutoContinueOnTransportReady {
+		t.Fatal("allow_auto_continue_on_transport_ready = true, want false")
+	}
+}
+
+func TestMobileChallengeMetadataOverridesApprovedObservedBrowserChallenges(t *testing.T) {
+	metadata := mobileChallengeMetadata(fakeObservedChallenge{
+		provider: "vk",
+		metadata: provider.InteractiveChallengeMetadata{
+			CompletionMode: provider.ChallengeCompletionModeAppReturnCallback,
+		},
+	})
+	if metadata.CompletionMode != provider.ChallengeCompletionModeOwnedBrowserObserved {
+		t.Fatalf("completion_mode = %q, want %q", metadata.CompletionMode, provider.ChallengeCompletionModeOwnedBrowserObserved)
+	}
+	if !metadata.AllowRememberedSignIn {
+		t.Fatal("allow_remembered_sign_in = false, want true")
+	}
+	if !metadata.AllowAutoContinueOnTransportReady {
+		t.Fatal("allow_auto_continue_on_transport_ready = false, want true")
+	}
+}
+
+func TestMobileChallengeMetadataDoesNotAutoContinueUnsupportedVKObservedStarts(t *testing.T) {
+	metadata := mobileChallengeMetadata(fakeObservedChallenge{
+		provider: "vk",
+		openURL:  "https://calls.vk.com/rooms/test",
+	})
+	if metadata.CompletionMode != provider.ChallengeCompletionModeOwnedBrowserObserved {
+		t.Fatalf("completion_mode = %q, want %q", metadata.CompletionMode, provider.ChallengeCompletionModeOwnedBrowserObserved)
+	}
+	if metadata.AllowAutoContinueOnTransportReady {
+		t.Fatal("allow_auto_continue_on_transport_ready = true, want false")
 	}
 }
 

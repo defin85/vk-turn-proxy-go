@@ -143,8 +143,9 @@ func normalizeOwnedBrowserMetadata(
 	}
 
 	return &ChallengeOwnedBrowserMetadata{
-		CookieURLs:     append([]string(nil), cookieURLs...),
-		RememberSignIn: metadata.AllowRememberedSignIn,
+		CookieURLs:                   append([]string(nil), cookieURLs...),
+		RememberSignIn:               metadata.AllowRememberedSignIn,
+		AutoContinueOnTransportReady: metadata.AllowAutoContinueOnTransportReady,
 	}
 }
 

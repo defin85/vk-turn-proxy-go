@@ -35,7 +35,7 @@ func (a *Adapter) Descriptor() provider.ProviderDescriptor {
 	return provider.ProviderDescriptor{
 		ID:            "vk",
 		DisplayName:   "VK Calls",
-		Description:   "Invite-first provider with browser-mediated continuation that resolves into transport-ready TURN credentials.",
+		Description:   "VK Calls invite or authenticated root start with browser-mediated continuation that resolves into transport-ready TURN credentials.",
 		InputKind:     provider.ProviderInputKindLink,
 		AuthPosture:   provider.ProviderAuthPostureGuestOrAccount,
 		BrowserPolicy: provider.ProviderBrowserPolicyExternalRequired,
@@ -56,12 +56,24 @@ func (a *Adapter) Descriptor() provider.ProviderDescriptor {
 }
 
 func (a *Adapter) Resolve(ctx context.Context, link string) (provider.Resolution, error) {
-	joinToken, err := normalizeJoinToken(link)
+	input, err := normalizeInput(link)
 	if err != nil {
 		return provider.Resolution{}, err
 	}
 
-	resolution, err := newResolver(a.doer).resolve(ctx, joinToken)
+	resolver := newResolver(a.doer)
+	var resolution provider.Resolution
+	switch input.family {
+	case inputFamilyInvite:
+		resolution, err = resolver.resolve(ctx, input.joinToken)
+	case inputFamilyAuthenticatedRoot:
+		resolution, err = resolver.resolveAuthenticatedHostedCall(
+			ctx,
+			input.normalizedLink,
+		)
+	default:
+		err = provider.ErrNotImplemented
+	}
 	if err != nil {
 		return provider.Resolution{}, err
 	}
@@ -70,7 +82,14 @@ func (a *Adapter) Resolve(ctx context.Context, link string) (provider.Resolution
 		resolution.Metadata = make(map[string]string, 4)
 	}
 	resolution.Metadata["provider"] = "vk"
-	resolution.Metadata["resolution_method"] = "staged_http"
+	if resolution.Metadata["resolution_method"] == "" {
+		switch input.family {
+		case inputFamilyAuthenticatedRoot:
+			resolution.Metadata["resolution_method"] = "browser_observed"
+		default:
+			resolution.Metadata["resolution_method"] = "staged_http"
+		}
+	}
 	applyDerivedTurnCredentialExpiry(&resolution, nowUTC())
 
 	return resolution, nil

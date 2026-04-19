@@ -439,11 +439,32 @@ class Translations with BaseTranslations<AppLocale, Translations> {
   /// en: 'Forget embedded sign-in'
   String get shellTextForgetEmbeddedSignIn => 'Forget embedded sign-in';
 
+  /// en: 'Embedded browser cookies and session'
+  String get shellTextEmbeddedBrowserStateTitle =>
+      'Embedded browser cookies and session';
+
+  /// en: 'The in-app browser keeps its own app-owned cookies and storage. Rebooting the device does not clear this state.'
+  String get shellTextEmbeddedBrowserStateBody =>
+      'The in-app browser keeps its own app-owned cookies and storage. Rebooting the device does not clear this state.';
+
+  /// en: 'Use this reset before a clean provider sign-in test or when an old VK session keeps getting reused. It only clears the embedded WebView inside this app.'
+  String get shellTextEmbeddedBrowserStateHint =>
+      'Use this reset before a clean provider sign-in test or when an old VK session keeps getting reused. It only clears the embedded WebView inside this app.';
+
   /// en: 'Import from file'
   String get shellTextImportFromFile => 'Import from file';
 
   /// en: 'Export saved profile'
   String get shellTextExportSavedProfile => 'Export saved profile';
+
+  /// en: 'Selected profile'
+  String get shellTextSelectedProfileActions => 'Selected profile';
+
+  /// en: 'Make current'
+  String get shellTextMakeCurrent => 'Make current';
+
+  /// en: 'Copy profile'
+  String get shellTextCopyProfile => 'Copy profile';
 
   /// en: 'Paste envelope'
   String get shellTextPasteEnvelope => 'Paste envelope';
@@ -500,6 +521,17 @@ class Translations with BaseTranslations<AppLocale, Translations> {
   String shellTextDeletedMobileProfile({required Object profileId}) =>
       'Deleted mobile profile ${profileId}.';
 
+  /// en: '{sourceLabel} copy'
+  String shellTextDuplicatedItemLabel({required Object sourceLabel}) =>
+      '${sourceLabel} copy';
+
+  /// en: 'Copied item'
+  String get shellTextDuplicatedItemFallbackLabel => 'Copied item';
+
+  /// en: 'Seeded a new profile draft from {profileLabel}.'
+  String shellTextSeededProfileCopyDraft({required Object profileLabel}) =>
+      'Seeded a new profile draft from ${profileLabel}.';
+
   /// en: 'Saved managed provider {providerLabel}.'
   String shellTextSavedManagedProvider({required Object providerLabel}) =>
       'Saved managed provider ${providerLabel}.';
@@ -507,6 +539,11 @@ class Translations with BaseTranslations<AppLocale, Translations> {
   /// en: 'Deleted managed provider {providerId}.'
   String shellTextDeletedManagedProvider({required Object providerId}) =>
       'Deleted managed provider ${providerId}.';
+
+  /// en: 'Seeded a new managed provider draft from {providerLabel}.'
+  String shellTextSeededManagedProviderCopyDraft({
+    required Object providerLabel,
+  }) => 'Seeded a new managed provider draft from ${providerLabel}.';
 
   /// en: 'Save or select a profile before exporting it.'
   String get shellTextSaveOrSelectProfileBeforeExport =>
@@ -885,6 +922,10 @@ class Translations with BaseTranslations<AppLocale, Translations> {
     required Object templateLabel,
   }) =>
       'Seeded a new managed provider draft from the ${templateLabel} template.';
+
+  /// en: 'Seeded a new template draft from {templateLabel}.'
+  String shellTextSeededTemplateCopyDraft({required Object templateLabel}) =>
+      'Seeded a new template draft from ${templateLabel}.';
 
   /// en: 'Cleared local mobile shell state.'
   String get shellTextClearedLocalMobileShellState =>
@@ -1556,6 +1597,15 @@ class Translations with BaseTranslations<AppLocale, Translations> {
   /// en: 'Delete provider'
   String get shellTextMobileDeleteProvider => 'Delete provider';
 
+  /// en: 'Saved providers'
+  String get shellTextSavedProviders => 'Saved providers';
+
+  /// en: 'Selected provider'
+  String get shellTextSelectedProviderActions => 'Selected provider';
+
+  /// en: 'Copy provider'
+  String get shellTextCopyProvider => 'Copy provider';
+
   /// en: 'Selected type'
   String get shellTextSelectedType => 'Selected type';
 
@@ -1599,6 +1649,12 @@ class Translations with BaseTranslations<AppLocale, Translations> {
 
   /// en: 'Delete template'
   String get shellTextMobileDeleteTemplate => 'Delete template';
+
+  /// en: 'Selected template'
+  String get shellTextSelectedTemplateActions => 'Selected template';
+
+  /// en: 'Copy template'
+  String get shellTextCopyTemplate => 'Copy template';
 
   /// en: 'Provider record'
   String get shellTextDesktopProviderRecord => 'Provider record';
@@ -2242,8 +2298,15 @@ class Translations with BaseTranslations<AppLocale, Translations> {
   String get shellTextCreateProviderUseTemplate =>
       'Use a template to prefill a new provider. Templates are starting points, not saved providers.';
 
+  /// en: 'Choose a shipped preset to prefill a new provider. Presets are read-only starting points, not editable records.'
+  String get shellTextCreateProviderUsePreset =>
+      'Choose a shipped preset to prefill a new provider. Presets are read-only starting points, not editable records.';
+
   /// en: 'Provider types'
   String get shellTextProviderTypes => 'Provider types';
+
+  /// en: 'Presets'
+  String get shellTextPresets => 'Presets';
 
   /// en: 'This build does not advertise any shipped provider types yet.'
   String get shellTextNoShippedProviderTypesYet =>
@@ -2259,6 +2322,10 @@ class Translations with BaseTranslations<AppLocale, Translations> {
   String get shellTextNoSavedTemplatesYet =>
       'No saved templates yet. Save a provider as a template to reuse it here.';
 
+  /// en: 'Save a provider as a template to manage reusable starting values here.'
+  String get shellTextNoSavedTemplatesMessage =>
+      'Save a provider as a template to manage reusable starting values here.';
+
   /// en: 'No saved templates match the current search.'
   String get shellTextNoSavedTemplatesMatchSearch =>
       'No saved templates match the current search.';
@@ -2268,6 +2335,9 @@ class Translations with BaseTranslations<AppLocale, Translations> {
 
   /// en: 'Shipped templates'
   String get shellTextShippedTemplates => 'Shipped templates';
+
+  /// en: 'Shipped presets'
+  String get shellTextShippedPresets => 'Shipped presets';
 
   /// en: 'No shipped templates match the current search.'
   String get shellTextNoShippedTemplatesMatchSearch =>
@@ -2921,8 +2991,17 @@ extension on Translations {
           'shellTextOpenProfiles' => 'Open profiles',
           'shellTextResetLocalState' => 'Reset local state',
           'shellTextForgetEmbeddedSignIn' => 'Forget embedded sign-in',
+          'shellTextEmbeddedBrowserStateTitle' =>
+            'Embedded browser cookies and session',
+          'shellTextEmbeddedBrowserStateBody' =>
+            'The in-app browser keeps its own app-owned cookies and storage. Rebooting the device does not clear this state.',
+          'shellTextEmbeddedBrowserStateHint' =>
+            'Use this reset before a clean provider sign-in test or when an old VK session keeps getting reused. It only clears the embedded WebView inside this app.',
           'shellTextImportFromFile' => 'Import from file',
           'shellTextExportSavedProfile' => 'Export saved profile',
+          'shellTextSelectedProfileActions' => 'Selected profile',
+          'shellTextMakeCurrent' => 'Make current',
+          'shellTextCopyProfile' => 'Copy profile',
           'shellTextPasteEnvelope' => 'Paste envelope',
           'shellTextCopyText' => 'Copy text',
           'shellTextSaveFile' => 'Save file',
@@ -2949,12 +3028,21 @@ extension on Translations {
           'shellTextDeletedMobileProfile' =>
             ({required Object profileId}) =>
                 'Deleted mobile profile ${profileId}.',
+          'shellTextDuplicatedItemLabel' =>
+            ({required Object sourceLabel}) => '${sourceLabel} copy',
+          'shellTextDuplicatedItemFallbackLabel' => 'Copied item',
+          'shellTextSeededProfileCopyDraft' =>
+            ({required Object profileLabel}) =>
+                'Seeded a new profile draft from ${profileLabel}.',
           'shellTextSavedManagedProvider' =>
             ({required Object providerLabel}) =>
                 'Saved managed provider ${providerLabel}.',
           'shellTextDeletedManagedProvider' =>
             ({required Object providerId}) =>
                 'Deleted managed provider ${providerId}.',
+          'shellTextSeededManagedProviderCopyDraft' =>
+            ({required Object providerLabel}) =>
+                'Seeded a new managed provider draft from ${providerLabel}.',
           'shellTextSaveOrSelectProfileBeforeExport' =>
             'Save or select a profile before exporting it.',
           'shellTextSelectedProfileDependsOnMissingManagedProviderSnapshot' =>
@@ -3153,6 +3241,9 @@ extension on Translations {
           'shellTextSeededManagedProviderDraftFromTemplate' =>
             ({required Object templateLabel}) =>
                 'Seeded a new managed provider draft from the ${templateLabel} template.',
+          'shellTextSeededTemplateCopyDraft' =>
+            ({required Object templateLabel}) =>
+                'Seeded a new template draft from ${templateLabel}.',
           'shellTextClearedLocalMobileShellState' =>
             'Cleared local mobile shell state.',
           'shellTextFailedToClearLocalMobileShellState' =>
@@ -3469,6 +3560,9 @@ extension on Translations {
           'shellTextMobileSaveAsTemplate' => 'Save as template',
           'shellTextMobileUseInProfileDraft' => 'Use in profile draft',
           'shellTextMobileDeleteProvider' => 'Delete provider',
+          'shellTextSavedProviders' => 'Saved providers',
+          'shellTextSelectedProviderActions' => 'Selected provider',
+          'shellTextCopyProvider' => 'Copy provider',
           'shellTextSelectedType' => 'Selected type',
           'shellTextMobileEditTemplate' => 'Edit template',
           'shellTextMobileNewTemplate' => 'New template',
@@ -3487,6 +3581,8 @@ extension on Translations {
           'shellTextMobileSaveTemplate' => 'Save template',
           'shellTextMobileUseTemplate' => 'Use template',
           'shellTextMobileDeleteTemplate' => 'Delete template',
+          'shellTextSelectedTemplateActions' => 'Selected template',
+          'shellTextCopyTemplate' => 'Copy template',
           'shellTextDesktopProviderRecord' => 'Provider record',
           'shellTextDesktopNewProviderRecord' => 'New provider record',
           'shellTextDesktopEditReusableProviderRecord' =>
@@ -3660,6 +3756,9 @@ extension on Translations {
           'shellTextAppOwnedManagedRecord' => 'App-owned managed record',
           'shellTextSelectedFamily' => 'Selected family',
           'shellTextMobileOpenBrowser' => 'Open browser',
+          _ => null,
+        } ??
+        switch (path) {
           'shellTextMobileContinueInApp' => 'Continue in app',
           'shellTextChallengeContinuationCancelled' =>
             ({required Object challengeId}) =>
@@ -3682,9 +3781,6 @@ extension on Translations {
           'shellTextSupportSubtitle' =>
             'Activity, failures, logs, and diagnostics stay explicit but secondary to the main VPN workflow.',
           'shellTextRoutingTitle' => 'Routing',
-          _ => null,
-        } ??
-        switch (path) {
           'shellTextRoutingSubtitle' => 'Choose the VPN profile and app scope.',
           'shellTextRoutingProfile' => 'Routing profile',
           'shellTextRoutingProfileStandard' => 'Standard',
@@ -3777,17 +3873,23 @@ extension on Translations {
             'Choose a provider type and configure a new saved provider.',
           'shellTextCreateProviderUseTemplate' =>
             'Use a template to prefill a new provider. Templates are starting points, not saved providers.',
+          'shellTextCreateProviderUsePreset' =>
+            'Choose a shipped preset to prefill a new provider. Presets are read-only starting points, not editable records.',
           'shellTextProviderTypes' => 'Provider types',
+          'shellTextPresets' => 'Presets',
           'shellTextNoShippedProviderTypesYet' =>
             'This build does not advertise any shipped provider types yet.',
           'shellTextSearchTemplates' => 'Search templates',
           'shellTextMyTemplates' => 'My templates',
           'shellTextNoSavedTemplatesYet' =>
             'No saved templates yet. Save a provider as a template to reuse it here.',
+          'shellTextNoSavedTemplatesMessage' =>
+            'Save a provider as a template to manage reusable starting values here.',
           'shellTextNoSavedTemplatesMatchSearch' =>
             'No saved templates match the current search.',
           'shellTextPrefillsNewProviders' => 'Prefills new providers',
           'shellTextShippedTemplates' => 'Shipped templates',
+          'shellTextShippedPresets' => 'Shipped presets',
           'shellTextNoShippedTemplatesMatchSearch' =>
             'No shipped templates match the current search.',
           'shellTextStartingPointForNewProviders' =>

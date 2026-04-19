@@ -28,6 +28,31 @@ Verified evidence:
 - `flutter_driver(command="tap", finderType="ByText", text="Providers")` successfully switched the app to `Providers`.
 - A follow-up screenshot showed the live wide-layout `Providers` screen with the saved-provider root on the left and the companion create pane on the right.
 
+### Development Wi-Fi VPN start over wireless ADB
+
+Verified on `2026-04-19` against Android tablet `192.168.0.16:36133`.
+
+Findings:
+- The packaged Android `android_vpn_service` path in `Development Wi-Fi` mode
+  now preserves the active local subnet as intended. Live evidence showed
+  `192.168.0.0/24` stayed on `wlan0` while `tun0` received the split VPN routes.
+- The app process and `MainActivity` stayed alive and resumed after VPN start.
+- Wireless ADB did **not** stay continuously connected across
+  `VpnService.Builder.establish()`. Device `logcat` showed:
+  - `Vpn: Established by com.defin85.mobile_gui_shell on tun0`
+  - immediately followed by `adbd ... Software caused connection abort`
+  - `ADB wifi device disconnected`
+  - then a new `adbd_wifi_secure_connect: connected host-...`
+- In practice, this means `flutter run`, Dart MCP DTD sessions, and `adb`
+  port-forwards die during the brief Wi-Fi ADB reconnect, even though the
+  device itself comes back and the app keeps running.
+
+Verified implication:
+- `Development Wi-Fi` routing can be validated over wireless ADB.
+- Stable live Flutter debugging across the VPN transition requires USB ADB on
+  this workstation/device combination. For post-VPN inspection, prefer the
+  documented USB passthrough path instead of wireless debugging.
+
 Use the default `mobile/gui_shell/lib/main.dart` entrypoint only when the task specifically needs production-entrypoint parity rather than driver-enabled inspection.
 
 ### Mobile GUI shell via Dart MCP over USB from WSL

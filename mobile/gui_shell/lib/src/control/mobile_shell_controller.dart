@@ -111,7 +111,8 @@ class MobileShellController extends ChangeNotifier {
   ProviderTemplateDraft providerTemplateDraft =
       ProviderTemplateDraft.defaults();
   MobileWorkflowSurface workflowSurface = MobileWorkflowSurface.profile;
-  String? selectedProfileId;
+  String? currentProfileId;
+  String? focusedProfileId;
   PlatformTunnelMode? selectedPlatformTunnelMode;
   String? selectedManagedProviderId;
   String? selectedProviderTemplateId;
@@ -130,6 +131,7 @@ class MobileShellController extends ChangeNotifier {
   bool busy = false;
   bool _requiresLocalStateReset = false;
   String? _blockedLocalStateMessage;
+  bool _forceFreshResolutionAfterEmbeddedSignOut = false;
 
   final Map<String, ChallengeRecord> _challengeCache =
       <String, ChallengeRecord>{};
@@ -305,17 +307,28 @@ class MobileShellController extends ChangeNotifier {
     return null;
   }
 
+  String? get selectedProfileId => currentProfileId;
+
   ProfileRecord? get selectedSavedProfile {
-    final profileId = selectedProfileId?.trim() ?? '';
-    if (profileId.isEmpty) {
-      return null;
+    return _profileById(currentProfileId);
+  }
+
+  ProfileRecord? get focusedSavedProfile {
+    return _profileById(focusedProfileId);
+  }
+
+  ProfileDraft get currentProfileDraft {
+    final profile = selectedSavedProfile;
+    if (profile == null) {
+      return draft;
     }
-    for (final profile in profiles) {
-      if (profile.id == profileId) {
-        return profile;
-      }
-    }
-    return null;
+    return _normalizeDraft(
+      ProfileDraft.fromProfile(
+        profile,
+        providerBinding:
+            profileBindings[profile.id] ?? const ProfileProviderBinding(),
+      ),
+    );
   }
 
   PortableProfileEnvelope? get pendingPortableProfileImportEnvelope =>
@@ -352,6 +365,19 @@ class MobileShellController extends ChangeNotifier {
       if (challenge != null &&
           session.state == SessionState.challengeRequired) {
         return challenge;
+      }
+    }
+    return null;
+  }
+
+  ProfileRecord? _profileById(String? rawProfileId) {
+    final profileId = rawProfileId?.trim() ?? '';
+    if (profileId.isEmpty) {
+      return null;
+    }
+    for (final profile in profiles) {
+      if (profile.id == profileId) {
+        return profile;
       }
     }
     return null;
@@ -503,6 +529,7 @@ class MobileShellController extends ChangeNotifier {
       providerTemplateDraft = _normalizeProviderTemplateDraft(
         providerTemplateDraft,
       );
+      _normalizeProfileSelectionState();
       selectedResolutionId = _resolveSelectedResolutionId(nextResolutions);
       _replaceSessions(nextSessions);
       _mergeChallenges(nextChallenges);
@@ -536,20 +563,40 @@ class MobileShellController extends ChangeNotifier {
   }
 
   void selectProfile(String profileId) {
+    focusProfile(profileId);
+  }
+
+  void focusProfile(String profileId) {
+    final normalizedProfileId = profileId.trim();
+    if (normalizedProfileId.isEmpty) {
+      return;
+    }
     workflowSurface = MobileWorkflowSurface.profile;
-    selectedProfileId = profileId;
-    final selected = profiles.firstWhere(
-      (ProfileRecord profile) => profile.id == profileId,
-      orElse: () => ProfileDraft.defaults().toProfile(),
-    );
-    draft = _normalizeDraft(
-      ProfileDraft.fromProfile(
-        selected,
-        providerBinding:
-            profileBindings[profileId] ?? const ProfileProviderBinding(),
-      ),
-    );
+    focusedProfileId = normalizedProfileId;
+    final selected = _profileById(normalizedProfileId);
+    if (selected != null) {
+      draft = _normalizeDraft(
+        ProfileDraft.fromProfile(
+          selected,
+          providerBinding:
+              profileBindings[normalizedProfileId] ??
+              const ProfileProviderBinding(),
+        ),
+      );
+    }
     _clearSelectedResolutionSelection();
+    _scheduleStatePersist();
+    notifyListeners();
+  }
+
+  void makeProfileCurrent(String profileId) {
+    final normalizedProfileId = profileId.trim();
+    if (normalizedProfileId.isEmpty ||
+        _profileById(normalizedProfileId) == null) {
+      return;
+    }
+    currentProfileId = normalizedProfileId;
+    _normalizeSelectedPlatformTunnelMode();
     _scheduleStatePersist();
     notifyListeners();
   }
@@ -560,6 +607,7 @@ class MobileShellController extends ChangeNotifier {
   }
 
   void selectResolution(String resolutionId) {
+    _forceFreshResolutionAfterEmbeddedSignOut = false;
     selectedResolutionId = resolutionId;
     notifyListeners();
   }
@@ -769,7 +817,7 @@ class MobileShellController extends ChangeNotifier {
 
   void resetDraft() {
     workflowSurface = MobileWorkflowSurface.profile;
-    selectedProfileId = null;
+    focusedProfileId = null;
     draft = _defaultDraft();
     _clearSelectedResolutionSelection();
     _scheduleStatePersist();
@@ -803,6 +851,22 @@ class MobileShellController extends ChangeNotifier {
 
   void showProviderConfigWorkspace({String? preferredProvider}) {
     showProviderWorkspace(preferredProvider: preferredProvider);
+  }
+
+  void focusManagedProvider(String providerId) {
+    final normalizedProviderId = providerId.trim();
+    if (normalizedProviderId.isEmpty) {
+      return;
+    }
+    workflowSurface = MobileWorkflowSurface.provider;
+    selectedManagedProviderId = normalizedProviderId;
+    final selected =
+        managedProviderById(normalizedProviderId) ??
+        _defaultManagedProviderDraft().toRecord();
+    managedProviderDraft = _normalizeManagedProviderDraft(
+      ManagedProviderDraft.fromRecord(selected),
+    );
+    notifyListeners();
   }
 
   void selectManagedProvider(String providerId) {
@@ -854,6 +918,29 @@ class MobileShellController extends ChangeNotifier {
     resetManagedProviderDraft(preferredProvider: preferredProvider);
   }
 
+  void duplicateSelectedProfile() {
+    final source = focusedSavedProfile;
+    if (source == null) {
+      notice = _copy.saveOrSelectProfileBeforeExport;
+      _notify();
+      return;
+    }
+    final sourceLabel = source.name.trim().isEmpty ? source.id : source.name;
+    workflowSurface = MobileWorkflowSurface.profile;
+    focusedProfileId = null;
+    draft = _normalizeDraft(
+      ProfileDraft.fromProfile(
+        source,
+        providerBinding:
+            profileBindings[source.id] ?? const ProfileProviderBinding(),
+      ).copyWith(id: null, name: _duplicatedLabel(sourceLabel)),
+    );
+    _clearSelectedResolutionSelection();
+    showTransientNotice(_copy.seededProfileCopyDraft(sourceLabel));
+    _scheduleStatePersist();
+    notifyListeners();
+  }
+
   void startProviderTemplateDraftFromManagedProvider() {
     workflowSurface = MobileWorkflowSurface.providerTemplate;
     selectedProviderTemplateId = null;
@@ -878,6 +965,66 @@ class MobileShellController extends ChangeNotifier {
   void updateProviderTemplateDraft(ProviderTemplateDraft nextDraft) {
     workflowSurface = MobileWorkflowSurface.providerTemplate;
     providerTemplateDraft = _normalizeProviderTemplateDraft(nextDraft);
+    notifyListeners();
+  }
+
+  void focusProviderTemplate(String templateId) {
+    final normalizedTemplateId = templateId.trim();
+    if (normalizedTemplateId.isEmpty) {
+      return;
+    }
+    workflowSurface = MobileWorkflowSurface.provider;
+    selectedProviderTemplateId = normalizedTemplateId;
+    final selected =
+        providerTemplateById(normalizedTemplateId) ??
+        _defaultProviderTemplateDraft().toRecord();
+    providerTemplateDraft = _normalizeProviderTemplateDraft(
+      ProviderTemplateDraft.fromRecord(selected),
+    );
+    notifyListeners();
+  }
+
+  void duplicateSelectedManagedProvider() {
+    final source = managedProviderById(selectedManagedProviderId ?? '');
+    if (source == null) {
+      notice = _copy.noManagedProvidersAvailableYet;
+      _notify();
+      return;
+    }
+    final sourceLabel = source.name.trim().isEmpty ? source.id : source.name;
+    workflowSurface = MobileWorkflowSurface.providerConfig;
+    selectedManagedProviderId = null;
+    managedProviderDraft = _normalizeManagedProviderDraft(
+      ManagedProviderDraft.fromRecord(source).copyWith(
+        id: null,
+        name: _duplicatedLabel(sourceLabel),
+        createdAt: null,
+        updatedAt: null,
+      ),
+    );
+    showTransientNotice(_copy.seededManagedProviderCopyDraft(sourceLabel));
+    notifyListeners();
+  }
+
+  void duplicateSelectedProviderTemplate() {
+    final source = providerTemplateById(selectedProviderTemplateId ?? '');
+    if (source == null) {
+      notice = _copy.noSavedTemplatesYet;
+      _notify();
+      return;
+    }
+    final sourceLabel = source.name.trim().isEmpty ? source.id : source.name;
+    workflowSurface = MobileWorkflowSurface.providerTemplate;
+    selectedProviderTemplateId = null;
+    providerTemplateDraft = _normalizeProviderTemplateDraft(
+      ProviderTemplateDraft.fromRecord(source).copyWith(
+        id: null,
+        name: _duplicatedLabel(sourceLabel),
+        createdAt: null,
+        updatedAt: null,
+      ),
+    );
+    showTransientNotice(_copy.seededTemplateCopyDraft(sourceLabel));
     notifyListeners();
   }
 
@@ -1080,7 +1227,8 @@ class MobileShellController extends ChangeNotifier {
       managedProviderDraft = ManagedProviderDraft.defaults();
       providerTemplateDraft = ProviderTemplateDraft.defaults();
       workflowSurface = MobileWorkflowSurface.profile;
-      selectedProfileId = null;
+      currentProfileId = null;
+      focusedProfileId = null;
       selectedPlatformTunnelMode = null;
       selectedManagedProviderId = null;
       selectedProviderTemplateId = null;
@@ -1117,6 +1265,8 @@ class MobileShellController extends ChangeNotifier {
     _notify();
     try {
       await _ownedBrowserSessionStateResetter.clearSessionState();
+      _forceFreshResolutionAfterEmbeddedSignOut = true;
+      _clearSelectedReusableResolutionSelection();
       notice = _copy.clearedRememberedEmbeddedSignIn;
     } catch (error) {
       notice = switch (error) {
@@ -1138,7 +1288,8 @@ class MobileShellController extends ChangeNotifier {
     busy = true;
     _notify();
     try {
-      final persistedDraftProfileId = selectedProfileId?.trim() ?? '';
+      final persistedDraftProfileId = focusedProfileId?.trim() ?? '';
+      final previousCurrentProfileId = currentProfileId?.trim() ?? '';
       final descriptor = activeProviderDescriptor;
       if (descriptor == null) {
         notice = _copy.selectedProviderNotAdvertisedByConnectedMobileHost;
@@ -1186,7 +1337,20 @@ class MobileShellController extends ChangeNotifier {
             left.id.compareTo(right.id),
       );
       profiles = nextProfiles;
-      selectProfile(profile.id);
+      if (previousCurrentProfileId.isEmpty ||
+          previousCurrentProfileId == persistedDraftProfileId) {
+        currentProfileId = profile.id;
+      }
+      focusedProfileId = profile.id;
+      draft = _normalizeDraft(
+        ProfileDraft.fromProfile(
+          profile,
+          providerBinding:
+              profileBindings[profile.id] ?? const ProfileProviderBinding(),
+        ),
+      );
+      _normalizeSelectedPlatformTunnelMode();
+      _scheduleStatePersist();
       showTransientNotice(
         _copy.savedMobileProfile(
           profile.name.isEmpty ? profile.id : profile.name,
@@ -1210,7 +1374,7 @@ class MobileShellController extends ChangeNotifier {
   }
 
   Future<void> deleteSelectedProfile() async {
-    final profileId = selectedProfileId;
+    final profileId = focusedProfileId;
     if (profileId == null) {
       return;
     }
@@ -1239,6 +1403,9 @@ class MobileShellController extends ChangeNotifier {
           }
         }
       }
+      if (currentProfileId == profileId) {
+        currentProfileId = null;
+      }
       resetDraft();
       notice = _copy.deletedMobileProfile(profileId);
       if (hostConnection?.isReady == true) {
@@ -1259,7 +1426,7 @@ class MobileShellController extends ChangeNotifier {
   }
 
   PortableProfileEnvelope? selectedPortableProfileEnvelope() {
-    final selected = selectedSavedProfile;
+    final selected = focusedSavedProfile;
     if (selected == null) {
       notice = _copy.saveOrSelectProfileBeforeExport;
       _notify();
@@ -1439,7 +1606,10 @@ class MobileShellController extends ChangeNotifier {
             left.id.compareTo(right.id),
       );
       profiles = nextProfiles;
-      selectedProfileId = profile.id;
+      if ((currentProfileId?.trim() ?? '').isEmpty) {
+        currentProfileId = profile.id;
+      }
+      focusedProfileId = profile.id;
       draft = _normalizeDraft(
         ProfileDraft.fromProfile(
           profile,
@@ -1479,7 +1649,7 @@ class MobileShellController extends ChangeNotifier {
   }
 
   Future<void> startSelectedProfile() async {
-    final profileId = selectedProfileId;
+    final profileId = focusedProfileId ?? currentProfileId;
     if (profileId == null) {
       return;
     }
@@ -1498,7 +1668,7 @@ class MobileShellController extends ChangeNotifier {
         notice = _copy.selectedProviderNotAdvertisedByConnectedMobileHost;
         return;
       }
-      final resolution = await _startResolutionForCurrentDraft(descriptor);
+      final resolution = await _startResolutionForDraft(draft, descriptor);
       if (resolution == null) {
         return;
       }
@@ -1537,7 +1707,9 @@ class MobileShellController extends ChangeNotifier {
       }
       final session = await bridge.materializeResolution(
         resolutionId: resolutionId,
-        runtimeDefaults: RuntimeDefaults.fromProfileSpec(draft.spec),
+        runtimeDefaults: RuntimeDefaults.fromProfileSpec(
+          currentProfileDraft.spec,
+        ),
       );
       selectedResolutionId = resolutionId;
       selectedSessionId = session.id;
@@ -1694,7 +1866,9 @@ class MobileShellController extends ChangeNotifier {
         notice = _executionPlanSelectionRequiredMessage(mode);
         return;
       }
-      final runtimeDefaults = RuntimeDefaults.fromProfileSpec(draft.spec);
+      final runtimeDefaults = RuntimeDefaults.fromProfileSpec(
+        currentProfileDraft.spec,
+      );
       final runtimeDefaultsError = _platformTunnelRuntimeDefaultsBlockReason(
         mode: mode,
         executionPlan: executionPlan,
@@ -1815,7 +1989,8 @@ class MobileShellController extends ChangeNotifier {
     return _resolutionById(resolutionId);
   }
 
-  Future<ResolutionRecord?> _startResolutionForCurrentDraft(
+  Future<ResolutionRecord?> _startResolutionForDraft(
+    ProfileDraft sourceDraft,
     ProviderDescriptor descriptor,
   ) async {
     if (descriptor.inputKind != ProviderInputKind.link) {
@@ -1834,10 +2009,10 @@ class MobileShellController extends ChangeNotifier {
       provider: descriptor.id,
       input: ProviderInputEnvelope(
         kind: descriptor.inputKind,
-        link: draft.spec.link,
+        link: sourceDraft.spec.link,
       ),
       providerSettings: descriptor.normalizeProviderSettings(
-        draft.spec.providerSettings,
+        sourceDraft.spec.providerSettings,
         applyDefaults: false,
       ),
     );
@@ -1850,6 +2025,10 @@ class MobileShellController extends ChangeNotifier {
     if (selectedResolution != null) {
       switch (selectedResolution.state) {
         case ResolutionState.resolved:
+          if (_forceFreshResolutionAfterEmbeddedSignOut) {
+            _clearSelectedResolutionSelection();
+            break;
+          }
           return selectedResolution.id;
         case ResolutionState.challengeRequired:
           notice = _copy.challengeMustCompleteBeforeStarting(mode.label);
@@ -1864,16 +2043,19 @@ class MobileShellController extends ChangeNotifier {
           break;
       }
     }
-
-    final descriptor = activeProviderDescriptor;
+    final descriptor = descriptorForProvider(currentProfileDraft.spec.provider);
     if (descriptor == null) {
       notice = _copy.selectedProviderNotAdvertisedByConnectedMobileHost;
       return null;
     }
-    final resolution = await _startResolutionForCurrentDraft(descriptor);
+    final resolution = await _startResolutionForDraft(
+      currentProfileDraft,
+      descriptor,
+    );
     if (resolution == null) {
       return null;
     }
+    _forceFreshResolutionAfterEmbeddedSignOut = false;
     selectedResolutionId = resolution.id;
     await refresh();
     final refreshedResolution = _resolutionById(resolution.id) ?? resolution;
@@ -2609,11 +2791,13 @@ class MobileShellController extends ChangeNotifier {
       managedProviders = state.managedProviders;
       providerTemplates = state.providerTemplates;
       profileBindings = state.profileBindings;
-      selectedProfileId = state.selectedProfileId;
+      currentProfileId = state.currentProfileId;
+      focusedProfileId = state.focusedProfileId;
       selectedPlatformTunnelMode = state.selectedPlatformTunnelMode;
       platformModePreferences = state.platformModePreferences;
       localeOverrideTag = state.localeTag;
       draft = state.draft;
+      _normalizeProfileSelectionState();
       managedProviderDraft = _defaultManagedProviderDraft();
       providerTemplateDraft = _defaultProviderTemplateDraft();
       _persistedStateSignature = state.signature();
@@ -2644,19 +2828,19 @@ class MobileShellController extends ChangeNotifier {
       managedProviders: managedProviders,
       providerTemplates: providerTemplates,
       profileBindings: profileBindings,
-      selectedProfileId: selectedProfileId,
+      initialCurrentProfileId: currentProfileId,
+      initialFocusedProfileId: focusedProfileId,
       selectedPlatformTunnelMode: selectedPlatformTunnelMode,
       platformModePreferences: platformModePreferences,
       localeTag: localeOverrideTag,
       draft: draft,
     );
-    final sanitized = next.sanitizedForPersistence(providerDescriptors);
-    final signature = sanitized.signature();
+    final signature = next.signature();
     if (signature == _persistedStateSignature) {
       return;
     }
     try {
-      await stateStore.save(sanitized);
+      await stateStore.save(next, providerDescriptors: providerDescriptors);
       _persistedStateSignature = signature;
     } catch (error) {
       notice = _copy.failedToPersistMobileShellState(error);
@@ -3042,7 +3226,7 @@ class MobileShellController extends ChangeNotifier {
   }
 
   String _platformModePreferenceScope() {
-    final selected = selectedProfileId?.trim() ?? '';
+    final selected = currentProfileId?.trim() ?? '';
     return selected.isEmpty ? _draftModePreferenceScope : selected;
   }
 
@@ -3073,6 +3257,31 @@ class MobileShellController extends ChangeNotifier {
     if (notify) {
       _notify();
     }
+  }
+
+  void _normalizeProfileSelectionState() {
+    final normalizedCurrent = currentProfileId?.trim() ?? '';
+    if (normalizedCurrent.isNotEmpty &&
+        _profileById(normalizedCurrent) == null) {
+      currentProfileId = null;
+    }
+    final normalizedFocused = focusedProfileId?.trim() ?? '';
+    if (normalizedFocused.isNotEmpty &&
+        _profileById(normalizedFocused) == null) {
+      focusedProfileId = null;
+      if (workflowSurface == MobileWorkflowSurface.profile &&
+          (draft.id?.trim() ?? '').isNotEmpty) {
+        draft = _defaultDraft();
+      }
+    }
+  }
+
+  String _duplicatedLabel(String sourceLabel) {
+    final trimmed = sourceLabel.trim();
+    if (trimmed.isEmpty) {
+      return _copy.duplicatedItemFallbackLabel;
+    }
+    return _copy.duplicatedItemLabel(trimmed);
   }
 
   MobilePlatformModePreferences _normalizePlatformModePreferences(
@@ -3403,6 +3612,13 @@ class MobileShellController extends ChangeNotifier {
 
   void _clearSelectedResolutionSelection() {
     selectedResolutionId = null;
+  }
+
+  void _clearSelectedReusableResolutionSelection() {
+    final selected = _selectedResolutionRecord();
+    if (selected?.state == ResolutionState.resolved) {
+      selectedResolutionId = null;
+    }
   }
 
   void _notify() {

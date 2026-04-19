@@ -1,12 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_shell_core/portable_profile_transfer.dart';
 import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_models.dart';
 import 'package:mobile_gui_shell/src/control/mobile_host_bridge.dart';
 import 'package:mobile_gui_shell/src/control/mobile_platform_app_inventory.dart';
 import 'package:mobile_gui_shell/src/control/mobile_shell_controller.dart';
 import 'package:mobile_gui_shell/src/ui/owned_browser_challenge.dart';
+import 'package:mobile_gui_shell/src/ui/portable_profile_transfer_dialogs.dart';
 import 'package:mobile_gui_shell/src/ui/profile_editor.dart';
 import 'package:mobile_gui_shell/src/ui/provider_config_editor.dart';
 
@@ -21,33 +23,21 @@ enum _ActivitySurface { resolutions, sessions }
 
 enum _DiagnosticsSurface { overview, events }
 
+enum _ProfileImportAction { file, qr, paste }
+
+enum _ProviderRootSurface { savedProviders, templates }
+
 enum _ProviderChooserSurface { families, templates }
 
 class _ProviderChooserResult {
   const _ProviderChooserResult.family(this.providerId)
-    : preset = null,
-      userTemplateId = null,
-      editUserTemplate = false;
+    : preset = null;
 
   const _ProviderChooserResult.template(this.preset)
-    : providerId = null,
-      userTemplateId = null,
-      editUserTemplate = false;
-
-  const _ProviderChooserResult.userTemplateUse(this.userTemplateId)
-    : providerId = null,
-      preset = null,
-      editUserTemplate = false;
-
-  const _ProviderChooserResult.userTemplateEdit(this.userTemplateId)
-    : providerId = null,
-      preset = null,
-      editUserTemplate = true;
+    : providerId = null;
 
   final String? providerId;
   final ProviderPreset? preset;
-  final String? userTemplateId;
-  final bool editUserTemplate;
 }
 
 class DashboardPage extends StatefulWidget {
@@ -182,15 +172,6 @@ class _DashboardPageState extends State<DashboardPage> {
     final preset = result.preset;
     if (preset != null) {
       widget.controller.applyPreset(preset);
-      return;
-    }
-    final userTemplateId = result.userTemplateId;
-    if (userTemplateId != null) {
-      if (result.editUserTemplate) {
-        widget.controller.selectProviderTemplate(userTemplateId);
-        return;
-      }
-      widget.controller.useProviderTemplate(userTemplateId);
     }
   }
 
@@ -621,7 +602,7 @@ class _ProfilesPage extends StatelessWidget {
     if (resetDraft) {
       controller.resetDraft();
     } else if (profileId != null) {
-      controller.selectProfile(profileId);
+      controller.focusProfile(profileId);
     }
     controller.showProfileWorkspace();
     Navigator.of(context).push<void>(
@@ -632,23 +613,69 @@ class _ProfilesPage extends StatelessWidget {
     );
   }
 
+  Future<void> _showPortableExport(BuildContext context) async {
+    final envelope = controller.selectedPortableProfileEnvelope();
+    if (envelope == null || !context.mounted) {
+      return;
+    }
+    await showPortableProfileExportDialog(
+      context: context,
+      envelope: envelope,
+      onCopyText: controller.copyPortableProfileEnvelopeText,
+      onShareText: controller.sharePortableProfileEnvelopeText,
+      onShareFile: controller.sharePortableProfileEnvelopeFile,
+    );
+  }
+
+  Future<void> _showPortableImportPreview(
+    BuildContext context,
+    PortableProfileEnvelope envelope,
+  ) async {
+    await showPortableProfileImportPreviewDialog(
+      context: context,
+      envelope: envelope,
+      onConfirm: controller.confirmPortableProfileImport,
+    );
+  }
+
+  Future<void> _importPortableFromFile(BuildContext context) async {
+    final envelope = await controller.importPortableProfileEnvelopeFromFile();
+    if (envelope == null || !context.mounted) {
+      return;
+    }
+    await _showPortableImportPreview(context, envelope);
+  }
+
+  Future<void> _scanPortableQr(BuildContext context) async {
+    final payload = await showPortableProfileQrScanner(context);
+    if (payload == null || payload.trim().isEmpty || !context.mounted) {
+      return;
+    }
+    final envelope = controller.previewPortableProfileEnvelope(payload);
+    if (envelope == null || !context.mounted) {
+      return;
+    }
+    await _showPortableImportPreview(context, envelope);
+  }
+
+  Future<void> _pastePortableEnvelope(BuildContext context) async {
+    final envelope = await showPortableProfilePasteDialog(
+      context: context,
+      onPreviewImport: controller.previewPortableProfileEnvelope,
+    );
+    if (envelope == null || !context.mounted) {
+      return;
+    }
+    await _showPortableImportPreview(context, envelope);
+  }
+
   @override
   Widget build(BuildContext context) {
     final wide =
         MediaQuery.sizeOf(context).width >= _compactNavigationBreakpoint;
     final notice = controller.surfaceNotice;
+    final focusedProfile = controller.focusedSavedProfile;
     final menuActions = <_CardActionEntry>[
-      _CardActionEntry(
-        id: 'import-invite',
-        label: t.mobileProfilesImportInvite,
-        onSelected: () async {
-          _openProfileWorkspace(
-            context,
-            title: t.mobileProfilesImportInvite,
-            resetDraft: true,
-          );
-        },
-      ),
       if (!wide && controller.activeModeSupportsAppRouting)
         _CardActionEntry(
           id: 'routing',
@@ -686,20 +713,76 @@ class _ProfilesPage extends StatelessWidget {
           _NoticeBanner(message: notice),
         ],
         const SizedBox(height: 16),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: FilledButton.icon(
-            onPressed: controller.busy
-                ? null
-                : () => _openProfileWorkspace(
-                    context,
-                    title: t.mobileProfilesAddProfile,
-                    resetDraft: true,
-                  ),
-            icon: const Icon(Icons.add),
-            label: Text(t.mobileProfilesAddProfile),
-          ),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: <Widget>[
+            FilledButton.icon(
+              key: const ValueKey<String>('profiles-new-button'),
+              onPressed: controller.busy
+                  ? null
+                  : () => _openProfileWorkspace(
+                      context,
+                      title: t.mobileProfilesAddProfile,
+                      resetDraft: true,
+                    ),
+              icon: const Icon(Icons.add),
+              label: Text(t.mobileProfilesAddProfile),
+            ),
+            PopupMenuButton<_ProfileImportAction>(
+              key: const ValueKey<String>('profiles-import-button'),
+              enabled: !controller.busy,
+              onSelected: (_ProfileImportAction action) {
+                switch (action) {
+                  case _ProfileImportAction.file:
+                    unawaited(_importPortableFromFile(context));
+                  case _ProfileImportAction.qr:
+                    unawaited(_scanPortableQr(context));
+                  case _ProfileImportAction.paste:
+                    unawaited(_pastePortableEnvelope(context));
+                }
+              },
+              itemBuilder: (BuildContext context) =>
+                  <PopupMenuEntry<_ProfileImportAction>>[
+                    PopupMenuItem<_ProfileImportAction>(
+                      value: _ProfileImportAction.file,
+                      child: Text(context.shellText.importFromFile),
+                    ),
+                    PopupMenuItem<_ProfileImportAction>(
+                      value: _ProfileImportAction.qr,
+                      child: Text(context.shellText.scanPortableProfileQr),
+                    ),
+                    PopupMenuItem<_ProfileImportAction>(
+                      value: _ProfileImportAction.paste,
+                      child: Text(context.shellText.pasteEnvelope),
+                    ),
+                  ],
+              child: FilledButton.tonalIcon(
+                onPressed: null,
+                icon: const Icon(Icons.file_upload_outlined),
+                label: Text(context.shellText.importPortableProfile),
+              ),
+            ),
+          ],
         ),
+        if (focusedProfile != null) ...<Widget>[
+          const SizedBox(height: 16),
+          _ProfileSelectionActions(
+            profile: focusedProfile,
+            busy: controller.busy,
+            currentForHome: controller.selectedProfileId == focusedProfile.id,
+            onEdit: () => _openProfileWorkspace(
+              context,
+              title: context.shellText.mobileEditProfile,
+              profileId: focusedProfile.id,
+            ),
+            onMakeCurrent: () =>
+                controller.makeProfileCurrent(focusedProfile.id),
+            onCopy: controller.duplicateSelectedProfile,
+            onExport: () => unawaited(_showPortableExport(context)),
+            onDelete: () => unawaited(controller.deleteSelectedProfile()),
+          ),
+        ],
         const SizedBox(height: 20),
         _ProfilesListSection(
           controller: controller,
@@ -764,11 +847,14 @@ class _ProfilesListSection extends StatelessWidget {
             ) ...<Widget>[
               _ProfileListItem(
                 profile: controller.profiles[index],
-                selected:
+                focused:
+                    controller.focusedProfileId ==
+                    controller.profiles[index].id,
+                currentForHome:
                     controller.selectedProfileId ==
                     controller.profiles[index].id,
                 onSelect: () =>
-                    controller.selectProfile(controller.profiles[index].id),
+                    controller.focusProfile(controller.profiles[index].id),
                 onEdit: () => onEditProfile(controller.profiles[index]),
               ),
               if (index != controller.profiles.length - 1)
@@ -781,16 +867,108 @@ class _ProfilesListSection extends StatelessWidget {
   }
 }
 
+class _ProfileSelectionActions extends StatelessWidget {
+  const _ProfileSelectionActions({
+    required this.profile,
+    required this.busy,
+    required this.currentForHome,
+    required this.onEdit,
+    required this.onMakeCurrent,
+    required this.onCopy,
+    required this.onExport,
+    required this.onDelete,
+  });
+
+  final ProfileRecord profile;
+  final bool busy;
+  final bool currentForHome;
+  final VoidCallback onEdit;
+  final VoidCallback onMakeCurrent;
+  final VoidCallback onCopy;
+  final VoidCallback onExport;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final title = profile.name.trim().isEmpty
+        ? profile.id
+        : profile.name.trim();
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              context.shellText.selectedProfileActions,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              title,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: <Widget>[
+                FilledButton.tonalIcon(
+                  key: const ValueKey<String>('profiles-edit-button'),
+                  onPressed: busy ? null : onEdit,
+                  icon: const Icon(Icons.edit_outlined),
+                  label: Text(context.shellText.mobileEditProfile),
+                ),
+                OutlinedButton.icon(
+                  key: const ValueKey<String>('profiles-make-current-button'),
+                  onPressed: busy || currentForHome ? null : onMakeCurrent,
+                  icon: const Icon(Icons.home_outlined),
+                  label: Text(context.shellText.makeCurrent),
+                ),
+                OutlinedButton.icon(
+                  key: const ValueKey<String>('profiles-copy-button'),
+                  onPressed: busy ? null : onCopy,
+                  icon: const Icon(Icons.content_copy_outlined),
+                  label: Text(context.shellText.copyProfile),
+                ),
+                OutlinedButton.icon(
+                  key: const ValueKey<String>('profiles-export-button'),
+                  onPressed: busy ? null : onExport,
+                  icon: const Icon(Icons.ios_share_outlined),
+                  label: Text(context.shellText.exportSavedProfile),
+                ),
+                OutlinedButton.icon(
+                  key: const ValueKey<String>('profiles-delete-button'),
+                  onPressed: busy ? null : onDelete,
+                  icon: const Icon(Icons.delete_outline),
+                  label: Text(context.shellText.deleteProfile),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ProfileListItem extends StatelessWidget {
   const _ProfileListItem({
     required this.profile,
-    required this.selected,
+    required this.focused,
+    required this.currentForHome,
     required this.onSelect,
     required this.onEdit,
   });
 
   final ProfileRecord profile;
-  final bool selected;
+  final bool focused;
+  final bool currentForHome;
   final VoidCallback onSelect;
   final VoidCallback onEdit;
 
@@ -803,11 +981,14 @@ class _ProfileListItem extends StatelessWidget {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       onTap: onSelect,
+      tileColor: focused
+          ? theme.colorScheme.primaryContainer.withValues(alpha: 0.45)
+          : null,
       leading: CircleAvatar(
-        backgroundColor: selected
+        backgroundColor: focused
             ? theme.colorScheme.primary
             : theme.colorScheme.surfaceContainerHighest,
-        foregroundColor: selected
+        foregroundColor: focused
             ? theme.colorScheme.onPrimary
             : theme.colorScheme.onSurfaceVariant,
         child: Text(_profileInitials(profile)),
@@ -828,7 +1009,7 @@ class _ProfileListItem extends StatelessWidget {
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
-          if (selected) ...<Widget>[
+          if (currentForHome) ...<Widget>[
             const SizedBox(height: 8),
             _StatusChip(
               label: context.shellText.mobileSelectedForHome,
@@ -858,7 +1039,7 @@ class _ProfileWorkspacePage extends StatelessWidget {
       animation: controller,
       builder: (BuildContext context, _) {
         final notice = controller.surfaceNotice;
-        final hasSavedProfile = controller.selectedProfileId != null;
+        final hasSavedProfile = controller.focusedProfileId != null;
         return Scaffold(
           appBar: AppBar(
             title: Text(title),
@@ -886,10 +1067,10 @@ class _ProfileWorkspacePage extends StatelessWidget {
                 managedProviders: controller.managedProviders,
                 initialManagedProviderId:
                     controller.draft.providerBinding.managedProviderId,
-                selectedProfileId: controller.selectedProfileId,
+                selectedProfileId: controller.focusedProfileId,
                 draft: controller.draft,
                 busy: controller.busy,
-                onSelectProfile: controller.selectProfile,
+                onSelectProfile: controller.focusProfile,
                 onDraftChanged: controller.updateDraft,
                 onActivateManagedProviderMode:
                     controller.activateManagedProviderMode,
@@ -964,7 +1145,7 @@ VoidCallback? _profileWorkspaceVpnAction(MobileShellController controller) {
   );
 }
 
-class _ProvidersPage extends StatelessWidget {
+class _ProvidersPage extends StatefulWidget {
   const _ProvidersPage({
     required this.controller,
     required this.headerAccessory,
@@ -978,7 +1159,15 @@ class _ProvidersPage extends StatelessWidget {
   final VoidCallback onReturnToRoot;
 
   @override
+  State<_ProvidersPage> createState() => _ProvidersPageState();
+}
+
+class _ProvidersPageState extends State<_ProvidersPage> {
+  _ProviderRootSurface _surface = _ProviderRootSurface.savedProviders;
+
+  @override
   Widget build(BuildContext context) {
+    final controller = widget.controller;
     final notice = controller.surfaceNotice;
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
@@ -988,7 +1177,6 @@ class _ProvidersPage extends StatelessWidget {
                 MobileWorkflowSurface.providerConfig ||
             controller.workflowSurface ==
                 MobileWorkflowSurface.providerTemplate;
-        final rootPanel = _ProviderRecordsRootSection(controller: controller);
         final detailPanel = switch (controller.workflowSurface) {
           MobileWorkflowSurface.providerConfig => ProviderConfigEditorPanel(
             key: const ValueKey<String>('provider-config-editor-panel'),
@@ -1003,7 +1191,7 @@ class _ProvidersPage extends StatelessWidget {
                 controller.startProviderTemplateDraftFromManagedProvider,
             onDelete: controller.deleteSelectedManagedProvider,
             onApplyToProfileDraft: controller.useManagedProviderForDraft,
-            onClose: onReturnToRoot,
+            onClose: widget.onReturnToRoot,
             showCloseButton: wide,
           ),
           MobileWorkflowSurface.providerTemplate => ProviderTemplateEditorPanel(
@@ -1017,33 +1205,105 @@ class _ProvidersPage extends StatelessWidget {
             onSave: controller.saveProviderTemplateDraft,
             onDelete: controller.deleteSelectedProviderTemplate,
             onUseTemplate: controller.useProviderTemplate,
-            onClose: onReturnToRoot,
+            onClose: widget.onReturnToRoot,
             showCloseButton: wide,
           ),
           _ => const SizedBox.shrink(),
         };
+        final selectedManagedProvider =
+            controller.selectedManagedProviderId == null
+            ? null
+            : controller.managedProviderById(
+                controller.selectedManagedProviderId!,
+              );
+        final selectedTemplate = controller.selectedProviderTemplateId == null
+            ? null
+            : controller.providerTemplateById(
+                controller.selectedProviderTemplateId!,
+              );
+        final rootPanel = _surface == _ProviderRootSurface.savedProviders
+            ? _ProviderRecordsRootSection(controller: controller)
+            : _TemplateRecordsRootSection(controller: controller);
         final rootChildren = <Widget>[
           _PageHeader(
             title: context.shellText.mobileProvidersTitle,
             subtitle: context.shellText.mobileProvidersSubtitle,
-            trailing: headerAccessory,
+            trailing: widget.headerAccessory,
           ),
           if (notice != null) ...<Widget>[
             const SizedBox(height: 12),
             _NoticeBanner(message: notice),
           ],
           const SizedBox(height: 16),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: FilledButton.icon(
-              key: const ValueKey<String>('managed-provider-create-button'),
-              onPressed: controller.busy
-                  ? null
-                  : () => unawaited(onOpenNewProviderFlow()),
-              icon: const Icon(Icons.add),
-              label: Text(context.shellText.mobileAddProvider),
-            ),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: <Widget>[
+              ChoiceChip(
+                key: const ValueKey<String>('providers-surface-saved'),
+                selected: _surface == _ProviderRootSurface.savedProviders,
+                label: Text(context.shellText.savedProviders),
+                onSelected: (_) {
+                  setState(() {
+                    _surface = _ProviderRootSurface.savedProviders;
+                  });
+                  widget.onReturnToRoot();
+                },
+              ),
+              ChoiceChip(
+                key: const ValueKey<String>('providers-surface-templates'),
+                selected: _surface == _ProviderRootSurface.templates,
+                label: Text(context.shellText.templates),
+                onSelected: (_) {
+                  setState(() {
+                    _surface = _ProviderRootSurface.templates;
+                  });
+                  widget.onReturnToRoot();
+                },
+              ),
+              FilledButton.icon(
+                key: const ValueKey<String>('managed-provider-create-button'),
+                onPressed: controller.busy
+                    ? null
+                    : () => unawaited(widget.onOpenNewProviderFlow()),
+                icon: const Icon(Icons.add),
+                label: Text(context.shellText.mobileAddProvider),
+              ),
+            ],
           ),
+          if (_surface == _ProviderRootSurface.savedProviders &&
+              selectedManagedProvider != null) ...<Widget>[
+            const SizedBox(height: 16),
+            _ManagedProviderSelectionActions(
+              provider: selectedManagedProvider,
+              busy: controller.busy,
+              onEdit: () =>
+                  controller.selectManagedProvider(selectedManagedProvider.id),
+              onCopy: controller.duplicateSelectedManagedProvider,
+              onUseInProfile: () => controller.useManagedProviderForDraft(
+                selectedManagedProvider.id,
+              ),
+              onSaveAsTemplate:
+                  controller.startProviderTemplateDraftFromManagedProvider,
+              onDelete: () =>
+                  unawaited(controller.deleteSelectedManagedProvider()),
+            ),
+          ],
+          if (_surface == _ProviderRootSurface.templates &&
+              selectedTemplate != null) ...<Widget>[
+            const SizedBox(height: 16),
+            _ProviderTemplateSelectionActions(
+              template: selectedTemplate,
+              busy: controller.busy,
+              onUse: () => controller.useProviderTemplate(selectedTemplate.id),
+              onCopy: controller.duplicateSelectedProviderTemplate,
+              onEdit: () =>
+                  controller.selectProviderTemplate(selectedTemplate.id),
+              onDelete: () =>
+                  unawaited(controller.deleteSelectedProviderTemplate()),
+            ),
+          ],
           const SizedBox(height: 20),
           rootPanel,
         ];
@@ -1051,34 +1311,27 @@ class _ProvidersPage extends StatelessWidget {
         if (wide && showingDetail) {
           return Padding(
             padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                Expanded(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      Flexible(
-                        flex: 5,
-                        child: SingleChildScrollView(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: rootChildren,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Flexible(
-                        flex: 7,
-                        child: Align(
-                          alignment: Alignment.topLeft,
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 840),
-                            child: detailPanel,
-                          ),
-                        ),
-                      ),
-                    ],
+                Flexible(
+                  flex: 5,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: rootChildren,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Flexible(
+                  flex: 7,
+                  child: Align(
+                    alignment: Alignment.topLeft,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 840),
+                      child: detailPanel,
+                    ),
                   ),
                 ),
               ],
@@ -1101,11 +1354,11 @@ class _ProvidersPage extends StatelessWidget {
                   children: <Widget>[
                     OutlinedButton.icon(
                       key: const ValueKey<String>('providers-back-button'),
-                      onPressed: onReturnToRoot,
+                      onPressed: widget.onReturnToRoot,
                       icon: const Icon(Icons.arrow_back),
                       label: Text(context.shellText.mobileBackToProviders),
                     ),
-                    headerAccessory,
+                    widget.headerAccessory,
                   ],
                 ),
                 if (notice != null) ...<Widget>[
@@ -1191,6 +1444,20 @@ class _SupportPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final shellWide =
+            MediaQuery.sizeOf(context).width >= _compactNavigationBreakpoint;
+        final wide = shellWide && constraints.maxWidth >= 760;
+        if (!wide) {
+          return _buildCompact(context);
+        }
+        return _buildWide(context, constraints.maxWidth);
+      },
+    );
+  }
+
+  Widget _buildCompact(BuildContext context) {
     final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1230,20 +1497,8 @@ class _SupportPage extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  key: const ValueKey<String>('forget-embedded-sign-in-button'),
-                  onPressed: controller.busy
-                      ? null
-                      : () => unawaited(
-                          controller.clearRememberedEmbeddedSignIn(),
-                        ),
-                  icon: const Icon(Icons.logout_rounded),
-                  label: Text(context.shellText.forgetEmbeddedSignIn),
-                ),
-              ),
+              const SizedBox(height: 16),
+              _EmbeddedBrowserStateCard(controller: controller),
             ],
           ),
         ),
@@ -1266,6 +1521,381 @@ class _SupportPage extends StatelessWidget {
           },
         ),
       ],
+    );
+  }
+
+  Widget _buildWide(BuildContext context, double maxWidth) {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          _PageHeader(
+            title: context.shellText.supportTitle,
+            subtitle: context.shellText.supportSubtitle,
+            trailing: headerAccessory,
+          ),
+          const SizedBox(height: 14),
+          _SupportContextStrip(controller: controller),
+          const SizedBox(height: 14),
+          _SupportWideToolbar(
+            controller: controller,
+            supportSurface: supportSurface,
+            onSupportSurfaceChanged: onSupportSurfaceChanged,
+            activitySurface: activitySurface,
+            onActivitySurfaceChanged: (_ActivitySurface surface) {
+              onActivitySurfaceChanged(surface);
+              onSupportSurfaceChanged(_SupportSurface.activity);
+            },
+            diagnosticsSurface: diagnosticsSurface,
+            onDiagnosticsSurfaceChanged: onDiagnosticsSurfaceChanged,
+          ),
+          const SizedBox(height: 14),
+          Expanded(
+            child: switch (supportSurface) {
+              _SupportSurface.activity => _ActivityPage(
+                controller: controller,
+                surface: activitySurface,
+                onLaunchChallengeSurface: onLaunchChallengeSurface,
+                openChallengeLabel: openChallengeLabel,
+                showsManualChallengeContinue: showsManualChallengeContinue,
+                onSurfaceChanged: onActivitySurfaceChanged,
+                showHeader: false,
+                showSurfaceSelector: false,
+              ),
+              _SupportSurface.diagnostics => _SupportDiagnosticsWorkspace(
+                controller: controller,
+                surface: diagnosticsSurface,
+                onSurfaceChanged: onDiagnosticsSurfaceChanged,
+              ),
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmbeddedBrowserStateCard extends StatelessWidget {
+  const _EmbeddedBrowserStateCard({required this.controller});
+
+  final MobileShellController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Icon(Icons.cookie_outlined, color: theme.colorScheme.primary),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        context.shellText.embeddedBrowserStateTitle,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        context.shellText.embeddedBrowserStateBody,
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        context.shellText.embeddedBrowserStateHint,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FilledButton.tonalIcon(
+                key: const ValueKey<String>('forget-embedded-sign-in-button'),
+                onPressed: controller.busy
+                    ? null
+                    : () =>
+                          unawaited(controller.clearRememberedEmbeddedSignIn()),
+                icon: const Icon(Icons.logout_rounded),
+                label: Text(context.shellText.forgetEmbeddedSignIn),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SupportContextStrip extends StatelessWidget {
+  const _SupportContextStrip({required this.controller});
+
+  final MobileShellController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final selectedProfile = controller.selectedSavedProfile;
+    final profileName = selectedProfile?.name.trim().isNotEmpty == true
+        ? selectedProfile!.name
+        : selectedProfile?.id ?? '—';
+    final hostTone = _hostIndicatorTone(context, controller);
+    final hostDetail =
+        controller.hostStatusMessage ??
+        controller.hostConnection?.description ??
+        context.shellText.waitingForMobileHostBridge;
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: <Widget>[
+        _SupportContextBadge(
+          icon: hostTone.$4,
+          accentColor: hostTone.$3,
+          label: hostTone.$1,
+          value: hostDetail,
+        ),
+        _SupportContextBadge(
+          icon: Icons.account_circle_outlined,
+          accentColor: theme.colorScheme.primary,
+          label: context.shellText.currentProfile,
+          value: profileName,
+        ),
+      ],
+    );
+  }
+}
+
+class _SupportContextBadge extends StatelessWidget {
+  const _SupportContextBadge({
+    required this.icon,
+    required this.accentColor,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final Color accentColor;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: 0.82),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: accentColor.withValues(alpha: 0.18)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(icon, size: 15, color: accentColor),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: theme.textTheme.labelMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(width: 8),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 260),
+            child: Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SupportWideToolbar extends StatelessWidget {
+  const _SupportWideToolbar({
+    required this.supportSurface,
+    required this.onSupportSurfaceChanged,
+    required this.activitySurface,
+    required this.onActivitySurfaceChanged,
+    required this.diagnosticsSurface,
+    required this.onDiagnosticsSurfaceChanged,
+    required this.controller,
+  });
+
+  final _SupportSurface supportSurface;
+  final ValueChanged<_SupportSurface> onSupportSurfaceChanged;
+  final _ActivitySurface activitySurface;
+  final ValueChanged<_ActivitySurface> onActivitySurfaceChanged;
+  final _DiagnosticsSurface diagnosticsSurface;
+  final ValueChanged<_DiagnosticsSurface> onDiagnosticsSurfaceChanged;
+  final MobileShellController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: <Widget>[
+        _SupportToolbarChip(
+          selected: supportSurface == _SupportSurface.activity,
+          label: context.shellText.activity,
+          tone: _SupportToolbarChipTone.primary,
+          onPressed: () => onSupportSurfaceChanged(_SupportSurface.activity),
+        ),
+        _SupportToolbarChip(
+          selected: supportSurface == _SupportSurface.diagnostics,
+          label: context.shellText.diagnostics,
+          tone: _SupportToolbarChipTone.secondary,
+          onPressed: () => onSupportSurfaceChanged(_SupportSurface.diagnostics),
+        ),
+        const SizedBox(width: 4),
+        if (supportSurface == _SupportSurface.activity) ...<Widget>[
+          _SupportToolbarChip(
+            selected: activitySurface == _ActivitySurface.resolutions,
+            label: context.shellText.resolutionsCount(
+              controller.resolutions.length,
+            ),
+            tone: _SupportToolbarChipTone.primary,
+            onPressed: () =>
+                onActivitySurfaceChanged(_ActivitySurface.resolutions),
+          ),
+          _SupportToolbarChip(
+            selected: activitySurface == _ActivitySurface.sessions,
+            label: context.shellText.sessionsCount(controller.sessions.length),
+            tone: _SupportToolbarChipTone.primary,
+            onPressed: () =>
+                onActivitySurfaceChanged(_ActivitySurface.sessions),
+          ),
+        ] else ...<Widget>[
+          _SupportToolbarChip(
+            selected: diagnosticsSurface == _DiagnosticsSurface.overview,
+            label: context.shellText.overview,
+            tone: _SupportToolbarChipTone.secondary,
+            onPressed: () =>
+                onDiagnosticsSurfaceChanged(_DiagnosticsSurface.overview),
+          ),
+          _SupportToolbarChip(
+            selected: diagnosticsSurface == _DiagnosticsSurface.events,
+            label: context.shellText.eventsCount(controller.events.length),
+            tone: _SupportToolbarChipTone.secondary,
+            onPressed: () =>
+                onDiagnosticsSurfaceChanged(_DiagnosticsSurface.events),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+enum _SupportToolbarChipTone { primary, secondary }
+
+class _SupportToolbarChip extends StatelessWidget {
+  const _SupportToolbarChip({
+    required this.selected,
+    required this.label,
+    required this.tone,
+    required this.onPressed,
+  });
+
+  final bool selected;
+  final String label;
+  final _SupportToolbarChipTone tone;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isPrimary = tone == _SupportToolbarChipTone.primary;
+    final sideColor = selected
+        ? (isPrimary
+              ? theme.colorScheme.primary.withValues(alpha: 0.18)
+              : theme.colorScheme.onSurface.withValues(alpha: 0.10))
+        : (isPrimary
+              ? theme.colorScheme.outlineVariant
+              : theme.colorScheme.outlineVariant.withValues(alpha: 0.72));
+    final backgroundColor = selected
+        ? (isPrimary
+              ? theme.colorScheme.primary.withValues(alpha: 0.12)
+              : theme.colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.42,
+                ))
+        : theme.colorScheme.surface.withValues(alpha: isPrimary ? 0.72 : 0.54);
+    final foregroundColor = selected
+        ? (isPrimary ? theme.colorScheme.primary : theme.colorScheme.onSurface)
+        : (isPrimary
+              ? theme.colorScheme.onSurfaceVariant
+              : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.78));
+    return ChoiceChip(
+      selected: selected,
+      showCheckmark: false,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
+      side: BorderSide(color: sideColor),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      backgroundColor: backgroundColor,
+      selectedColor: backgroundColor,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      labelPadding: const EdgeInsets.symmetric(horizontal: 2),
+      label: Text(
+        label,
+        style: theme.textTheme.labelMedium?.copyWith(
+          fontWeight: FontWeight.w800,
+          color: foregroundColor,
+        ),
+      ),
+      onSelected: (_) => onPressed(),
+    );
+  }
+}
+
+class _SupportDiagnosticsWorkspace extends StatelessWidget {
+  const _SupportDiagnosticsWorkspace({
+    required this.controller,
+    required this.surface,
+    required this.onSurfaceChanged,
+  });
+
+  final MobileShellController controller;
+  final _DiagnosticsSurface surface;
+  final ValueChanged<_DiagnosticsSurface> onSurfaceChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return _DiagnosticsPage(
+      controller: controller,
+      surface: surface,
+      onSurfaceChanged: onSurfaceChanged,
+      showHeader: false,
+      includeEmbeddedBrowserStateCard: true,
+      showSurfaceSelector: false,
     );
   }
 }
@@ -2566,17 +3196,242 @@ class _ProviderRecordsRootSection extends StatelessWidget {
               _ManagedProviderListItem(
                 provider: controller.managedProviders[index],
                 selected:
-                    controller.workflowSurface ==
-                        MobileWorkflowSurface.providerConfig &&
                     controller.selectedManagedProviderId ==
-                        controller.managedProviders[index].id,
-                onSelect: () => controller.selectManagedProvider(
+                    controller.managedProviders[index].id,
+                onSelect: () => controller.focusManagedProvider(
                   controller.managedProviders[index].id,
                 ),
               ),
               if (index != controller.managedProviders.length - 1)
                 const Divider(height: 1),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TemplateRecordsRootSection extends StatelessWidget {
+  const _TemplateRecordsRootSection({required this.controller});
+
+  final MobileShellController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (controller.providerTemplates.isEmpty) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                context.shellText.noSavedTemplatesYet,
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                context.shellText.noSavedTemplatesMessage,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          children: <Widget>[
+            for (
+              var index = 0;
+              index < controller.providerTemplates.length;
+              index++
+            ) ...<Widget>[
+              _ProviderTemplateListItem(
+                template: controller.providerTemplates[index],
+                selected:
+                    controller.selectedProviderTemplateId ==
+                    controller.providerTemplates[index].id,
+                onSelect: () => controller.focusProviderTemplate(
+                  controller.providerTemplates[index].id,
+                ),
+              ),
+              if (index != controller.providerTemplates.length - 1)
+                const Divider(height: 1),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ManagedProviderSelectionActions extends StatelessWidget {
+  const _ManagedProviderSelectionActions({
+    required this.provider,
+    required this.busy,
+    required this.onEdit,
+    required this.onCopy,
+    required this.onUseInProfile,
+    required this.onSaveAsTemplate,
+    required this.onDelete,
+  });
+
+  final ManagedProviderRecord provider;
+  final bool busy;
+  final VoidCallback onEdit;
+  final VoidCallback onCopy;
+  final VoidCallback onUseInProfile;
+  final VoidCallback onSaveAsTemplate;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final title = provider.name.trim().isEmpty ? provider.id : provider.name;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              context.shellText.selectedProviderActions,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              title,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: <Widget>[
+                FilledButton.tonalIcon(
+                  key: const ValueKey<String>('providers-edit-button'),
+                  onPressed: busy ? null : onEdit,
+                  icon: const Icon(Icons.edit_outlined),
+                  label: Text(context.shellText.mobileEditProvider),
+                ),
+                OutlinedButton.icon(
+                  key: const ValueKey<String>('providers-copy-button'),
+                  onPressed: busy ? null : onCopy,
+                  icon: const Icon(Icons.content_copy_outlined),
+                  label: Text(context.shellText.copyProvider),
+                ),
+                OutlinedButton.icon(
+                  key: const ValueKey<String>('providers-use-button'),
+                  onPressed: busy ? null : onUseInProfile,
+                  icon: const Icon(Icons.assignment_turned_in_outlined),
+                  label: Text(context.shellText.mobileUseInProfileDraft),
+                ),
+                OutlinedButton.icon(
+                  key: const ValueKey<String>('providers-save-template-button'),
+                  onPressed: busy ? null : onSaveAsTemplate,
+                  icon: const Icon(Icons.bookmark_add_outlined),
+                  label: Text(context.shellText.mobileSaveAsTemplate),
+                ),
+                OutlinedButton.icon(
+                  key: const ValueKey<String>('providers-delete-button'),
+                  onPressed: busy ? null : onDelete,
+                  icon: const Icon(Icons.delete_outline),
+                  label: Text(context.shellText.mobileDeleteProvider),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProviderTemplateSelectionActions extends StatelessWidget {
+  const _ProviderTemplateSelectionActions({
+    required this.template,
+    required this.busy,
+    required this.onUse,
+    required this.onCopy,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final ProviderTemplateRecord template;
+  final bool busy;
+  final VoidCallback onUse;
+  final VoidCallback onCopy;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final title = template.name.trim().isEmpty ? template.id : template.name;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              context.shellText.selectedTemplateActions,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              title,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: <Widget>[
+                FilledButton.tonalIcon(
+                  key: const ValueKey<String>('templates-use-button'),
+                  onPressed: busy ? null : onUse,
+                  icon: const Icon(Icons.playlist_add_check_outlined),
+                  label: Text(context.shellText.mobileUseTemplate),
+                ),
+                OutlinedButton.icon(
+                  key: const ValueKey<String>('templates-copy-button'),
+                  onPressed: busy ? null : onCopy,
+                  icon: const Icon(Icons.content_copy_outlined),
+                  label: Text(context.shellText.copyTemplate),
+                ),
+                OutlinedButton.icon(
+                  key: const ValueKey<String>('templates-edit-button'),
+                  onPressed: busy ? null : onEdit,
+                  icon: const Icon(Icons.edit_outlined),
+                  label: Text(context.shellText.mobileEditTemplate),
+                ),
+                OutlinedButton.icon(
+                  key: const ValueKey<String>('templates-delete-button'),
+                  onPressed: busy ? null : onDelete,
+                  icon: const Icon(Icons.delete_outline),
+                  label: Text(context.shellText.mobileDeleteTemplate),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -2658,6 +3513,83 @@ class _ManagedProviderListItem extends StatelessWidget {
   }
 }
 
+class _ProviderTemplateListItem extends StatelessWidget {
+  const _ProviderTemplateListItem({
+    required this.template,
+    required this.selected,
+    required this.onSelect,
+  });
+
+  final ProviderTemplateRecord template;
+  final bool selected;
+  final VoidCallback onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final title = template.name.trim().isEmpty ? template.id : template.name;
+    final familyTitle =
+        supportedProviderDefinitionFor(template.provider)?.title ??
+        template.provider;
+
+    return ListTile(
+      key: ValueKey<String>('provider-template-item-${template.id}'),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      onTap: onSelect,
+      tileColor: selected
+          ? theme.colorScheme.primaryContainer.withValues(alpha: 0.45)
+          : null,
+      leading: CircleAvatar(
+        backgroundColor: selected
+            ? theme.colorScheme.primary
+            : theme.colorScheme.surfaceContainerHighest,
+        foregroundColor: selected
+            ? theme.colorScheme.onPrimary
+            : theme.colorScheme.onSurfaceVariant,
+        child: const Icon(Icons.bookmark_border_rounded),
+      ),
+      title: Text(
+        title,
+        style: theme.textTheme.titleMedium?.copyWith(
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const SizedBox(height: 4),
+          Text(
+            context.shellText.typeLabel(familyTitle),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            context.shellText.prefillsNewProviders,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          if (template.availability.message.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 4),
+            Text(
+              template.availability.message,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ],
+      ),
+      trailing: _StatusChip(
+        label: template.availability.state.label,
+        accent: template.isAvailable,
+      ),
+    );
+  }
+}
+
 class _ProviderChooserPage extends StatelessWidget {
   const _ProviderChooserPage({required this.controller});
 
@@ -2727,19 +3659,6 @@ class _ProviderChooserPageBodyState extends State<_ProviderChooserPageBody> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final query = _query.trim().toLowerCase();
-    final filteredUserTemplates = widget.userTemplates
-        .where((ProviderTemplateRecord template) {
-          if (query.isEmpty) {
-            return true;
-          }
-          final familyTitle =
-              supportedProviderDefinitionFor(template.provider)?.title ?? '';
-          final haystack =
-              '${template.name} ${template.provider} $familyTitle ${template.availability.message}'
-                  .toLowerCase();
-          return haystack.contains(query);
-        })
-        .toList(growable: false);
     final filteredPresets = widget.presets
         .where((ProviderPreset preset) {
           if (query.isEmpty) {
@@ -2762,7 +3681,7 @@ class _ProviderChooserPageBodyState extends State<_ProviderChooserPageBody> {
           Text(
             _surface == _ProviderChooserSurface.families
                 ? context.shellText.createProviderChooseType
-                : context.shellText.createProviderUseTemplate,
+                : context.shellText.createProviderUsePreset,
             style: theme.textTheme.bodyLarge?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -2793,7 +3712,7 @@ class _ProviderChooserPageBodyState extends State<_ProviderChooserPageBody> {
                 ),
                 selected: _surface == _ProviderChooserSurface.templates,
                 label: Text(
-                  context.shellText.templates,
+                  context.shellText.presets,
                   style: theme.textTheme.labelLarge,
                 ),
                 onSelected: (_) {
@@ -2915,140 +3834,7 @@ class _ProviderChooserPageBodyState extends State<_ProviderChooserPageBody> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    context.shellText.myTemplates,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  if (filteredUserTemplates.isEmpty)
-                    Text(
-                      widget.userTemplates.isEmpty
-                          ? context.shellText.noSavedTemplatesYet
-                          : context.shellText.noSavedTemplatesMatchSearch,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    )
-                  else
-                    ...filteredUserTemplates.map((
-                      ProviderTemplateRecord template,
-                    ) {
-                      final familyTitle =
-                          supportedProviderDefinitionFor(
-                            template.provider,
-                          )?.title ??
-                          template.provider;
-                      final templateTitle = template.name.trim().isEmpty
-                          ? template.id
-                          : template.name.trim();
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: Container(
-                          key: ValueKey<String>(
-                            'user-template-item-${template.id}',
-                          ),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.surfaceContainerHighest
-                                .withValues(alpha: 0.35),
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              Row(
-                                children: <Widget>[
-                                  Expanded(
-                                    child: Text(
-                                      templateTitle,
-                                      style: theme.textTheme.titleMedium
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                    ),
-                                  ),
-                                  _StatusChip(
-                                    label: template.availability.state.label,
-                                    accent: template.isAvailable,
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                context.shellText.typeLabel(familyTitle),
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                context.shellText.prefillsNewProviders,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                              if (template
-                                  .availability
-                                  .message
-                                  .isNotEmpty) ...<Widget>[
-                                const SizedBox(height: 4),
-                                Text(
-                                  template.availability.message,
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
-                              const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: <Widget>[
-                                  FilledButton.tonal(
-                                    key: ValueKey<String>(
-                                      'user-template-use-${template.id}',
-                                    ),
-                                    onPressed: widget.busy
-                                        ? null
-                                        : () {
-                                            Navigator.of(context).pop(
-                                              _ProviderChooserResult.userTemplateUse(
-                                                template.id,
-                                              ),
-                                            );
-                                          },
-                                    child: Text(
-                                      context.shellText.mobileUseTemplate,
-                                    ),
-                                  ),
-                                  OutlinedButton(
-                                    key: ValueKey<String>(
-                                      'user-template-edit-${template.id}',
-                                    ),
-                                    onPressed: widget.busy
-                                        ? null
-                                        : () {
-                                            Navigator.of(context).pop(
-                                              _ProviderChooserResult.userTemplateEdit(
-                                                template.id,
-                                              ),
-                                            );
-                                          },
-                                    child: Text(
-                                      context.shellText.mobileEditTemplate,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }),
-                  const SizedBox(height: 12),
-                  Text(
-                    context.shellText.shippedTemplates,
+                    context.shellText.shippedPresets,
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -3246,6 +4032,8 @@ class _ActivityPage extends StatelessWidget {
     required this.openChallengeLabel,
     required this.showsManualChallengeContinue,
     required this.onSurfaceChanged,
+    this.showHeader = true,
+    this.showSurfaceSelector = true,
   });
 
   final MobileShellController controller;
@@ -3255,6 +4043,8 @@ class _ActivityPage extends StatelessWidget {
   final String Function(ChallengeRecord? challenge) openChallengeLabel;
   final bool Function(ChallengeRecord? challenge) showsManualChallengeContinue;
   final ValueChanged<_ActivitySurface> onSurfaceChanged;
+  final bool showHeader;
+  final bool showSurfaceSelector;
 
   @override
   Widget build(BuildContext context) {
@@ -3264,37 +4054,42 @@ class _ActivityPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          _PageHeader(
-            title: context.shellText.activity,
-            subtitle: context.shellText.activityPageSubtitle,
-          ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: <Widget>[
-              ChoiceChip(
-                selected: surface == _ActivitySurface.resolutions,
-                label: Text(
-                  context.shellText.resolutionsCount(
-                    controller.resolutions.length,
+          if (showHeader) ...<Widget>[
+            _PageHeader(
+              title: context.shellText.activity,
+              subtitle: context.shellText.activityPageSubtitle,
+            ),
+            const SizedBox(height: 16),
+          ],
+          if (showSurfaceSelector) ...<Widget>[
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: <Widget>[
+                ChoiceChip(
+                  selected: surface == _ActivitySurface.resolutions,
+                  label: Text(
+                    context.shellText.resolutionsCount(
+                      controller.resolutions.length,
+                    ),
+                    style: theme.textTheme.labelLarge,
                   ),
-                  style: theme.textTheme.labelLarge,
+                  onSelected: (_) =>
+                      onSurfaceChanged(_ActivitySurface.resolutions),
                 ),
-                onSelected: (_) =>
-                    onSurfaceChanged(_ActivitySurface.resolutions),
-              ),
-              ChoiceChip(
-                selected: surface == _ActivitySurface.sessions,
-                label: Text(
-                  context.shellText.sessionsCount(controller.sessions.length),
-                  style: theme.textTheme.labelLarge,
+                ChoiceChip(
+                  selected: surface == _ActivitySurface.sessions,
+                  label: Text(
+                    context.shellText.sessionsCount(controller.sessions.length),
+                    style: theme.textTheme.labelLarge,
+                  ),
+                  onSelected: (_) =>
+                      onSurfaceChanged(_ActivitySurface.sessions),
                 ),
-                onSelected: (_) => onSurfaceChanged(_ActivitySurface.sessions),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
           Expanded(
             child: switch (surface) {
               _ActivitySurface.resolutions => _ResolutionsPanel(
@@ -3322,11 +4117,17 @@ class _DiagnosticsPage extends StatelessWidget {
     required this.controller,
     required this.surface,
     required this.onSurfaceChanged,
+    this.showHeader = true,
+    this.includeEmbeddedBrowserStateCard = false,
+    this.showSurfaceSelector = true,
   });
 
   final MobileShellController controller;
   final _DiagnosticsSurface surface;
   final ValueChanged<_DiagnosticsSurface> onSurfaceChanged;
+  final bool showHeader;
+  final bool includeEmbeddedBrowserStateCard;
+  final bool showSurfaceSelector;
 
   @override
   Widget build(BuildContext context) {
@@ -3336,35 +4137,40 @@ class _DiagnosticsPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          _PageHeader(
-            title: context.shellText.diagnostics,
-            subtitle: context.shellText.diagnosticsPageSubtitle,
-          ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: <Widget>[
-              ChoiceChip(
-                selected: surface == _DiagnosticsSurface.overview,
-                label: Text(
-                  context.shellText.overview,
-                  style: theme.textTheme.labelLarge,
+          if (showHeader) ...<Widget>[
+            _PageHeader(
+              title: context.shellText.diagnostics,
+              subtitle: context.shellText.diagnosticsPageSubtitle,
+            ),
+            const SizedBox(height: 16),
+          ],
+          if (showSurfaceSelector) ...<Widget>[
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: <Widget>[
+                ChoiceChip(
+                  selected: surface == _DiagnosticsSurface.overview,
+                  label: Text(
+                    context.shellText.overview,
+                    style: theme.textTheme.labelLarge,
+                  ),
+                  onSelected: (_) =>
+                      onSurfaceChanged(_DiagnosticsSurface.overview),
                 ),
-                onSelected: (_) =>
-                    onSurfaceChanged(_DiagnosticsSurface.overview),
-              ),
-              ChoiceChip(
-                selected: surface == _DiagnosticsSurface.events,
-                label: Text(
-                  context.shellText.eventsCount(controller.events.length),
-                  style: theme.textTheme.labelLarge,
+                ChoiceChip(
+                  selected: surface == _DiagnosticsSurface.events,
+                  label: Text(
+                    context.shellText.eventsCount(controller.events.length),
+                    style: theme.textTheme.labelLarge,
+                  ),
+                  onSelected: (_) =>
+                      onSurfaceChanged(_DiagnosticsSurface.events),
                 ),
-                onSelected: (_) => onSurfaceChanged(_DiagnosticsSurface.events),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
           Expanded(
             child: switch (surface) {
               _DiagnosticsSurface.overview => ListView(
@@ -3375,6 +4181,10 @@ class _DiagnosticsPage extends StatelessWidget {
                   if (controller.surfaceNotice != null) ...<Widget>[
                     const SizedBox(height: 12),
                     _NoticeBanner(message: controller.surfaceNotice!),
+                  ],
+                  if (includeEmbeddedBrowserStateCard) ...<Widget>[
+                    const SizedBox(height: 12),
+                    _EmbeddedBrowserStateCard(controller: controller),
                   ],
                 ],
               ),
@@ -3868,134 +4678,157 @@ class _ResolutionsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              context.shellText.resolutionsTitle,
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              context.shellText.resolutionsSubtitle,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: controller.resolutions.isEmpty
-                  ? Center(
-                      child: Text(
-                        context.shellText.noProviderResolutionsYet,
-                        style: theme.textTheme.bodyLarge?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    )
-                  : ListView.separated(
-                      itemCount: controller.resolutions.length,
-                      separatorBuilder: (_, int index) =>
-                          const SizedBox(height: 14),
-                      itemBuilder: (BuildContext context, int index) {
-                        final resolution = controller.resolutions[index];
-                        final challenge = controller
-                            .activeChallengeForResolution(resolution);
-                        return _ResolutionCard(
-                          resolution: resolution,
-                          challenge: challenge,
-                          busy: controller.busy,
-                          selected:
-                              controller.selectedResolutionId == resolution.id,
-                          onSelect: () =>
-                              controller.selectResolution(resolution.id),
-                          onOpenChallenge: challenge == null
-                              ? null
-                              : () => onLaunchChallengeSurface(challenge),
-                          openChallengeLabel: openChallengeLabel(challenge),
-                          onContinueChallenge:
-                              challenge == null ||
-                                  !showsManualChallengeContinue(challenge)
-                              ? null
-                              : () =>
-                                    controller.continueChallenge(challenge.id),
-                          onCancelChallenge: challenge == null
-                              ? null
-                              : () => controller.cancelChallenge(challenge.id),
-                          onMaterialize:
-                              resolution.state == ResolutionState.resolved &&
-                                  resolution.supportsAction(
-                                    ArtifactAction.startOnThisDevice,
-                                  )
-                              ? () => controller.materializeResolution(
-                                  resolution.id,
-                                )
-                              : null,
-                          onCopyExport:
-                              resolution.state == ResolutionState.resolved &&
-                                  resolution.supportsAction(
-                                    ArtifactAction.exportHandoff,
-                                  )
-                              ? () => controller.copyResolutionExport(
-                                  resolution.id,
-                                )
-                              : null,
-                          onShareExport:
-                              resolution.state == ResolutionState.resolved &&
-                                  resolution.supportsAction(
-                                    ArtifactAction.exportHandoff,
-                                  )
-                              ? () => controller.shareResolutionExport(
-                                  resolution.id,
-                                )
-                              : null,
-                          onOpenRoom:
-                              resolution.state == ResolutionState.resolved &&
-                                  resolution.supportsAction(
-                                    ArtifactAction.openRoom,
-                                  )
-                              ? () => controller.openResolutionExternalAction(
-                                  resolution.id,
-                                  ArtifactAction.openRoom,
-                                )
-                              : null,
-                          onOpenCamera:
-                              resolution.state == ResolutionState.resolved &&
-                                  resolution.supportsAction(
-                                    ArtifactAction.openCamera,
-                                  )
-                              ? () => controller.openResolutionExternalAction(
-                                  resolution.id,
-                                  ArtifactAction.openCamera,
-                                )
-                              : null,
-                          onOpenArchive:
-                              resolution.state == ResolutionState.resolved &&
-                                  resolution.supportsAction(
-                                    ArtifactAction.openArchive,
-                                  )
-                              ? () => controller.openResolutionExternalAction(
-                                  resolution.id,
-                                  ArtifactAction.openArchive,
-                                )
-                              : null,
-                          onCancel: resolution.isTerminal
-                              ? null
-                              : () =>
-                                    controller.cancelResolution(resolution.id),
-                        );
-                      },
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final compact = constraints.maxHeight < 260;
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  context.shellText.resolutionsTitle,
+                  style:
+                      (compact
+                              ? theme.textTheme.titleLarge
+                              : theme.textTheme.headlineSmall)
+                          ?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                if (!compact) ...<Widget>[
+                  const SizedBox(height: 8),
+                  Text(
+                    context.shellText.resolutionsSubtitle,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
                     ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                Expanded(
+                  child: controller.resolutions.isEmpty
+                      ? Center(
+                          child: Text(
+                            context.shellText.noProviderResolutionsYet,
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.bodyLarge?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        )
+                      : ListView.separated(
+                          itemCount: controller.resolutions.length,
+                          separatorBuilder: (_, int index) =>
+                              const SizedBox(height: 14),
+                          itemBuilder: (BuildContext context, int index) {
+                            final resolution = controller.resolutions[index];
+                            final challenge = controller
+                                .activeChallengeForResolution(resolution);
+                            return _ResolutionCard(
+                              resolution: resolution,
+                              challenge: challenge,
+                              busy: controller.busy,
+                              selected:
+                                  controller.selectedResolutionId ==
+                                  resolution.id,
+                              onSelect: () =>
+                                  controller.selectResolution(resolution.id),
+                              onOpenChallenge: challenge == null
+                                  ? null
+                                  : () => onLaunchChallengeSurface(challenge),
+                              openChallengeLabel: openChallengeLabel(challenge),
+                              onContinueChallenge:
+                                  challenge == null ||
+                                      !showsManualChallengeContinue(challenge)
+                                  ? null
+                                  : () => controller.continueChallenge(
+                                      challenge.id,
+                                    ),
+                              onCancelChallenge: challenge == null
+                                  ? null
+                                  : () => controller.cancelChallenge(
+                                      challenge.id,
+                                    ),
+                              onMaterialize:
+                                  resolution.state ==
+                                          ResolutionState.resolved &&
+                                      resolution.supportsAction(
+                                        ArtifactAction.startOnThisDevice,
+                                      )
+                                  ? () => controller.materializeResolution(
+                                      resolution.id,
+                                    )
+                                  : null,
+                              onCopyExport:
+                                  resolution.state ==
+                                          ResolutionState.resolved &&
+                                      resolution.supportsAction(
+                                        ArtifactAction.exportHandoff,
+                                      )
+                                  ? () => controller.copyResolutionExport(
+                                      resolution.id,
+                                    )
+                                  : null,
+                              onShareExport:
+                                  resolution.state ==
+                                          ResolutionState.resolved &&
+                                      resolution.supportsAction(
+                                        ArtifactAction.exportHandoff,
+                                      )
+                                  ? () => controller.shareResolutionExport(
+                                      resolution.id,
+                                    )
+                                  : null,
+                              onOpenRoom:
+                                  resolution.state ==
+                                          ResolutionState.resolved &&
+                                      resolution.supportsAction(
+                                        ArtifactAction.openRoom,
+                                      )
+                                  ? () =>
+                                        controller.openResolutionExternalAction(
+                                          resolution.id,
+                                          ArtifactAction.openRoom,
+                                        )
+                                  : null,
+                              onOpenCamera:
+                                  resolution.state ==
+                                          ResolutionState.resolved &&
+                                      resolution.supportsAction(
+                                        ArtifactAction.openCamera,
+                                      )
+                                  ? () =>
+                                        controller.openResolutionExternalAction(
+                                          resolution.id,
+                                          ArtifactAction.openCamera,
+                                        )
+                                  : null,
+                              onOpenArchive:
+                                  resolution.state ==
+                                          ResolutionState.resolved &&
+                                      resolution.supportsAction(
+                                        ArtifactAction.openArchive,
+                                      )
+                                  ? () =>
+                                        controller.openResolutionExternalAction(
+                                          resolution.id,
+                                          ArtifactAction.openArchive,
+                                        )
+                                  : null,
+                              onCancel: resolution.isTerminal
+                                  ? null
+                                  : () => controller.cancelResolution(
+                                      resolution.id,
+                                    ),
+                            );
+                          },
+                        ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
@@ -4474,68 +5307,80 @@ class _SessionsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              context.shellText.sessionsTitle,
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: controller.sessions.isEmpty
-                  ? Center(
-                      child: Text(
-                        context.shellText.noMobileSessionsYet,
-                        style: theme.textTheme.bodyLarge?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final compact = constraints.maxHeight < 220;
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  context.shellText.sessionsTitle,
+                  style:
+                      (compact
+                              ? theme.textTheme.titleLarge
+                              : theme.textTheme.headlineSmall)
+                          ?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: controller.sessions.isEmpty
+                      ? Center(
+                          child: Text(
+                            context.shellText.noMobileSessionsYet,
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.bodyLarge?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        )
+                      : ListView.separated(
+                          itemCount: controller.sessions.length,
+                          separatorBuilder: (_, int index) =>
+                              const SizedBox(height: 14),
+                          itemBuilder: (BuildContext context, int index) {
+                            final session = controller.sessions[index];
+                            final challenge = controller.activeChallengeFor(
+                              session,
+                            );
+                            return _SessionCard(
+                              session: session,
+                              challenge: challenge,
+                              busy: controller.busy,
+                              selected:
+                                  controller.selectedSessionId == session.id,
+                              onSelect: () =>
+                                  controller.selectSession(session.id),
+                              onStop: () => controller.stopSession(session.id),
+                              onExport: () =>
+                                  controller.exportDiagnostics(session.id),
+                              onOpenChallenge: challenge == null
+                                  ? null
+                                  : () => onLaunchChallengeSurface(challenge),
+                              openChallengeLabel: openChallengeLabel(challenge),
+                              onContinueChallenge:
+                                  challenge == null ||
+                                      !showsManualChallengeContinue(challenge)
+                                  ? null
+                                  : () => controller.continueChallenge(
+                                      challenge.id,
+                                    ),
+                              onCancelChallenge: challenge == null
+                                  ? null
+                                  : () => controller.cancelChallenge(
+                                      challenge.id,
+                                    ),
+                            );
+                          },
                         ),
-                      ),
-                    )
-                  : ListView.separated(
-                      itemCount: controller.sessions.length,
-                      separatorBuilder: (_, int index) =>
-                          const SizedBox(height: 14),
-                      itemBuilder: (BuildContext context, int index) {
-                        final session = controller.sessions[index];
-                        final challenge = controller.activeChallengeFor(
-                          session,
-                        );
-                        return _SessionCard(
-                          session: session,
-                          challenge: challenge,
-                          busy: controller.busy,
-                          selected: controller.selectedSessionId == session.id,
-                          onSelect: () => controller.selectSession(session.id),
-                          onStop: () => controller.stopSession(session.id),
-                          onExport: () =>
-                              controller.exportDiagnostics(session.id),
-                          onOpenChallenge: challenge == null
-                              ? null
-                              : () => onLaunchChallengeSurface(challenge),
-                          openChallengeLabel: openChallengeLabel(challenge),
-                          onContinueChallenge:
-                              challenge == null ||
-                                  !showsManualChallengeContinue(challenge)
-                              ? null
-                              : () =>
-                                    controller.continueChallenge(challenge.id),
-                          onCancelChallenge: challenge == null
-                              ? null
-                              : () => controller.cancelChallenge(challenge.id),
-                        );
-                      },
-                    ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

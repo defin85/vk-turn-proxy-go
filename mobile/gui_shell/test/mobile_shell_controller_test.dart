@@ -406,6 +406,90 @@ void main() {
   );
 
   test(
+    'controller clears the selected reusable resolution when forgetting embedded sign-in',
+    () async {
+      final resetter = _FakeOwnedBrowserSessionStateResetter();
+      final profile = ProfileRecord(
+        id: 'profile-1',
+        name: 'vk live',
+        spec: _profileSpec(),
+      );
+      final bridge = _FakeMobileHostBridge(
+        resolutionsList: <ResolutionRecord>[_resolutionRecord()],
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[profile],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: profile.id,
+            draft: ProfileDraft.fromProfile(profile),
+          ),
+        ),
+        ownedBrowserSessionStateResetter: resetter,
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      controller.selectResolution('resolution-1');
+
+      await controller.clearRememberedEmbeddedSignIn();
+
+      expect(resetter.clearCalls, 1);
+      expect(controller.selectedResolutionId, isNull);
+      expect(controller.notice, 'Cleared remembered embedded sign-in.');
+    },
+  );
+
+  test(
+    'controller starts a fresh resolution after forgetting embedded sign-in instead of reusing a resolved artifact',
+    () async {
+      final resetter = _FakeOwnedBrowserSessionStateResetter();
+      final profile = ProfileRecord(
+        id: 'profile-1',
+        name: 'vk live',
+        spec: _profileSpec(),
+      );
+      final bridge = _FakeMobileHostBridge(
+        resolutionsList: <ResolutionRecord>[
+          _resolutionRecord(id: 'resolution-resolved-1'),
+        ],
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[profile],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: profile.id,
+            draft: ProfileDraft.fromProfile(profile),
+          ),
+        ),
+        ownedBrowserSessionStateResetter: resetter,
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      expect(controller.selectedResolutionId, 'resolution-resolved-1');
+
+      await controller.clearRememberedEmbeddedSignIn();
+      await controller.startPlatformTunnel(
+        PlatformTunnelMode.androidVpnService,
+      );
+
+      expect(resetter.clearCalls, 1);
+      expect(bridge.startResolutionCalls, hasLength(1));
+      expect(bridge.startedPlatformTunnelResolutionIDs, <String?>[
+        'resolution-1',
+      ]);
+      expect(controller.selectedResolutionId, 'resolution-1');
+    },
+  );
+
+  test(
     'controller surfaces platform reset errors for remembered embedded sign-in without double wrapping',
     () async {
       final resetter = _FakeOwnedBrowserSessionStateResetter(
@@ -1355,6 +1439,7 @@ void main() {
             ],
             providerConfigs: const <ProviderConfigRecord>[],
             selectedProfileId: 'profile-1',
+            focusedProfileId: 'profile-1',
             draft: ProfileDraft.fromProfile(
               ProfileRecord(
                 id: 'profile-1',
@@ -2567,7 +2652,11 @@ class _InMemoryStateStore implements MobileShellStateStore {
   Future<MobileShellState?> load() async => state;
 
   @override
-  Future<void> save(MobileShellState state) async {}
+  Future<void> save(
+    MobileShellState state, {
+    Iterable<ProviderDescriptor> providerDescriptors =
+        const <ProviderDescriptor>[],
+  }) async {}
 
   @override
   Future<void> clear() async {}
@@ -3022,7 +3111,11 @@ class _ThrowingStateStore implements MobileShellStateStore {
   }
 
   @override
-  Future<void> save(MobileShellState state) async {}
+  Future<void> save(
+    MobileShellState state, {
+    Iterable<ProviderDescriptor> providerDescriptors =
+        const <ProviderDescriptor>[],
+  }) async {}
 }
 
 class _FakeMobileHandoffAdapter implements MobileHandoffAdapter {
@@ -3103,7 +3196,11 @@ class _RecoverableThrowingStateStore implements MobileShellStateStore {
   }
 
   @override
-  Future<void> save(MobileShellState state) async {}
+  Future<void> save(
+    MobileShellState state, {
+    Iterable<ProviderDescriptor> providerDescriptors =
+        const <ProviderDescriptor>[],
+  }) async {}
 }
 
 ResolutionRecord _resolutionRecord({

@@ -360,7 +360,8 @@ void main() {
       await tester.tap(find.text('Add profile'));
       await tester.pumpAndSettle();
 
-      expect(controller.selectedProfileId, isNull);
+      expect(controller.selectedProfileId, profile.id);
+      expect(controller.focusedProfileId, isNull);
 
       await tester.pageBack();
       await tester.pumpAndSettle();
@@ -369,7 +370,7 @@ void main() {
 
       expect(find.text('Choose a profile'), findsNothing);
       expect(find.text('Current mode'), findsOneWidget);
-      expect(find.text('Continue in Profiles'), findsOneWidget);
+      expect(find.text('Turn on VPN'), findsOneWidget);
       expect(find.text('Open profiles'), findsNothing);
       expect(find.text('Open activity'), findsOneWidget);
       expect(find.text('Open routing'), findsNothing);
@@ -396,14 +397,27 @@ void main() {
 
       expect(find.text('No saved profiles yet'), findsOneWidget);
       expect(find.text('Add profile'), findsOneWidget);
-      expect(find.text('Import invite'), findsNothing);
+      expect(
+        find.byKey(const ValueKey<String>('profiles-import-button')),
+        findsOneWidget,
+      );
       expect(find.text('Manage providers'), findsNothing);
       expect(find.byTooltip('Profiles actions'), findsOneWidget);
 
       await _openProfilesMenu(tester);
 
-      expect(find.text('Import invite'), findsOneWidget);
       expect(find.text('Manage providers'), findsNothing);
+      await tester.tapAt(const Offset(200, 200));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('profiles-import-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Import from file'), findsOneWidget);
+      expect(find.text('Scan portable profile QR'), findsOneWidget);
+      expect(find.text('Paste envelope'), findsOneWidget);
       await tester.tapAt(const Offset(200, 200));
       await tester.pumpAndSettle();
 
@@ -1779,6 +1793,324 @@ void main() {
     },
   );
 
+  testWidgets(
+    'owned-browser page keeps calls.vk.com root starts in the same browser session',
+    (WidgetTester tester) async {
+      final rootUri = Uri.parse('https://calls.vk.com/');
+      final loadedUris = <Uri>[];
+      final runner = WebViewOwnedBrowserChallengeRunner(
+        sessionFactory:
+            (
+              ValueChanged<String> onWebResourceError,
+              ValueChanged<Uri> onPageNavigation,
+            ) {
+              return OwnedBrowserWebSession(
+                viewBuilder: (BuildContext context) => const SizedBox.expand(
+                  child: ColoredBox(color: Colors.black),
+                ),
+                load: (Uri uri) async {
+                  loadedUris.add(uri);
+                  if (uri == rootUri) {
+                    onPageNavigation(Uri.parse('https://calls.vk.com/feed'));
+                  }
+                },
+                clearSessionState: () async {},
+                collectCookies: (List<String> urls) async =>
+                    const <BrowserCookieRecord>[],
+              );
+            },
+      );
+      final challenge = ChallengeRecord(
+        id: 'challenge-1',
+        sessionId: 'session-1',
+        provider: 'vk',
+        stage: 'provider_resolve',
+        kind: 'browser',
+        prompt: 'Authenticate inside the in-app browser.',
+        openUrl: rootUri.toString(),
+        status: ChallengeStatus.pending,
+        completionMode: ChallengeCompletionMode.ownedBrowserObserved,
+        ownedBrowser: const ChallengeOwnedBrowserMetadata(
+          cookieUrls: <String>[
+            'https://calls.vk.com/',
+            'https://login.vk.com/',
+          ],
+        ),
+        createdAt: DateTime.utc(2026, 4, 16, 12, 0),
+        updatedAt: DateTime.utc(2026, 4, 16, 12, 1),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (BuildContext context) {
+              return Scaffold(
+                body: Center(
+                  child: FilledButton(
+                    onPressed: () {
+                      unawaited(runner.run(context, challenge));
+                    },
+                    child: const Text('Open challenge'),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open challenge'));
+      await tester.pumpAndSettle();
+
+      expect(loadedUris, <Uri>[rootUri]);
+    },
+  );
+
+  testWidgets(
+    'owned-browser page auto-completes for host-approved transport-ready VK root flow',
+    (WidgetTester tester) async {
+      var clearSessionStateCalls = 0;
+      var observedRequests = const <BrowserObservedRequestRecord>[];
+      ChallengeContinuationSubmission? submission;
+      final runner = WebViewOwnedBrowserChallengeRunner(
+        sessionFactory:
+            (
+              ValueChanged<String> onWebResourceError,
+              ValueChanged<Uri> onPageNavigation,
+            ) {
+              return OwnedBrowserWebSession(
+                viewBuilder: (BuildContext context) => const SizedBox.expand(
+                  child: ColoredBox(color: Colors.black),
+                ),
+                load: (Uri uri) async {},
+                clearSessionState: () async {
+                  clearSessionStateCalls += 1;
+                },
+                collectCookies: (List<String> urls) async =>
+                    const <BrowserCookieRecord>[
+                      BrowserCookieRecord(
+                        name: 'remixsid',
+                        value: 'cookie',
+                        domain: 'calls.vk.com',
+                      ),
+                    ],
+                collectObservedRequests: () async => observedRequests,
+              );
+            },
+      );
+      final challenge = ChallengeRecord(
+        id: 'challenge-1',
+        sessionId: 'session-1',
+        provider: 'vk',
+        stage: 'provider_resolve',
+        kind: 'browser',
+        prompt: 'Authenticate inside the in-app browser.',
+        openUrl: 'https://calls.vk.com/',
+        status: ChallengeStatus.pending,
+        completionMode: ChallengeCompletionMode.ownedBrowserObserved,
+        ownedBrowser: const ChallengeOwnedBrowserMetadata(
+          cookieUrls: <String>[
+            'https://calls.vk.com/',
+            'https://vk.com/',
+            'https://login.vk.com/',
+            'https://login.vk.ru/',
+          ],
+          autoContinueOnTransportReady: true,
+        ),
+        createdAt: DateTime.utc(2026, 4, 19, 12, 0),
+        updatedAt: DateTime.utc(2026, 4, 19, 12, 1),
+      );
+
+      Future<void> openHarness(BuildContext context) async {
+        submission = await runner.run(context, challenge);
+      }
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (BuildContext context) {
+              return Scaffold(
+                body: Center(
+                  child: FilledButton(
+                    onPressed: () {
+                      unawaited(openHarness(context));
+                    },
+                    child: const Text('Open challenge'),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open challenge'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Authenticate inside the in-app browser.'),
+        findsOneWidget,
+      );
+      expect(clearSessionStateCalls, 1);
+
+      observedRequests = <BrowserObservedRequestRecord>[
+        const BrowserObservedRequestRecord(
+          method: 'POST',
+          url: 'https://calls.okcdn.ru/fb.do',
+          formValues: <String, String>{
+            'method': 'vchat.startConversation',
+            'createJoinLink': 'true',
+          },
+          statusCode: 200,
+          body: <String, dynamic>{
+            'endpoint': 'wss://videowebrtc.okcdn.ru/ws2?conversationId=test',
+            'wt_endpoint':
+                'https://videowebrtc.okcdn.ru:23432/wt?conversationId=test',
+            'token': 'transport-token',
+            'turn_server': <String, dynamic>{
+              'username': 'turn-user',
+              'credential': 'turn-credential',
+              'urls': <String>['turn:155.212.199.150:19302'],
+            },
+          },
+        ),
+      ];
+
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Authenticate inside the in-app browser.'),
+        findsNothing,
+      );
+      expect(submission, isNotNull);
+      expect(submission!.observedRequests, hasLength(1));
+      expect(clearSessionStateCalls, 2);
+    },
+  );
+
+  testWidgets(
+    'owned-browser harness auto-completes after transport-ready hosted-call evidence is observed',
+    (WidgetTester tester) async {
+      var clearSessionStateCalls = 0;
+      var observedRequests = const <BrowserObservedRequestRecord>[];
+      ChallengeContinuationSubmission? submission;
+      final runner = WebViewOwnedBrowserChallengeRunner(
+        sessionFactory:
+            (
+              ValueChanged<String> onWebResourceError,
+              ValueChanged<Uri> onPageNavigation,
+            ) {
+              return OwnedBrowserWebSession(
+                viewBuilder: (BuildContext context) => const SizedBox.expand(
+                  child: ColoredBox(color: Colors.black),
+                ),
+                load: (Uri uri) async {},
+                clearSessionState: () async {
+                  clearSessionStateCalls += 1;
+                },
+                collectCookies: (List<String> urls) async =>
+                    const <BrowserCookieRecord>[
+                      BrowserCookieRecord(
+                        name: 'remixsid',
+                        value: 'cookie',
+                        domain: 'calls.vk.com',
+                      ),
+                    ],
+                collectObservedRequests: () async => observedRequests,
+              );
+            },
+      );
+      final challenge = ChallengeRecord(
+        id: 'owned-browser-ime-harness',
+        sessionId: 'session-1',
+        provider: 'vk',
+        stage: 'provider_resolve',
+        kind: 'browser',
+        prompt: 'Authenticate inside the in-app browser.',
+        openUrl: 'https://calls.vk.com/#codex-auto-complete=1',
+        status: ChallengeStatus.pending,
+        completionMode: ChallengeCompletionMode.ownedBrowserObserved,
+        ownedBrowser: const ChallengeOwnedBrowserMetadata(
+          cookieUrls: <String>[
+            'https://calls.vk.com/',
+            'https://vk.com/',
+            'https://login.vk.com/',
+            'https://login.vk.ru/',
+          ],
+        ),
+        createdAt: DateTime.utc(2026, 4, 19, 12, 0),
+        updatedAt: DateTime.utc(2026, 4, 19, 12, 1),
+      );
+
+      Future<void> openHarness(BuildContext context) async {
+        submission = await runner.run(context, challenge);
+      }
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (BuildContext context) {
+              return Scaffold(
+                body: Center(
+                  child: FilledButton(
+                    onPressed: () {
+                      unawaited(openHarness(context));
+                    },
+                    child: const Text('Open challenge'),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open challenge'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Authenticate inside the in-app browser.'),
+        findsOneWidget,
+      );
+      expect(clearSessionStateCalls, 1);
+
+      observedRequests = <BrowserObservedRequestRecord>[
+        const BrowserObservedRequestRecord(
+          method: 'POST',
+          url: 'https://calls.okcdn.ru/fb.do',
+          formValues: <String, String>{
+            'method': 'vchat.startConversation',
+            'createJoinLink': 'true',
+          },
+          statusCode: 200,
+          body: <String, dynamic>{
+            'endpoint': 'wss://videowebrtc.okcdn.ru/ws2?conversationId=test',
+            'wt_endpoint':
+                'https://videowebrtc.okcdn.ru:23432/wt?conversationId=test',
+            'token': 'transport-token',
+            'turn_server': <String, dynamic>{
+              'username': 'turn-user',
+              'credential': 'turn-credential',
+              'urls': <String>['turn:155.212.199.150:19302'],
+            },
+          },
+        ),
+      ];
+
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Authenticate inside the in-app browser.'),
+        findsNothing,
+      );
+      expect(submission, isNotNull);
+      expect(submission!.observedRequests, hasLength(1));
+      expect(clearSessionStateCalls, 2);
+    },
+  );
+
   testWidgets('owned-browser page applies the VK desktop-like user agent', (
     WidgetTester tester,
   ) async {
@@ -2490,7 +2822,7 @@ void main() {
   testWidgets(
     'mobile shell exposes and runs the dedicated forget embedded sign-in action',
     (WidgetTester tester) async {
-      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.physicalSize = const Size(800, 1800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
@@ -2505,6 +2837,13 @@ void main() {
       await tester.pumpAndSettle();
 
       await _openSupportTab(tester);
+      expect(find.text('Embedded browser cookies and session'), findsOneWidget);
+      expect(
+        find.text(
+          'The in-app browser keeps its own app-owned cookies and storage. Rebooting the device does not clear this state.',
+        ),
+        findsOneWidget,
+      );
       expect(find.text('Forget embedded sign-in'), findsOneWidget);
 
       await tester.tap(
@@ -2517,6 +2856,40 @@ void main() {
       expect(controller.notice, 'Cleared remembered embedded sign-in.');
     },
   );
+
+  testWidgets('mobile shell uses the wide support layout on tablet widths', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final controller = MobileShellController(
+      bridge: _FakeMobileHostBridge(),
+      stateStore: _InMemoryStateStore(MobileShellState.empty()),
+    );
+    await controller.initialize();
+    await tester.pumpWidget(MobileShellApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    await _openSupportTab(tester);
+
+    expect(find.text('Current profile'), findsOneWidget);
+    expect(find.text('Host ready'), findsOneWidget);
+    expect(find.text('Diagnostics'), findsOneWidget);
+    expect(find.text('Resolutions (0)'), findsOneWidget);
+    expect(find.text('Sessions (0)'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'Activity'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'Diagnostics'), findsOneWidget);
+    expect(find.text('Embedded browser cookies and session'), findsNothing);
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Diagnostics'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Embedded browser cookies and session'), findsOneWidget);
+    expect(find.text('Overview'), findsOneWidget);
+    expect(find.text('Mobile host ready'), findsOneWidget);
+  });
 
   testWidgets('mobile shell renders event stream in diagnostics events', (
     WidgetTester tester,
@@ -2775,10 +3148,27 @@ void main() {
         find.byKey(const ValueKey<String>('provider-family-picker-item-vk')),
       );
       await tester.pumpAndSettle();
+      final providerWorkspaceScrollable = _managedProviderWorkspaceScrollable();
+      await tester.scrollUntilVisible(
+        find.text('Provider name'),
+        240,
+        scrollable: providerWorkspaceScrollable,
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, 'VK Starter');
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey<String>('managed-provider-save-button')),
+        240,
+        scrollable: providerWorkspaceScrollable,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(
-        find.byKey(
-          const ValueKey<String>('managed-provider-save-template-button'),
-        ),
+        find.byKey(const ValueKey<String>('managed-provider-save-button')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey<String>('providers-save-template-button')),
       );
       await tester.pumpAndSettle();
 
@@ -2842,17 +3232,17 @@ void main() {
       await tester.enterText(find.byType(TextField).first, 'VK Starter');
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
-        find.byKey(
-          const ValueKey<String>('managed-provider-save-template-button'),
-        ),
+        find.byKey(const ValueKey<String>('managed-provider-save-button')),
         240,
         scrollable: providerWorkspaceScrollable,
       );
       await tester.pumpAndSettle();
       await tester.tap(
-        find.byKey(
-          const ValueKey<String>('managed-provider-save-template-button'),
-        ),
+        find.byKey(const ValueKey<String>('managed-provider-save-button')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey<String>('providers-save-template-button')),
       );
       await tester.pumpAndSettle();
 
@@ -2880,25 +3270,20 @@ void main() {
       final templateId = controller.providerTemplates.single.id;
 
       await tester.tap(
-        find.byKey(const ValueKey<String>('managed-provider-create-button')),
+        find.byKey(const ValueKey<String>('providers-surface-templates')),
       );
       await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(
-          const ValueKey<String>('provider-chooser-surface-templates'),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('My templates'), findsOneWidget);
-      expect(find.text('Shipped templates'), findsOneWidget);
       expect(
-        find.byKey(ValueKey<String>('user-template-item-$templateId')),
+        find.byKey(ValueKey<String>('provider-template-item-$templateId')),
         findsOneWidget,
       );
 
       await tester.tap(
-        find.byKey(ValueKey<String>('user-template-use-$templateId')),
+        find.byKey(ValueKey<String>('provider-template-item-$templateId')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey<String>('templates-use-button')),
       );
       await tester.pumpAndSettle();
 
@@ -2929,21 +3314,31 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(controller.managedProviders, hasLength(1));
-      expect(controller.managedProviders.single.name, 'VK Seeded Provider');
+      expect(controller.managedProviders, hasLength(2));
+      expect(
+        controller.managedProviders.any(
+          (ManagedProviderRecord provider) => provider.name == 'VK Starter',
+        ),
+        isTrue,
+      );
+      expect(
+        controller.managedProviders.any(
+          (ManagedProviderRecord provider) =>
+              provider.name == 'VK Seeded Provider',
+        ),
+        isTrue,
+      );
 
       await tester.tap(
-        find.byKey(const ValueKey<String>('managed-provider-create-button')),
+        find.byKey(const ValueKey<String>('providers-surface-templates')),
       );
       await tester.pumpAndSettle();
       await tester.tap(
-        find.byKey(
-          const ValueKey<String>('provider-chooser-surface-templates'),
-        ),
+        find.byKey(ValueKey<String>('provider-template-item-$templateId')),
       );
       await tester.pumpAndSettle();
       await tester.tap(
-        find.byKey(ValueKey<String>('user-template-edit-$templateId')),
+        find.byKey(const ValueKey<String>('templates-edit-button')),
       );
       await tester.pumpAndSettle();
 
@@ -2975,16 +3370,20 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(controller.providerTemplates.single.name, 'VK Starter Updated');
-      expect(controller.managedProviders.single.name, 'VK Seeded Provider');
+      expect(
+        controller.managedProviders.any(
+          (ManagedProviderRecord provider) =>
+              provider.name == 'VK Seeded Provider',
+        ),
+        isTrue,
+      );
 
-      await tester.scrollUntilVisible(
-        find.byKey(const ValueKey<String>('provider-template-delete-button')),
-        240,
-        scrollable: templateWorkspaceScrollable,
+      await tester.tap(
+        find.byKey(ValueKey<String>('provider-template-item-$templateId')),
       );
       await tester.pumpAndSettle();
       await tester.tap(
-        find.byKey(const ValueKey<String>('provider-template-delete-button')),
+        find.byKey(const ValueKey<String>('templates-delete-button')),
       );
       await tester.pumpAndSettle();
 
@@ -3026,14 +3425,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('My templates'), findsOneWidget);
-    expect(find.text('Shipped templates'), findsOneWidget);
+    expect(find.text('My templates'), findsNothing);
     expect(
       find.text(
         'No saved templates yet. Save a provider as a template to reuse it here.',
       ),
-      findsOneWidget,
+      findsNothing,
     );
+    expect(find.text('Shipped presets'), findsOneWidget);
     expect(find.text('Read-only shipped template'), findsWidgets);
     expect(find.text('Edit template'), findsNothing);
   });
@@ -3212,6 +3611,10 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey<String>('providers-edit-button')),
+      );
+      await tester.pumpAndSettle();
 
       await tester.scrollUntilVisible(
         find.text('Provider name'),
@@ -3237,14 +3640,20 @@ void main() {
 
       expect(controller.providerConfigs.single.name, 'WB Central Updated');
 
-      await tester.scrollUntilVisible(
-        find.byKey(const ValueKey<String>('managed-provider-delete-button')),
-        240,
-        scrollable: providerWorkspaceScrollable,
+      await tester.tap(
+        find.byKey(const ValueKey<String>('providers-back-button')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(
+          ValueKey<String>(
+            'managed-provider-item-${controller.providerConfigs.single.id}',
+          ),
+        ),
       );
       await tester.pumpAndSettle();
       final deleteButton = tester.widget<OutlinedButton>(
-        find.byKey(const ValueKey<String>('managed-provider-delete-button')),
+        find.byKey(const ValueKey<String>('providers-delete-button')),
       );
       expect(deleteButton.onPressed, isNotNull);
       deleteButton.onPressed!.call();
@@ -3300,6 +3709,10 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('providers-edit-button')),
+    );
+    await tester.pumpAndSettle();
 
     expect(controller.workflowSurface, MobileWorkflowSurface.providerConfig);
     expect(
@@ -3310,8 +3723,8 @@ void main() {
     );
     expect(
       tester
-          .widget<TextButton>(
-            find.byKey(const ValueKey<String>('managed-provider-apply-button')),
+          .widget<OutlinedButton>(
+            find.byKey(const ValueKey<String>('providers-use-button')),
           )
           .onPressed,
       isNotNull,
@@ -3362,6 +3775,10 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey<String>('providers-edit-button')),
+      );
+      await tester.pumpAndSettle();
 
       final providerWorkspaceScrollable = _managedProviderWorkspaceScrollable();
       await tester.scrollUntilVisible(
@@ -3387,10 +3804,8 @@ void main() {
       );
       expect(
         tester
-            .widget<TextButton>(
-              find.byKey(
-                const ValueKey<String>('managed-provider-apply-button'),
-              ),
+            .widget<OutlinedButton>(
+              find.byKey(const ValueKey<String>('providers-use-button')),
             )
             .onPressed,
         isNotNull,
@@ -3455,8 +3870,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final applyButton = tester.widget<TextButton>(
-        find.byKey(const ValueKey<String>('managed-provider-apply-button')),
+      final applyButton = tester.widget<OutlinedButton>(
+        find.byKey(const ValueKey<String>('providers-use-button')),
       );
       expect(applyButton.onPressed, isNotNull);
       applyButton.onPressed!.call();
@@ -3712,6 +4127,10 @@ void main() {
       expect(find.text('Paste portable profile envelope'), findsOneWidget);
       expect(find.text('Preview import'), findsOneWidget);
       expect(tester.takeException(), isNull);
+      tester.view.viewInsets = FakeViewPadding.zero;
+      await tester.pump();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
     },
   );
 
@@ -3766,12 +4185,15 @@ void main() {
 
       expect(find.text('Import portable profile'), findsOneWidget);
       expect(tester.takeException(), isNull);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
     },
   );
 
   testWidgets('saved profile banner auto-dismisses in the profile workspace', (
     WidgetTester tester,
   ) async {
+    tester.view.reset();
     tester.view.physicalSize = const Size(1200, 2200);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -3783,11 +4205,20 @@ void main() {
     );
 
     await controller.initialize();
-    await tester.pumpWidget(MobileShellApp(controller: controller));
-    await tester.pumpAndSettle();
-
-    await _openProfilesTab(tester);
-    await _openProfileEditorFromProfiles(tester);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AnimatedBuilder(
+          animation: controller,
+          builder: (BuildContext context, _) {
+            final notice = controller.surfaceNotice;
+            return Scaffold(
+              body: notice == null ? const SizedBox.shrink() : Text(notice),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pump();
 
     await controller.saveDraft();
     await tester.pump();
@@ -4042,7 +4473,11 @@ class _InMemoryStateStore implements MobileShellStateStore {
   Future<MobileShellState?> load() async => state;
 
   @override
-  Future<void> save(MobileShellState state) async {}
+  Future<void> save(
+    MobileShellState state, {
+    Iterable<ProviderDescriptor> providerDescriptors =
+        const <ProviderDescriptor>[],
+  }) async {}
 
   @override
   Future<void> clear() async {}
@@ -4560,7 +4995,11 @@ class _ThrowingStateStore implements MobileShellStateStore {
   }
 
   @override
-  Future<void> save(MobileShellState state) async {}
+  Future<void> save(
+    MobileShellState state, {
+    Iterable<ProviderDescriptor> providerDescriptors =
+        const <ProviderDescriptor>[],
+  }) async {}
 }
 
 class _FakeMobileHandoffAdapter implements MobileHandoffAdapter {

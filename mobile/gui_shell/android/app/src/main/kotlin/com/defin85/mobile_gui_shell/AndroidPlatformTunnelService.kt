@@ -178,8 +178,9 @@ internal class AndroidPlatformTunnelService : VpnService() {
         ): String? {
             val normalizedPolicy = policy.trim()
             val packageManager = context.packageManager
-            when (normalizedPolicy) {
-                "all_apps" -> return null
+            val appRoutingError =
+                when (normalizedPolicy) {
+                    "all_apps" -> null
                 "allowed_packages" -> {
                     for (pkg in allowedPackages) {
                         if (pkg == context.packageName) {
@@ -189,7 +190,7 @@ internal class AndroidPlatformTunnelService : VpnService() {
                             return "Allowed package $pkg is not installed on this device."
                         }
                     }
-                    return null
+                    null
                 }
                 "disallowed_packages" -> {
                     for (pkg in disallowedPackages) {
@@ -197,9 +198,12 @@ internal class AndroidPlatformTunnelService : VpnService() {
                             return "Disallowed package $pkg is not installed on this device."
                         }
                     }
-                    return null
+                    null
                 }
-                else -> return "Android VPN route policy $normalizedPolicy is not supported."
+                    else -> "Android VPN route policy $normalizedPolicy is not supported."
+                }
+            if (appRoutingError != null) {
+                return appRoutingError
             }
             return when (underlayRoutePolicy.trim()) {
                 "", "standard" -> null

@@ -36,9 +36,10 @@ type BrowserReturnMetadata struct {
 }
 
 type InteractiveChallengeMetadata struct {
-	CompletionMode        ChallengeCompletionMode
-	BrowserReturn         *BrowserReturnMetadata
-	AllowRememberedSignIn bool
+	CompletionMode                    ChallengeCompletionMode
+	BrowserReturn                     *BrowserReturnMetadata
+	AllowRememberedSignIn             bool
+	AllowAutoContinueOnTransportReady bool
 }
 
 type InteractiveChallengeMetadataProvider interface {

@@ -1,0 +1,82 @@
+{
+  "scenario_id": "vk_call_authenticated_transport_missing_v1",
+  "provider": "vk",
+  "browser_source": {
+    "captured_at": "2026-04-16",
+    "contour": "authenticated_hosted_call_create_join_link",
+    "notes": "Observed mobile owned-browser hosted-call creation branch reached vchat.startConversation(createJoinLink=true) but the response did not carry transport-ready TURN fields."
+  },
+  "input": {
+    "input_family": "authenticated_root",
+    "link_redacted": "https://calls.vk.com/"
+  },
+  "stages": [
+    {
+      "name": "ok_anonym_login",
+      "endpoint_id": "ok_anonym_login",
+      "request": {
+        "method": "POST",
+        "form_keys": [
+          "application_key",
+          "format",
+          "method",
+          "session_data"
+        ],
+        "redacted_fields": [
+          "session_data"
+        ]
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "api_server": "https://calls.okcdn.ru/",
+          "session_key": "<redacted:ok-session-key>",
+          "session_secret_key": "<redacted:ok-session-secret-key>"
+        }
+      },
+      "outcome": {
+        "kind": "continue",
+        "extracted": {
+          "session_key": "<redacted:ok-session-key>"
+        }
+      }
+    },
+    {
+      "name": "ok_start_conversation_create_join_link",
+      "endpoint_id": "ok_start_conversation_create_join_link",
+      "request": {
+        "method": "POST",
+        "form_keys": [
+          "application_key",
+          "createJoinLink",
+          "format",
+          "method",
+          "session_key"
+        ],
+        "redacted_fields": [
+          "session_key"
+        ]
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "join_link": "https://vk.com/call/join/<redacted:vk-hosted-call-token>",
+          "endpoint": "wss://<redacted:vk-call-endpoint>",
+          "wt_endpoint": "https://<redacted:vk-call-webtransport-endpoint>",
+          "token": "<redacted:vk-call-token>"
+        }
+      },
+      "outcome": {
+        "kind": "provider_error",
+        "error_code": "authenticated_browser_contour_incomplete"
+      }
+    }
+  ],
+  "expected": {
+    "result_kind": "provider_error",
+    "provider_error": {
+      "stage": "ok_start_conversation_create_join_link",
+      "code": "authenticated_browser_contour_incomplete"
+    }
+  }
+}
