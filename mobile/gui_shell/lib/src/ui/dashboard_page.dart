@@ -31,6 +31,8 @@ enum _ProviderChooserSurface { families, templates }
 
 enum _InlineActionDensity { compact, medium, wide }
 
+enum _InlineActionVariant { filledTonal, outlined }
+
 class _ProviderChooserResult {
   const _ProviderChooserResult.family(this.providerId) : preset = null;
 
@@ -991,47 +993,49 @@ class _ProfileListItem extends StatelessWidget {
               onSelected: () async => onDelete(),
             ),
           ];
-          final showCopyInline = density != _InlineActionDensity.compact;
-          final showMakeCurrentInline =
-              !currentForHome && density == _InlineActionDensity.wide;
-          if (showMakeCurrentInline) {
+          final inlineActions = <_InlineActionDescriptor>[
+            _InlineActionDescriptor(
+              id: 'profiles-edit-button',
+              label: context.shellText.mobileEditProfile,
+              icon: Icons.edit_outlined,
+              onPressed: onEdit,
+              variant: _InlineActionVariant.filledTonal,
+            ),
+            if (density != _InlineActionDensity.compact)
+              _InlineActionDescriptor(
+                id: 'profiles-copy-button',
+                label: context.shellText.copyProfile,
+                icon: Icons.content_copy_outlined,
+                onPressed: onCopy,
+                variant: _InlineActionVariant.outlined,
+              ),
+            if (!currentForHome && density == _InlineActionDensity.wide)
+              _InlineActionDescriptor(
+                id: 'profiles-make-current-button',
+                label: context.shellText.makeCurrent,
+                icon: Icons.home_outlined,
+                onPressed: onMakeCurrent,
+                variant: _InlineActionVariant.outlined,
+              ),
+          ];
+          if (density == _InlineActionDensity.wide) {
             overflowActions.removeWhere(
               (_CardActionEntry action) =>
                   action.id == 'profiles-make-current-button',
             );
           }
-          return Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: <Widget>[
-              FilledButton.tonalIcon(
-                key: const ValueKey<String>('profiles-edit-button'),
-                onPressed: busy ? null : onEdit,
-                icon: const Icon(Icons.edit_outlined),
-                label: Text(context.shellText.mobileEditProfile),
-              ),
-              if (showCopyInline)
-                OutlinedButton.icon(
-                  key: const ValueKey<String>('profiles-copy-button'),
-                  onPressed: busy ? null : onCopy,
-                  icon: const Icon(Icons.content_copy_outlined),
-                  label: Text(context.shellText.copyProfile),
-                ),
-              if (showMakeCurrentInline)
-                OutlinedButton.icon(
-                  key: const ValueKey<String>('profiles-make-current-button'),
-                  onPressed: busy ? null : onMakeCurrent,
-                  icon: const Icon(Icons.home_outlined),
-                  label: Text(context.shellText.makeCurrent),
-                ),
-              if (overflowActions.isNotEmpty)
-                _ActionOverflowButton(
-                  key: const ValueKey<String>('profiles-actions-overflow'),
-                  tooltip: MaterialLocalizations.of(context).showMenuTooltip,
-                  enabled: !busy,
-                  actions: overflowActions,
-                ),
-            ],
+          final actionPlan = _planInlineActions(
+            context: context,
+            maxWidth: constraints.maxWidth,
+            inlineActions: inlineActions,
+            overflowActions: overflowActions,
+          );
+          return _InlineActionStrip(
+            busy: busy,
+            overflowTooltip: MaterialLocalizations.of(context).showMenuTooltip,
+            overflowKey: const ValueKey<String>('profiles-actions-overflow'),
+            inlineActions: actionPlan.inlineActions,
+            overflowActions: actionPlan.overflowActions,
           );
         },
       ),
@@ -1047,6 +1051,160 @@ _InlineActionDensity _inlineActionDensityForWidth(double width) {
     return _InlineActionDensity.medium;
   }
   return _InlineActionDensity.wide;
+}
+
+const double _inlineActionSpacing = 10;
+const double _inlineActionOverflowWidth = 48;
+const double _inlineActionHorizontalPadding = 32;
+const double _inlineActionIconWidth = 18;
+const double _inlineActionIconGap = 8;
+const double _inlineActionSafetyMargin = 32;
+
+class _InlineActionDescriptor {
+  const _InlineActionDescriptor({
+    required this.id,
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+    required this.variant,
+  });
+
+  final String id;
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+  final _InlineActionVariant variant;
+
+  _CardActionEntry toOverflowAction() {
+    return _CardActionEntry(
+      id: id,
+      label: label,
+      onSelected: () async => onPressed(),
+    );
+  }
+}
+
+class _InlineActionPlan {
+  const _InlineActionPlan({
+    required this.inlineActions,
+    required this.overflowActions,
+  });
+
+  final List<_InlineActionDescriptor> inlineActions;
+  final List<_CardActionEntry> overflowActions;
+}
+
+_InlineActionPlan _planInlineActions({
+  required BuildContext context,
+  required double maxWidth,
+  required List<_InlineActionDescriptor> inlineActions,
+  required List<_CardActionEntry> overflowActions,
+}) {
+  final visibleActions = <_InlineActionDescriptor>[];
+  final hiddenActions = <_CardActionEntry>[...overflowActions];
+  var usedWidth = 0.0;
+  for (var index = 0; index < inlineActions.length; index += 1) {
+    final action = inlineActions[index];
+    final actionWidth = _estimateInlineActionWidth(context, action);
+    final spacingBefore = visibleActions.isEmpty ? 0.0 : _inlineActionSpacing;
+    final actionsRemaining = inlineActions.length - index - 1;
+    final needsOverflowAfterThis =
+        hiddenActions.isNotEmpty || actionsRemaining > 0;
+    final reservedOverflowWidth = needsOverflowAfterThis
+        ? (visibleActions.isEmpty
+              ? _inlineActionOverflowWidth
+              : _inlineActionSpacing + _inlineActionOverflowWidth)
+        : 0.0;
+    final nextUsedWidth =
+        usedWidth + spacingBefore + actionWidth + reservedOverflowWidth;
+    final forceInline = visibleActions.isEmpty;
+    if (forceInline || nextUsedWidth <= maxWidth) {
+      visibleActions.add(action);
+      usedWidth += spacingBefore + actionWidth;
+      continue;
+    }
+    hiddenActions.add(action.toOverflowAction());
+  }
+  return _InlineActionPlan(
+    inlineActions: visibleActions,
+    overflowActions: hiddenActions,
+  );
+}
+
+double _estimateInlineActionWidth(
+  BuildContext context,
+  _InlineActionDescriptor action,
+) {
+  final textPainter = TextPainter(
+    text: TextSpan(
+      text: action.label,
+      style: Theme.of(context).textTheme.labelLarge,
+    ),
+    maxLines: 1,
+    textDirection: Directionality.of(context),
+  )..layout();
+  return textPainter.width +
+      _inlineActionHorizontalPadding +
+      _inlineActionIconWidth +
+      _inlineActionIconGap +
+      _inlineActionSafetyMargin;
+}
+
+class _InlineActionStrip extends StatelessWidget {
+  const _InlineActionStrip({
+    required this.busy,
+    required this.overflowTooltip,
+    required this.overflowKey,
+    required this.inlineActions,
+    required this.overflowActions,
+  });
+
+  final bool busy;
+  final String overflowTooltip;
+  final ValueKey<String> overflowKey;
+  final List<_InlineActionDescriptor> inlineActions;
+  final List<_CardActionEntry> overflowActions;
+
+  @override
+  Widget build(BuildContext context) {
+    final children = <Widget>[
+      for (var index = 0; index < inlineActions.length; index += 1) ...<Widget>[
+        if (index > 0) const SizedBox(width: _inlineActionSpacing),
+        _buildInlineActionButton(inlineActions[index]),
+      ],
+      if (overflowActions.isNotEmpty) ...<Widget>[
+        if (inlineActions.isNotEmpty)
+          const SizedBox(width: _inlineActionSpacing),
+        _ActionOverflowButton(
+          key: overflowKey,
+          tooltip: overflowTooltip,
+          enabled: !busy,
+          actions: overflowActions,
+        ),
+      ],
+    ];
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Row(mainAxisSize: MainAxisSize.min, children: children),
+    );
+  }
+
+  Widget _buildInlineActionButton(_InlineActionDescriptor action) {
+    return switch (action.variant) {
+      _InlineActionVariant.filledTonal => FilledButton.tonalIcon(
+        key: ValueKey<String>(action.id),
+        onPressed: busy ? null : action.onPressed,
+        icon: Icon(action.icon),
+        label: Text(action.label),
+      ),
+      _InlineActionVariant.outlined => OutlinedButton.icon(
+        key: ValueKey<String>(action.id),
+        onPressed: busy ? null : action.onPressed,
+        icon: Icon(action.icon),
+        label: Text(action.label),
+      ),
+    };
+  }
 }
 
 class _SelectableListRow extends StatelessWidget {
@@ -3428,45 +3586,48 @@ class _ManagedProviderListItem extends StatelessWidget {
               onSelected: () async => onDelete(),
             ),
           ];
-          final showCopyInline = density != _InlineActionDensity.compact;
-          final showUseInline = density != _InlineActionDensity.compact;
+          final inlineActions = <_InlineActionDescriptor>[
+            _InlineActionDescriptor(
+              id: 'providers-edit-button',
+              label: context.shellText.mobileEditProvider,
+              icon: Icons.edit_outlined,
+              onPressed: onEdit,
+              variant: _InlineActionVariant.filledTonal,
+            ),
+            if (density != _InlineActionDensity.compact)
+              _InlineActionDescriptor(
+                id: 'providers-copy-button',
+                label: context.shellText.copyProvider,
+                icon: Icons.content_copy_outlined,
+                onPressed: onCopy,
+                variant: _InlineActionVariant.outlined,
+              ),
+            if (density == _InlineActionDensity.wide)
+              _InlineActionDescriptor(
+                id: 'providers-use-button',
+                label: context.shellText.mobileUseInProfileDraft,
+                icon: Icons.assignment_turned_in_outlined,
+                onPressed: onUseInProfile,
+                variant: _InlineActionVariant.outlined,
+              ),
+          ];
           if (density == _InlineActionDensity.wide) {
             overflowActions.removeWhere(
               (_CardActionEntry action) => action.id == 'providers-use-button',
             );
           }
-          return Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: <Widget>[
-              FilledButton.tonalIcon(
-                key: const ValueKey<String>('providers-edit-button'),
-                onPressed: busy ? null : onEdit,
-                icon: const Icon(Icons.edit_outlined),
-                label: Text(context.shellText.mobileEditProvider),
-              ),
-              if (showCopyInline)
-                OutlinedButton.icon(
-                  key: const ValueKey<String>('providers-copy-button'),
-                  onPressed: busy ? null : onCopy,
-                  icon: const Icon(Icons.content_copy_outlined),
-                  label: Text(context.shellText.copyProvider),
-                ),
-              if (showUseInline && density == _InlineActionDensity.wide)
-                OutlinedButton.icon(
-                  key: const ValueKey<String>('providers-use-button'),
-                  onPressed: busy ? null : onUseInProfile,
-                  icon: const Icon(Icons.assignment_turned_in_outlined),
-                  label: Text(context.shellText.mobileUseInProfileDraft),
-                ),
-              if (overflowActions.isNotEmpty)
-                _ActionOverflowButton(
-                  key: const ValueKey<String>('providers-actions-overflow'),
-                  tooltip: MaterialLocalizations.of(context).showMenuTooltip,
-                  enabled: !busy,
-                  actions: overflowActions,
-                ),
-            ],
+          final actionPlan = _planInlineActions(
+            context: context,
+            maxWidth: constraints.maxWidth,
+            inlineActions: inlineActions,
+            overflowActions: overflowActions,
+          );
+          return _InlineActionStrip(
+            busy: busy,
+            overflowTooltip: MaterialLocalizations.of(context).showMenuTooltip,
+            overflowKey: const ValueKey<String>('providers-actions-overflow'),
+            inlineActions: actionPlan.inlineActions,
+            overflowActions: actionPlan.overflowActions,
           );
         },
       ),
@@ -3579,40 +3740,43 @@ class _ProviderTemplateListItem extends StatelessWidget {
               onSelected: () async => onDelete(),
             ),
           ];
-          final showCopyInline = density != _InlineActionDensity.compact;
-          final showEditInline = density == _InlineActionDensity.wide;
-          return Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: <Widget>[
-              FilledButton.tonalIcon(
-                key: const ValueKey<String>('templates-use-button'),
-                onPressed: busy ? null : onUse,
-                icon: const Icon(Icons.playlist_add_check_outlined),
-                label: Text(context.shellText.mobileUseTemplate),
+          final inlineActions = <_InlineActionDescriptor>[
+            _InlineActionDescriptor(
+              id: 'templates-use-button',
+              label: context.shellText.mobileUseTemplate,
+              icon: Icons.playlist_add_check_outlined,
+              onPressed: onUse,
+              variant: _InlineActionVariant.filledTonal,
+            ),
+            if (density != _InlineActionDensity.compact)
+              _InlineActionDescriptor(
+                id: 'templates-copy-button',
+                label: context.shellText.copyTemplate,
+                icon: Icons.content_copy_outlined,
+                onPressed: onCopy,
+                variant: _InlineActionVariant.outlined,
               ),
-              if (showCopyInline)
-                OutlinedButton.icon(
-                  key: const ValueKey<String>('templates-copy-button'),
-                  onPressed: busy ? null : onCopy,
-                  icon: const Icon(Icons.content_copy_outlined),
-                  label: Text(context.shellText.copyTemplate),
-                ),
-              if (showEditInline)
-                OutlinedButton.icon(
-                  key: const ValueKey<String>('templates-edit-button'),
-                  onPressed: busy ? null : onEdit,
-                  icon: const Icon(Icons.edit_outlined),
-                  label: Text(context.shellText.mobileEditTemplate),
-                ),
-              if (overflowActions.isNotEmpty)
-                _ActionOverflowButton(
-                  key: const ValueKey<String>('templates-actions-overflow'),
-                  tooltip: MaterialLocalizations.of(context).showMenuTooltip,
-                  enabled: !busy,
-                  actions: overflowActions,
-                ),
-            ],
+            if (density == _InlineActionDensity.wide)
+              _InlineActionDescriptor(
+                id: 'templates-edit-button',
+                label: context.shellText.mobileEditTemplate,
+                icon: Icons.edit_outlined,
+                onPressed: onEdit,
+                variant: _InlineActionVariant.outlined,
+              ),
+          ];
+          final actionPlan = _planInlineActions(
+            context: context,
+            maxWidth: constraints.maxWidth,
+            inlineActions: inlineActions,
+            overflowActions: overflowActions,
+          );
+          return _InlineActionStrip(
+            busy: busy,
+            overflowTooltip: MaterialLocalizations.of(context).showMenuTooltip,
+            overflowKey: const ValueKey<String>('templates-actions-overflow'),
+            inlineActions: actionPlan.inlineActions,
+            overflowActions: actionPlan.overflowActions,
           );
         },
       ),

@@ -3497,6 +3497,88 @@ void main() {
   );
 
   testWidgets(
+    'localized provider row actions keep long labels on one line by moving extra actions into overflow',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1500, 2200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(providersList: _providerDescriptors),
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: const <ProfileRecord>[],
+            managedProviders: <ManagedProviderRecord>[
+              ManagedProviderRecord(
+                id: 'provider-config-1',
+                provider: 'vk',
+                name: 'VK Saved',
+                providerSettings: const <String, dynamic>{'region': 'eu-west'},
+                createdAt: DateTime.utc(2026, 4, 12, 18, 0),
+                updatedAt: DateTime.utc(2026, 4, 12, 18, 1),
+              ),
+            ],
+            providerTemplates: const <ProviderTemplateRecord>[],
+            draft: ProfileDraft.defaults(),
+          ),
+        ),
+      );
+
+      await controller.initialize();
+      await pumpMobileShellTestApp(
+        tester,
+        controller: controller,
+        locale: AppLocale.ru,
+      );
+      await tester.pumpAndSettle();
+      await _openProvidersTab(tester);
+
+      await tester.tap(
+        find.byKey(
+          const ValueKey<String>('managed-provider-item-provider-config-1'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey<String>('providers-edit-button')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('providers-copy-button')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('providers-use-button')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('providers-actions-overflow')),
+        findsOneWidget,
+      );
+
+      final editTop = tester
+          .getTopLeft(
+            find.byKey(const ValueKey<String>('providers-edit-button')),
+          )
+          .dy;
+      final copyTop = tester
+          .getTopLeft(
+            find.byKey(const ValueKey<String>('providers-copy-button')),
+          )
+          .dy;
+      final overflowTop = tester
+          .getTopLeft(
+            find.byKey(const ValueKey<String>('providers-actions-overflow')),
+          )
+          .dy;
+
+      expect(copyTop, closeTo(editTop, 0.1));
+      expect(overflowTop, closeTo(editTop, 0.1));
+    },
+  );
+
+  testWidgets(
     'providers and templates root actions open snapshot-copy drafts',
     (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1200, 2200);
@@ -4062,12 +4144,19 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final applyButton = tester.widget<OutlinedButton>(
-        find.byKey(const ValueKey<String>('providers-use-button')),
+      final applyInline = find.byKey(
+        const ValueKey<String>('providers-use-button'),
       );
-      expect(applyButton.onPressed, isNotNull);
-      applyButton.onPressed!.call();
-      await tester.pumpAndSettle();
+      if (applyInline.evaluate().isNotEmpty) {
+        await tester.tap(applyInline);
+        await tester.pumpAndSettle();
+      } else {
+        await _selectOverflowAction(
+          tester,
+          overflowKey: 'providers-actions-overflow',
+          actionKey: 'providers-use-button',
+        );
+      }
 
       expect(controller.workflowSurface, MobileWorkflowSurface.profile);
       expect(controller.draft.spec.provider, 'vk');
