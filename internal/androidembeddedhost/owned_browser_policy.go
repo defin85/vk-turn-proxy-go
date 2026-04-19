@@ -30,7 +30,8 @@ func mobileChallengeMetadata(
 		return metadata
 	}
 	return provider.InteractiveChallengeMetadata{
-		CompletionMode: provider.ChallengeCompletionModeOwnedBrowserObserved,
+		CompletionMode:        provider.ChallengeCompletionModeOwnedBrowserObserved,
+		AllowRememberedSignIn: true,
 	}
 }
 

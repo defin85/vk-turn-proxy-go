@@ -55,6 +55,7 @@ class MobileShellController extends ChangeNotifier {
     MobileHandoffAdapter? handoffAdapter,
     MobilePortableProfileTransferAdapter? portableProfileTransferAdapter,
     MobilePlatformAppInventory? appInventory,
+    MobileOwnedBrowserSessionStateResetter? ownedBrowserSessionStateResetter,
     DirectoryProvider? diagnosticsDirectoryProvider,
     DateTime Function()? clock,
     IDFactory? idFactory,
@@ -66,6 +67,9 @@ class MobileShellController extends ChangeNotifier {
            portableProfileTransferAdapter ??
            SystemMobilePortableProfileTransferAdapter(),
        _appInventory = appInventory ?? PlatformMobilePlatformAppInventory(),
+       _ownedBrowserSessionStateResetter =
+           ownedBrowserSessionStateResetter ??
+           const PlatformMobileOwnedBrowserSessionStateResetter(),
        _diagnosticsDirectoryProvider =
            diagnosticsDirectoryProvider ?? defaultDiagnosticsDirectory,
        _clock = clock ?? DateTime.now,
@@ -81,6 +85,8 @@ class MobileShellController extends ChangeNotifier {
   final MobileHandoffAdapter _handoffAdapter;
   final MobilePortableProfileTransferAdapter _portableProfileTransferAdapter;
   final MobilePlatformAppInventory _appInventory;
+  final MobileOwnedBrowserSessionStateResetter
+  _ownedBrowserSessionStateResetter;
   final DirectoryProvider _diagnosticsDirectoryProvider;
   final DateTime Function() _clock;
   final IDFactory _idFactory;
@@ -1101,6 +1107,26 @@ class MobileShellController extends ChangeNotifier {
     busy = false;
     _notify();
     await _connectBridge();
+  }
+
+  Future<void> clearRememberedEmbeddedSignIn() async {
+    if (busy) {
+      return;
+    }
+    busy = true;
+    _notify();
+    try {
+      await _ownedBrowserSessionStateResetter.clearSessionState();
+      notice = _copy.clearedRememberedEmbeddedSignIn;
+    } catch (error) {
+      notice = switch (error) {
+        MobileHostPlatformActionError(:final message) => message,
+        _ => _copy.failedToClearRememberedEmbeddedSignIn(error),
+      };
+    } finally {
+      busy = false;
+      _notify();
+    }
   }
 
   Future<void> saveDraft() async {

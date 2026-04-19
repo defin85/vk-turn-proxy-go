@@ -26,6 +26,7 @@ class ShellText {
   String get openDiagnostics => t.shellTextOpenDiagnostics;
   String get openProfiles => t.shellTextOpenProfiles;
   String get resetLocalState => t.shellTextResetLocalState;
+  String get forgetEmbeddedSignIn => t.shellTextForgetEmbeddedSignIn;
   String get importFromFile => t.shellTextImportFromFile;
   String get exportSavedProfile => t.shellTextExportSavedProfile;
   String get pasteEnvelope => t.shellTextPasteEnvelope;
@@ -171,6 +172,10 @@ class ShellText {
       t.shellTextFailedToPersistDesktopShellState(error: error);
   String failedToPersistMobileShellState(Object error) =>
       t.shellTextFailedToPersistMobileShellState(error: error);
+  String get clearedRememberedEmbeddedSignIn =>
+      t.shellTextClearedRememberedEmbeddedSignIn;
+  String failedToClearRememberedEmbeddedSignIn(Object error) =>
+      t.shellTextFailedToClearRememberedEmbeddedSignIn(error: error);
   String platformTunnelReadyForLocalHost(String modeLabel) =>
       t.shellTextPlatformTunnelReadyForLocalHost(modeLabel: modeLabel);
   String platformTunnelBlocked({

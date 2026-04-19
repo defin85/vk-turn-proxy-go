@@ -61,6 +61,80 @@ const ProviderDescriptor _unsupportedProviderSettingsDescriptor =
 
 void main() {
   testWidgets(
+    'mobile profile editor keeps saved-profile actions compact until overflow opens',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1400, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: SizedBox(
+                width: 900,
+                child: ProfileEditorPanel(
+                  profiles: const <ProfileRecord>[],
+                  providerDescriptors: const <ProviderDescriptor>[
+                    _providerWithSettingsDescriptor,
+                  ],
+                  availableProviderConfigs: const <ProviderConfigRecord>[],
+                  selectedProfileId: 'profile-1',
+                  draft: ProfileDraft.defaults(),
+                  busy: false,
+                  onSelectProfile: (_) {},
+                  onDraftChanged: (_) {},
+                  onApplyProviderConfig: (_) {},
+                  onSave: () async {},
+                  onDelete: () async {},
+                  onReset: () {},
+                  onResolve: () async {},
+                  onStart: () async {},
+                  onPreparePortableExport: () => null,
+                  onCopyPortableExportText: (_) async {},
+                  onSharePortableExportText: (_) async {},
+                  onSharePortableExportFile: (_) async {},
+                  onImportPortableFromFile: () async => null,
+                  onPreviewPortableImport: (_) => null,
+                  onConfirmPortableImport: (_) async {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(
+        find.byKey(const ValueKey<String>('profile-editor-primary-action')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('profile-editor-save-action')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('profile-editor-more-actions')),
+        findsOneWidget,
+      );
+      expect(find.text('Delete profile'), findsNothing);
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('profile-editor-more-actions')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey<String>('profile-editor-resolve-action')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('profile-editor-delete-action')),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
     'mobile profile editor progressively discloses provider and runtime sections',
     (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1200, 2200);

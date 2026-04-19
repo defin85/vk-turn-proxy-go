@@ -238,6 +238,10 @@ The shell is app-owned and mobile-aware:
 - challenges that advertise `owned_browser_observed` open in an app-owned
   embedded WebView instead of the external browser and continue with the
   documented cookie-backed payload from that same in-app session
+- when that typed challenge metadata also approves remembered sign-in, the
+  shell reuses the same app-owned WebView browser sandbox across compatible
+  embedded challenge opens on the same install instead of clearing it on every
+  open and close
 - app-return-compatible challenges may auto-continue once when the app receives
   the documented foreground-resume or native browser-return signal for that
   active challenge
@@ -254,6 +258,15 @@ If the host does not advertise `owned_browser_observed`, if the challenge omits
 the documented cookie domains, or if the embedded WebView session cannot return
 cookies for those domains, the shell cancels that active challenge through the
 host bridge instead of silently claiming success or inventing a fallback path.
+If remembered browser state still exists but no longer proves completion for
+the current challenge, the shell also fails closed and keeps the manual
+continuation fallback explicit instead of treating remembered sign-in as proof.
+
+Remembered embedded sign-in has its own reset path.
+The `Support` surface exposes `Forget embedded sign-in`, which clears the
+app-owned embedded browser cookies and browser-backed storage without wiping
+saved profiles, provider drafts, routing preferences, or unrelated shell
+preferences.
 
 The current repo-owned approval gate is narrow by design:
 

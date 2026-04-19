@@ -46,6 +46,9 @@ func TestMobileChallengeMetadataOverridesApprovedOwnedBrowserChallenges(t *testi
 	if metadata.CompletionMode != provider.ChallengeCompletionModeOwnedBrowserObserved {
 		t.Fatalf("completion_mode = %q, want %q", metadata.CompletionMode, provider.ChallengeCompletionModeOwnedBrowserObserved)
 	}
+	if !metadata.AllowRememberedSignIn {
+		t.Fatal("allow_remembered_sign_in = false, want true")
+	}
 	if metadata.BrowserReturn != nil {
 		t.Fatalf("browser_return = %#v, want nil", metadata.BrowserReturn)
 	}

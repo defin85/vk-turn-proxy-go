@@ -314,7 +314,8 @@ type ChallengeBrowserReturnMetadata struct {
 }
 
 type ChallengeOwnedBrowserMetadata struct {
-	CookieURLs []string `json:"cookie_urls,omitempty"`
+	CookieURLs     []string `json:"cookie_urls,omitempty"`
+	RememberSignIn bool     `json:"remember_sign_in,omitempty"`
 }
 
 type BrowserCookie struct {

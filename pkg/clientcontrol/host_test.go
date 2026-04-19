@@ -1819,7 +1819,8 @@ func TestHostResolutionChallengeOwnedBrowserUsesSubmittedContinuation(t *testing
 						prompt:   "complete captcha",
 						openURL:  "https://example.test/challenge",
 						metadata: provider.InteractiveChallengeMetadata{
-							CompletionMode: provider.ChallengeCompletionModeOwnedBrowserObserved,
+							CompletionMode:        provider.ChallengeCompletionModeOwnedBrowserObserved,
+							AllowRememberedSignIn: true,
 						},
 					},
 					cookieURLs: []string{
@@ -1894,6 +1895,9 @@ func TestHostResolutionChallengeOwnedBrowserUsesSubmittedContinuation(t *testing
 	}
 	if got := challengeEvent.Challenge.OwnedBrowser.CookieURLs; len(got) != 1 || got[0] != stageServer.URL {
 		t.Fatalf("challenge owned_browser.cookie_urls = %#v, want %q", got, stageServer.URL)
+	}
+	if !challengeEvent.Challenge.OwnedBrowser.RememberSignIn {
+		t.Fatal("challenge owned_browser.remember_sign_in = false, want true")
 	}
 
 	challenge, err := host.ContinueChallengeWithBrowserContinuation(

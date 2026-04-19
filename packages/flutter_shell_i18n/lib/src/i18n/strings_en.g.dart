@@ -436,6 +436,9 @@ class Translations with BaseTranslations<AppLocale, Translations> {
   /// en: 'Reset local state'
   String get shellTextResetLocalState => 'Reset local state';
 
+  /// en: 'Forget embedded sign-in'
+  String get shellTextForgetEmbeddedSignIn => 'Forget embedded sign-in';
+
   /// en: 'Import from file'
   String get shellTextImportFromFile => 'Import from file';
 
@@ -686,6 +689,15 @@ class Translations with BaseTranslations<AppLocale, Translations> {
   /// en: 'Failed to persist mobile shell state: {error}'
   String shellTextFailedToPersistMobileShellState({required Object error}) =>
       'Failed to persist mobile shell state: ${error}';
+
+  /// en: 'Cleared remembered embedded sign-in.'
+  String get shellTextClearedRememberedEmbeddedSignIn =>
+      'Cleared remembered embedded sign-in.';
+
+  /// en: 'Failed to clear remembered embedded sign-in: {error}'
+  String shellTextFailedToClearRememberedEmbeddedSignIn({
+    required Object error,
+  }) => 'Failed to clear remembered embedded sign-in: ${error}';
 
   /// en: '{modeLabel} is ready for the local host tunnel path.'
   String shellTextPlatformTunnelReadyForLocalHost({
@@ -2908,6 +2920,7 @@ extension on Translations {
           'shellTextOpenDiagnostics' => 'Open diagnostics',
           'shellTextOpenProfiles' => 'Open profiles',
           'shellTextResetLocalState' => 'Reset local state',
+          'shellTextForgetEmbeddedSignIn' => 'Forget embedded sign-in',
           'shellTextImportFromFile' => 'Import from file',
           'shellTextExportSavedProfile' => 'Export saved profile',
           'shellTextPasteEnvelope' => 'Paste envelope',
@@ -3044,6 +3057,11 @@ extension on Translations {
           'shellTextFailedToPersistMobileShellState' =>
             ({required Object error}) =>
                 'Failed to persist mobile shell state: ${error}',
+          'shellTextClearedRememberedEmbeddedSignIn' =>
+            'Cleared remembered embedded sign-in.',
+          'shellTextFailedToClearRememberedEmbeddedSignIn' =>
+            ({required Object error}) =>
+                'Failed to clear remembered embedded sign-in: ${error}',
           'shellTextPlatformTunnelReadyForLocalHost' =>
             ({required Object modeLabel}) =>
                 '${modeLabel} is ready for the local host tunnel path.',
@@ -3664,12 +3682,12 @@ extension on Translations {
           'shellTextSupportSubtitle' =>
             'Activity, failures, logs, and diagnostics stay explicit but secondary to the main VPN workflow.',
           'shellTextRoutingTitle' => 'Routing',
-          'shellTextRoutingSubtitle' => 'Choose the VPN profile and app scope.',
-          'shellTextRoutingProfile' => 'Routing profile',
-          'shellTextRoutingProfileStandard' => 'Standard',
           _ => null,
         } ??
         switch (path) {
+          'shellTextRoutingSubtitle' => 'Choose the VPN profile and app scope.',
+          'shellTextRoutingProfile' => 'Routing profile',
+          'shellTextRoutingProfileStandard' => 'Standard',
           'shellTextRoutingProfileDevelopmentWifi' => 'Development Wi-Fi',
           'shellTextRoutingProfileStandardDescription' =>
             'Use the normal Android system VPN routing behavior for this mode.',

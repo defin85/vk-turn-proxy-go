@@ -345,17 +345,14 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                   ),
                   const SizedBox(height: 8),
                   Text(copy.providerLabel(envelope.profile.spec.provider)),
-                  Text(copy.sourceModeLabel(envelope.providerBinding.mode.value)),
+                  Text(
+                    copy.sourceModeLabel(envelope.providerBinding.mode.value),
+                  ),
                   if (envelope.providerBinding.isManaged)
-                    Text(
-                      copy.managedProviderSnapshot(snapshotName),
-                    ),
+                    Text(copy.managedProviderSnapshot(snapshotName)),
                   const SizedBox(height: 12),
                   if (envelope.isSecretBearing)
-                    _warningBanner(
-                      context,
-                      copy.portableImportSecretWarning,
-                    ),
+                    _warningBanner(context, copy.portableImportSecretWarning),
                   if (!envelope.isSecretBearing)
                     Text(
                       copy.portableImportCreatesFreshIdsMobile,
@@ -386,6 +383,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   Future<void> _showPortablePasteDialog() async {
     final controller = TextEditingController();
     String? errorText;
+    PortableProfileEnvelope? previewEnvelope;
     try {
       await showDialog<void>(
         context: context,
@@ -443,8 +441,8 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                             });
                             return;
                           }
+                          previewEnvelope = envelope;
                           Navigator.of(context).pop();
-                          unawaited(_showPortableImportPreview(envelope));
                         },
                         child: Text(copy.previewImport),
                       ),
@@ -454,6 +452,9 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
           );
         },
       );
+      if (previewEnvelope != null && mounted) {
+        await _showPortableImportPreview(previewEnvelope!);
+      }
     } finally {
       controller.dispose();
     }
@@ -555,6 +556,9 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
             _disclosureSection(
               title: copy.mobilePortableTransfer,
               subtitle: copy.mobilePortableTransferSubtitle,
+              sectionKey: const ValueKey<String>(
+                'profile-editor-portable-transfer-section',
+              ),
               initiallyExpanded: false,
               children: <Widget>[
                 Wrap(
@@ -602,46 +606,16 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
               ],
             ),
             const SizedBox(height: 16),
-            _actionButton(
-              buttonKey: const ValueKey<String>(
-                'profile-editor-primary-action',
-              ),
-              label: primaryLabel,
-              onPressed: widget.busy
+            _footerActionBar(
+              primaryLabel: primaryLabel,
+              onPrimaryPressed: widget.busy
                   ? null
                   : () => unawaited(primaryAction.call()),
+              onSavePressed: widget.busy
+                  ? null
+                  : () => unawaited(widget.onSave()),
+              hasSavedProfile: hasSavedProfile,
             ),
-            const SizedBox(height: 12),
-            _actionButton(
-              buttonKey: const ValueKey<String>('profile-editor-save-action'),
-              label: copy.saveProfile,
-              variant: _ProfileEditorActionVariant.secondary,
-              onPressed: widget.busy ? null : () => unawaited(widget.onSave()),
-            ),
-            if (hasSavedProfile) ...<Widget>[
-              const SizedBox(height: 12),
-              _actionButton(
-                buttonKey: const ValueKey<String>(
-                  'profile-editor-resolve-action',
-                ),
-                label: copy.resolveInvite,
-                variant: _ProfileEditorActionVariant.outlined,
-                onPressed: widget.busy
-                    ? null
-                    : () => unawaited(widget.onResolve()),
-              ),
-              const SizedBox(height: 12),
-              _actionButton(
-                buttonKey: const ValueKey<String>(
-                  'profile-editor-delete-action',
-                ),
-                label: copy.deleteProfile,
-                variant: _ProfileEditorActionVariant.text,
-                onPressed: widget.busy
-                    ? null
-                    : () => unawaited(widget.onDelete()),
-              ),
-            ],
           ],
         ),
       ),
@@ -895,6 +869,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   }
 
   Widget _disclosureSection({
+    Key? sectionKey,
     required String title,
     required String subtitle,
     required List<Widget> children,
@@ -910,6 +885,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
+          key: sectionKey,
           initiallyExpanded: initiallyExpanded,
           tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -931,38 +907,91 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     );
   }
 
-  Widget _actionButton({
-    Key? buttonKey,
-    required String label,
-    required VoidCallback? onPressed,
-    _ProfileEditorActionVariant variant = _ProfileEditorActionVariant.primary,
+  Widget _footerActionBar({
+    required String primaryLabel,
+    required VoidCallback? onPrimaryPressed,
+    required VoidCallback? onSavePressed,
+    required bool hasSavedProfile,
   }) {
-    final child = SizedBox(
-      width: double.infinity,
-      child: switch (variant) {
-        _ProfileEditorActionVariant.primary => FilledButton(
-          key: buttonKey,
-          onPressed: onPressed,
-          child: Text(label),
-        ),
-        _ProfileEditorActionVariant.secondary => FilledButton.tonal(
-          key: buttonKey,
-          onPressed: onPressed,
-          child: Text(label),
-        ),
-        _ProfileEditorActionVariant.outlined => OutlinedButton(
-          key: buttonKey,
-          onPressed: onPressed,
-          child: Text(label),
-        ),
-        _ProfileEditorActionVariant.text => TextButton(
-          key: buttonKey,
-          onPressed: onPressed,
-          child: Text(label),
-        ),
+    final theme = Theme.of(context);
+    final copy = context.shellText;
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final compact = constraints.maxWidth < 760;
+        final saveButton = compact
+            ? IconButton.filledTonal(
+                key: const ValueKey<String>('profile-editor-save-action'),
+                tooltip: copy.saveProfile,
+                onPressed: onSavePressed,
+                icon: const Icon(Icons.save_outlined),
+              )
+            : FilledButton.tonalIcon(
+                key: const ValueKey<String>('profile-editor-save-action'),
+                onPressed: onSavePressed,
+                icon: const Icon(Icons.save_outlined),
+                label: Text(copy.saveProfile),
+              );
+        final moreButton = hasSavedProfile
+            ? PopupMenuButton<_ProfileEditorOverflowAction>(
+                key: const ValueKey<String>('profile-editor-more-actions'),
+                tooltip: MaterialLocalizations.of(context).showMenuTooltip,
+                enabled: !widget.busy,
+                onSelected: (_ProfileEditorOverflowAction action) {
+                  switch (action) {
+                    case _ProfileEditorOverflowAction.resolve:
+                      unawaited(widget.onResolve());
+                    case _ProfileEditorOverflowAction.delete:
+                      unawaited(widget.onDelete());
+                  }
+                },
+                itemBuilder: (BuildContext context) =>
+                    <PopupMenuEntry<_ProfileEditorOverflowAction>>[
+                      PopupMenuItem<_ProfileEditorOverflowAction>(
+                        key: const ValueKey<String>(
+                          'profile-editor-resolve-action',
+                        ),
+                        value: _ProfileEditorOverflowAction.resolve,
+                        child: Text(copy.resolveInvite),
+                      ),
+                      PopupMenuItem<_ProfileEditorOverflowAction>(
+                        key: const ValueKey<String>(
+                          'profile-editor-delete-action',
+                        ),
+                        value: _ProfileEditorOverflowAction.delete,
+                        child: Text(copy.deleteProfile),
+                      ),
+                    ],
+                icon: const Icon(Icons.more_horiz),
+              )
+            : null;
+        return Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest.withValues(
+              alpha: 0.16,
+            ),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Row(
+            children: <Widget>[
+              Expanded(
+                child: FilledButton(
+                  key: const ValueKey<String>('profile-editor-primary-action'),
+                  onPressed: onPrimaryPressed,
+                  child: Text(primaryLabel),
+                ),
+              ),
+              const SizedBox(width: 12),
+              saveButton,
+              if (moreButton != null) ...<Widget>[
+                const SizedBox(width: 8),
+                moreButton,
+              ],
+            ],
+          ),
+        );
       },
     );
-    return child;
   }
 
   Widget _providerSettingsField(ProviderSettingsField field) {
@@ -1144,7 +1173,10 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     );
   }
 
-  String _providerLinkLabel(BuildContext context, ProviderDescriptor? descriptor) {
+  String _providerLinkLabel(
+    BuildContext context,
+    ProviderDescriptor? descriptor,
+  ) {
     if (descriptor == null) {
       return context.shellText.providerInput;
     }
@@ -1256,44 +1288,44 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
         ),
         borderRadius: BorderRadius.circular(14),
       ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              context.shellText.mobileProviderMode,
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            context.shellText.mobileProviderMode,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
             ),
-            const SizedBox(height: 6),
-            Text(
-              managedMode
+          ),
+          const SizedBox(height: 6),
+          Text(
+            managedMode
                 ? context.shellText.mobileManagedModeSummary
                 : context.shellText.mobileCustomModeSummary,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
             ),
+          ),
           const SizedBox(height: 10),
           Wrap(
             spacing: 10,
             runSpacing: 10,
             children: <Widget>[
-            ChoiceChip(
-              selected: managedMode,
-              label: Text(context.shellText.managedProvider),
-              onSelected: widget.busy
-                  ? null
-                  : (_) => widget.onActivateManagedProviderMode(
+              ChoiceChip(
+                selected: managedMode,
+                label: Text(context.shellText.managedProvider),
+                onSelected: widget.busy
+                    ? null
+                    : (_) => widget.onActivateManagedProviderMode(
                         managedProviderId: selectedManagedProviderId,
                       ),
               ),
-            ChoiceChip(
-              selected: !managedMode,
-              label: Text(context.shellText.customProvider),
-              onSelected: widget.busy
-                  ? null
-                  : (_) => widget.onUseCustomProvider(),
+              ChoiceChip(
+                selected: !managedMode,
+                label: Text(context.shellText.customProvider),
+                onSelected: widget.busy
+                    ? null
+                    : (_) => widget.onUseCustomProvider(),
               ),
             ],
           ),
@@ -1506,4 +1538,4 @@ class _PortableQrScannerPageState extends State<_PortableQrScannerPage> {
   }
 }
 
-enum _ProfileEditorActionVariant { primary, secondary, outlined, text }
+enum _ProfileEditorOverflowAction { resolve, delete }

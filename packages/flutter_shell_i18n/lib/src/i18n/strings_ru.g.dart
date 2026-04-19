@@ -326,6 +326,9 @@ class TranslationsRu extends Translations
   @override
   String get shellTextResetLocalState => 'Сбросить локальное состояние';
   @override
+  String get shellTextForgetEmbeddedSignIn =>
+      'Забыть вход во встроенном браузере';
+  @override
   String get shellTextImportFromFile => 'Импорт из файла';
   @override
   String get shellTextExportSavedProfile =>
@@ -521,6 +524,13 @@ class TranslationsRu extends Translations
   @override
   String shellTextFailedToPersistMobileShellState({required Object error}) =>
       'Не удалось сохранить состояние мобильной оболочки: ${error}';
+  @override
+  String get shellTextClearedRememberedEmbeddedSignIn =>
+      'Сохраненный вход во встроенном браузере очищен.';
+  @override
+  String shellTextFailedToClearRememberedEmbeddedSignIn({
+    required Object error,
+  }) => 'Не удалось очистить сохраненный вход во встроенном браузере: ${error}';
   @override
   String shellTextPlatformTunnelReadyForLocalHost({
     required Object modeLabel,
@@ -2248,6 +2258,8 @@ extension on TranslationsRu {
           'shellTextOpenDiagnostics' => 'Открыть диагностику',
           'shellTextOpenProfiles' => 'Открыть профили',
           'shellTextResetLocalState' => 'Сбросить локальное состояние',
+          'shellTextForgetEmbeddedSignIn' =>
+            'Забыть вход во встроенном браузере',
           'shellTextImportFromFile' => 'Импорт из файла',
           'shellTextExportSavedProfile' => 'Экспортировать сохраненный профиль',
           'shellTextPasteEnvelope' => 'Вставить конверт',
@@ -2384,6 +2396,11 @@ extension on TranslationsRu {
           'shellTextFailedToPersistMobileShellState' =>
             ({required Object error}) =>
                 'Не удалось сохранить состояние мобильной оболочки: ${error}',
+          'shellTextClearedRememberedEmbeddedSignIn' =>
+            'Сохраненный вход во встроенном браузере очищен.',
+          'shellTextFailedToClearRememberedEmbeddedSignIn' =>
+            ({required Object error}) =>
+                'Не удалось очистить сохраненный вход во встроенном браузере: ${error}',
           'shellTextPlatformTunnelReadyForLocalHost' =>
             ({required Object modeLabel}) =>
                 '${modeLabel} готов для туннельного пути локального хоста.',
@@ -3023,13 +3040,13 @@ extension on TranslationsRu {
           'shellTextSupportSubtitle' =>
             'Активность, ошибки, логи и диагностика остаются явными, но вторичными по отношению к основному VPN-потоку.',
           'shellTextRoutingTitle' => 'Маршрутизация',
+          _ => null,
+        } ??
+        switch (path) {
           'shellTextRoutingSubtitle' =>
             'Выберите профиль VPN и охват приложений.',
           'shellTextRoutingProfile' => 'Профиль маршрутизации',
           'shellTextRoutingProfileStandard' => 'Стандартный',
-          _ => null,
-        } ??
-        switch (path) {
           'shellTextRoutingProfileDevelopmentWifi' => 'Development Wi-Fi',
           'shellTextRoutingProfileStandardDescription' =>
             'Использовать обычное поведение маршрутизации системного VPN Android для этого режима.',

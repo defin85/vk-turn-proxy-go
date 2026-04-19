@@ -44,6 +44,20 @@ That means closing the challenge screen no longer implies clearing embedded
 sign-in state. The remembered session remains app-owned and local to the
 mobile install.
 
+### Decision: Remembered reuse stays behind explicit compatibility approval
+
+Remembered embedded sign-in must remain an explicit product decision, not an
+accidental side effect of opening an owned-browser surface.
+
+That means the shell should enable remembered reuse only for provider flows
+that the product explicitly marks as compatible with both owned-browser
+continuation and remembered sign-in reuse. The shell must not infer that
+policy from provider-name checks or other UI-local heuristics.
+
+If the current control-plane metadata cannot yet express remembered-reuse
+approval directly, the implementation should keep one centralized documented
+runtime policy until the typed contract grows that field.
+
 ### Decision: Keep remembered sign-in separate from ordinary shell persistence
 
 The shell already redacts ordinary persisted shell state. Remembered browser

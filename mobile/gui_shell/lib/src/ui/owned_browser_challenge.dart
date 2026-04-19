@@ -58,7 +58,7 @@ class OwnedBrowserWebSession {
   const OwnedBrowserWebSession({
     required this.viewBuilder,
     required this.load,
-    required this.clearCookies,
+    required this.clearSessionState,
     required this.collectCookies,
     this.collectObservedRequests = _collectNoObservedRequests,
     this.setUserAgent,
@@ -68,7 +68,7 @@ class OwnedBrowserWebSession {
 
   final WidgetBuilder viewBuilder;
   final Future<void> Function(Uri uri) load;
-  final Future<void> Function() clearCookies;
+  final Future<void> Function() clearSessionState;
   final Future<List<BrowserCookieRecord>> Function(List<String> urls)
   collectCookies;
   final Future<List<BrowserObservedRequestRecord>> Function()
@@ -242,17 +242,22 @@ class WebViewOwnedBrowserChallengeRunner
     OwnedBrowserWebSessionFactory? sessionFactory,
     MobileSoftKeyboardHider? keyboardHider,
     MobileWindowSoftInputModeController? softInputModeController,
+    MobileOwnedBrowserSessionStateResetter? sessionStateResetter,
     this.showDebugDiagnostics = false,
-  }) : _sessionFactory = sessionFactory ?? _createDefaultSession,
+  }) : _sessionFactory = sessionFactory,
        _keyboardHider =
            keyboardHider ?? const PlatformMobileSoftKeyboardHider(),
        _softInputModeController =
            softInputModeController ??
-           const PlatformMobileWindowSoftInputModeController();
+           const PlatformMobileWindowSoftInputModeController(),
+       _sessionStateResetter =
+           sessionStateResetter ??
+           const PlatformMobileOwnedBrowserSessionStateResetter();
 
-  final OwnedBrowserWebSessionFactory _sessionFactory;
+  final OwnedBrowserWebSessionFactory? _sessionFactory;
   final MobileSoftKeyboardHider _keyboardHider;
   final MobileWindowSoftInputModeController _softInputModeController;
+  final MobileOwnedBrowserSessionStateResetter _sessionStateResetter;
   final bool showDebugDiagnostics;
 
   @override
@@ -272,7 +277,16 @@ class WebViewOwnedBrowserChallengeRunner
       MaterialPageRoute<ChallengeContinuationSubmission>(
         builder: (BuildContext context) => _OwnedBrowserChallengePage(
           challenge: challenge,
-          sessionFactory: _sessionFactory,
+          sessionFactory:
+              _sessionFactory ??
+              (
+                ValueChanged<String> onWebResourceError,
+                ValueChanged<Uri> onPageNavigation,
+              ) => _createDefaultSession(
+                onWebResourceError,
+                onPageNavigation,
+                _sessionStateResetter,
+              ),
           keyboardHider: _keyboardHider,
           softInputModeController: _softInputModeController,
           showDebugDiagnostics: showDebugDiagnostics,
@@ -284,6 +298,7 @@ class WebViewOwnedBrowserChallengeRunner
   static OwnedBrowserWebSession _createDefaultSession(
     ValueChanged<String> onWebResourceError,
     ValueChanged<Uri> onPageNavigation,
+    MobileOwnedBrowserSessionStateResetter sessionStateResetter,
   ) {
     final cookieManager = WebviewCookieManager();
     final observedRequests = <BrowserObservedRequestRecord>[];
@@ -358,9 +373,7 @@ class WebViewOwnedBrowserChallengeRunner
         observedRequests.clear();
         await controller.loadRequest(uri);
       },
-      clearCookies: () async {
-        await cookieManager.clearCookies();
-      },
+      clearSessionState: sessionStateResetter.clearSessionState,
       setUserAgent: (String userAgent) => controller.setUserAgent(userAgent),
       collectCookies: (List<String> urls) async {
         final cookies = <BrowserCookieRecord>[];
@@ -481,16 +494,25 @@ class _OwnedBrowserChallengePageState extends State<_OwnedBrowserChallengePage>
   }
 
   Future<void> _start(Uri uri) async {
-    final preferredUserAgent = _preferredUserAgentForChallenge(
-      widget.challenge,
-    );
-    if (preferredUserAgent != null) {
-      await _session.setUserAgent?.call(preferredUserAgent);
+    try {
+      final preferredUserAgent = _preferredUserAgentForChallenge(
+        widget.challenge,
+      );
+      if (preferredUserAgent != null) {
+        await _session.setUserAgent?.call(preferredUserAgent);
+      }
+      if (_shouldResetBrowserStateForChallenge(widget.challenge)) {
+        await _session.clearSessionState();
+      }
+      await _session.load(uri);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _error = '$error';
+      });
     }
-    if (_shouldResetBrowserStateForChallenge(widget.challenge)) {
-      await _session.clearCookies();
-    }
-    await _session.load(uri);
   }
 
   Future<void> _loadHarnessInvite() async {
@@ -679,7 +701,7 @@ class _OwnedBrowserChallengePageState extends State<_OwnedBrowserChallengePage>
     WidgetsBinding.instance.removeObserver(this);
     unawaited(widget.softInputModeController.restoreDefaultMode());
     if (_shouldResetBrowserStateForChallenge(widget.challenge)) {
-      unawaited(_session.clearCookies());
+      unawaited(_session.clearSessionState());
     }
     super.dispose();
   }
@@ -837,7 +859,7 @@ bool _shouldResetBrowserStateForChallenge(ChallengeRecord challenge) {
   if (challenge.id == 'owned-browser-ime-harness') {
     return true;
   }
-  return challenge.provider.trim().toLowerCase() != 'vk';
+  return challenge.ownedBrowser?.rememberSignIn != true;
 }
 
 bool _isVkOwnedBrowserLikeChallenge(ChallengeRecord challenge) {

@@ -65,7 +65,7 @@ func challengeContractMetadataWithMetadata(
 	case provider.ChallengeCompletionModeManualConfirm:
 		return ChallengeCompletionModeManualConfirm, nil, nil
 	case provider.ChallengeCompletionModeOwnedBrowserObserved:
-		ownedBrowser := normalizeOwnedBrowserMetadata(challenge)
+		ownedBrowser := normalizeOwnedBrowserMetadata(challenge, metadata)
 		if ownedBrowser == nil {
 			return ChallengeCompletionModeManualConfirm, nil, nil
 		}
@@ -135,6 +135,7 @@ func normalizeAppReturnMetadata(
 
 func normalizeOwnedBrowserMetadata(
 	challenge provider.InteractiveChallenge,
+	metadata provider.InteractiveChallengeMetadata,
 ) *ChallengeOwnedBrowserMetadata {
 	cookieURLs := providerprompt.ContinuationCookieURLs(challenge)
 	if len(cookieURLs) == 0 {
@@ -142,7 +143,8 @@ func normalizeOwnedBrowserMetadata(
 	}
 
 	return &ChallengeOwnedBrowserMetadata{
-		CookieURLs: append([]string(nil), cookieURLs...),
+		CookieURLs:     append([]string(nil), cookieURLs...),
+		RememberSignIn: metadata.AllowRememberedSignIn,
 	}
 }
 

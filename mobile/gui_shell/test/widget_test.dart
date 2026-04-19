@@ -1479,7 +1479,7 @@ void main() {
                 load: (Uri uri) async {
                   onWebResourceError('net::ERR_FAILED');
                 },
-                clearCookies: () async {},
+                clearSessionState: () async {},
                 collectCookies: (List<String> urls) async =>
                     const <BrowserCookieRecord>[],
               );
@@ -1572,7 +1572,7 @@ void main() {
                   child: ColoredBox(color: Colors.black),
                 ),
                 load: (Uri uri) async {},
-                clearCookies: () async {},
+                clearSessionState: () async {},
                 collectCookies: (List<String> urls) async =>
                     const <BrowserCookieRecord>[],
               );
@@ -1648,7 +1648,7 @@ void main() {
                 child: ColoredBox(color: Colors.black),
               ),
               load: (Uri uri) async {},
-              clearCookies: () async {},
+              clearSessionState: () async {},
               collectCookies: (List<String> urls) async =>
                   const <BrowserCookieRecord>[],
             );
@@ -1730,7 +1730,7 @@ void main() {
                     onPageNavigation(Uri.parse('https://m.vk.com/feed'));
                   }
                 },
-                clearCookies: () async {},
+                clearSessionState: () async {},
                 collectCookies: (List<String> urls) async =>
                     const <BrowserCookieRecord>[],
               );
@@ -1793,7 +1793,7 @@ void main() {
               viewBuilder: (BuildContext context) =>
                   const SizedBox.expand(child: ColoredBox(color: Colors.black)),
               load: (Uri uri) async {},
-              clearCookies: () async {},
+              clearSessionState: () async {},
               setUserAgent: (String userAgent) async {
                 requestedUserAgents.add(userAgent);
               },
@@ -1846,143 +1846,148 @@ void main() {
     ]);
   });
 
-  testWidgets('owned-browser page preserves VK cookies across sessions', (
-    WidgetTester tester,
-  ) async {
-    var clearCookiesCalls = 0;
-    final runner = WebViewOwnedBrowserChallengeRunner(
-      sessionFactory:
-          (
-            ValueChanged<String> onWebResourceError,
-            ValueChanged<Uri> onPageNavigation,
-          ) {
-            return OwnedBrowserWebSession(
-              viewBuilder: (BuildContext context) =>
-                  const SizedBox.expand(child: ColoredBox(color: Colors.black)),
-              load: (Uri uri) async {},
-              clearCookies: () async {
-                clearCookiesCalls += 1;
-              },
-              collectCookies: (List<String> urls) async =>
-                  const <BrowserCookieRecord>[],
-            );
-          },
-    );
-    final challenge = ChallengeRecord(
-      id: 'challenge-1',
-      sessionId: 'session-1',
-      provider: 'vk',
-      stage: 'provider_resolve',
-      kind: 'captcha',
-      prompt: 'Continue inside the in-app browser.',
-      openUrl: 'https://vk.com/call/join/test',
-      status: ChallengeStatus.pending,
-      completionMode: ChallengeCompletionMode.ownedBrowserObserved,
-      ownedBrowser: const ChallengeOwnedBrowserMetadata(
-        cookieUrls: <String>['https://login.vk.ru/'],
-      ),
-      createdAt: DateTime.utc(2026, 4, 7, 12, 0),
-      updatedAt: DateTime.utc(2026, 4, 7, 12, 1),
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Builder(
-          builder: (BuildContext context) {
-            return Scaffold(
-              body: Center(
-                child: FilledButton(
-                  onPressed: () {
-                    unawaited(runner.run(context, challenge));
-                  },
-                  child: const Text('Open challenge'),
+  testWidgets(
+    'owned-browser page preserves browser state only when remember_sign_in is approved',
+    (WidgetTester tester) async {
+      var clearSessionStateCalls = 0;
+      final runner = WebViewOwnedBrowserChallengeRunner(
+        sessionFactory:
+            (
+              ValueChanged<String> onWebResourceError,
+              ValueChanged<Uri> onPageNavigation,
+            ) {
+              return OwnedBrowserWebSession(
+                viewBuilder: (BuildContext context) => const SizedBox.expand(
+                  child: ColoredBox(color: Colors.black),
                 ),
-              ),
-            );
-          },
+                load: (Uri uri) async {},
+                clearSessionState: () async {
+                  clearSessionStateCalls += 1;
+                },
+                collectCookies: (List<String> urls) async =>
+                    const <BrowserCookieRecord>[],
+              );
+            },
+      );
+      final challenge = ChallengeRecord(
+        id: 'challenge-1',
+        sessionId: 'session-1',
+        provider: 'vk',
+        stage: 'provider_resolve',
+        kind: 'captcha',
+        prompt: 'Continue inside the in-app browser.',
+        openUrl: 'https://vk.com/call/join/test',
+        status: ChallengeStatus.pending,
+        completionMode: ChallengeCompletionMode.ownedBrowserObserved,
+        ownedBrowser: const ChallengeOwnedBrowserMetadata(
+          cookieUrls: <String>['https://login.vk.ru/'],
+          rememberSignIn: true,
         ),
-      ),
-    );
+        createdAt: DateTime.utc(2026, 4, 7, 12, 0),
+        updatedAt: DateTime.utc(2026, 4, 7, 12, 1),
+      );
 
-    await tester.tap(find.text('Open challenge'));
-    await tester.pumpAndSettle();
-
-    expect(clearCookiesCalls, 0);
-
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-
-    expect(clearCookiesCalls, 0);
-  });
-
-  testWidgets('owned-browser page resets non-VK cookies per session', (
-    WidgetTester tester,
-  ) async {
-    var clearCookiesCalls = 0;
-    final runner = WebViewOwnedBrowserChallengeRunner(
-      sessionFactory:
-          (
-            ValueChanged<String> onWebResourceError,
-            ValueChanged<Uri> onPageNavigation,
-          ) {
-            return OwnedBrowserWebSession(
-              viewBuilder: (BuildContext context) =>
-                  const SizedBox.expand(child: ColoredBox(color: Colors.black)),
-              load: (Uri uri) async {},
-              clearCookies: () async {
-                clearCookiesCalls += 1;
-              },
-              collectCookies: (List<String> urls) async =>
-                  const <BrowserCookieRecord>[],
-            );
-          },
-    );
-    final challenge = ChallengeRecord(
-      id: 'challenge-1',
-      sessionId: 'session-1',
-      provider: 'example-provider',
-      stage: 'provider_resolve',
-      kind: 'captcha',
-      prompt: 'Continue inside the in-app browser.',
-      openUrl: 'https://example.com/challenge',
-      status: ChallengeStatus.pending,
-      completionMode: ChallengeCompletionMode.ownedBrowserObserved,
-      ownedBrowser: const ChallengeOwnedBrowserMetadata(
-        cookieUrls: <String>['https://example.com/'],
-      ),
-      createdAt: DateTime.utc(2026, 4, 7, 12, 0),
-      updatedAt: DateTime.utc(2026, 4, 7, 12, 1),
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Builder(
-          builder: (BuildContext context) {
-            return Scaffold(
-              body: Center(
-                child: FilledButton(
-                  onPressed: () {
-                    unawaited(runner.run(context, challenge));
-                  },
-                  child: const Text('Open challenge'),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (BuildContext context) {
+              return Scaffold(
+                body: Center(
+                  child: FilledButton(
+                    onPressed: () {
+                      unawaited(runner.run(context, challenge));
+                    },
+                    child: const Text('Open challenge'),
+                  ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
-      ),
-    );
+      );
 
-    await tester.tap(find.text('Open challenge'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Open challenge'));
+      await tester.pumpAndSettle();
 
-    expect(clearCookiesCalls, 1);
+      expect(clearSessionStateCalls, 0);
 
-    await tester.pageBack();
-    await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
 
-    expect(clearCookiesCalls, 2);
-  });
+      expect(clearSessionStateCalls, 0);
+    },
+  );
+
+  testWidgets(
+    'owned-browser page resets browser state per session when remember_sign_in is not approved',
+    (WidgetTester tester) async {
+      var clearSessionStateCalls = 0;
+      final runner = WebViewOwnedBrowserChallengeRunner(
+        sessionFactory:
+            (
+              ValueChanged<String> onWebResourceError,
+              ValueChanged<Uri> onPageNavigation,
+            ) {
+              return OwnedBrowserWebSession(
+                viewBuilder: (BuildContext context) => const SizedBox.expand(
+                  child: ColoredBox(color: Colors.black),
+                ),
+                load: (Uri uri) async {},
+                clearSessionState: () async {
+                  clearSessionStateCalls += 1;
+                },
+                collectCookies: (List<String> urls) async =>
+                    const <BrowserCookieRecord>[],
+              );
+            },
+      );
+      final challenge = ChallengeRecord(
+        id: 'challenge-1',
+        sessionId: 'session-1',
+        provider: 'vk',
+        stage: 'provider_resolve',
+        kind: 'captcha',
+        prompt: 'Continue inside the in-app browser.',
+        openUrl: 'https://vk.com/call/join/test',
+        status: ChallengeStatus.pending,
+        completionMode: ChallengeCompletionMode.ownedBrowserObserved,
+        ownedBrowser: const ChallengeOwnedBrowserMetadata(
+          cookieUrls: <String>['https://login.vk.ru/'],
+        ),
+        createdAt: DateTime.utc(2026, 4, 7, 12, 0),
+        updatedAt: DateTime.utc(2026, 4, 7, 12, 1),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (BuildContext context) {
+              return Scaffold(
+                body: Center(
+                  child: FilledButton(
+                    onPressed: () {
+                      unawaited(runner.run(context, challenge));
+                    },
+                    child: const Text('Open challenge'),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open challenge'));
+      await tester.pumpAndSettle();
+
+      expect(clearSessionStateCalls, 1);
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      expect(clearSessionStateCalls, 2);
+    },
+  );
 
   testWidgets(
     'owned-browser page refreshes the embedded viewport while IME is visible',
@@ -2003,7 +2008,7 @@ void main() {
                   child: ColoredBox(color: Colors.black),
                 ),
                 load: (Uri uri) async {},
-                clearCookies: () async {},
+                clearSessionState: () async {},
                 collectCookies: (List<String> urls) async =>
                     const <BrowserCookieRecord>[],
                 refreshViewport: () async {
@@ -2094,7 +2099,7 @@ void main() {
                   child: ColoredBox(color: Colors.black),
                 ),
                 load: (Uri uri) async {},
-                clearCookies: () async {},
+                clearSessionState: () async {},
                 collectCookies: (List<String> urls) async =>
                     const <BrowserCookieRecord>[],
               );
@@ -2481,6 +2486,37 @@ void main() {
       'https://room.example.test/rooms/team-sync',
     ]);
   });
+
+  testWidgets(
+    'mobile shell exposes and runs the dedicated forget embedded sign-in action',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final resetter = _FakeOwnedBrowserSessionStateResetter();
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(),
+        stateStore: _InMemoryStateStore(MobileShellState.empty()),
+        ownedBrowserSessionStateResetter: resetter,
+      );
+      await controller.initialize();
+      await tester.pumpWidget(MobileShellApp(controller: controller));
+      await tester.pumpAndSettle();
+
+      await _openSupportTab(tester);
+      expect(find.text('Forget embedded sign-in'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('forget-embedded-sign-in-button')),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(resetter.clearCalls, 1);
+      expect(controller.notice, 'Cleared remembered embedded sign-in.');
+    },
+  );
 
   testWidgets('mobile shell renders event stream in diagnostics events', (
     WidgetTester tester,
@@ -3587,6 +3623,55 @@ void main() {
   );
 
   testWidgets(
+    'portable transfer section can be expanded through a dedicated key',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(),
+        stateStore: _InMemoryStateStore(MobileShellState.empty()),
+      );
+
+      await controller.initialize();
+      await tester.pumpWidget(MobileShellApp(controller: controller));
+      await tester.pumpAndSettle();
+
+      await _openProfilesTab(tester);
+      await _openProfileEditorFromProfiles(tester);
+      await tester.dragUntilVisible(
+        find.byKey(
+          const ValueKey<String>('profile-editor-portable-transfer-section'),
+        ),
+        _profileWorkspaceScrollable(),
+        const Offset(0, -160),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(
+          const ValueKey<String>('profile-editor-portable-transfer-section'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(
+          const ValueKey<String>('profile-editor-portable-export-action'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(
+          const ValueKey<String>('profile-editor-portable-import-paste-action'),
+        ),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
     'portable paste dialog stays usable when keyboard insets shrink the viewport',
     (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1600, 900);
@@ -3626,6 +3711,60 @@ void main() {
 
       expect(find.text('Paste portable profile envelope'), findsOneWidget);
       expect(find.text('Preview import'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'portable paste preview opens after the paste dialog closes cleanly',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(),
+        stateStore: _InMemoryStateStore(MobileShellState.empty()),
+      );
+
+      await controller.initialize();
+      await tester.pumpWidget(MobileShellApp(controller: controller));
+      await tester.pumpAndSettle();
+
+      await _openProfilesTab(tester);
+      await _openProfileEditorFromProfiles(tester);
+      await tester.dragUntilVisible(
+        find.byKey(
+          const ValueKey<String>('profile-editor-portable-transfer-section'),
+        ),
+        _profileWorkspaceScrollable(),
+        const Offset(0, -160),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(
+          const ValueKey<String>('profile-editor-portable-transfer-section'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(
+          const ValueKey<String>('profile-editor-portable-import-paste-action'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byType(TextField).last,
+        '{"type":"portable_profile","version":1,"profile":{"id":"portable-profile-1","name":"Portable profile","spec":{"provider":"vk","link":"","listen_addr":"127.0.0.1:9001","peer_addr":"127.0.0.1:56000","connections":1,"mode":"udp","use_dtls":true,"interactive_provider":true,"log_level":"info"}},"provider_binding":{"mode":"custom"},"secret_classification":{}}',
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('Preview import'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Import portable profile'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -4460,6 +4599,16 @@ class _FakeMobilePortableProfileTransferAdapter
 
   @override
   Future<void> shareEnvelopeText(String payload) async {}
+}
+
+class _FakeOwnedBrowserSessionStateResetter
+    implements MobileOwnedBrowserSessionStateResetter {
+  int clearCalls = 0;
+
+  @override
+  Future<void> clearSessionState() async {
+    clearCalls += 1;
+  }
 }
 
 String _twoDigits(int value) => value.toString().padLeft(2, '0');

@@ -385,6 +385,50 @@ void main() {
   );
 
   test(
+    'controller clears remembered embedded sign-in through the dedicated resetter',
+    () async {
+      final resetter = _FakeOwnedBrowserSessionStateResetter();
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(),
+        stateStore: _InMemoryStateStore(MobileShellState.empty()),
+        ownedBrowserSessionStateResetter: resetter,
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.clearRememberedEmbeddedSignIn();
+
+      expect(resetter.clearCalls, 1);
+      expect(controller.busy, isFalse);
+      expect(controller.notice, 'Cleared remembered embedded sign-in.');
+    },
+  );
+
+  test(
+    'controller surfaces platform reset errors for remembered embedded sign-in without double wrapping',
+    () async {
+      final resetter = _FakeOwnedBrowserSessionStateResetter(
+        error: const MobileHostPlatformActionError('native reset failed'),
+      );
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(),
+        stateStore: _InMemoryStateStore(MobileShellState.empty()),
+        ownedBrowserSessionStateResetter: resetter,
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.clearRememberedEmbeddedSignIn();
+
+      expect(resetter.clearCalls, 1);
+      expect(controller.busy, isFalse);
+      expect(controller.notice, 'native reset failed');
+    },
+  );
+
+  test(
     'controller blocks incompatible bridge and does not start sessions',
     () async {
       final profile = ProfileRecord(
@@ -2536,6 +2580,22 @@ class _FakeBrowserLauncher implements BrowserLauncher {
   Future<bool> open(String url) async {
     openedUrls.add(url);
     return true;
+  }
+}
+
+class _FakeOwnedBrowserSessionStateResetter
+    implements MobileOwnedBrowserSessionStateResetter {
+  _FakeOwnedBrowserSessionStateResetter({this.error});
+
+  final Object? error;
+  int clearCalls = 0;
+
+  @override
+  Future<void> clearSessionState() async {
+    clearCalls += 1;
+    if (error != null) {
+      throw error!;
+    }
   }
 }
 

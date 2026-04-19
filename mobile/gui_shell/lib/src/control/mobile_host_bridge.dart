@@ -143,6 +143,10 @@ abstract class MobileWebViewDocumentStartScriptInstaller {
   });
 }
 
+abstract class MobileOwnedBrowserSessionStateResetter {
+  Future<void> clearSessionState();
+}
+
 class PlatformMobileHostConfigResolver implements MobileHostConfigResolver {
   PlatformMobileHostConfigResolver({MethodChannel? methodChannel})
     : _methodChannel = methodChannel ?? const MethodChannel(_bridgeChannelName);
@@ -365,6 +369,37 @@ class PlatformMobileWebViewDocumentStartScriptInstaller
       return false;
     } catch (_) {
       return false;
+    }
+  }
+}
+
+class PlatformMobileOwnedBrowserSessionStateResetter
+    implements MobileOwnedBrowserSessionStateResetter {
+  const PlatformMobileOwnedBrowserSessionStateResetter({
+    MethodChannel? methodChannel,
+  }) : _methodChannel =
+           methodChannel ?? const MethodChannel(_bridgeChannelName);
+
+  final MethodChannel _methodChannel;
+
+  @override
+  Future<void> clearSessionState() async {
+    try {
+      await _methodChannel.invokeMethod<void>('clearOwnedBrowserSessionState');
+    } on MissingPluginException {
+      throw MobileHostPlatformActionError(
+        currentShellText.nativeMobileHostBridgePluginUnavailable,
+      );
+    } on PlatformException catch (error) {
+      throw MobileHostPlatformActionError(
+        currentShellText.failedToClearRememberedEmbeddedSignIn(
+          error.message ?? error.code,
+        ),
+      );
+    } catch (error) {
+      throw MobileHostPlatformActionError(
+        currentShellText.failedToClearRememberedEmbeddedSignIn(error),
+      );
     }
   }
 }

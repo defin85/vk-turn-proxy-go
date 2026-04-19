@@ -863,25 +863,6 @@ class _ProfileWorkspacePage extends StatelessWidget {
           appBar: AppBar(
             title: Text(title),
             actions: <Widget>[
-              IconButton(
-                key: const ValueKey<String>('profile-workspace-save-action'),
-                tooltip: context.shellText.saveProfile,
-                onPressed: controller.busy
-                    ? null
-                    : () => unawaited(controller.saveDraft()),
-                icon: const Icon(Icons.save_outlined),
-              ),
-              if (hasSavedProfile)
-                IconButton(
-                  key: const ValueKey<String>(
-                    'profile-workspace-resolve-action',
-                  ),
-                  tooltip: context.shellText.resolveInvite,
-                  onPressed: controller.busy
-                      ? null
-                      : () => unawaited(controller.startResolutionFromDraft()),
-                  icon: const Icon(Icons.travel_explore_outlined),
-                ),
               if (hasSavedProfile)
                 IconButton(
                   key: const ValueKey<String>('profile-workspace-vpn-action'),
@@ -1248,6 +1229,20 @@ class _SupportPage extends StatelessWidget {
                         onSupportSurfaceChanged(_SupportSurface.diagnostics),
                   ),
                 ],
+              ),
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  key: const ValueKey<String>('forget-embedded-sign-in-button'),
+                  onPressed: controller.busy
+                      ? null
+                      : () => unawaited(
+                          controller.clearRememberedEmbeddedSignIn(),
+                        ),
+                  icon: const Icon(Icons.logout_rounded),
+                  label: Text(context.shellText.forgetEmbeddedSignIn),
+                ),
               ),
             ],
           ),

@@ -11,11 +11,14 @@ import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Build
 import android.net.VpnService
+import android.webkit.CookieManager
+import android.webkit.WebStorage
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import androidx.core.content.getSystemService
 import androidx.webkit.ScriptHandler
+import androidx.webkit.WebStorageCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import io.flutter.embedding.android.FlutterActivity
@@ -83,6 +86,8 @@ class MainActivity : FlutterActivity() {
                         hideSoftKeyboard()
                         result.success(null)
                     }
+                    "clearOwnedBrowserSessionState" ->
+                        clearOwnedBrowserSessionState(result)
                     "setSoftInputMode" ->
                         try {
                             setSoftInputMode(call)
@@ -404,6 +409,40 @@ class MainActivity : FlutterActivity() {
         }
         window?.decorView?.windowToken?.let { windowToken ->
             getSystemService<InputMethodManager>()?.hideSoftInputFromWindow(windowToken, 0)
+        }
+    }
+
+    private fun clearOwnedBrowserSessionState(result: MethodChannel.Result) {
+        try {
+            val webStorage = WebStorage.getInstance()
+            val cookieManager = CookieManager.getInstance()
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.DELETE_BROWSING_DATA)) {
+                WebStorageCompat.deleteBrowsingData(
+                    webStorage,
+                    Runnable {
+                        try {
+                            cookieManager.flush()
+                        } catch (_: RuntimeException) {
+                        }
+                        result.success(null)
+                    },
+                )
+                return
+            }
+            webStorage.deleteAllData()
+            cookieManager.removeAllCookies {
+                try {
+                    cookieManager.flush()
+                } catch (_: RuntimeException) {
+                }
+                result.success(null)
+            }
+        } catch (error: Exception) {
+            result.error(
+                "owned_browser_session_clear_failed",
+                error.message ?: "Unable to clear app-owned browser session state.",
+                null,
+            )
         }
     }
 

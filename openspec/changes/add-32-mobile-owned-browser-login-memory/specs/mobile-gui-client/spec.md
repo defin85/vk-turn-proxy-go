@@ -3,8 +3,8 @@
 ### Requirement: Mobile shell exposes remembered embedded sign-in reset without full local-state wipe
 
 The system SHALL let the operator clear remembered app-owned browser sign-in
-state from the mobile shell without requiring app reinstall or a full local
-state reset.
+state from the mobile shell through a dedicated embedded sign-in reset action,
+without requiring app reinstall or a full local state reset.
 
 #### Scenario: Operator clears remembered embedded sign-in from the mobile shell
 
@@ -16,3 +16,5 @@ state reset.
   browser state
 - **AND** saved profiles, selected profile state, and ordinary shell
   preferences remain intact
+- **AND** the operator does not need to invoke the broader local-state reset
+  action to clear remembered embedded sign-in

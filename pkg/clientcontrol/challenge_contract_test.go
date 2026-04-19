@@ -63,7 +63,8 @@ func TestChallengeContractMetadataFailsClosedOnMissingOwnedBrowserMetadata(t *te
 		fakeOwnedBrowserChallenge{
 			fakeChallenge: fakeChallenge{
 				metadata: provider.InteractiveChallengeMetadata{
-					CompletionMode: provider.ChallengeCompletionModeOwnedBrowserObserved,
+					CompletionMode:        provider.ChallengeCompletionModeOwnedBrowserObserved,
+					AllowRememberedSignIn: true,
 				},
 			},
 		},
@@ -84,7 +85,8 @@ func TestChallengeContractMetadataExposesOwnedBrowserCookieURLs(t *testing.T) {
 		fakeOwnedBrowserChallenge{
 			fakeChallenge: fakeChallenge{
 				metadata: provider.InteractiveChallengeMetadata{
-					CompletionMode: provider.ChallengeCompletionModeOwnedBrowserObserved,
+					CompletionMode:        provider.ChallengeCompletionModeOwnedBrowserObserved,
+					AllowRememberedSignIn: true,
 				},
 			},
 			cookieURLs: []string{
@@ -106,5 +108,8 @@ func TestChallengeContractMetadataExposesOwnedBrowserCookieURLs(t *testing.T) {
 		got[0] != "https://login.vk.ru/" ||
 		got[1] != "https://api.vk.ru/" {
 		t.Fatalf("owned_browser.cookie_urls = %#v, want login/api urls", got)
+	}
+	if !ownedBrowser.RememberSignIn {
+		t.Fatal("owned_browser.remember_sign_in = false, want true")
 	}
 }

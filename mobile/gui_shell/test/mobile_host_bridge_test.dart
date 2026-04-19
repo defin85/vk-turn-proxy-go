@@ -290,6 +290,23 @@ void main() {
     },
   );
 
+  test(
+    'platform owned-browser session resetter invokes the native bridge',
+    () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall call) async {
+            expect(call.method, 'clearOwnedBrowserSessionState');
+            return null;
+          });
+
+      final resetter = PlatformMobileOwnedBrowserSessionStateResetter(
+        methodChannel: channel,
+      );
+
+      await resetter.clearSessionState();
+    },
+  );
+
   test('platform host resolver rejects invalid native host URLs', () async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (MethodCall call) async {
