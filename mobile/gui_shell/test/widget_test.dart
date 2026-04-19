@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
@@ -425,6 +427,11 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
+      final signalIconBytes = Uint8List.fromList(
+        base64Decode(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=',
+        ),
+      );
       final profile = ProfileRecord(
         id: 'profile-1',
         name: 'vk live',
@@ -433,11 +440,19 @@ void main() {
       final controller = MobileShellController(
         bridge: _FakeMobileHostBridge(),
         appInventory: _FakeMobilePlatformAppInventory(
-          apps: const <MobilePlatformApp>[
-            MobilePlatformApp(packageName: 'org.signal', label: 'Signal'),
+          apps: <MobilePlatformApp>[
+            MobilePlatformApp(
+              packageName: 'org.signal',
+              label: 'Signal',
+              iconBytes: signalIconBytes,
+            ),
             MobilePlatformApp(
               packageName: 'org.telegram.messenger',
               label: 'Telegram',
+            ),
+            const MobilePlatformApp(
+              packageName: 'com.signal.beta',
+              label: 'Signal Beta',
             ),
           ],
         ),
@@ -461,17 +476,50 @@ void main() {
       expect(find.text('Routing'), findsWidgets);
       expect(find.text('Search apps'), findsNothing);
 
-      await tester.tap(find.widgetWithText(ChoiceChip, 'Included apps').first);
+      await tester.tap(
+        find.byKey(const ValueKey<String>('routing-app-scope-control')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(BottomSheet), findsOneWidget);
+      await tester.tap(find.text('Included apps').last);
       await tester.pumpAndSettle();
 
       expect(find.text('Search apps'), findsOneWidget);
-      await tester.tap(find.text('Signal').first);
+      expect(
+        find.byKey(const ValueKey<String>('routing-bulk-actions')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('routing-app-icon-org.signal')),
+          matching: find.byType(Image),
+        ),
+        findsOneWidget,
+      );
+      await tester.enterText(find.byType(TextField).first, 'sig');
+      await tester.pumpAndSettle();
+      expect(find.text('Telegram'), findsNothing);
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('routing-bulk-actions')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Select visible').last);
       await tester.pumpAndSettle();
 
-      expect(
-        controller.activePlatformModePreferences.allowedPackages,
-        contains('org.signal'),
+      expect(controller.activePlatformModePreferences.allowedPackages, <String>[
+        'com.signal.beta',
+        'org.signal',
+      ]);
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('routing-bulk-actions')),
       );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Clear visible').last);
+      await tester.pumpAndSettle();
+
+      expect(controller.activePlatformModePreferences.allowedPackages, isEmpty);
     },
   );
 
@@ -567,7 +615,11 @@ void main() {
       await _openProfilesMenu(tester);
       await tester.tap(find.text('Routing').last);
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(ChoiceChip, 'Included apps').first);
+      await tester.tap(
+        find.byKey(const ValueKey<String>('routing-app-scope-control')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Included apps').last);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Signal').first);
       await tester.pumpAndSettle();
@@ -583,6 +635,168 @@ void main() {
 
       await _openProfilesTab(tester);
       expect(controller.draft.name, 'resize draft');
+    },
+  );
+
+  testWidgets(
+    'mobile shell shows the Development Wi-Fi routing profile when the host advertises support',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final profile = ProfileRecord(
+        id: 'profile-1',
+        name: 'vk live',
+        spec: _profileSpec(),
+      );
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(),
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[profile],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: profile.id,
+            draft: ProfileDraft.fromProfile(profile),
+          ),
+        ),
+      );
+
+      await controller.initialize();
+      await tester.pumpWidget(MobileShellApp(controller: controller));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Routing').first);
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('routing-profile-control')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(BottomSheet), findsOneWidget);
+
+      expect(find.text('Development Wi-Fi'), findsOneWidget);
+      await tester.tap(find.text('Development Wi-Fi').last);
+      await tester.pumpAndSettle();
+
+      expect(
+        controller.activePlatformModePreferences.underlayRoutePolicy,
+        PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork,
+      );
+    },
+  );
+
+  testWidgets(
+    'mobile shell hides Development Wi-Fi when the connected Android host does not advertise support',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final profile = ProfileRecord(
+        id: 'profile-1',
+        name: 'vk live',
+        spec: _profileSpec(),
+      );
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(
+          readyResult: const MobileHostConnectionResult(
+            state: MobileHostLifecycleState.ready,
+            message: 'Connected to embedded mobile host bridge',
+            info: _androidReadyHostInfoWithoutDevelopmentRouting,
+            description: 'fake-test-bridge',
+          ),
+        ),
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[profile],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: profile.id,
+            draft: ProfileDraft.fromProfile(profile),
+          ),
+        ),
+      );
+
+      await controller.initialize();
+      await tester.pumpWidget(MobileShellApp(controller: controller));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Routing').first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Development Wi-Fi'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'mobile shell keeps an unsupported saved Development Wi-Fi preference explicit and disabled',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final profile = ProfileRecord(
+        id: 'profile-1',
+        name: 'vk live',
+        spec: _profileSpec(),
+      );
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(
+          readyResult: const MobileHostConnectionResult(
+            state: MobileHostLifecycleState.ready,
+            message: 'Connected to embedded mobile host bridge',
+            info: _androidReadyHostInfoWithoutDevelopmentRouting,
+            description: 'fake-test-bridge',
+          ),
+        ),
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[profile],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: profile.id,
+            platformModePreferences:
+                const <String, MobilePlatformModePreferences>{
+                  'profile-1::android_vpn_service':
+                      MobilePlatformModePreferences(
+                        underlayRoutePolicy: PlatformTunnelUnderlayRoutePolicy
+                            .preserveActiveLocalNetwork,
+                      ),
+                },
+            draft: ProfileDraft.fromProfile(profile),
+          ),
+        ),
+      );
+
+      await controller.initialize();
+      await tester.pumpWidget(MobileShellApp(controller: controller));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Routing').first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Development Wi-Fi'), findsOneWidget);
+      expect(
+        find.textContaining('unsupported by the connected host'),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('routing-profile-control')),
+      );
+      await tester.pumpAndSettle();
+
+      final option = tester
+          .widget<RadioListTile<PlatformTunnelUnderlayRoutePolicy>>(
+            find.widgetWithText(
+              RadioListTile<PlatformTunnelUnderlayRoutePolicy>,
+              'Development Wi-Fi',
+            ),
+          );
+      expect(option.onChanged, isNull);
+      expect(
+        find.textContaining('unsupported by the connected host'),
+        findsNWidgets(2),
+      );
     },
   );
 
@@ -2355,6 +2569,10 @@ void main() {
       find.byKey(const ValueKey<String>('managed-provider-create-button')),
     );
     await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey<String>('provider-chooser-route')),
+      findsOneWidget,
+    );
     await tester.tap(
       find.byKey(const ValueKey<String>('provider-chooser-surface-templates')),
     );
@@ -2398,17 +2616,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.byKey(const ValueKey<String>('provider-chooser-close-button')),
+      find.byKey(const ValueKey<String>('provider-chooser-route')),
       findsOneWidget,
     );
 
-    await tester.tap(
-      find.byKey(const ValueKey<String>('provider-chooser-close-button')),
-    );
+    await tester.pageBack();
     await tester.pumpAndSettle();
 
     expect(
-      find.byKey(const ValueKey<String>('provider-chooser-close-button')),
+      find.byKey(const ValueKey<String>('provider-chooser-route')),
       findsNothing,
     );
     expect(
@@ -2416,6 +2632,56 @@ void main() {
       findsNothing,
     );
   });
+
+  testWidgets(
+    'mobile shell keeps compact host status on a dialog-sized overlay',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(),
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: const <ProfileRecord>[],
+            providerConfigs: const <ProviderConfigRecord>[],
+            draft: ProfileDraft.defaults(),
+          ),
+        ),
+      );
+
+      await controller.initialize();
+      await tester.pumpWidget(MobileShellApp(controller: controller));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('host-status-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Dialog), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey<String>('host-status-dialog')),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('Connected to embedded mobile host bridge'),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('host-status-close-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Dialog), findsNothing);
+      expect(
+        find.byKey(const ValueKey<String>('host-status-dialog')),
+        findsNothing,
+      );
+    },
+  );
 
   testWidgets(
     'mobile shell lets operator close wide provider and template editors',
@@ -3497,6 +3763,48 @@ const HostInfo _readyHostInfo = HostInfo(
     PlatformTunnelCapability(
       mode: PlatformTunnelMode.androidVpnService,
       available: false,
+      supportedUnderlayRoutePolicies: <PlatformTunnelUnderlayRoutePolicy>[
+        PlatformTunnelUnderlayRoutePolicy.standard,
+        PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork,
+      ],
+      executionPlans: <RuntimeExecutionPlanDescriptor>[
+        _androidVpnExecutionPlanDescriptor,
+      ],
+      missingPrerequisite: PlatformTunnelPrerequisite.hostImplementation,
+      message: 'embedded mobile host does not implement tunnel startup yet',
+    ),
+  ],
+);
+
+const HostInfo _androidReadyHostInfoWithoutDevelopmentRouting = HostInfo(
+  contractVersion: '1',
+  build: BuildIdentity(
+    product: 'vk-turn-proxy-go',
+    version: '0.1.0',
+    buildNumber: '1',
+    revision: 'mobilehost1234',
+    role: 'mobile_host',
+    target: 'android/debug',
+  ),
+  capabilities: <Capability>[
+    Capability.mobileHostBridge,
+    Capability.platformTunnels,
+    Capability.profiles,
+    Capability.providerConfigs,
+    Capability.providerRuntimeArtifacts,
+    Capability.runtimeExecutionPlanning,
+    Capability.sessions,
+    Capability.challenges,
+    Capability.diagnostics,
+    Capability.eventStream,
+  ],
+  platformTunnels: <PlatformTunnelCapability>[
+    PlatformTunnelCapability(
+      mode: PlatformTunnelMode.androidVpnService,
+      available: false,
+      supportedUnderlayRoutePolicies: <PlatformTunnelUnderlayRoutePolicy>[
+        PlatformTunnelUnderlayRoutePolicy.standard,
+      ],
       executionPlans: <RuntimeExecutionPlanDescriptor>[
         _androidVpnExecutionPlanDescriptor,
       ],
@@ -3830,6 +4138,8 @@ class _FakeMobileHostBridge implements MobileHostBridge {
         PlatformTunnelApplicationRoutingPolicy.allApps,
     List<String> allowedPackages = const <String>[],
     List<String> disallowedPackages = const <String>[],
+    PlatformTunnelUnderlayRoutePolicy underlayRoutePolicy =
+        PlatformTunnelUnderlayRoutePolicy.standard,
   }) async {
     startedPlatformTunnels.add(mode);
     startedPlatformTunnelResolutionIDs.add(resolutionId);

@@ -1097,6 +1097,24 @@ enum PlatformTunnelApplicationRoutingPolicy {
   }
 }
 
+enum PlatformTunnelUnderlayRoutePolicy {
+  standard('standard'),
+  preserveActiveLocalNetwork('preserve_active_local_network');
+
+  const PlatformTunnelUnderlayRoutePolicy(this.value);
+
+  final String value;
+
+  static PlatformTunnelUnderlayRoutePolicy? fromJson(String? raw) {
+    for (final policy in values) {
+      if (policy.value == raw) {
+        return policy;
+      }
+    }
+    return null;
+  }
+}
+
 enum PlatformTunnelStartupStage {
   capabilityCheck('capability_check'),
   permissionAcquire('permission_acquire'),
@@ -1273,6 +1291,8 @@ class PlatformTunnelCapability {
     required this.mode,
     required this.available,
     this.satisfiedPrerequisites = const <PlatformTunnelPrerequisite>[],
+    this.supportedUnderlayRoutePolicies =
+        const <PlatformTunnelUnderlayRoutePolicy>[],
     this.executionPlans = const <RuntimeExecutionPlanDescriptor>[],
     this.missingPrerequisite,
     this.message = '',
@@ -1283,6 +1303,10 @@ class PlatformTunnelCapability {
     final available = json['available'] as bool? ?? false;
     final satisfiedPrerequisites = _readSatisfiedPrerequisites(
       json['satisfied_prerequisites'],
+    );
+    final supportedUnderlayRoutePolicies = _readSupportedUnderlayRoutePolicies(
+      json['supported_underlay_route_policies'],
+      mode: mode,
     );
     final missingPrerequisite = _readOptionalPlatformTunnelPrerequisite(
       json['missing_prerequisite'],
@@ -1302,6 +1326,7 @@ class PlatformTunnelCapability {
       mode: mode,
       available: available,
       satisfiedPrerequisites: satisfiedPrerequisites,
+      supportedUnderlayRoutePolicies: supportedUnderlayRoutePolicies,
       executionPlans:
           (json['execution_plans'] as List<dynamic>? ?? const <dynamic>[])
               .map(
@@ -1318,6 +1343,7 @@ class PlatformTunnelCapability {
   final PlatformTunnelMode mode;
   final bool available;
   final List<PlatformTunnelPrerequisite> satisfiedPrerequisites;
+  final List<PlatformTunnelUnderlayRoutePolicy> supportedUnderlayRoutePolicies;
   final List<RuntimeExecutionPlanDescriptor> executionPlans;
   final PlatformTunnelPrerequisite? missingPrerequisite;
   final String message;
@@ -1328,6 +1354,9 @@ class PlatformTunnelCapability {
       'available': available,
       'satisfied_prerequisites': satisfiedPrerequisites
           .map((PlatformTunnelPrerequisite prerequisite) => prerequisite.value)
+          .toList(growable: false),
+      'supported_underlay_route_policies': supportedUnderlayRoutePolicies
+          .map((PlatformTunnelUnderlayRoutePolicy policy) => policy.value)
           .toList(growable: false),
       'execution_plans': executionPlans
           .map((RuntimeExecutionPlanDescriptor plan) => plan.toJson())
@@ -1346,6 +1375,7 @@ class PlatformTunnelStartResult {
     this.stage,
     this.missingPrerequisite,
     this.startupAttemptId = '',
+    this.underlayRoutePolicy,
     this.message = '',
   });
 
@@ -1400,6 +1430,10 @@ class PlatformTunnelStartResult {
       stage: stage,
       missingPrerequisite: missingPrerequisite,
       startupAttemptId: startupAttemptId,
+      underlayRoutePolicy: _readOptionalUnderlayRoutePolicy(
+        json['underlay_route_policy'],
+        fieldName: 'underlay_route_policy',
+      ),
       message: json['message'] as String? ?? '',
     );
   }
@@ -1410,6 +1444,7 @@ class PlatformTunnelStartResult {
   final PlatformTunnelStartupStage? stage;
   final PlatformTunnelPrerequisite? missingPrerequisite;
   final String startupAttemptId;
+  final PlatformTunnelUnderlayRoutePolicy? underlayRoutePolicy;
   final String message;
 
   Map<String, dynamic> toJson() {
@@ -1420,6 +1455,7 @@ class PlatformTunnelStartResult {
       'stage': stage?.value,
       'missing_prerequisite': missingPrerequisite?.value,
       'startup_attempt_id': startupAttemptId.isEmpty ? null : startupAttemptId,
+      'underlay_route_policy': underlayRoutePolicy?.value,
       'message': message.isEmpty ? null : message,
     });
   }
@@ -3426,6 +3462,37 @@ List<PlatformTunnelPrerequisite> _readSatisfiedPrerequisites(dynamic raw) {
       .toList(growable: false);
 }
 
+List<PlatformTunnelUnderlayRoutePolicy> _readSupportedUnderlayRoutePolicies(
+  dynamic raw, {
+  required PlatformTunnelMode mode,
+}) {
+  final values = raw as List<dynamic>? ?? const <dynamic>[];
+  if (values.isEmpty) {
+    if (mode == PlatformTunnelMode.androidVpnService) {
+      return const <PlatformTunnelUnderlayRoutePolicy>[
+        PlatformTunnelUnderlayRoutePolicy.standard,
+      ];
+    }
+    return const <PlatformTunnelUnderlayRoutePolicy>[];
+  }
+  return values
+      .map((dynamic item) {
+        if (item is! String) {
+          throw const FormatException(
+            'platform tunnel underlay route policies must be string values',
+          );
+        }
+        final policy = PlatformTunnelUnderlayRoutePolicy.fromJson(item);
+        if (policy != null) {
+          return policy;
+        }
+        throw FormatException(
+          'invalid platform tunnel underlay route policy: $item',
+        );
+      })
+      .toList(growable: false);
+}
+
 PlatformTunnelPrerequisite? _readOptionalPlatformTunnelPrerequisite(
   dynamic raw, {
   required String fieldName,
@@ -3437,6 +3504,21 @@ PlatformTunnelPrerequisite? _readOptionalPlatformTunnelPrerequisite(
   final prerequisite = PlatformTunnelPrerequisite.fromJson(value);
   if (prerequisite != null) {
     return prerequisite;
+  }
+  throw FormatException('invalid $fieldName: $value');
+}
+
+PlatformTunnelUnderlayRoutePolicy? _readOptionalUnderlayRoutePolicy(
+  dynamic raw, {
+  required String fieldName,
+}) {
+  final value = raw as String?;
+  if (value == null || value.isEmpty) {
+    return null;
+  }
+  final policy = PlatformTunnelUnderlayRoutePolicy.fromJson(value);
+  if (policy != null) {
+    return policy;
   }
   throw FormatException('invalid $fieldName: $value');
 }

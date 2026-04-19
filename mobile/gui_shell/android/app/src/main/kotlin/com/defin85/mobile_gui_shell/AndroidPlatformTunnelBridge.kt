@@ -11,6 +11,7 @@ internal class AndroidPlatformTunnelBridge(
 
     fun validateAndroidVpnRoutePolicy(
         policy: String,
+        underlayRoutePolicy: String,
         allowedPackages: String,
         disallowedPackages: String,
     ): String? {
@@ -19,6 +20,7 @@ internal class AndroidPlatformTunnelBridge(
         return AndroidPlatformTunnelService.validateRoutePolicy(
             appContext,
             policy = policy,
+            underlayRoutePolicy = underlayRoutePolicy,
             allowedPackages = allowed,
             disallowedPackages = disallowed,
         )

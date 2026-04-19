@@ -36,3 +36,14 @@ scope or a different Android runtime mode.
   restart to take effect
 - **AND** it does not silently pretend that the active tunnel was mutated in
   place
+
+#### Scenario: Operator updates visible app flags in bulk
+
+- **GIVEN** the operator is using `included apps` or `excluded apps` scope on
+  the mobile routing surface
+- **AND** the app list is filtered by the current search query
+- **WHEN** the operator applies a bulk select or bulk clear action
+- **THEN** the shell updates the flags for the currently visible app set in one
+  action
+- **AND** it does not silently mutate apps that are outside the current
+  filtered result set

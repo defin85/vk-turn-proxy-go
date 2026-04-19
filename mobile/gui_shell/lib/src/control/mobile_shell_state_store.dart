@@ -14,6 +14,7 @@ class MobilePlatformModePreferences {
     this.executionPlan,
     this.applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
+    this.underlayRoutePolicy = PlatformTunnelUnderlayRoutePolicy.standard,
     this.allowedPackages = const <String>[],
     this.disallowedPackages = const <String>[],
   });
@@ -33,6 +34,11 @@ class MobilePlatformModePreferences {
             json['application_routing_policy'] as String?,
           ) ??
           PlatformTunnelApplicationRoutingPolicy.allApps,
+      underlayRoutePolicy:
+          PlatformTunnelUnderlayRoutePolicy.fromJson(
+            json['underlay_route_policy'] as String?,
+          ) ??
+          PlatformTunnelUnderlayRoutePolicy.standard,
       allowedPackages: _readPackageList(json['allowed_packages']),
       disallowedPackages: _readPackageList(json['disallowed_packages']),
     );
@@ -40,6 +46,7 @@ class MobilePlatformModePreferences {
 
   final RuntimeExecutionPlan? executionPlan;
   final PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy;
+  final PlatformTunnelUnderlayRoutePolicy underlayRoutePolicy;
   final List<String> allowedPackages;
   final List<String> disallowedPackages;
 
@@ -47,6 +54,7 @@ class MobilePlatformModePreferences {
     RuntimeExecutionPlan? executionPlan,
     bool replaceExecutionPlan = false,
     PlatformTunnelApplicationRoutingPolicy? applicationRoutingPolicy,
+    PlatformTunnelUnderlayRoutePolicy? underlayRoutePolicy,
     List<String>? allowedPackages,
     List<String>? disallowedPackages,
   }) {
@@ -56,6 +64,7 @@ class MobilePlatformModePreferences {
           : (executionPlan ?? this.executionPlan),
       applicationRoutingPolicy:
           applicationRoutingPolicy ?? this.applicationRoutingPolicy,
+      underlayRoutePolicy: underlayRoutePolicy ?? this.underlayRoutePolicy,
       allowedPackages: allowedPackages ?? this.allowedPackages,
       disallowedPackages: disallowedPackages ?? this.disallowedPackages,
     );
@@ -65,6 +74,7 @@ class MobilePlatformModePreferences {
     return <String, dynamic>{
       if (executionPlan != null) 'execution_plan': executionPlan!.toJson(),
       'application_routing_policy': applicationRoutingPolicy.value,
+      'underlay_route_policy': underlayRoutePolicy.value,
       if (allowedPackages.isNotEmpty) 'allowed_packages': allowedPackages,
       if (disallowedPackages.isNotEmpty)
         'disallowed_packages': disallowedPackages,

@@ -182,6 +182,25 @@ Advanced runtime overrides and secondary resolution/session actions stay
 reachable through explicit disclosure and overflow affordances instead of
 crowding the first mobile screen.
 
+## Interaction surface taxonomy
+
+`mobile/gui_shell` classifies surfaces by task weight rather than by widget
+habit:
+
+- bottom sheets for local, reversible choices inside the current workflow
+- dedicated follow-on routes for catalog or library flows that need search,
+  tabs, longer lists, or multiple actions
+- dialog-sized overlays for compact preview, confirmation, and short status
+  summaries that do not become the main browsing surface
+
+Current mobile surface map:
+
+- `Routing profile` and `App scope`: bottom-sheet local pickers
+- `New provider`: dedicated follow-on route from `Providers`
+- owned-browser continuation: full-screen route
+- portable import/export preview: dialog-sized overlay
+- compact host/status summary: dialog-sized overlay
+
 ## Portable profile transfer
 
 The `Profiles` workflow now supports explicit shell-to-shell transfer of saved

@@ -122,12 +122,16 @@ func (c *androidVPNServiceController) Start(
 	ctx context.Context,
 	req clientcontrol.PlatformTunnelStartRequest,
 ) (clientcontrol.PlatformTunnelStartResult, error) {
+	if strings.TrimSpace(string(req.UnderlayRoutePolicy)) == "" {
+		req.UnderlayRoutePolicy = clientcontrol.PlatformTunnelUnderlayRoutePolicyStandard
+	}
 	capability := c.Capability()
 	if req.Mode != capability.Mode {
 		return capabilityCheckFailure(
 			req.Mode,
 			nil,
 			clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+			req.UnderlayRoutePolicy,
 			fmt.Sprintf("android embedded host does not publish platform tunnel mode %s", req.Mode),
 		), nil
 	}
@@ -138,6 +142,7 @@ func (c *androidVPNServiceController) Start(
 			req.Mode,
 			nil,
 			clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+			req.UnderlayRoutePolicy,
 			err.Error(),
 		), nil
 	}
@@ -147,6 +152,7 @@ func (c *androidVPNServiceController) Start(
 			req.Mode,
 			selectedPlanPtr,
 			capability.MissingPrerequisite,
+			req.UnderlayRoutePolicy,
 			firstNonEmpty(strings.TrimSpace(capability.Message), unavailableExecutionPlanMessage(capability, selectedPlan)),
 		), nil
 	}
@@ -155,7 +161,21 @@ func (c *androidVPNServiceController) Start(
 			req.Mode,
 			selectedPlanPtr,
 			clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+			req.UnderlayRoutePolicy,
 			"android embedded host reports android_vpn_service support without a packaged lifecycle implementation",
+		), nil
+	}
+	if !supportsUnderlayRoutePolicy(capability, req.UnderlayRoutePolicy) {
+		return capabilityCheckFailure(
+			req.Mode,
+			selectedPlanPtr,
+			clientcontrol.PlatformTunnelPrerequisiteRouteExclusion,
+			req.UnderlayRoutePolicy,
+			fmt.Sprintf(
+				"android embedded host does not advertise underlay_route_policy %s for mode %s",
+				req.UnderlayRoutePolicy,
+				req.Mode,
+			),
 		), nil
 	}
 
@@ -170,6 +190,7 @@ func (c *androidVPNServiceController) Start(
 				Stage:               clientcontrol.PlatformTunnelStartupStagePermissionAcquire,
 				MissingPrerequisite: clientcontrol.PlatformTunnelPrerequisitePermission,
 				StartupAttemptID:    attemptID,
+				UnderlayRoutePolicy: req.UnderlayRoutePolicy,
 				Message:             pending.Error(),
 			}, nil
 		}
@@ -178,6 +199,7 @@ func (c *androidVPNServiceController) Start(
 			selectedPlanPtr,
 			clientcontrol.PlatformTunnelStartupStagePermissionAcquire,
 			clientcontrol.PlatformTunnelPrerequisitePermission,
+			req.UnderlayRoutePolicy,
 			err.Error(),
 		)
 	}
@@ -202,6 +224,7 @@ func (c *androidVPNServiceController) Resume(
 			attempt.plan,
 			clientcontrol.PlatformTunnelStartupStagePermissionAcquire,
 			clientcontrol.PlatformTunnelPrerequisitePermission,
+			attempt.req.UnderlayRoutePolicy,
 			err.Error(),
 		)
 	}
@@ -248,6 +271,7 @@ func (c *androidVPNServiceController) finishStartup(
 			selectedPlanPtr,
 			clientcontrol.PlatformTunnelStartupStageRouteValidate,
 			routePolicyPrerequisite(err),
+			req.UnderlayRoutePolicy,
 			withCleanupMessage(ctx, c.lifecycle, cleanupRequired, err.Error()),
 		)
 	}
@@ -263,6 +287,7 @@ func (c *androidVPNServiceController) finishStartup(
 				selectedPlanPtr,
 				clientcontrol.PlatformTunnelStartupStageRuntimeAttach,
 				clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+				req.UnderlayRoutePolicy,
 				withCleanupMessage(
 					ctx,
 					c.lifecycle,
@@ -279,6 +304,7 @@ func (c *androidVPNServiceController) finishStartup(
 				selectedPlanPtr,
 				clientcontrol.PlatformTunnelStartupStageRuntimeAttach,
 				clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+				req.UnderlayRoutePolicy,
 				withCleanupMessage(ctx, c.lifecycle, cleanupRequired, err.Error()),
 			)
 		}
@@ -289,6 +315,7 @@ func (c *androidVPNServiceController) finishStartup(
 			selectedPlanPtr,
 			clientcontrol.PlatformTunnelStartupStageHostBringup,
 			clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+			req.UnderlayRoutePolicy,
 			withCleanupMessage(ctx, c.lifecycle, cleanupRequired, err.Error()),
 		)
 	}
@@ -298,14 +325,16 @@ func (c *androidVPNServiceController) finishStartup(
 			selectedPlanPtr,
 			clientcontrol.PlatformTunnelStartupStageRuntimeAttach,
 			clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+			req.UnderlayRoutePolicy,
 			withCleanupMessage(ctx, c.lifecycle, cleanupRequired, err.Error()),
 		)
 	}
 
 	return clientcontrol.PlatformTunnelStartResult{
-		Mode:          req.Mode,
-		ExecutionPlan: selectedPlanPtr,
-		Ready:         true,
+		Mode:                req.Mode,
+		ExecutionPlan:       selectedPlanPtr,
+		Ready:               true,
+		UnderlayRoutePolicy: req.UnderlayRoutePolicy,
 	}, nil
 }
 
@@ -362,6 +391,7 @@ func capabilityCheckFailure(
 	mode clientcontrol.PlatformTunnelMode,
 	plan *clientcontrol.RuntimeExecutionPlan,
 	prerequisite clientcontrol.PlatformTunnelPrerequisite,
+	underlayRoutePolicy clientcontrol.PlatformTunnelUnderlayRoutePolicy,
 	message string,
 ) clientcontrol.PlatformTunnelStartResult {
 	if strings.TrimSpace(string(prerequisite)) == "" {
@@ -373,6 +403,7 @@ func capabilityCheckFailure(
 		Ready:               false,
 		Stage:               clientcontrol.PlatformTunnelStartupStageCapabilityCheck,
 		MissingPrerequisite: prerequisite,
+		UnderlayRoutePolicy: underlayRoutePolicy,
 		Message:             strings.TrimSpace(message),
 	}
 }
@@ -382,6 +413,7 @@ func startFailureResult(
 	plan *clientcontrol.RuntimeExecutionPlan,
 	stage clientcontrol.PlatformTunnelStartupStage,
 	prerequisite clientcontrol.PlatformTunnelPrerequisite,
+	underlayRoutePolicy clientcontrol.PlatformTunnelUnderlayRoutePolicy,
 	message string,
 ) (clientcontrol.PlatformTunnelStartResult, error) {
 	result := clientcontrol.PlatformTunnelStartResult{
@@ -390,6 +422,7 @@ func startFailureResult(
 		Ready:               false,
 		Stage:               stage,
 		MissingPrerequisite: prerequisite,
+		UnderlayRoutePolicy: underlayRoutePolicy,
 		Message:             strings.TrimSpace(message),
 	}
 	return clientcontrol.PlatformTunnelStartResult{}, &clientcontrol.PlatformTunnelStartError{Result: result}
@@ -508,10 +541,29 @@ func clonePlatformTunnelCapability(capability clientcontrol.PlatformTunnelCapabi
 	if len(capability.SatisfiedPrerequisites) > 0 {
 		clone.SatisfiedPrerequisites = append([]clientcontrol.PlatformTunnelPrerequisite(nil), capability.SatisfiedPrerequisites...)
 	}
+	if len(capability.SupportedUnderlayRoutePolicies) > 0 {
+		clone.SupportedUnderlayRoutePolicies = append([]clientcontrol.PlatformTunnelUnderlayRoutePolicy(nil), capability.SupportedUnderlayRoutePolicies...)
+	}
 	if len(capability.ExecutionPlans) > 0 {
 		clone.ExecutionPlans = append([]clientcontrol.RuntimeExecutionPlanDescriptor(nil), capability.ExecutionPlans...)
 	}
 	return clone
+}
+
+func supportsUnderlayRoutePolicy(
+	capability clientcontrol.PlatformTunnelCapability,
+	policy clientcontrol.PlatformTunnelUnderlayRoutePolicy,
+) bool {
+	if strings.TrimSpace(string(policy)) == "" ||
+		policy == clientcontrol.PlatformTunnelUnderlayRoutePolicyStandard {
+		return true
+	}
+	for _, candidate := range capability.SupportedUnderlayRoutePolicies {
+		if candidate == policy {
+			return true
+		}
+	}
+	return false
 }
 
 func newAndroidRouteExclusionError(message string) error {
@@ -574,6 +626,10 @@ func supportedAndroidVPNServiceCapability(message string) clientcontrol.Platform
 		SatisfiedPrerequisites: []clientcontrol.PlatformTunnelPrerequisite{
 			clientcontrol.PlatformTunnelPrerequisiteRouteExclusion,
 			clientcontrol.PlatformTunnelPrerequisiteDNSBypass,
+		},
+		SupportedUnderlayRoutePolicies: []clientcontrol.PlatformTunnelUnderlayRoutePolicy{
+			clientcontrol.PlatformTunnelUnderlayRoutePolicyStandard,
+			clientcontrol.PlatformTunnelUnderlayRoutePolicyPreserveActiveLocalNetwork,
 		},
 		ExecutionPlans: androidVPNServiceExecutionPlans(true, message),
 	}

@@ -1013,12 +1013,40 @@ class ShellText {
   String get supportSubtitle => t.shellTextSupportSubtitle;
   String get routingTitle => t.shellTextRoutingTitle;
   String get routingSubtitle => t.shellTextRoutingSubtitle;
+  String get routingProfile => t.shellTextRoutingProfile;
+  String get routingProfileStandard => t.shellTextRoutingProfileStandard;
+  String get routingProfileDevelopmentWifi =>
+      t.shellTextRoutingProfileDevelopmentWifi;
+  String get routingProfileStandardDescription =>
+      t.shellTextRoutingProfileStandardDescription;
+  String get routingProfileDevelopmentWifiDescription =>
+      t.shellTextRoutingProfileDevelopmentWifiDescription;
+  String get appScope => t.shellTextAppScope;
   String modeScope(String modeLabel) =>
       t.shellTextModeScope(modeLabel: modeLabel);
   String get allApps => t.shellTextAllApps;
   String get includedApps => t.shellTextIncludedApps;
   String get excludedApps => t.shellTextExcludedApps;
+  String routingScopeSummary({
+    required int selectedCount,
+    required int totalCount,
+  }) => t.shellTextRoutingScopeSummary(
+    selectedCount: selectedCount,
+    totalCount: totalCount,
+  );
   String get searchApps => t.shellTextSearchApps;
+  String routingVisibleAppsSummary({
+    required int visibleCount,
+    required int totalCount,
+    required int selectedCount,
+  }) => t.shellTextRoutingVisibleAppsSummary(
+    visibleCount: visibleCount,
+    totalCount: totalCount,
+    selectedCount: selectedCount,
+  );
+  String get bulkActions => t.shellTextBulkActions;
+  String get selectVisibleApps => t.shellTextSelectVisibleApps;
+  String get clearVisibleApps => t.shellTextClearVisibleApps;
   String get allInstalledAppsUseVpnPath =>
       t.shellTextAllInstalledAppsUseVpnPath;
   String get retryAppScan => t.shellTextRetryAppScan;
@@ -1199,6 +1227,13 @@ class ShellText {
   String get mobileHostModeUnavailable => t.shellTextMobileHostModeUnavailable;
   String platformTunnelReady(String modeLabel) =>
       t.shellTextPlatformTunnelReady(modeLabel: modeLabel);
+  String platformTunnelReadyWithRoutingProfile({
+    required String modeLabel,
+    required String profileLabel,
+  }) => t.shellTextPlatformTunnelReadyWithRoutingProfile(
+    modeLabel: modeLabel,
+    profileLabel: profileLabel,
+  );
   String startupBlockedAt(String stageLabel) =>
       t.shellTextStartupBlockedAt(stageLabel: stageLabel);
   String get unknownStage => t.shellTextUnknownStage;
@@ -1224,6 +1259,19 @@ class ShellText {
         );
 
   String get perAppRoutingUnavailable => t.shellTextPerAppRoutingUnavailable;
+  String restartVpnToApplyRoutingProfile(String modeLabel) =>
+      t.shellTextRestartVpnToApplyRoutingProfile(modeLabel: modeLabel);
+  String developmentWifiRoutingUnavailableForHost(String modeLabel) =>
+      t.shellTextDevelopmentWifiRoutingUnavailableForHost(modeLabel: modeLabel);
+  String get developmentWifiRoutingSavedButUnsupported =>
+      t.shellTextDevelopmentWifiRoutingSavedButUnsupported;
+  String routingSummaryWithProfile({
+    required String profileLabel,
+    required String scopeSummary,
+  }) => t.shellTextRoutingSummaryWithProfile(
+    profileLabel: profileLabel,
+    scopeSummary: scopeSummary,
+  );
   String get scopeAllInstalledApps => t.shellTextScopeAllInstalledApps;
   String get scopeIncludedAppsEmpty => t.shellTextScopeIncludedAppsEmpty;
   String scopeOnlySelectedApps(int count) =>

@@ -17,6 +17,8 @@ abstract class ControlPlaneApi {
     RuntimeExecutionPlan? executionPlan,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
+    PlatformTunnelUnderlayRoutePolicy underlayRoutePolicy =
+        PlatformTunnelUnderlayRoutePolicy.standard,
     List<String> allowedPackages = const <String>[],
     List<String> disallowedPackages = const <String>[],
   });
@@ -122,6 +124,8 @@ class ControlPlaneClient implements ControlPlaneApi {
     RuntimeExecutionPlan? executionPlan,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
+    PlatformTunnelUnderlayRoutePolicy underlayRoutePolicy =
+        PlatformTunnelUnderlayRoutePolicy.standard,
     List<String> allowedPackages = const <String>[],
     List<String> disallowedPackages = const <String>[],
   }) async {
@@ -137,6 +141,8 @@ class ControlPlaneClient implements ControlPlaneApi {
         if (executionPlan != null) 'execution_plan': executionPlan.toJson(),
         if (mode == PlatformTunnelMode.androidVpnService)
           'application_routing_policy': applicationRoutingPolicy.value,
+        if (mode == PlatformTunnelMode.androidVpnService)
+          'underlay_route_policy': underlayRoutePolicy.value,
         if (mode == PlatformTunnelMode.androidVpnService &&
             allowedPackages.isNotEmpty)
           'allowed_packages': allowedPackages,

@@ -256,6 +256,25 @@ class MobileShellController extends ChangeNotifier {
   bool get activeModeSupportsAppRouting =>
       _modeSupportsAppRouting(activePlatformTunnelMode);
 
+  bool get activeModeSupportsDevelopmentUnderlayRouting =>
+      _modeSupportsUnderlayRoutePolicy(
+        activePlatformTunnelMode,
+        PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork,
+      );
+
+  bool get activeUnderlayRoutePolicyRequiresRestart {
+    final mode = activePlatformTunnelMode;
+    if (mode == null) {
+      return false;
+    }
+    final result = platformTunnelResultFor(mode);
+    if (result?.ready != true) {
+      return false;
+    }
+    return _startedUnderlayRoutePolicyForMode(mode, result) !=
+        activePlatformModePreferences.underlayRoutePolicy;
+  }
+
   bool get systemTunnelSupported =>
       platformTunnels.any((PlatformTunnelCapability capability) {
         return capability.available;
@@ -577,6 +596,26 @@ class MobileShellController extends ChangeNotifier {
     );
   }
 
+  void updateUnderlayRoutePolicy(PlatformTunnelUnderlayRoutePolicy policy) {
+    final mode = activePlatformTunnelMode;
+    if (mode == null) {
+      return;
+    }
+    final current = modePreferencesFor(mode);
+    if (current.underlayRoutePolicy == policy) {
+      return;
+    }
+    _storeModePreferences(
+      mode,
+      current.copyWith(underlayRoutePolicy: policy),
+      notify: true,
+    );
+    if (platformTunnelResultFor(mode)?.ready == true) {
+      notice = _copy.restartVpnToApplyRoutingProfile(mode.label);
+      _notify();
+    }
+  }
+
   void updateRoutingPackageSelection({
     required String packageName,
     required bool selected,
@@ -613,6 +652,51 @@ class MobileShellController extends ChangeNotifier {
             disallowedPackages: _togglePackage(
               current.disallowedPackages,
               normalizedPackage,
+              selected,
+            ),
+          ),
+          notify: true,
+        );
+        return;
+    }
+  }
+
+  void updateRoutingPackageSelectionBatch({
+    required Iterable<String> packageNames,
+    required bool selected,
+  }) {
+    final mode = activePlatformTunnelMode;
+    if (mode == null) {
+      return;
+    }
+    final normalizedPackages = _normalizePackageNames(packageNames);
+    if (normalizedPackages.isEmpty) {
+      return;
+    }
+    final current = modePreferencesFor(mode);
+    switch (current.applicationRoutingPolicy) {
+      case PlatformTunnelApplicationRoutingPolicy.allApps:
+        return;
+      case PlatformTunnelApplicationRoutingPolicy.allowedPackages:
+        _storeModePreferences(
+          mode,
+          current.copyWith(
+            allowedPackages: _togglePackages(
+              current.allowedPackages,
+              normalizedPackages,
+              selected,
+            ),
+          ),
+          notify: true,
+        );
+        return;
+      case PlatformTunnelApplicationRoutingPolicy.disallowedPackages:
+        _storeModePreferences(
+          mode,
+          current.copyWith(
+            disallowedPackages: _togglePackages(
+              current.disallowedPackages,
+              normalizedPackages,
               selected,
             ),
           ),
@@ -1600,6 +1684,18 @@ class MobileShellController extends ChangeNotifier {
         notice = routingError;
         return;
       }
+      final underlayRoutePolicyError = _underlayRoutePolicySelectionBlockReason(
+        mode,
+        modePreferences,
+      );
+      if (underlayRoutePolicyError != null) {
+        notice = underlayRoutePolicyError;
+        return;
+      }
+      final underlayRoutePolicy = _requestedUnderlayRoutePolicyForMode(
+        mode,
+        modePreferences,
+      );
       final resolutionId = await _ensureResolutionForPlatformTunnel(mode);
       if (resolutionId == null) {
         return;
@@ -1621,6 +1717,7 @@ class MobileShellController extends ChangeNotifier {
           mode,
           modePreferences,
         ),
+        underlayRoutePolicy: underlayRoutePolicy,
       );
       if (_requiresPlatformTunnelPermissionResume(mode, result)) {
         await bridge.requestPlatformTunnelPermission(mode: mode);
@@ -2558,6 +2655,13 @@ class MobileShellController extends ChangeNotifier {
 
   String _platformTunnelNotice(PlatformTunnelStartResult result) {
     if (result.ready) {
+      if (result.underlayRoutePolicy ==
+          PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork) {
+        return _copy.platformTunnelReadyWithRoutingProfile(
+          modeLabel: result.mode.label,
+          profileLabel: _underlayRoutePolicyLabel(result.underlayRoutePolicy!),
+        );
+      }
       return _copy.platformTunnelReady(result.mode.label);
     }
     return _copy.platformTunnelBlocked(
@@ -2962,6 +3066,7 @@ class MobileShellController extends ChangeNotifier {
         executionPlan: resolvedExecutionPlan,
         applicationRoutingPolicy:
             PlatformTunnelApplicationRoutingPolicy.allApps,
+        underlayRoutePolicy: PlatformTunnelUnderlayRoutePolicy.standard,
       );
     }
     return MobilePlatformModePreferences(
@@ -2969,6 +3074,9 @@ class MobileShellController extends ChangeNotifier {
       applicationRoutingPolicy:
           current?.applicationRoutingPolicy ??
           PlatformTunnelApplicationRoutingPolicy.allApps,
+      underlayRoutePolicy:
+          current?.underlayRoutePolicy ??
+          PlatformTunnelUnderlayRoutePolicy.standard,
       allowedPackages: allowedPackages,
       disallowedPackages: disallowedPackages,
     );
@@ -3094,6 +3202,27 @@ class MobileShellController extends ChangeNotifier {
     return _normalizePackageNames(preferences.disallowedPackages);
   }
 
+  PlatformTunnelUnderlayRoutePolicy _requestedUnderlayRoutePolicyForMode(
+    PlatformTunnelMode mode,
+    MobilePlatformModePreferences preferences,
+  ) {
+    if (!_modeSupportsAppRouting(mode)) {
+      return PlatformTunnelUnderlayRoutePolicy.standard;
+    }
+    return preferences.underlayRoutePolicy;
+  }
+
+  PlatformTunnelUnderlayRoutePolicy _startedUnderlayRoutePolicyForMode(
+    PlatformTunnelMode mode,
+    PlatformTunnelStartResult? result,
+  ) {
+    if (!_modeSupportsAppRouting(mode)) {
+      return PlatformTunnelUnderlayRoutePolicy.standard;
+    }
+    return result?.underlayRoutePolicy ??
+        PlatformTunnelUnderlayRoutePolicy.standard;
+  }
+
   String? _routingSelectionBlockReason(
     PlatformTunnelMode mode,
     MobilePlatformModePreferences preferences,
@@ -3110,6 +3239,17 @@ class MobileShellController extends ChangeNotifier {
             ? _copy.selectAtLeastOneExcludedApp(mode.label)
             : null;
     }
+  }
+
+  String? _underlayRoutePolicySelectionBlockReason(
+    PlatformTunnelMode mode,
+    MobilePlatformModePreferences preferences,
+  ) {
+    final policy = _requestedUnderlayRoutePolicyForMode(mode, preferences);
+    if (_modeSupportsUnderlayRoutePolicy(mode, policy)) {
+      return null;
+    }
+    return _copy.developmentWifiRoutingUnavailableForHost(mode.label);
   }
 
   String _executionPlanSelectionRequiredMessage(PlatformTunnelMode mode) {
@@ -3178,6 +3318,7 @@ class MobileShellController extends ChangeNotifier {
   ) {
     return _sameExecutionPlan(left.executionPlan, right.executionPlan) &&
         left.applicationRoutingPolicy == right.applicationRoutingPolicy &&
+        left.underlayRoutePolicy == right.underlayRoutePolicy &&
         _sameStringLists(left.allowedPackages, right.allowedPackages) &&
         _sameStringLists(left.disallowedPackages, right.disallowedPackages);
   }
@@ -3209,6 +3350,29 @@ class MobileShellController extends ChangeNotifier {
 
   bool _modeSupportsAppRouting(PlatformTunnelMode? mode) {
     return mode == PlatformTunnelMode.androidVpnService;
+  }
+
+  bool _modeSupportsUnderlayRoutePolicy(
+    PlatformTunnelMode? mode,
+    PlatformTunnelUnderlayRoutePolicy policy,
+  ) {
+    if (policy == PlatformTunnelUnderlayRoutePolicy.standard) {
+      return true;
+    }
+    final capability = capabilityForMode(mode);
+    if (capability == null) {
+      return false;
+    }
+    return capability.supportedUnderlayRoutePolicies.contains(policy);
+  }
+
+  String _underlayRoutePolicyLabel(PlatformTunnelUnderlayRoutePolicy policy) {
+    return switch (policy) {
+      PlatformTunnelUnderlayRoutePolicy.standard =>
+        _copy.routingProfileStandard,
+      PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork =>
+        _copy.routingProfileDevelopmentWifi,
+    };
   }
 
   void _clearSelectedResolutionSelection() {
@@ -3274,11 +3438,20 @@ List<String> _togglePackage(
   String packageName,
   bool selected,
 ) {
+  return _togglePackages(current, <String>[packageName], selected);
+}
+
+List<String> _togglePackages(
+  List<String> current,
+  Iterable<String> packageNames,
+  bool selected,
+) {
   final next = current.toSet();
+  final normalizedPackages = _normalizePackageNames(packageNames);
   if (selected) {
-    next.add(packageName);
+    next.addAll(normalizedPackages);
   } else {
-    next.remove(packageName);
+    next.removeAll(normalizedPackages);
   }
   final sorted = next.toList(growable: false);
   sorted.sort();

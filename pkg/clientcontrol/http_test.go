@@ -1019,6 +1019,30 @@ func TestHandlerPlatformTunnelStartRejectsInvalidAndroidAppRoutingPolicy(t *test
 	}
 }
 
+func TestHandlerPlatformTunnelStartRejectsInvalidAndroidUnderlayRoutePolicy(t *testing.T) {
+	host := New(WithBuildIdentity(BuildIdentity{Target: "android/embedded"}))
+	handler := Handler(host)
+
+	body, _ := json.Marshal(PlatformTunnelStartRequest{
+		Mode:                PlatformTunnelModeAndroidVPNService,
+		UnderlayRoutePolicy: PlatformTunnelUnderlayRoutePolicy("side_channel_magic"),
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/platform-tunnels/start", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("POST /v1/platform-tunnels/start code = %d body=%s, want 400", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode platform tunnel invalid payload: %v", err)
+	}
+	if payload["code"] != "platform_tunnel_invalid" {
+		t.Fatalf("platform tunnel invalid code = %v, want platform_tunnel_invalid", payload["code"])
+	}
+}
+
 func TestHandlerPlatformTunnelResumeReturnsTypedFailureResult(t *testing.T) {
 	host := New(
 		WithBuildIdentity(testBuildIdentity()),

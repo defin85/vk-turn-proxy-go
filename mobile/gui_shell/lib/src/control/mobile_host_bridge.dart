@@ -659,6 +659,8 @@ class HttpMobileHostBridge implements MobileHostBridge {
     RuntimeExecutionPlan? executionPlan,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
+    PlatformTunnelUnderlayRoutePolicy underlayRoutePolicy =
+        PlatformTunnelUnderlayRoutePolicy.standard,
     List<String> allowedPackages = const <String>[],
     List<String> disallowedPackages = const <String>[],
   }) {
@@ -668,6 +670,7 @@ class HttpMobileHostBridge implements MobileHostBridge {
       runtimeDefaults: runtimeDefaults,
       executionPlan: executionPlan,
       applicationRoutingPolicy: applicationRoutingPolicy,
+      underlayRoutePolicy: underlayRoutePolicy,
       allowedPackages: allowedPackages,
       disallowedPackages: disallowedPackages,
     );
@@ -804,6 +807,8 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
     RuntimeExecutionPlan? executionPlan,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
+    PlatformTunnelUnderlayRoutePolicy underlayRoutePolicy =
+        PlatformTunnelUnderlayRoutePolicy.standard,
     List<String> allowedPackages = const <String>[],
     List<String> disallowedPackages = const <String>[],
   }) => _fail();

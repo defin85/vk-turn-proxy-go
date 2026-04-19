@@ -331,6 +331,8 @@ void main() {
           turnServer: 'turn.example.test',
           turnPort: '3478',
         ),
+        underlayRoutePolicy:
+            PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork,
       );
 
       expect(result.ready, isFalse);
@@ -346,6 +348,12 @@ void main() {
       expect(
         api.startPlatformTunnelRuntimeDefaults.single?.turnServer,
         'turn.example.test',
+      );
+      expect(
+        api.startPlatformTunnelUnderlayRoutePolicies,
+        <PlatformTunnelUnderlayRoutePolicy>[
+          PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork,
+        ],
       );
     },
   );
@@ -715,6 +723,9 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
   final List<String?> startPlatformTunnelResolutionIDs = <String?>[];
   final List<RuntimeDefaults?> startPlatformTunnelRuntimeDefaults =
       <RuntimeDefaults?>[];
+  final List<PlatformTunnelUnderlayRoutePolicy>
+  startPlatformTunnelUnderlayRoutePolicies =
+      <PlatformTunnelUnderlayRoutePolicy>[];
   final List<PlatformTunnelMode> stopPlatformTunnelModes =
       <PlatformTunnelMode>[];
 
@@ -785,9 +796,12 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
         PlatformTunnelApplicationRoutingPolicy.allApps,
     List<String> allowedPackages = const <String>[],
     List<String> disallowedPackages = const <String>[],
+    PlatformTunnelUnderlayRoutePolicy underlayRoutePolicy =
+        PlatformTunnelUnderlayRoutePolicy.standard,
   }) async {
     startPlatformTunnelResolutionIDs.add(resolutionId);
     startPlatformTunnelRuntimeDefaults.add(runtimeDefaults);
+    startPlatformTunnelUnderlayRoutePolicies.add(underlayRoutePolicy);
     return const PlatformTunnelStartResult(
       mode: PlatformTunnelMode.appleNetworkExtension,
       ready: false,

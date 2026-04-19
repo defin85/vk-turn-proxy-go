@@ -164,21 +164,11 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Future<void> _openNewProviderFlow() async {
-    final result = await showDialog<_ProviderChooserResult>(
-      context: context,
-      builder: (BuildContext context) {
-        return _DialogSurfaceFrame(
-          maxWidth: 640,
-          maxHeight: 720,
-          child: _ProviderChooserDialog(
-            supportedProviders: widget.controller.supportedProviderCatalog,
-            providerDescriptors: widget.controller.providerDescriptors,
-            userTemplates: widget.controller.providerTemplates,
-            presets: widget.controller.presetCatalog,
-            busy: widget.controller.busy,
-          ),
-        );
-      },
+    final result = await Navigator.of(context).push<_ProviderChooserResult>(
+      MaterialPageRoute<_ProviderChooserResult>(
+        builder: (BuildContext context) =>
+            _ProviderChooserPage(controller: widget.controller),
+      ),
     );
     if (!mounted || result == null) {
       return;
@@ -555,7 +545,7 @@ class _HomePage extends StatelessWidget {
     final notice = controller.surfaceNotice;
 
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
       children: <Widget>[
         _PageHeader(
           title: t.mobileHomeTitle,
@@ -578,7 +568,7 @@ class _HomePage extends StatelessWidget {
             ),
           ),
         ],
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         if (controller.profiles.isEmpty)
           _HomeEmptyState(onOpenProfiles: onOpenProfiles)
         else if (selectedProfile != null)
@@ -1311,13 +1301,160 @@ class _RoutingPageState extends State<_RoutingPage> {
     super.dispose();
   }
 
+  Future<void> _showRoutingProfileSheet({
+    required ShellText copy,
+    required MobileShellController controller,
+    required PlatformTunnelUnderlayRoutePolicy underlayRoutePolicy,
+    required bool showDevelopmentWifiProfile,
+    required bool developmentWifiUnsupported,
+  }) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+                child: Text(
+                  copy.routingProfile,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              RadioListTile<PlatformTunnelUnderlayRoutePolicy>(
+                value: PlatformTunnelUnderlayRoutePolicy.standard,
+                groupValue: underlayRoutePolicy,
+                onChanged: (_) {
+                  controller.updateUnderlayRoutePolicy(
+                    PlatformTunnelUnderlayRoutePolicy.standard,
+                  );
+                  Navigator.of(context).pop();
+                },
+                title: Text(copy.routingProfileStandard),
+                subtitle: Text(copy.routingProfileStandardDescription),
+              ),
+              if (showDevelopmentWifiProfile)
+                RadioListTile<PlatformTunnelUnderlayRoutePolicy>(
+                  value: PlatformTunnelUnderlayRoutePolicy
+                      .preserveActiveLocalNetwork,
+                  groupValue: underlayRoutePolicy,
+                  onChanged: developmentWifiUnsupported
+                      ? null
+                      : (_) {
+                          controller.updateUnderlayRoutePolicy(
+                            PlatformTunnelUnderlayRoutePolicy
+                                .preserveActiveLocalNetwork,
+                          );
+                          Navigator.of(context).pop();
+                        },
+                  title: Text(copy.routingProfileDevelopmentWifi),
+                  subtitle: Text(
+                    developmentWifiUnsupported
+                        ? copy.developmentWifiRoutingSavedButUnsupported
+                        : copy.routingProfileDevelopmentWifiDescription,
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showAppScopeSheet({
+    required ShellText copy,
+    required MobileShellController controller,
+    required PlatformTunnelApplicationRoutingPolicy routingPolicy,
+    required int selectedCount,
+    required int totalCount,
+  }) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (BuildContext context) {
+        final summary = copy.routingScopeSummary(
+          selectedCount: selectedCount,
+          totalCount: totalCount,
+        );
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+                child: Text(
+                  copy.appScope,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              RadioListTile<PlatformTunnelApplicationRoutingPolicy>(
+                value: PlatformTunnelApplicationRoutingPolicy.allApps,
+                groupValue: routingPolicy,
+                onChanged: (_) {
+                  controller.updateApplicationRoutingPolicy(
+                    PlatformTunnelApplicationRoutingPolicy.allApps,
+                  );
+                  Navigator.of(context).pop();
+                },
+                title: Text(copy.allApps),
+                subtitle: Text(copy.allInstalledAppsUseVpnPath),
+              ),
+              RadioListTile<PlatformTunnelApplicationRoutingPolicy>(
+                value: PlatformTunnelApplicationRoutingPolicy.allowedPackages,
+                groupValue: routingPolicy,
+                onChanged: (_) {
+                  controller.updateApplicationRoutingPolicy(
+                    PlatformTunnelApplicationRoutingPolicy.allowedPackages,
+                  );
+                  Navigator.of(context).pop();
+                },
+                title: Text(copy.includedApps),
+                subtitle: Text(summary),
+              ),
+              RadioListTile<PlatformTunnelApplicationRoutingPolicy>(
+                value:
+                    PlatformTunnelApplicationRoutingPolicy.disallowedPackages,
+                groupValue: routingPolicy,
+                onChanged: (_) {
+                  controller.updateApplicationRoutingPolicy(
+                    PlatformTunnelApplicationRoutingPolicy.disallowedPackages,
+                  );
+                  Navigator.of(context).pop();
+                },
+                title: Text(copy.excludedApps),
+                subtitle: Text(summary),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
     final theme = Theme.of(context);
+    final copy = context.shellText;
     final mode = controller.activePlatformTunnelMode;
     final preferences = controller.activePlatformModePreferences;
     final routingPolicy = preferences.applicationRoutingPolicy;
+    final underlayRoutePolicy = preferences.underlayRoutePolicy;
+    final showDevelopmentWifiProfile =
+        controller.activeModeSupportsDevelopmentUnderlayRouting ||
+        underlayRoutePolicy ==
+            PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork;
+    final developmentWifiUnsupported =
+        showDevelopmentWifiProfile &&
+        !controller.activeModeSupportsDevelopmentUnderlayRouting;
     final selectedPackages = switch (routingPolicy) {
       PlatformTunnelApplicationRoutingPolicy.allApps => const <String>[],
       PlatformTunnelApplicationRoutingPolicy.allowedPackages =>
@@ -1335,6 +1472,40 @@ class _RoutingPageState extends State<_RoutingPage> {
               app.packageName.toLowerCase().contains(query);
         })
         .toList(growable: false);
+    final filteredPackageNames = filteredApps
+        .map((MobilePlatformApp app) => app.packageName)
+        .toList(growable: false);
+    final selectedVisibleCount = filteredApps
+        .where(
+          (MobilePlatformApp app) => selectedPackages.contains(app.packageName),
+        )
+        .length;
+    final routingProfileLabel = switch (underlayRoutePolicy) {
+      PlatformTunnelUnderlayRoutePolicy.standard => copy.routingProfileStandard,
+      PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork =>
+        copy.routingProfileDevelopmentWifi,
+    };
+    final routingProfileDetail = switch (underlayRoutePolicy) {
+      PlatformTunnelUnderlayRoutePolicy.standard => null,
+      PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork =>
+        developmentWifiUnsupported
+            ? copy.developmentWifiRoutingSavedButUnsupported
+            : null,
+    };
+    final appScopeLabel = switch (routingPolicy) {
+      PlatformTunnelApplicationRoutingPolicy.allApps => copy.allApps,
+      PlatformTunnelApplicationRoutingPolicy.allowedPackages =>
+        copy.includedApps,
+      PlatformTunnelApplicationRoutingPolicy.disallowedPackages =>
+        copy.excludedApps,
+    };
+    final appScopeDetail =
+        routingPolicy == PlatformTunnelApplicationRoutingPolicy.allApps
+        ? copy.allInstalledAppsUseVpnPath
+        : copy.routingScopeSummary(
+            selectedCount: selectedPackages.length,
+            totalCount: controller.installedApps.length,
+          );
 
     return ListView(
       padding: const EdgeInsets.all(20),
@@ -1365,88 +1536,120 @@ class _RoutingPageState extends State<_RoutingPage> {
         else ...<Widget>[
           Card(
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text(
-                    context.shellText.modeScope(mode.label),
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
+                  LayoutBuilder(
+                    builder:
+                        (BuildContext context, BoxConstraints constraints) {
+                          final splitSections = constraints.maxWidth >= 760;
+                          final profileControl = _RoutingCompactSelectorCard(
+                            key: const ValueKey<String>(
+                              'routing-profile-control',
+                            ),
+                            icon: Icons.route_outlined,
+                            title: copy.routingProfile,
+                            value: routingProfileLabel,
+                            detail: routingProfileDetail,
+                            onTap: () => unawaited(
+                              _showRoutingProfileSheet(
+                                copy: copy,
+                                controller: controller,
+                                underlayRoutePolicy: underlayRoutePolicy,
+                                showDevelopmentWifiProfile:
+                                    showDevelopmentWifiProfile,
+                                developmentWifiUnsupported:
+                                    developmentWifiUnsupported,
+                              ),
+                            ),
+                          );
+                          final appScopeControl = _RoutingCompactSelectorCard(
+                            key: const ValueKey<String>(
+                              'routing-app-scope-control',
+                            ),
+                            icon: Icons.apps_outlined,
+                            title: copy.appScope,
+                            value: appScopeLabel,
+                            detail: appScopeDetail,
+                            onTap: () => unawaited(
+                              _showAppScopeSheet(
+                                copy: copy,
+                                controller: controller,
+                                routingPolicy: routingPolicy,
+                                selectedCount: selectedPackages.length,
+                                totalCount: controller.installedApps.length,
+                              ),
+                            ),
+                          );
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              if (splitSections)
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: <Widget>[
+                                    Expanded(child: profileControl),
+                                    const SizedBox(width: 10),
+                                    Expanded(child: appScopeControl),
+                                  ],
+                                )
+                              else ...<Widget>[
+                                profileControl,
+                                const SizedBox(height: 10),
+                                appScopeControl,
+                              ],
+                            ],
+                          );
+                        },
+                  ),
+                  if (routingPolicy !=
+                      PlatformTunnelApplicationRoutingPolicy
+                          .allApps) ...<Widget>[
+                    const SizedBox(height: 10),
+                    Divider(height: 1, color: theme.colorScheme.outlineVariant),
+                    const SizedBox(height: 10),
+                    _RoutingFilterToolbar(
+                      searchController: _searchController,
+                      searchLabel: copy.searchApps,
+                      summary: copy.routingVisibleAppsSummary(
+                        visibleCount: filteredApps.length,
+                        totalCount: controller.installedApps.length,
+                        selectedCount: selectedVisibleCount,
+                      ),
+                      onSearchChanged: () => setState(() {}),
+                      actionsEnabled: filteredPackageNames.isNotEmpty,
+                      bulkActionsLabel: copy.bulkActions,
+                      selectVisibleLabel: copy.selectVisibleApps,
+                      clearVisibleLabel: copy.clearVisibleApps,
+                      onSelectVisible: () =>
+                          controller.updateRoutingPackageSelectionBatch(
+                            packageNames: filteredPackageNames,
+                            selected: true,
+                          ),
+                      onClearVisible: () =>
+                          controller.updateRoutingPackageSelectionBatch(
+                            packageNames: filteredPackageNames,
+                            selected: false,
+                          ),
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    _routingSummaryForHome(context, controller),
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 14),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: <Widget>[
-                      ChoiceChip(
-                        selected:
-                            routingPolicy ==
-                            PlatformTunnelApplicationRoutingPolicy.allApps,
-                        label: Text(context.shellText.allApps),
-                        onSelected: (_) =>
-                            controller.updateApplicationRoutingPolicy(
-                              PlatformTunnelApplicationRoutingPolicy.allApps,
-                            ),
-                      ),
-                      ChoiceChip(
-                        selected:
-                            routingPolicy ==
-                            PlatformTunnelApplicationRoutingPolicy
-                                .allowedPackages,
-                        label: Text(context.shellText.includedApps),
-                        onSelected: (_) =>
-                            controller.updateApplicationRoutingPolicy(
-                              PlatformTunnelApplicationRoutingPolicy
-                                  .allowedPackages,
-                            ),
-                      ),
-                      ChoiceChip(
-                        selected:
-                            routingPolicy ==
-                            PlatformTunnelApplicationRoutingPolicy
-                                .disallowedPackages,
-                        label: Text(context.shellText.excludedApps),
-                        onSelected: (_) =>
-                            controller.updateApplicationRoutingPolicy(
-                              PlatformTunnelApplicationRoutingPolicy
-                                  .disallowedPackages,
-                            ),
-                      ),
-                    ],
-                  ),
+                  ],
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           if (routingPolicy == PlatformTunnelApplicationRoutingPolicy.allApps)
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Text(
-                  context.shellText.allInstalledAppsUseVpnPath,
+                  copy.allInstalledAppsUseVpnPath,
                   style: theme.textTheme.bodyMedium,
                 ),
               ),
             )
           else ...<Widget>[
-            TextField(
-              controller: _searchController,
-              onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.search),
-                labelText: context.shellText.searchApps,
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
             if (controller.loadingInstalledApps)
               const Center(child: CircularProgressIndicator())
             else if (controller.installedAppsError != null)
@@ -1465,7 +1668,7 @@ class _RoutingPageState extends State<_RoutingPage> {
                         onPressed: () => unawaited(
                           controller.ensureInstalledAppsLoaded(force: true),
                         ),
-                        child: Text(context.shellText.retryAppScan),
+                        child: Text(copy.retryAppScan),
                       ),
                     ],
                   ),
@@ -1477,43 +1680,292 @@ class _RoutingPageState extends State<_RoutingPage> {
                   padding: const EdgeInsets.all(16),
                   child: Text(
                     query.isEmpty
-                        ? context.shellText.noInstalledAppsReported
-                        : context.shellText.noInstalledAppsMatchSearch,
+                        ? copy.noInstalledAppsReported
+                        : copy.noInstalledAppsMatchSearch,
                     style: theme.textTheme.bodyMedium,
                   ),
                 ),
               )
             else
               Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Column(
-                    children: filteredApps
-                        .map<Widget>((MobilePlatformApp app) {
-                          final selected = selectedPackages.contains(
-                            app.packageName,
-                          );
-                          return CheckboxListTile(
-                            value: selected,
-                            onChanged: (bool? nextValue) {
-                              controller.updateRoutingPackageSelection(
-                                packageName: app.packageName,
-                                selected: nextValue ?? false,
-                              );
-                            },
-                            title: Text(app.label),
-                            subtitle: Text(app.packageName),
-                            secondary: app.systemApp
-                                ? const Icon(Icons.memory_outlined)
-                                : const Icon(Icons.apps_outlined),
-                          );
-                        })
-                        .toList(growable: false),
-                  ),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  children: List<Widget>.generate(filteredApps.length, (
+                    int index,
+                  ) {
+                    final app = filteredApps[index];
+                    final selected = selectedPackages.contains(app.packageName);
+                    return Column(
+                      children: <Widget>[
+                        _RoutingAppListTile(
+                          app: app,
+                          selected: selected,
+                          onChanged: (bool nextValue) {
+                            controller.updateRoutingPackageSelection(
+                              packageName: app.packageName,
+                              selected: nextValue,
+                            );
+                          },
+                        ),
+                        if (index != filteredApps.length - 1)
+                          const Divider(height: 1),
+                      ],
+                    );
+                  }),
                 ),
               ),
           ],
         ],
+      ],
+    );
+  }
+}
+
+class _RoutingAppIcon extends StatelessWidget {
+  const _RoutingAppIcon({required this.app});
+
+  final MobilePlatformApp app;
+
+  @override
+  Widget build(BuildContext context) {
+    final fallbackIcon = app.systemApp
+        ? const Icon(Icons.memory_outlined)
+        : const Icon(Icons.apps_outlined);
+    final iconBytes = app.iconBytes;
+    if (iconBytes == null || iconBytes.isEmpty) {
+      return fallbackIcon;
+    }
+    return SizedBox(
+      key: ValueKey<String>('routing-app-icon-${app.packageName}'),
+      width: 24,
+      height: 24,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: Image.memory(
+          iconBytes,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => fallbackIcon,
+        ),
+      ),
+    );
+  }
+}
+
+class _RoutingCompactSelectorCard extends StatelessWidget {
+  const _RoutingCompactSelectorCard({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.value,
+    this.detail,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String value;
+  final String? detail;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.32),
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Icon(
+                    icon,
+                    size: 18,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    Icons.edit_outlined,
+                    size: 18,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                value,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              if (detail != null) ...<Widget>[
+                const SizedBox(height: 4),
+                Text(
+                  detail!,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RoutingAppListTile extends StatelessWidget {
+  const _RoutingAppListTile({
+    required this.app,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final MobilePlatformApp app;
+  final bool selected;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: () => onChanged(!selected),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        child: Row(
+          children: <Widget>[
+            _RoutingAppIcon(app: app),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    app.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    app.packageName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Checkbox(
+              value: selected,
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              onChanged: (bool? nextValue) => onChanged(nextValue ?? false),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+enum _RoutingBulkAction { selectVisible, clearVisible }
+
+class _RoutingFilterToolbar extends StatelessWidget {
+  const _RoutingFilterToolbar({
+    required this.searchController,
+    required this.searchLabel,
+    required this.summary,
+    required this.onSearchChanged,
+    required this.actionsEnabled,
+    required this.bulkActionsLabel,
+    required this.selectVisibleLabel,
+    required this.clearVisibleLabel,
+    required this.onSelectVisible,
+    required this.onClearVisible,
+  });
+
+  final TextEditingController searchController;
+  final String searchLabel;
+  final String summary;
+  final VoidCallback onSearchChanged;
+  final bool actionsEnabled;
+  final String bulkActionsLabel;
+  final String selectVisibleLabel;
+  final String clearVisibleLabel;
+  final VoidCallback onSelectVisible;
+  final VoidCallback onClearVisible;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        TextField(
+          controller: searchController,
+          onChanged: (_) => onSearchChanged(),
+          decoration: InputDecoration(
+            isDense: true,
+            prefixIcon: const Icon(Icons.search),
+            labelText: searchLabel,
+            border: const OutlineInputBorder(),
+            suffixIcon: PopupMenuButton<_RoutingBulkAction>(
+              key: const ValueKey<String>('routing-bulk-actions'),
+              tooltip: bulkActionsLabel,
+              enabled: actionsEnabled,
+              onSelected: (_RoutingBulkAction action) {
+                switch (action) {
+                  case _RoutingBulkAction.selectVisible:
+                    onSelectVisible();
+                    return;
+                  case _RoutingBulkAction.clearVisible:
+                    onClearVisible();
+                    return;
+                }
+              },
+              itemBuilder: (BuildContext context) =>
+                  <PopupMenuEntry<_RoutingBulkAction>>[
+                    PopupMenuItem<_RoutingBulkAction>(
+                      value: _RoutingBulkAction.selectVisible,
+                      child: Text(selectVisibleLabel),
+                    ),
+                    PopupMenuItem<_RoutingBulkAction>(
+                      value: _RoutingBulkAction.clearVisible,
+                      child: Text(clearVisibleLabel),
+                    ),
+                  ],
+              icon: const Icon(Icons.done_all),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          summary,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
       ],
     );
   }
@@ -1806,7 +2258,8 @@ class _HomePrimaryActionCard extends StatelessWidget {
       tunnelReady,
       needsProfileSelection,
     )) {
-      (final ChallengeRecord _, _, _) => context.shellText.finishProviderValidation,
+      (final ChallengeRecord _, _, _) =>
+        context.shellText.finishProviderValidation,
       (null, true, _) => context.shellText.vpnIsOn,
       (null, false, true) => context.shellText.profileRequired,
       (null, false, false) => context.shellText.vpnIsOff,
@@ -2210,8 +2663,36 @@ class _ManagedProviderListItem extends StatelessWidget {
   }
 }
 
-class _ProviderChooserDialog extends StatefulWidget {
-  const _ProviderChooserDialog({
+class _ProviderChooserPage extends StatelessWidget {
+  const _ProviderChooserPage({required this.controller});
+
+  final MobileShellController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (BuildContext context, _) {
+        return Scaffold(
+          key: const ValueKey<String>('provider-chooser-route'),
+          appBar: AppBar(title: Text(context.shellText.createProvider)),
+          body: SafeArea(
+            child: _ProviderChooserPageBody(
+              supportedProviders: controller.supportedProviderCatalog,
+              providerDescriptors: controller.providerDescriptors,
+              userTemplates: controller.providerTemplates,
+              presets: controller.presetCatalog,
+              busy: controller.busy,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ProviderChooserPageBody extends StatefulWidget {
+  const _ProviderChooserPageBody({
     required this.supportedProviders,
     required this.providerDescriptors,
     required this.userTemplates,
@@ -2226,10 +2707,11 @@ class _ProviderChooserDialog extends StatefulWidget {
   final bool busy;
 
   @override
-  State<_ProviderChooserDialog> createState() => _ProviderChooserDialogState();
+  State<_ProviderChooserPageBody> createState() =>
+      _ProviderChooserPageBodyState();
 }
 
-class _ProviderChooserDialogState extends State<_ProviderChooserDialog> {
+class _ProviderChooserPageBodyState extends State<_ProviderChooserPageBody> {
   late final TextEditingController _searchController;
   _ProviderChooserSurface _surface = _ProviderChooserSurface.families;
   String _query = '';
@@ -2280,42 +2762,15 @@ class _ProviderChooserDialogState extends State<_ProviderChooserDialog> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      context.shellText.createProvider,
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _surface == _ProviderChooserSurface.families
-                          ? context.shellText.createProviderChooseType
-                          : context.shellText.createProviderUseTemplate,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                key: const ValueKey<String>('provider-chooser-close-button'),
-                tooltip: context.shellText.close,
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close),
-              ),
-            ],
+          Text(
+            _surface == _ProviderChooserSurface.families
+                ? context.shellText.createProviderChooseType
+                : context.shellText.createProviderUseTemplate,
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 12),
           Wrap(
@@ -2355,12 +2810,9 @@ class _ProviderChooserDialogState extends State<_ProviderChooserDialog> {
             ],
           ),
           const SizedBox(height: 12),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 420),
+          Expanded(
             child: switch (_surface) {
               _ProviderChooserSurface.families => ListView(
-                primary: false,
-                shrinkWrap: true,
                 children: <Widget>[
                   if (widget.supportedProviders.isEmpty)
                     Text(
@@ -2449,8 +2901,6 @@ class _ProviderChooserDialogState extends State<_ProviderChooserDialog> {
                 ],
               ),
               _ProviderChooserSurface.templates => ListView(
-                primary: false,
-                shrinkWrap: true,
                 children: <Widget>[
                   TextField(
                     key: const ValueKey<String>(
@@ -2573,7 +3023,9 @@ class _ProviderChooserDialogState extends State<_ProviderChooserDialog> {
                                               ),
                                             );
                                           },
-                                    child: Text(context.shellText.mobileUseTemplate),
+                                    child: Text(
+                                      context.shellText.mobileUseTemplate,
+                                    ),
                                   ),
                                   OutlinedButton(
                                     key: ValueKey<String>(
@@ -2588,7 +3040,9 @@ class _ProviderChooserDialogState extends State<_ProviderChooserDialog> {
                                               ),
                                             );
                                           },
-                                    child: Text(context.shellText.mobileEditTemplate),
+                                    child: Text(
+                                      context.shellText.mobileEditTemplate,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -2707,7 +3161,9 @@ class _ProviderChooserDialogState extends State<_ProviderChooserDialog> {
                                           ),
                                         );
                                       },
-                                child: Text(context.shellText.mobileUseTemplate),
+                                child: Text(
+                                  context.shellText.mobileUseTemplate,
+                                ),
                               ),
                             ],
                           ),
@@ -3017,7 +3473,9 @@ class _LocaleMenuButton extends StatelessWidget {
     return PopupMenuButton<String>(
       tooltip: t.localeSwitchTooltip,
       onSelected: (String value) {
-        unawaited(controller.selectLocaleOverride(value.isEmpty ? null : value));
+        unawaited(
+          controller.selectLocaleOverride(value.isEmpty ? null : value),
+        );
       },
       itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
         CheckedPopupMenuItem<String>(
@@ -3041,8 +3499,9 @@ class _LocaleMenuButton extends StatelessWidget {
         child: DecoratedBox(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            color: Theme.of(context).colorScheme.surfaceContainerHighest
-                .withValues(alpha: 0.72),
+            color: Theme.of(
+              context,
+            ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.72),
           ),
           child: const Icon(Icons.translate_rounded),
         ),
@@ -3111,6 +3570,7 @@ class _HostStatusIndicator extends StatelessWidget {
         button: true,
         label: tone.$1,
         child: SizedBox.square(
+          key: const ValueKey<String>('host-status-button'),
           dimension: 44,
           child: Material(
             color: Colors.transparent,
@@ -3123,7 +3583,7 @@ class _HostStatusIndicator extends StatelessWidget {
                   return _DialogSurfaceFrame(
                     maxWidth: 520,
                     maxHeight: 420,
-                    child: _HostStatusSheet(
+                    child: _HostStatusDialog(
                       controller: controller,
                       onOpenDiagnostics: onOpenDiagnostics,
                     ),
@@ -3171,8 +3631,8 @@ class _HostStatusIndicator extends StatelessWidget {
   }
 }
 
-class _HostStatusSheet extends StatelessWidget {
-  const _HostStatusSheet({
+class _HostStatusDialog extends StatelessWidget {
+  const _HostStatusDialog({
     required this.controller,
     required this.onOpenDiagnostics,
   });
@@ -3188,6 +3648,7 @@ class _HostStatusSheet extends StatelessWidget {
     final tone = _hostIndicatorTone(context, controller);
 
     return SingleChildScrollView(
+      key: const ValueKey<String>('host-status-dialog'),
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -3228,6 +3689,7 @@ class _HostStatusSheet extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               IconButton(
+                key: const ValueKey<String>('host-status-close-button'),
                 tooltip: context.shellText.close,
                 onPressed: () => Navigator.of(context).pop(),
                 icon: const Icon(Icons.close),
@@ -3328,7 +3790,8 @@ class _HostBanner extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              connection?.message ?? context.shellText.waitingForMobileHostBridge,
+              connection?.message ??
+                  context.shellText.waitingForMobileHostBridge,
             ),
             const SizedBox(height: 8),
             Wrap(
@@ -4680,13 +5143,25 @@ String _platformTunnelResultSummary(
 ) {
   final copy = context.shellText;
   if (result.ready) {
+    if (result.underlayRoutePolicy ==
+        PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork) {
+      return copy.platformTunnelReadyWithRoutingProfile(
+        modeLabel: result.mode.label,
+        profileLabel: _underlayRoutePolicyLabel(
+          copy,
+          result.underlayRoutePolicy!,
+        ),
+      );
+    }
     return copy.platformTunnelReady(result.mode.label);
   }
   final buffer = StringBuffer(
     copy.startupBlockedAt(result.stage?.label ?? copy.unknownStage),
   );
   if (result.missingPrerequisite != null) {
-    buffer.write(' ${copy.missingPrerequisite(result.missingPrerequisite!.label)}.');
+    buffer.write(
+      ' ${copy.missingPrerequisite(result.missingPrerequisite!.label)}.',
+    );
   }
   if (result.message.isNotEmpty) {
     buffer.write(' ${result.message}');
@@ -4717,7 +5192,10 @@ String _modeSummary(BuildContext context, MobileShellController controller) {
   final executionPlan = controller.activeExecutionPlan;
   final routingSummary = _routingSummaryForHome(context, controller);
   if (executionPlan == null) {
-    return copy.modeSummary(modeLabel: modeLabel, routingSummary: routingSummary);
+    return copy.modeSummary(
+      modeLabel: modeLabel,
+      routingSummary: routingSummary,
+    );
   }
   return copy.modeSummary(
     modeLabel: modeLabel,
@@ -4735,8 +5213,9 @@ String _routingSummaryForHome(
     return copy.perAppRoutingUnavailable;
   }
   final preferences = controller.activePlatformModePreferences;
-  return switch (preferences.applicationRoutingPolicy) {
-    PlatformTunnelApplicationRoutingPolicy.allApps => copy.scopeAllInstalledApps,
+  final scopeSummary = switch (preferences.applicationRoutingPolicy) {
+    PlatformTunnelApplicationRoutingPolicy.allApps =>
+      copy.scopeAllInstalledApps,
     PlatformTunnelApplicationRoutingPolicy.allowedPackages =>
       preferences.allowedPackages.isEmpty
           ? copy.scopeIncludedAppsEmpty
@@ -4748,6 +5227,24 @@ String _routingSummaryForHome(
               preferences.disallowedPackages.length,
             ),
   };
+  return copy.routingSummaryWithProfile(
+    profileLabel: _underlayRoutePolicyLabel(
+      copy,
+      preferences.underlayRoutePolicy,
+    ),
+    scopeSummary: scopeSummary,
+  );
+}
+
+String _underlayRoutePolicyLabel(
+  ShellText copy,
+  PlatformTunnelUnderlayRoutePolicy policy,
+) {
+  return switch (policy) {
+    PlatformTunnelUnderlayRoutePolicy.standard => copy.routingProfileStandard,
+    PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork =>
+      copy.routingProfileDevelopmentWifi,
+  };
 }
 
 String _executionPlanLabel(BuildContext context, RuntimeExecutionPlan plan) {
@@ -4755,27 +5252,57 @@ String _executionPlanLabel(BuildContext context, RuntimeExecutionPlan plan) {
   return switch ((plan.engineFamily, plan.carrierFamily)) {
     (RuntimeEngineFamily.wireguardNative, RuntimeCarrierFamily.turnDatagram) =>
       copy.wireGuardNativeOverTurnDatagram,
-    (RuntimeEngineFamily.wireguardNative, RuntimeCarrierFamily.turnDtlsOverlay) =>
+    (
+      RuntimeEngineFamily.wireguardNative,
+      RuntimeCarrierFamily.turnDtlsOverlay,
+    ) =>
       copy.wireGuardNativeOverTurnDtls,
-    (RuntimeEngineFamily.wireguardNative, RuntimeCarrierFamily.webrtcDataChannel) =>
+    (
+      RuntimeEngineFamily.wireguardNative,
+      RuntimeCarrierFamily.webrtcDataChannel,
+    ) =>
       copy.wireGuardNativeOverWebRtc,
-    (RuntimeEngineFamily.customPacketOverlay, RuntimeCarrierFamily.turnDatagram) =>
+    (
+      RuntimeEngineFamily.customPacketOverlay,
+      RuntimeCarrierFamily.turnDatagram,
+    ) =>
       copy.customOverlayOverTurnDatagram,
-    (RuntimeEngineFamily.customPacketOverlay, RuntimeCarrierFamily.turnDtlsOverlay) =>
+    (
+      RuntimeEngineFamily.customPacketOverlay,
+      RuntimeCarrierFamily.turnDtlsOverlay,
+    ) =>
       copy.customOverlayOverTurnDtls,
-    (RuntimeEngineFamily.customPacketOverlay, RuntimeCarrierFamily.webrtcDataChannel) =>
+    (
+      RuntimeEngineFamily.customPacketOverlay,
+      RuntimeCarrierFamily.webrtcDataChannel,
+    ) =>
       copy.customOverlayOverWebRtc,
     (RuntimeEngineFamily.proxyCoreAdapter, RuntimeCarrierFamily.turnDatagram) =>
       copy.proxyCoreOverTurnDatagram,
-    (RuntimeEngineFamily.proxyCoreAdapter, RuntimeCarrierFamily.turnDtlsOverlay) =>
+    (
+      RuntimeEngineFamily.proxyCoreAdapter,
+      RuntimeCarrierFamily.turnDtlsOverlay,
+    ) =>
       copy.proxyCoreOverTurnDtls,
-    (RuntimeEngineFamily.proxyCoreAdapter, RuntimeCarrierFamily.webrtcDataChannel) =>
+    (
+      RuntimeEngineFamily.proxyCoreAdapter,
+      RuntimeCarrierFamily.webrtcDataChannel,
+    ) =>
       copy.proxyCoreOverWebRtc,
-    (RuntimeEngineFamily.trusttunnelNative, RuntimeCarrierFamily.turnDatagram) =>
+    (
+      RuntimeEngineFamily.trusttunnelNative,
+      RuntimeCarrierFamily.turnDatagram,
+    ) =>
       copy.trustTunnelOverTurnDatagram,
-    (RuntimeEngineFamily.trusttunnelNative, RuntimeCarrierFamily.turnDtlsOverlay) =>
+    (
+      RuntimeEngineFamily.trusttunnelNative,
+      RuntimeCarrierFamily.turnDtlsOverlay,
+    ) =>
       copy.trustTunnelOverTurnDtls,
-    (RuntimeEngineFamily.trusttunnelNative, RuntimeCarrierFamily.webrtcDataChannel) =>
+    (
+      RuntimeEngineFamily.trusttunnelNative,
+      RuntimeCarrierFamily.webrtcDataChannel,
+    ) =>
       copy.trustTunnelOverWebRtc,
   };
 }

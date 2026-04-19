@@ -2026,9 +2026,29 @@ class Translations with BaseTranslations<AppLocale, Translations> {
   /// en: 'Routing'
   String get shellTextRoutingTitle => 'Routing';
 
-  /// en: 'Choose whether Android system VPN covers all apps, only selected apps, or every app except the selected list.'
+  /// en: 'Choose the VPN profile and app scope.'
   String get shellTextRoutingSubtitle =>
-      'Choose whether Android system VPN covers all apps, only selected apps, or every app except the selected list.';
+      'Choose the VPN profile and app scope.';
+
+  /// en: 'Routing profile'
+  String get shellTextRoutingProfile => 'Routing profile';
+
+  /// en: 'Standard'
+  String get shellTextRoutingProfileStandard => 'Standard';
+
+  /// en: 'Development Wi-Fi'
+  String get shellTextRoutingProfileDevelopmentWifi => 'Development Wi-Fi';
+
+  /// en: 'Use the normal Android system VPN routing behavior for this mode.'
+  String get shellTextRoutingProfileStandardDescription =>
+      'Use the normal Android system VPN routing behavior for this mode.';
+
+  /// en: 'Preserve the active local Wi-Fi network outside the VPN so development tools stay reachable while the VPN remains active.'
+  String get shellTextRoutingProfileDevelopmentWifiDescription =>
+      'Preserve the active local Wi-Fi network outside the VPN so development tools stay reachable while the VPN remains active.';
+
+  /// en: 'App scope'
+  String get shellTextAppScope => 'App scope';
 
   /// en: '{modeLabel} scope'
   String shellTextModeScope({required Object modeLabel}) =>
@@ -2043,8 +2063,31 @@ class Translations with BaseTranslations<AppLocale, Translations> {
   /// en: 'Excluded apps'
   String get shellTextExcludedApps => 'Excluded apps';
 
+  /// en: '{selectedCount} selected out of {totalCount} installed apps.'
+  String shellTextRoutingScopeSummary({
+    required Object selectedCount,
+    required Object totalCount,
+  }) => '${selectedCount} selected out of ${totalCount} installed apps.';
+
   /// en: 'Search apps'
   String get shellTextSearchApps => 'Search apps';
+
+  /// en: '{visibleCount} visible of {totalCount}; {selectedCount} visible selected.'
+  String shellTextRoutingVisibleAppsSummary({
+    required Object visibleCount,
+    required Object totalCount,
+    required Object selectedCount,
+  }) =>
+      '${visibleCount} visible of ${totalCount}; ${selectedCount} visible selected.';
+
+  /// en: 'Actions'
+  String get shellTextBulkActions => 'Actions';
+
+  /// en: 'Select visible'
+  String get shellTextSelectVisibleApps => 'Select visible';
+
+  /// en: 'Clear visible'
+  String get shellTextClearVisibleApps => 'Clear visible';
 
   /// en: 'All installed apps will use the Android system VPN path for this mobile mode.'
   String get shellTextAllInstalledAppsUseVpnPath =>
@@ -2423,6 +2466,12 @@ class Translations with BaseTranslations<AppLocale, Translations> {
   String shellTextPlatformTunnelReady({required Object modeLabel}) =>
       '${modeLabel} reached ready state for the mobile host tunnel path.';
 
+  /// en: '{modeLabel} is ready with the {profileLabel} routing profile.'
+  String shellTextPlatformTunnelReadyWithRoutingProfile({
+    required Object modeLabel,
+    required Object profileLabel,
+  }) => '${modeLabel} is ready with the ${profileLabel} routing profile.';
+
   /// en: 'Startup blocked at {stageLabel}.'
   String shellTextStartupBlockedAt({required Object stageLabel}) =>
       'Startup blocked at ${stageLabel}.';
@@ -2450,6 +2499,27 @@ class Translations with BaseTranslations<AppLocale, Translations> {
   /// en: 'Per-app routing is unavailable for this mobile mode.'
   String get shellTextPerAppRoutingUnavailable =>
       'Per-app routing is unavailable for this mobile mode.';
+
+  /// en: 'Restart {modeLabel} to apply the selected routing profile.'
+  String shellTextRestartVpnToApplyRoutingProfile({
+    required Object modeLabel,
+  }) => 'Restart ${modeLabel} to apply the selected routing profile.';
+
+  /// en: '{modeLabel} does not advertise the Development Wi-Fi routing profile on this host.'
+  String shellTextDevelopmentWifiRoutingUnavailableForHost({
+    required Object modeLabel,
+  }) =>
+      '${modeLabel} does not advertise the Development Wi-Fi routing profile on this host.';
+
+  /// en: 'The saved Development Wi-Fi preference is unsupported by the connected host. Switch back to Standard or reconnect to a compatible host.'
+  String get shellTextDevelopmentWifiRoutingSavedButUnsupported =>
+      'The saved Development Wi-Fi preference is unsupported by the connected host. Switch back to Standard or reconnect to a compatible host.';
+
+  /// en: '{profileLabel}. {scopeSummary}'
+  String shellTextRoutingSummaryWithProfile({
+    required Object profileLabel,
+    required Object scopeSummary,
+  }) => '${profileLabel}. ${scopeSummary}';
 
   /// en: 'Scope: all installed apps.'
   String get shellTextScopeAllInstalledApps => 'Scope: all installed apps.';
@@ -3594,17 +3664,37 @@ extension on Translations {
           'shellTextSupportSubtitle' =>
             'Activity, failures, logs, and diagnostics stay explicit but secondary to the main VPN workflow.',
           'shellTextRoutingTitle' => 'Routing',
-          'shellTextRoutingSubtitle' =>
-            'Choose whether Android system VPN covers all apps, only selected apps, or every app except the selected list.',
-          'shellTextModeScope' =>
-            ({required Object modeLabel}) => '${modeLabel} scope',
-          'shellTextAllApps' => 'All apps',
+          'shellTextRoutingSubtitle' => 'Choose the VPN profile and app scope.',
+          'shellTextRoutingProfile' => 'Routing profile',
+          'shellTextRoutingProfileStandard' => 'Standard',
           _ => null,
         } ??
         switch (path) {
+          'shellTextRoutingProfileDevelopmentWifi' => 'Development Wi-Fi',
+          'shellTextRoutingProfileStandardDescription' =>
+            'Use the normal Android system VPN routing behavior for this mode.',
+          'shellTextRoutingProfileDevelopmentWifiDescription' =>
+            'Preserve the active local Wi-Fi network outside the VPN so development tools stay reachable while the VPN remains active.',
+          'shellTextAppScope' => 'App scope',
+          'shellTextModeScope' =>
+            ({required Object modeLabel}) => '${modeLabel} scope',
+          'shellTextAllApps' => 'All apps',
           'shellTextIncludedApps' => 'Included apps',
           'shellTextExcludedApps' => 'Excluded apps',
+          'shellTextRoutingScopeSummary' =>
+            ({required Object selectedCount, required Object totalCount}) =>
+                '${selectedCount} selected out of ${totalCount} installed apps.',
           'shellTextSearchApps' => 'Search apps',
+          'shellTextRoutingVisibleAppsSummary' =>
+            ({
+              required Object visibleCount,
+              required Object totalCount,
+              required Object selectedCount,
+            }) =>
+                '${visibleCount} visible of ${totalCount}; ${selectedCount} visible selected.',
+          'shellTextBulkActions' => 'Actions',
+          'shellTextSelectVisibleApps' => 'Select visible',
+          'shellTextClearVisibleApps' => 'Clear visible',
           'shellTextAllInstalledAppsUseVpnPath' =>
             'All installed apps will use the Android system VPN path for this mobile mode.',
           'shellTextRetryAppScan' => 'Retry app scan',
@@ -3771,6 +3861,9 @@ extension on Translations {
           'shellTextPlatformTunnelReady' =>
             ({required Object modeLabel}) =>
                 '${modeLabel} reached ready state for the mobile host tunnel path.',
+          'shellTextPlatformTunnelReadyWithRoutingProfile' =>
+            ({required Object modeLabel, required Object profileLabel}) =>
+                '${modeLabel} is ready with the ${profileLabel} routing profile.',
           'shellTextStartupBlockedAt' =>
             ({required Object stageLabel}) =>
                 'Startup blocked at ${stageLabel}.',
@@ -3784,6 +3877,17 @@ extension on Translations {
           'shellTextLinuxTunMode' => 'Linux TUN mode',
           'shellTextPerAppRoutingUnavailable' =>
             'Per-app routing is unavailable for this mobile mode.',
+          'shellTextRestartVpnToApplyRoutingProfile' =>
+            ({required Object modeLabel}) =>
+                'Restart ${modeLabel} to apply the selected routing profile.',
+          'shellTextDevelopmentWifiRoutingUnavailableForHost' =>
+            ({required Object modeLabel}) =>
+                '${modeLabel} does not advertise the Development Wi-Fi routing profile on this host.',
+          'shellTextDevelopmentWifiRoutingSavedButUnsupported' =>
+            'The saved Development Wi-Fi preference is unsupported by the connected host. Switch back to Standard or reconnect to a compatible host.',
+          'shellTextRoutingSummaryWithProfile' =>
+            ({required Object profileLabel, required Object scopeSummary}) =>
+                '${profileLabel}. ${scopeSummary}',
           'shellTextScopeAllInstalledApps' => 'Scope: all installed apps.',
           'shellTextScopeIncludedAppsEmpty' =>
             'Scope: included apps, but no apps are selected yet.',

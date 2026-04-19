@@ -1551,7 +1551,21 @@ class TranslationsRu extends Translations
   String get shellTextRoutingTitle => 'Маршрутизация';
   @override
   String get shellTextRoutingSubtitle =>
-      'Выберите, охватывает ли системный VPN Android все приложения, только выбранные приложения или все приложения кроме выбранного списка.';
+      'Выберите профиль VPN и охват приложений.';
+  @override
+  String get shellTextRoutingProfile => 'Профиль маршрутизации';
+  @override
+  String get shellTextRoutingProfileStandard => 'Стандартный';
+  @override
+  String get shellTextRoutingProfileDevelopmentWifi => 'Development Wi-Fi';
+  @override
+  String get shellTextRoutingProfileStandardDescription =>
+      'Использовать обычное поведение маршрутизации системного VPN Android для этого режима.';
+  @override
+  String get shellTextRoutingProfileDevelopmentWifiDescription =>
+      'Сохранить активную локальную Wi-Fi сеть вне VPN, чтобы инструменты разработки оставались доступными, пока VPN активен.';
+  @override
+  String get shellTextAppScope => 'Охват приложений';
   @override
   String shellTextModeScope({required Object modeLabel}) =>
       '${modeLabel}: охват';
@@ -1562,7 +1576,25 @@ class TranslationsRu extends Translations
   @override
   String get shellTextExcludedApps => 'Исключенные приложения';
   @override
+  String shellTextRoutingScopeSummary({
+    required Object selectedCount,
+    required Object totalCount,
+  }) => 'Выбрано ${selectedCount} из ${totalCount} установленных приложений.';
+  @override
   String get shellTextSearchApps => 'Поиск приложений';
+  @override
+  String shellTextRoutingVisibleAppsSummary({
+    required Object visibleCount,
+    required Object totalCount,
+    required Object selectedCount,
+  }) =>
+      'На экране ${visibleCount} из ${totalCount}; выбрано ${selectedCount} видимых.';
+  @override
+  String get shellTextBulkActions => 'Действия';
+  @override
+  String get shellTextSelectVisibleApps => 'Выбрать видимые';
+  @override
+  String get shellTextClearVisibleApps => 'Снять видимые';
   @override
   String get shellTextAllInstalledAppsUseVpnPath =>
       'Все установленные приложения будут использовать системный VPN-путь Android для этого мобильного режима.';
@@ -1837,6 +1869,11 @@ class TranslationsRu extends Translations
   String shellTextPlatformTunnelReady({required Object modeLabel}) =>
       '${modeLabel} достиг готового состояния для туннельного пути мобильного хоста.';
   @override
+  String shellTextPlatformTunnelReadyWithRoutingProfile({
+    required Object modeLabel,
+    required Object profileLabel,
+  }) => '${modeLabel} готов с профилем маршрутизации ${profileLabel}.';
+  @override
   String shellTextStartupBlockedAt({required Object stageLabel}) =>
       'Запуск заблокирован на этапе ${stageLabel}.';
   @override
@@ -1856,6 +1893,24 @@ class TranslationsRu extends Translations
   @override
   String get shellTextPerAppRoutingUnavailable =>
       'Маршрутизация по приложениям недоступна для этого мобильного режима.';
+  @override
+  String shellTextRestartVpnToApplyRoutingProfile({
+    required Object modeLabel,
+  }) =>
+      'Перезапустите ${modeLabel}, чтобы применить выбранный профиль маршрутизации.';
+  @override
+  String shellTextDevelopmentWifiRoutingUnavailableForHost({
+    required Object modeLabel,
+  }) =>
+      '${modeLabel} не объявляет профиль маршрутизации Development Wi-Fi для этого хоста.';
+  @override
+  String get shellTextDevelopmentWifiRoutingSavedButUnsupported =>
+      'Сохраненное предпочтение Development Wi-Fi не поддерживается текущим хостом. Переключитесь обратно на стандартный профиль или переподключитесь к совместимому хосту.';
+  @override
+  String shellTextRoutingSummaryWithProfile({
+    required Object profileLabel,
+    required Object scopeSummary,
+  }) => '${profileLabel}. ${scopeSummary}';
   @override
   String get shellTextScopeAllInstalledApps =>
       'Область: все установленные приложения.';
@@ -2969,16 +3024,37 @@ extension on TranslationsRu {
             'Активность, ошибки, логи и диагностика остаются явными, но вторичными по отношению к основному VPN-потоку.',
           'shellTextRoutingTitle' => 'Маршрутизация',
           'shellTextRoutingSubtitle' =>
-            'Выберите, охватывает ли системный VPN Android все приложения, только выбранные приложения или все приложения кроме выбранного списка.',
-          'shellTextModeScope' =>
-            ({required Object modeLabel}) => '${modeLabel}: охват',
-          'shellTextAllApps' => 'Все приложения',
+            'Выберите профиль VPN и охват приложений.',
+          'shellTextRoutingProfile' => 'Профиль маршрутизации',
+          'shellTextRoutingProfileStandard' => 'Стандартный',
           _ => null,
         } ??
         switch (path) {
+          'shellTextRoutingProfileDevelopmentWifi' => 'Development Wi-Fi',
+          'shellTextRoutingProfileStandardDescription' =>
+            'Использовать обычное поведение маршрутизации системного VPN Android для этого режима.',
+          'shellTextRoutingProfileDevelopmentWifiDescription' =>
+            'Сохранить активную локальную Wi-Fi сеть вне VPN, чтобы инструменты разработки оставались доступными, пока VPN активен.',
+          'shellTextAppScope' => 'Охват приложений',
+          'shellTextModeScope' =>
+            ({required Object modeLabel}) => '${modeLabel}: охват',
+          'shellTextAllApps' => 'Все приложения',
           'shellTextIncludedApps' => 'Включенные приложения',
           'shellTextExcludedApps' => 'Исключенные приложения',
+          'shellTextRoutingScopeSummary' =>
+            ({required Object selectedCount, required Object totalCount}) =>
+                'Выбрано ${selectedCount} из ${totalCount} установленных приложений.',
           'shellTextSearchApps' => 'Поиск приложений',
+          'shellTextRoutingVisibleAppsSummary' =>
+            ({
+              required Object visibleCount,
+              required Object totalCount,
+              required Object selectedCount,
+            }) =>
+                'На экране ${visibleCount} из ${totalCount}; выбрано ${selectedCount} видимых.',
+          'shellTextBulkActions' => 'Действия',
+          'shellTextSelectVisibleApps' => 'Выбрать видимые',
+          'shellTextClearVisibleApps' => 'Снять видимые',
           'shellTextAllInstalledAppsUseVpnPath' =>
             'Все установленные приложения будут использовать системный VPN-путь Android для этого мобильного режима.',
           'shellTextRetryAppScan' => 'Повторить сканирование приложений',
@@ -3149,6 +3225,9 @@ extension on TranslationsRu {
           'shellTextPlatformTunnelReady' =>
             ({required Object modeLabel}) =>
                 '${modeLabel} достиг готового состояния для туннельного пути мобильного хоста.',
+          'shellTextPlatformTunnelReadyWithRoutingProfile' =>
+            ({required Object modeLabel, required Object profileLabel}) =>
+                '${modeLabel} готов с профилем маршрутизации ${profileLabel}.',
           'shellTextStartupBlockedAt' =>
             ({required Object stageLabel}) =>
                 'Запуск заблокирован на этапе ${stageLabel}.',
@@ -3162,6 +3241,17 @@ extension on TranslationsRu {
           'shellTextLinuxTunMode' => 'Режим Linux TUN',
           'shellTextPerAppRoutingUnavailable' =>
             'Маршрутизация по приложениям недоступна для этого мобильного режима.',
+          'shellTextRestartVpnToApplyRoutingProfile' =>
+            ({required Object modeLabel}) =>
+                'Перезапустите ${modeLabel}, чтобы применить выбранный профиль маршрутизации.',
+          'shellTextDevelopmentWifiRoutingUnavailableForHost' =>
+            ({required Object modeLabel}) =>
+                '${modeLabel} не объявляет профиль маршрутизации Development Wi-Fi для этого хоста.',
+          'shellTextDevelopmentWifiRoutingSavedButUnsupported' =>
+            'Сохраненное предпочтение Development Wi-Fi не поддерживается текущим хостом. Переключитесь обратно на стандартный профиль или переподключитесь к совместимому хосту.',
+          'shellTextRoutingSummaryWithProfile' =>
+            ({required Object profileLabel, required Object scopeSummary}) =>
+                '${profileLabel}. ${scopeSummary}',
           'shellTextScopeAllInstalledApps' =>
             'Область: все установленные приложения.',
           'shellTextScopeIncludedAppsEmpty' =>

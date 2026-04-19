@@ -907,6 +907,9 @@ func TestHostStartPlatformTunnelDefaultsAndroidAppRoutingPolicyToAllApps(t *test
 	if captured.ApplicationRoutingPolicy != PlatformTunnelApplicationRoutingPolicyAllApps {
 		t.Fatalf("application_routing_policy = %q, want %q", captured.ApplicationRoutingPolicy, PlatformTunnelApplicationRoutingPolicyAllApps)
 	}
+	if captured.UnderlayRoutePolicy != PlatformTunnelUnderlayRoutePolicyStandard {
+		t.Fatalf("underlay_route_policy = %q, want %q", captured.UnderlayRoutePolicy, PlatformTunnelUnderlayRoutePolicyStandard)
+	}
 	if len(captured.AllowedPackages) != 0 || len(captured.DisallowedPackages) != 0 {
 		t.Fatalf("unexpected package scope in normalized request: %+v", captured)
 	}
@@ -923,6 +926,19 @@ func TestHostStartPlatformTunnelRejectsInvalidAndroidAppRoutingPolicy(t *testing
 		t.Fatal("StartPlatformTunnel() error = nil, want app routing policy validation error")
 	} else if !errors.Is(err, ErrPlatformTunnelAppRoutingPolicyInvalid) {
 		t.Fatalf("StartPlatformTunnel() error = %v, want ErrPlatformTunnelAppRoutingPolicyInvalid", err)
+	}
+}
+
+func TestHostStartPlatformTunnelRejectsInvalidAndroidUnderlayRoutePolicy(t *testing.T) {
+	host := New(WithBuildIdentity(BuildIdentity{Target: "android/embedded"}))
+
+	if _, err := host.StartPlatformTunnel(context.Background(), PlatformTunnelStartRequest{
+		Mode:                PlatformTunnelModeAndroidVPNService,
+		UnderlayRoutePolicy: PlatformTunnelUnderlayRoutePolicy("side_channel_magic"),
+	}); err == nil {
+		t.Fatal("StartPlatformTunnel() error = nil, want underlay route policy validation error")
+	} else if !errors.Is(err, ErrPlatformTunnelUnderlayRoutePolicyInvalid) {
+		t.Fatalf("StartPlatformTunnel() error = %v, want ErrPlatformTunnelUnderlayRoutePolicyInvalid", err)
 	}
 }
 

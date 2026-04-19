@@ -842,6 +842,10 @@ void main() {
             expect(runtimeDefaults['turn_server'], 'turn.example.test');
             expect(runtimeDefaults['turn_port'], '3478');
             expect(payload['application_routing_policy'], 'allowed_packages');
+            expect(
+              payload['underlay_route_policy'],
+              'preserve_active_local_network',
+            );
             expect(payload['allowed_packages'], <dynamic>[
               'com.example.youtube',
             ]);
@@ -852,6 +856,7 @@ void main() {
                 'stage': 'permission_acquire',
                 'missing_prerequisite': 'permission',
                 'startup_attempt_id': 'attempt-android-1',
+                'underlay_route_policy': 'preserve_active_local_network',
                 'message': 'permission required',
               }),
             );
@@ -899,6 +904,8 @@ void main() {
         applicationRoutingPolicy:
             PlatformTunnelApplicationRoutingPolicy.allowedPackages,
         allowedPackages: const <String>['com.example.youtube'],
+        underlayRoutePolicy:
+            PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork,
       );
       expect(startResult.ready, isFalse);
       expect(startResult.stage, PlatformTunnelStartupStage.permissionAcquire);
@@ -907,6 +914,10 @@ void main() {
         PlatformTunnelPrerequisite.permission,
       );
       expect(startResult.startupAttemptId, 'attempt-android-1');
+      expect(
+        startResult.underlayRoutePolicy,
+        PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork,
+      );
 
       final resumeResult = await client.resumePlatformTunnel(
         startupAttemptId: startResult.startupAttemptId,

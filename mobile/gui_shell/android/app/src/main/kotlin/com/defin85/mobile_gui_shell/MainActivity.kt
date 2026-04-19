@@ -4,6 +4,10 @@ import android.app.Activity
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Build
 import android.net.VpnService
@@ -21,7 +25,11 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugins.webviewflutter.WebViewFlutterAndroidExternalApi
 import io.flutter.plugins.webviewflutter.WebViewProxyApi
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import kotlin.math.roundToInt
 
 private const val MOBILE_HOST_BRIDGE_CHANNEL =
     "com.defin85.vk_turn_proxy_go/mobile_host_bridge"
@@ -44,6 +52,7 @@ class MainActivity : FlutterActivity() {
     private val pendingPortableProfileIngressPayloads = mutableListOf<String>()
     private var pendingPlatformTunnelPermissionResult: MethodChannel.Result? = null
     private val documentStartScriptHandlers = mutableMapOf<Long, ScriptHandler>()
+    private val appInventoryExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val platformTunnelBridge by lazy {
         AndroidPlatformTunnelBridge(applicationContext)
     }
@@ -118,7 +127,7 @@ class MainActivity : FlutterActivity() {
                                 null,
                             )
                         }
-                    "listInstalledApps" -> result.success(listInstalledApps())
+                    "listInstalledApps" -> listInstalledApps(result)
                     else -> result.notImplemented()
                 }
             }
@@ -184,6 +193,7 @@ class MainActivity : FlutterActivity() {
         boundFlutterEngine = null
         pendingBrowserReturnSignals.clear()
         pendingPortableProfileIngressPayloads.clear()
+        appInventoryExecutor.shutdownNow()
         super.cleanUpFlutterEngine(flutterEngine)
     }
 
@@ -515,7 +525,24 @@ class MainActivity : FlutterActivity() {
         return snapshot
     }
 
-    private fun listInstalledApps(): List<Map<String, Any>> {
+    private fun listInstalledApps(result: MethodChannel.Result) {
+        appInventoryExecutor.execute {
+            try {
+                val installedApps = buildInstalledAppsSnapshot()
+                runOnUiThread { result.success(installedApps) }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    result.error(
+                        "installed_apps_unavailable",
+                        error.message ?: "Unable to load installed Android apps.",
+                        null,
+                    )
+                }
+            }
+        }
+    }
+
+    private fun buildInstalledAppsSnapshot(): List<Map<String, Any?>> {
         @Suppress("DEPRECATION")
         val installed = packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
         return installed
@@ -528,10 +555,11 @@ class MainActivity : FlutterActivity() {
                     "package_name" to appInfo.packageName,
                     "label" to if (label.isEmpty()) appInfo.packageName else label,
                     "system_app" to isSystemApplication(appInfo),
+                    "icon_bytes" to applicationIconBytes(appInfo),
                 )
             }
             .sortedWith(
-                compareBy<Map<String, Any>> { entry ->
+                compareBy<Map<String, Any?>> { entry ->
                     (entry["label"] as String).lowercase()
                 }.thenBy { entry -> entry["package_name"] as String },
             )
@@ -542,6 +570,40 @@ class MainActivity : FlutterActivity() {
         val flags = appInfo.flags
         return flags and ApplicationInfo.FLAG_SYSTEM != 0 ||
             flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP != 0
+    }
+
+    private fun applicationIconBytes(appInfo: ApplicationInfo): ByteArray? {
+        val drawable = try {
+            appInfo.loadIcon(packageManager)
+        } catch (_: RuntimeException) {
+            return null
+        }
+        return drawableToPngBytes(drawable)
+    }
+
+    private fun drawableToPngBytes(drawable: Drawable): ByteArray? {
+        val iconSizePx = (resources.displayMetrics.density * 24f).roundToInt().coerceAtLeast(1)
+        val bitmap =
+            if (drawable is BitmapDrawable && drawable.bitmap != null) {
+                val source = drawable.bitmap
+                if (source.width == iconSizePx && source.height == iconSizePx) {
+                    source
+                } else {
+                    Bitmap.createScaledBitmap(source, iconSizePx, iconSizePx, true)
+                }
+            } else {
+                Bitmap.createBitmap(iconSizePx, iconSizePx, Bitmap.Config.ARGB_8888).also { target ->
+                    val canvas = Canvas(target)
+                    drawable.setBounds(0, 0, iconSizePx, iconSizePx)
+                    drawable.draw(canvas)
+                }
+            }
+        return ByteArrayOutputStream().use { stream ->
+            if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)) {
+                return null
+            }
+            stream.toByteArray()
+        }
     }
 
     private fun clearDocumentStartScriptHandlers() {

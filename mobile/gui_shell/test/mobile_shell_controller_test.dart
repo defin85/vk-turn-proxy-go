@@ -64,6 +64,41 @@ const HostInfo _readyHostInfo = HostInfo(
     PlatformTunnelCapability(
       mode: PlatformTunnelMode.androidVpnService,
       available: false,
+      supportedUnderlayRoutePolicies: <PlatformTunnelUnderlayRoutePolicy>[
+        PlatformTunnelUnderlayRoutePolicy.standard,
+        PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork,
+      ],
+      executionPlans: <RuntimeExecutionPlanDescriptor>[
+        _androidVpnExecutionPlanDescriptor,
+      ],
+      missingPrerequisite: PlatformTunnelPrerequisite.hostImplementation,
+      message: 'mobile host does not implement tunnel startup yet',
+    ),
+  ],
+);
+
+const HostInfo _readyHostInfoWithoutDevelopmentRouting = HostInfo(
+  contractVersion: '1',
+  build: _testHostBuild,
+  capabilities: <Capability>[
+    Capability.mobileHostBridge,
+    Capability.platformTunnels,
+    Capability.profiles,
+    Capability.providerConfigs,
+    Capability.providerRuntimeArtifacts,
+    Capability.runtimeExecutionPlanning,
+    Capability.sessions,
+    Capability.challenges,
+    Capability.diagnostics,
+    Capability.eventStream,
+  ],
+  platformTunnels: <PlatformTunnelCapability>[
+    PlatformTunnelCapability(
+      mode: PlatformTunnelMode.androidVpnService,
+      available: false,
+      supportedUnderlayRoutePolicies: <PlatformTunnelUnderlayRoutePolicy>[
+        PlatformTunnelUnderlayRoutePolicy.standard,
+      ],
       executionPlans: <RuntimeExecutionPlanDescriptor>[
         _androidVpnExecutionPlanDescriptor,
       ],
@@ -1580,12 +1615,12 @@ void main() {
     );
     addTearDown(controller.dispose);
 
-      await controller.initialize();
-      controller.managedProviders = const <ManagedProviderRecord>[];
-      controller.selectedManagedProviderId = null;
-      controller.draft = ProfileDraft.defaults();
-      controller.activateManagedProviderMode();
-      expect(controller.notice, 'Управляемые провайдеры пока недоступны.');
+    await controller.initialize();
+    controller.managedProviders = const <ManagedProviderRecord>[];
+    controller.selectedManagedProviderId = null;
+    controller.draft = ProfileDraft.defaults();
+    controller.activateManagedProviderMode();
+    expect(controller.notice, 'Управляемые провайдеры пока недоступны.');
 
     await controller.startResolutionFromDraft();
     expect(
@@ -1860,6 +1895,12 @@ void main() {
           PlatformTunnelApplicationRoutingPolicy.allApps,
         ],
       );
+      expect(
+        bridge.startedPlatformTunnelUnderlayRoutePolicies,
+        <PlatformTunnelUnderlayRoutePolicy>[
+          PlatformTunnelUnderlayRoutePolicy.standard,
+        ],
+      );
       expect(bridge.startedPlatformTunnelAllowedPackages.single, isEmpty);
       expect(bridge.startedPlatformTunnelDisallowedPackages.single, isEmpty);
       expect(
@@ -2044,6 +2085,175 @@ void main() {
   );
 
   test(
+    'controller updates app-routing package selection in bulk for the active policy',
+    () async {
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(),
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: 'profile-1',
+            draft: ProfileDraft.fromProfile(
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      controller.updateApplicationRoutingPolicy(
+        PlatformTunnelApplicationRoutingPolicy.allowedPackages,
+      );
+
+      controller.updateRoutingPackageSelectionBatch(
+        packageNames: <String>[
+          'org.telegram.messenger',
+          'org.signal',
+          'org.signal',
+        ],
+        selected: true,
+      );
+
+      expect(controller.activePlatformModePreferences.allowedPackages, <String>[
+        'org.signal',
+        'org.telegram.messenger',
+      ]);
+
+      controller.updateRoutingPackageSelectionBatch(
+        packageNames: const <String>['org.signal'],
+        selected: false,
+      );
+
+      expect(controller.activePlatformModePreferences.allowedPackages, <String>[
+        'org.telegram.messenger',
+      ]);
+    },
+  );
+
+  test(
+    'controller forwards development underlay route policy to platform tunnel startup',
+    () async {
+      final bridge = _FakeMobileHostBridge(
+        resolutionsList: <ResolutionRecord>[
+          _resolutionRecord(id: 'resolution-android-underlay-1'),
+        ],
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: 'profile-1',
+            draft: ProfileDraft.fromProfile(
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      controller.updateUnderlayRoutePolicy(
+        PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork,
+      );
+
+      await controller.startPlatformTunnel(
+        PlatformTunnelMode.androidVpnService,
+      );
+
+      expect(
+        bridge.startedPlatformTunnelUnderlayRoutePolicies,
+        <PlatformTunnelUnderlayRoutePolicy>[
+          PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork,
+        ],
+      );
+    },
+  );
+
+  test(
+    'controller fails closed when the saved development underlay profile is unsupported by the host',
+    () async {
+      final bridge = _FakeMobileHostBridge(
+        ensureReadyResult: const MobileHostConnectionResult(
+          state: MobileHostLifecycleState.ready,
+          message: 'Connected to embedded mobile host bridge',
+          info: _readyHostInfoWithoutDevelopmentRouting,
+          description: 'native bridge',
+        ),
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: 'profile-1',
+            platformModePreferences:
+                const <String, MobilePlatformModePreferences>{
+                  'profile-1::android_vpn_service':
+                      MobilePlatformModePreferences(
+                        underlayRoutePolicy: PlatformTunnelUnderlayRoutePolicy
+                            .preserveActiveLocalNetwork,
+                      ),
+                },
+            draft: ProfileDraft.fromProfile(
+              ProfileRecord(
+                id: 'profile-1',
+                name: 'vk live',
+                spec: _profileSpec(),
+              ),
+            ),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.startPlatformTunnel(
+        PlatformTunnelMode.androidVpnService,
+      );
+
+      expect(bridge.startResolutionCalls, isEmpty);
+      expect(bridge.startedPlatformTunnels, isEmpty);
+      expect(bridge.startedPlatformTunnelUnderlayRoutePolicies, isEmpty);
+      expect(controller.notice, contains('Development Wi-Fi'));
+      expect(controller.notice, contains('does not advertise'));
+    },
+  );
+
+  test(
     'controller requests Android VPN permission and resumes the same startup attempt',
     () async {
       final profile = ProfileRecord(
@@ -2157,6 +2367,53 @@ void main() {
     );
     expect(controller.notice, 'Android VPN Service disconnected.');
   });
+
+  test(
+    'controller requires a restart after changing the underlay route profile while the tunnel is ready',
+    () async {
+      final profile = ProfileRecord(
+        id: 'profile-1',
+        name: 'vk live',
+        spec: _profileSpec(),
+      );
+      final bridge = _FakeMobileHostBridge(
+        resolutionsList: <ResolutionRecord>[
+          _resolutionRecord(id: 'resolution-android-ready-1'),
+        ],
+        startPlatformTunnelResult: const PlatformTunnelStartResult(
+          mode: PlatformTunnelMode.androidVpnService,
+          ready: true,
+          underlayRoutePolicy: PlatformTunnelUnderlayRoutePolicy.standard,
+        ),
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[profile],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: profile.id,
+            draft: ProfileDraft.fromProfile(profile),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.startPlatformTunnel(
+        PlatformTunnelMode.androidVpnService,
+      );
+
+      controller.updateUnderlayRoutePolicy(
+        PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork,
+      );
+
+      expect(controller.activeUnderlayRoutePolicyRequiresRestart, isTrue);
+      expect(controller.notice, contains('Restart'));
+      expect(controller.notice, contains('routing profile'));
+    },
+  );
 
   test(
     'controller clears platform tunnel startup results when the bridge later fails closed',
@@ -2388,6 +2645,9 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   final List<PlatformTunnelApplicationRoutingPolicy>
   startedPlatformTunnelRoutingPolicies =
       <PlatformTunnelApplicationRoutingPolicy>[];
+  final List<PlatformTunnelUnderlayRoutePolicy>
+  startedPlatformTunnelUnderlayRoutePolicies =
+      <PlatformTunnelUnderlayRoutePolicy>[];
   final List<List<String>> startedPlatformTunnelAllowedPackages =
       <List<String>>[];
   final List<List<String>> startedPlatformTunnelDisallowedPackages =
@@ -2515,12 +2775,15 @@ class _FakeMobileHostBridge implements MobileHostBridge {
         PlatformTunnelApplicationRoutingPolicy.allApps,
     List<String> allowedPackages = const <String>[],
     List<String> disallowedPackages = const <String>[],
+    PlatformTunnelUnderlayRoutePolicy underlayRoutePolicy =
+        PlatformTunnelUnderlayRoutePolicy.standard,
   }) async {
     startedPlatformTunnels.add(mode);
     startedPlatformTunnelResolutionIDs.add(resolutionId);
     startedPlatformTunnelRuntimeDefaults.add(runtimeDefaults);
     startedPlatformTunnelExecutionPlans.add(executionPlan);
     startedPlatformTunnelRoutingPolicies.add(applicationRoutingPolicy);
+    startedPlatformTunnelUnderlayRoutePolicies.add(underlayRoutePolicy);
     startedPlatformTunnelAllowedPackages.add(List<String>.of(allowedPackages));
     startedPlatformTunnelDisallowedPackages.add(
       List<String>.of(disallowedPackages),

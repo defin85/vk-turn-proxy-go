@@ -143,13 +143,21 @@ const (
 	PlatformTunnelApplicationRoutingPolicyDisallowedPackages PlatformTunnelApplicationRoutingPolicy = "disallowed_packages"
 )
 
+type PlatformTunnelUnderlayRoutePolicy string
+
+const (
+	PlatformTunnelUnderlayRoutePolicyStandard                   PlatformTunnelUnderlayRoutePolicy = "standard"
+	PlatformTunnelUnderlayRoutePolicyPreserveActiveLocalNetwork PlatformTunnelUnderlayRoutePolicy = "preserve_active_local_network"
+)
+
 type PlatformTunnelCapability struct {
-	Mode                   PlatformTunnelMode               `json:"mode"`
-	Available              bool                             `json:"available"`
-	SatisfiedPrerequisites []PlatformTunnelPrerequisite     `json:"satisfied_prerequisites,omitempty"`
-	ExecutionPlans         []RuntimeExecutionPlanDescriptor `json:"execution_plans,omitempty"`
-	MissingPrerequisite    PlatformTunnelPrerequisite       `json:"missing_prerequisite,omitempty"`
-	Message                string                           `json:"message,omitempty"`
+	Mode                           PlatformTunnelMode                  `json:"mode"`
+	Available                      bool                                `json:"available"`
+	SatisfiedPrerequisites         []PlatformTunnelPrerequisite        `json:"satisfied_prerequisites,omitempty"`
+	SupportedUnderlayRoutePolicies []PlatformTunnelUnderlayRoutePolicy `json:"supported_underlay_route_policies,omitempty"`
+	ExecutionPlans                 []RuntimeExecutionPlanDescriptor    `json:"execution_plans,omitempty"`
+	MissingPrerequisite            PlatformTunnelPrerequisite          `json:"missing_prerequisite,omitempty"`
+	Message                        string                              `json:"message,omitempty"`
 }
 
 type HostInfo struct {
@@ -404,6 +412,7 @@ type PlatformTunnelStartRequest struct {
 	Mode                     PlatformTunnelMode                     `json:"mode"`
 	ExecutionPlan            *RuntimeExecutionPlan                  `json:"execution_plan,omitempty"`
 	ApplicationRoutingPolicy PlatformTunnelApplicationRoutingPolicy `json:"application_routing_policy,omitempty"`
+	UnderlayRoutePolicy      PlatformTunnelUnderlayRoutePolicy      `json:"underlay_route_policy,omitempty"`
 	AllowedPackages          []string                               `json:"allowed_packages,omitempty"`
 	DisallowedPackages       []string                               `json:"disallowed_packages,omitempty"`
 }
@@ -417,13 +426,15 @@ type PlatformTunnelStopRequest struct {
 }
 
 type PlatformTunnelStartResult struct {
-	Mode                PlatformTunnelMode         `json:"mode"`
-	ExecutionPlan       *RuntimeExecutionPlan      `json:"execution_plan,omitempty"`
-	Ready               bool                       `json:"ready"`
-	Stage               PlatformTunnelStartupStage `json:"stage,omitempty"`
-	MissingPrerequisite PlatformTunnelPrerequisite `json:"missing_prerequisite,omitempty"`
-	StartupAttemptID    string                     `json:"startup_attempt_id,omitempty"`
-	Message             string                     `json:"message,omitempty"`
+	Mode                    PlatformTunnelMode                `json:"mode"`
+	ExecutionPlan           *RuntimeExecutionPlan             `json:"execution_plan,omitempty"`
+	Ready                   bool                              `json:"ready"`
+	Stage                   PlatformTunnelStartupStage        `json:"stage,omitempty"`
+	MissingPrerequisite     PlatformTunnelPrerequisite        `json:"missing_prerequisite,omitempty"`
+	StartupAttemptID        string                            `json:"startup_attempt_id,omitempty"`
+	UnderlayRoutePolicy     PlatformTunnelUnderlayRoutePolicy `json:"underlay_route_policy,omitempty"`
+	UnderlayRouteExclusions []string                          `json:"underlay_route_exclusions,omitempty"`
+	Message                 string                            `json:"message,omitempty"`
 }
 
 type PlatformTunnelStopResult struct {

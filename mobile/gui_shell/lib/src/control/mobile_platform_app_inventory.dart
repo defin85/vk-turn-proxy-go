@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter/services.dart';
 
@@ -9,6 +11,7 @@ class MobilePlatformApp {
     required this.packageName,
     required this.label,
     this.systemApp = false,
+    this.iconBytes,
   });
 
   factory MobilePlatformApp.fromJson(Map<dynamic, dynamic> json) {
@@ -18,12 +21,28 @@ class MobilePlatformApp {
       packageName: packageName,
       label: label.isEmpty ? packageName : label,
       systemApp: json['system_app'] as bool? ?? false,
+      iconBytes: _parseIconBytes(json['icon_bytes']),
     );
   }
 
   final String packageName;
   final String label;
   final bool systemApp;
+  final Uint8List? iconBytes;
+
+  static Uint8List? _parseIconBytes(dynamic rawValue) {
+    if (rawValue is Uint8List) {
+      return rawValue.isEmpty ? null : rawValue;
+    }
+    if (rawValue is List<int>) {
+      return rawValue.isEmpty ? null : Uint8List.fromList(rawValue);
+    }
+    if (rawValue is List<dynamic>) {
+      final values = rawValue.whereType<int>().toList(growable: false);
+      return values.isEmpty ? null : Uint8List.fromList(values);
+    }
+    return null;
+  }
 }
 
 class MobilePlatformAppInventoryError implements Exception {

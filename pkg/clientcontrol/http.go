@@ -314,7 +314,8 @@ func Handler(host *Host) http.Handler {
 			switch {
 			case errors.Is(err, ErrPlatformTunnelModeRequired),
 				errors.Is(err, ErrPlatformTunnelModeUnknown),
-				errors.Is(err, ErrPlatformTunnelAppRoutingPolicyInvalid):
+				errors.Is(err, ErrPlatformTunnelAppRoutingPolicyInvalid),
+				errors.Is(err, ErrPlatformTunnelUnderlayRoutePolicyInvalid):
 				writeError(w, http.StatusBadRequest, "platform_tunnel_invalid", err)
 			default:
 				writeError(w, http.StatusInternalServerError, "platform_tunnel_start_failed", err)

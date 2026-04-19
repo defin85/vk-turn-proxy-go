@@ -26,16 +26,17 @@ import (
 const defaultHistoryLimit = 256
 
 var (
-	ErrProfileNotFound                       = errors.New("client control profile not found")
-	ErrProviderConfigNotFound                = errors.New("client control provider config not found")
-	ErrSessionNotFound                       = errors.New("client control session not found")
-	ErrChallengeNotFound                     = errors.New("client control challenge not found")
-	ErrResolutionNotFound                    = errors.New("client control resolution not found")
-	ErrPlatformTunnelModeRequired            = errors.New("platform tunnel mode is required")
-	ErrPlatformTunnelModeUnknown             = errors.New("platform tunnel mode is not supported by this contract")
-	ErrPlatformTunnelAppRoutingPolicyInvalid = errors.New("platform tunnel application routing policy is invalid")
-	ErrPlatformTunnelStartupAttemptRequired  = errors.New("platform tunnel startup attempt id is required")
-	ErrPlatformTunnelStartupAttemptNotFound  = errors.New("platform tunnel startup attempt was not found")
+	ErrProfileNotFound                          = errors.New("client control profile not found")
+	ErrProviderConfigNotFound                   = errors.New("client control provider config not found")
+	ErrSessionNotFound                          = errors.New("client control session not found")
+	ErrChallengeNotFound                        = errors.New("client control challenge not found")
+	ErrResolutionNotFound                       = errors.New("client control resolution not found")
+	ErrPlatformTunnelModeRequired               = errors.New("platform tunnel mode is required")
+	ErrPlatformTunnelModeUnknown                = errors.New("platform tunnel mode is not supported by this contract")
+	ErrPlatformTunnelAppRoutingPolicyInvalid    = errors.New("platform tunnel application routing policy is invalid")
+	ErrPlatformTunnelUnderlayRoutePolicyInvalid = errors.New("platform tunnel underlay route policy is invalid")
+	ErrPlatformTunnelStartupAttemptRequired     = errors.New("platform tunnel startup attempt id is required")
+	ErrPlatformTunnelStartupAttemptNotFound     = errors.New("platform tunnel startup attempt was not found")
 )
 
 type IncompatibleHostError struct {

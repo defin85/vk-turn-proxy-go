@@ -280,6 +280,38 @@ void main() {
     expect(restored.localeTag, 'ru');
     expect(restored.toJson()['locale_tag'], 'ru');
   });
+
+  test('mobile shell state round-trips underlay route policy preferences', () {
+    final state = MobileShellState(
+      profiles: const <ProfileRecord>[],
+      managedProviders: const <ManagedProviderRecord>[],
+      providerTemplates: const <ProviderTemplateRecord>[],
+      draft: ProfileDraft.defaults(),
+      platformModePreferences: const <String, MobilePlatformModePreferences>{
+        'profile-1::android_vpn_service': MobilePlatformModePreferences(
+          underlayRoutePolicy:
+              PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork,
+          applicationRoutingPolicy:
+              PlatformTunnelApplicationRoutingPolicy.allowedPackages,
+          allowedPackages: <String>['org.signal'],
+        ),
+      },
+    );
+
+    final restored = MobileShellState.fromJson(state.toJson());
+    final preferences =
+        restored.platformModePreferences['profile-1::android_vpn_service'];
+
+    expect(
+      preferences?.underlayRoutePolicy,
+      PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork,
+    );
+    expect(
+      preferences?.applicationRoutingPolicy,
+      PlatformTunnelApplicationRoutingPolicy.allowedPackages,
+    );
+    expect(preferences?.allowedPackages, <String>['org.signal']);
+  });
 }
 
 class _MemoryBlobStore implements StringBlobStore {

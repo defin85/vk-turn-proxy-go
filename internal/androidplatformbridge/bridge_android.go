@@ -128,7 +128,7 @@ void vktp_register_platform_tunnel_bridge(void *env_ptr, void *bridge_ptr) {
 	}
 
 	vktp_mid_is_permission_granted = (*env)->GetMethodID(env, vktp_bridge_class, "isAndroidVpnPermissionGranted", "()Z");
-	vktp_mid_validate_route_policy = (*env)->GetMethodID(env, vktp_bridge_class, "validateAndroidVpnRoutePolicy", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;");
+	vktp_mid_validate_route_policy = (*env)->GetMethodID(env, vktp_bridge_class, "validateAndroidVpnRoutePolicy", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;");
 	vktp_mid_bringup_host = (*env)->GetMethodID(env, vktp_bridge_class, "bringupAndroidVpnHost", "(Ljava/lang/String;)Ljava/lang/String;");
 	vktp_mid_protect_socket = (*env)->GetMethodID(env, vktp_bridge_class, "protectAndroidVpnSocket", "(I)Ljava/lang/String;");
 	vktp_mid_duplicate_tun_fd = (*env)->GetMethodID(env, vktp_bridge_class, "duplicateAndroidVpnTunFd", "()I");
@@ -206,6 +206,45 @@ static char* vktp_call_string3(
 	(*env)->DeleteLocalRef(env, arg1);
 	(*env)->DeleteLocalRef(env, arg2);
 	(*env)->DeleteLocalRef(env, arg3);
+	vktp_detach_env(attached);
+	return out;
+}
+
+static char* vktp_call_string4(
+	jmethodID method,
+	const char* value1,
+	const char* value2,
+	const char* value3,
+	const char* value4
+) {
+	if (vktp_bridge_object == NULL || method == NULL) {
+		return vktp_strdup_or_null("android platform tunnel bridge is not registered");
+	}
+	int attached = 0;
+	JNIEnv *env = vktp_attach_env(&attached);
+	if (env == NULL) {
+		return vktp_strdup_or_null("android platform tunnel bridge could not attach to the JVM");
+	}
+
+	jstring arg1 = (*env)->NewStringUTF(env, value1 == NULL ? "" : value1);
+	jstring arg2 = (*env)->NewStringUTF(env, value2 == NULL ? "" : value2);
+	jstring arg3 = (*env)->NewStringUTF(env, value3 == NULL ? "" : value3);
+	jstring arg4 = (*env)->NewStringUTF(env, value4 == NULL ? "" : value4);
+	jstring result = (jstring)(*env)->CallObjectMethod(env, vktp_bridge_object, method, arg1, arg2, arg3, arg4);
+	char* out = NULL;
+	if ((*env)->ExceptionCheck(env)) {
+		vktp_clear_exception(env);
+		out = vktp_strdup_or_null("android platform tunnel bridge method threw an exception");
+	} else {
+		out = vktp_jstring_to_error(env, result);
+	}
+	if (result != NULL) {
+		(*env)->DeleteLocalRef(env, result);
+	}
+	(*env)->DeleteLocalRef(env, arg1);
+	(*env)->DeleteLocalRef(env, arg2);
+	(*env)->DeleteLocalRef(env, arg3);
+	(*env)->DeleteLocalRef(env, arg4);
 	vktp_detach_env(attached);
 	return out;
 }
@@ -304,8 +343,8 @@ static char* vktp_call_string_int1(jmethodID method, int value1) {
 	return out;
 }
 
-char* vktp_android_vpn_validate_route_policy(const char* policy, const char* allowed, const char* disallowed) {
-	return vktp_call_string3(vktp_mid_validate_route_policy, policy, allowed, disallowed);
+char* vktp_android_vpn_validate_route_policy(const char* policy, const char* underlay_policy, const char* allowed, const char* disallowed) {
+	return vktp_call_string4(vktp_mid_validate_route_policy, policy, underlay_policy, allowed, disallowed);
 }
 
 char* vktp_android_vpn_bringup_host(const char* config_json) {
@@ -341,13 +380,14 @@ import (
 )
 
 type androidVPNHostConfig struct {
-	Policy             string   `json:"policy"`
-	AllowedPackages    []string `json:"allowed_packages,omitempty"`
-	DisallowedPackages []string `json:"disallowed_packages,omitempty"`
-	ClientAddresses    []string `json:"client_addresses"`
-	DNSServers         []string `json:"dns_servers,omitempty"`
-	IncludedRoutes     []string `json:"included_routes"`
-	MTU                int      `json:"mtu,omitempty"`
+	Policy              string   `json:"policy"`
+	UnderlayRoutePolicy string   `json:"underlay_route_policy,omitempty"`
+	AllowedPackages     []string `json:"allowed_packages,omitempty"`
+	DisallowedPackages  []string `json:"disallowed_packages,omitempty"`
+	ClientAddresses     []string `json:"client_addresses"`
+	DNSServers          []string `json:"dns_servers,omitempty"`
+	IncludedRoutes      []string `json:"included_routes"`
+	MTU                 int      `json:"mtu,omitempty"`
 }
 
 type VPNServiceLifecycle struct {
@@ -391,14 +431,18 @@ func (l *VPNServiceLifecycle) ValidateRoutePolicy(
 	_ context.Context,
 	req clientcontrol.PlatformTunnelStartRequest,
 ) error {
-	if err := callBridgeString3Value(
-		func(cValue1, cValue2, cValue3 *C.char) *C.char {
-			return C.vktp_android_vpn_validate_route_policy(cValue1, cValue2, cValue3)
+	if err := callBridgeString4Value(
+		func(cValue1, cValue2, cValue3, cValue4 *C.char) *C.char {
+			return C.vktp_android_vpn_validate_route_policy(cValue1, cValue2, cValue3, cValue4)
 		},
 		string(req.ApplicationRoutingPolicy),
+		string(req.UnderlayRoutePolicy),
 		joinPackages(req.AllowedPackages),
 		joinPackages(req.DisallowedPackages),
 	); err != nil {
+		if req.UnderlayRoutePolicy == clientcontrol.PlatformTunnelUnderlayRoutePolicyPreserveActiveLocalNetwork {
+			return androidembeddedhost.NewAndroidRouteExclusionError(err.Error())
+		}
 		return androidembeddedhost.NewAndroidAppRoutingPolicyError(err.Error())
 	}
 	return nil
@@ -499,6 +543,26 @@ func callBridgeString3Value(
 	return bridgeError(errValue)
 }
 
+func callBridgeString4Value(
+	fn func(*C.char, *C.char, *C.char, *C.char) *C.char,
+	value1 string,
+	value2 string,
+	value3 string,
+	value4 string,
+) error {
+	cValue1 := C.CString(value1)
+	cValue2 := C.CString(value2)
+	cValue3 := C.CString(value3)
+	cValue4 := C.CString(value4)
+	defer C.free(unsafe.Pointer(cValue1))
+	defer C.free(unsafe.Pointer(cValue2))
+	defer C.free(unsafe.Pointer(cValue3))
+	defer C.free(unsafe.Pointer(cValue4))
+
+	errValue := fn(cValue1, cValue2, cValue3, cValue4)
+	return bridgeError(errValue)
+}
+
 func callBridgeString1Value(fn func(*C.char) *C.char, value string) error {
 	cValue := C.CString(value)
 	defer C.free(unsafe.Pointer(cValue))
@@ -523,13 +587,14 @@ func androidVPNHostConfigFrom(
 		return nil, fmt.Errorf("android vpn host bring-up requires a strict TURN datagram WireGuard execution lease")
 	}
 	config := &androidVPNHostConfig{
-		Policy:             string(req.ApplicationRoutingPolicy),
-		AllowedPackages:    append([]string(nil), req.AllowedPackages...),
-		DisallowedPackages: append([]string(nil), req.DisallowedPackages...),
-		ClientAddresses:    append([]string(nil), lease.ClientAddresses...),
-		DNSServers:         append([]string(nil), lease.DNSServers...),
-		IncludedRoutes:     append([]string(nil), lease.AllowedIPs...),
-		MTU:                lease.MTU,
+		Policy:              string(req.ApplicationRoutingPolicy),
+		UnderlayRoutePolicy: string(req.UnderlayRoutePolicy),
+		AllowedPackages:     append([]string(nil), req.AllowedPackages...),
+		DisallowedPackages:  append([]string(nil), req.DisallowedPackages...),
+		ClientAddresses:     append([]string(nil), lease.ClientAddresses...),
+		DNSServers:          append([]string(nil), lease.DNSServers...),
+		IncludedRoutes:      append([]string(nil), lease.AllowedIPs...),
+		MTU:                 lease.MTU,
 	}
 	if len(config.ClientAddresses) == 0 {
 		return nil, fmt.Errorf("android vpn host bring-up requires at least one client address")
@@ -539,6 +604,9 @@ func androidVPNHostConfigFrom(
 	}
 	if strings.TrimSpace(config.Policy) == "" {
 		config.Policy = string(clientcontrol.PlatformTunnelApplicationRoutingPolicyAllApps)
+	}
+	if strings.TrimSpace(config.UnderlayRoutePolicy) == "" {
+		config.UnderlayRoutePolicy = string(clientcontrol.PlatformTunnelUnderlayRoutePolicyStandard)
 	}
 	return config, nil
 }

@@ -72,6 +72,23 @@ func TestManagerReportsSupportedAndroidVPNServiceCapabilityFromController(t *tes
 			clientcontrol.RuntimeHostAdapterAndroidVPNService,
 		)
 	}
+	if len(capability.SupportedUnderlayRoutePolicies) != 2 {
+		t.Fatalf("platform_tunnels[0].supported_underlay_route_policies len = %d, want 2", len(capability.SupportedUnderlayRoutePolicies))
+	}
+	if capability.SupportedUnderlayRoutePolicies[0] != clientcontrol.PlatformTunnelUnderlayRoutePolicyStandard {
+		t.Fatalf(
+			"platform_tunnels[0].supported_underlay_route_policies[0] = %q, want %q",
+			capability.SupportedUnderlayRoutePolicies[0],
+			clientcontrol.PlatformTunnelUnderlayRoutePolicyStandard,
+		)
+	}
+	if capability.SupportedUnderlayRoutePolicies[1] != clientcontrol.PlatformTunnelUnderlayRoutePolicyPreserveActiveLocalNetwork {
+		t.Fatalf(
+			"platform_tunnels[0].supported_underlay_route_policies[1] = %q, want %q",
+			capability.SupportedUnderlayRoutePolicies[1],
+			clientcontrol.PlatformTunnelUnderlayRoutePolicyPreserveActiveLocalNetwork,
+		)
+	}
 }
 
 func TestManagerPlatformTunnelStartPermissionAcquireFailureStaysFailClosed(t *testing.T) {
@@ -280,6 +297,57 @@ func TestManagerPlatformTunnelStartRouteValidationFailureCleansUp(t *testing.T) 
 	}
 }
 
+func TestManagerPlatformTunnelStartRejectsUnsupportedUnderlayRoutePolicyBeforePermissionPrompt(t *testing.T) {
+	t.Parallel()
+
+	lifecycle := &fakeAndroidVPNServiceLifecycle{}
+	manager := New(withPlatformTunnelController(newAndroidVPNServiceController(
+		clientcontrol.PlatformTunnelCapability{
+			Mode:      clientcontrol.PlatformTunnelModeAndroidVPNService,
+			Available: true,
+			SatisfiedPrerequisites: []clientcontrol.PlatformTunnelPrerequisite{
+				clientcontrol.PlatformTunnelPrerequisiteRouteExclusion,
+				clientcontrol.PlatformTunnelPrerequisiteDNSBypass,
+			},
+			SupportedUnderlayRoutePolicies: []clientcontrol.PlatformTunnelUnderlayRoutePolicy{
+				clientcontrol.PlatformTunnelUnderlayRoutePolicyStandard,
+			},
+			ExecutionPlans: androidVPNServiceExecutionPlans(true, ""),
+		},
+		lifecycle,
+	)))
+	baseURL := ensureStartedManager(t, manager)
+
+	result := startPlatformTunnel(t, baseURL, clientcontrol.PlatformTunnelStartRequest{
+		Mode:                clientcontrol.PlatformTunnelModeAndroidVPNService,
+		UnderlayRoutePolicy: clientcontrol.PlatformTunnelUnderlayRoutePolicyPreserveActiveLocalNetwork,
+	})
+
+	if result.Ready {
+		t.Fatal("platform tunnel start result ready = true, want false")
+	}
+	if result.Stage != clientcontrol.PlatformTunnelStartupStageCapabilityCheck {
+		t.Fatalf("platform tunnel start stage = %q, want %q", result.Stage, clientcontrol.PlatformTunnelStartupStageCapabilityCheck)
+	}
+	if result.MissingPrerequisite != clientcontrol.PlatformTunnelPrerequisiteRouteExclusion {
+		t.Fatalf(
+			"platform tunnel start missing_prerequisite = %q, want %q",
+			result.MissingPrerequisite,
+			clientcontrol.PlatformTunnelPrerequisiteRouteExclusion,
+		)
+	}
+	if result.UnderlayRoutePolicy != clientcontrol.PlatformTunnelUnderlayRoutePolicyPreserveActiveLocalNetwork {
+		t.Fatalf(
+			"platform tunnel start underlay_route_policy = %q, want %q",
+			result.UnderlayRoutePolicy,
+			clientcontrol.PlatformTunnelUnderlayRoutePolicyPreserveActiveLocalNetwork,
+		)
+	}
+	if len(lifecycle.calls) != 0 {
+		t.Fatalf("lifecycle calls = %+v, want none before permission acquire", lifecycle.calls)
+	}
+}
+
 func TestManagerPlatformTunnelStartHostBringupFailureCleansUp(t *testing.T) {
 	t.Parallel()
 
@@ -441,6 +509,9 @@ func TestAndroidVPNServiceControllerPassesMaterializedLeaseToRuntimeAttach(t *te
 	}
 	if !result.Ready {
 		t.Fatalf("controller.Start() ready = false, want true: %+v", result)
+	}
+	if result.UnderlayRoutePolicy != clientcontrol.PlatformTunnelUnderlayRoutePolicyStandard {
+		t.Fatalf("controller.Start() underlay_route_policy = %q, want %q", result.UnderlayRoutePolicy, clientcontrol.PlatformTunnelUnderlayRoutePolicyStandard)
 	}
 	if got := strings.Join(lifecycle.calls, ","); got != "acquire_permission,validate_route_policy,bringup_host,attach_runtime" {
 		t.Fatalf(

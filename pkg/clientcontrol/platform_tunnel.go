@@ -65,6 +65,12 @@ func normalizePlatformTunnelCapabilities(capabilities []PlatformTunnelCapability
 		snapshot = defaultPlatformTunnelCapabilities(build)
 	} else {
 		for index := range snapshot {
+			if len(snapshot[index].SupportedUnderlayRoutePolicies) == 0 &&
+				snapshot[index].Mode == PlatformTunnelModeAndroidVPNService {
+				snapshot[index].SupportedUnderlayRoutePolicies = []PlatformTunnelUnderlayRoutePolicy{
+					PlatformTunnelUnderlayRoutePolicyStandard,
+				}
+			}
 			if len(snapshot[index].ExecutionPlans) == 0 {
 				snapshot[index].ExecutionPlans = defaultRuntimeExecutionPlansForPlatformTunnel(snapshot[index])
 			}
@@ -85,6 +91,9 @@ func clonePlatformTunnelCapabilities(capabilities []PlatformTunnelCapability) []
 		copyCapability := capability
 		if len(capability.SatisfiedPrerequisites) > 0 {
 			copyCapability.SatisfiedPrerequisites = append([]PlatformTunnelPrerequisite(nil), capability.SatisfiedPrerequisites...)
+		}
+		if len(capability.SupportedUnderlayRoutePolicies) > 0 {
+			copyCapability.SupportedUnderlayRoutePolicies = append([]PlatformTunnelUnderlayRoutePolicy(nil), capability.SupportedUnderlayRoutePolicies...)
 		}
 		copyCapability.ExecutionPlans = cloneRuntimeExecutionPlanDescriptors(capability.ExecutionPlans)
 		out = append(out, copyCapability)
@@ -110,6 +119,11 @@ func defaultPlatformTunnelCapabilities(build BuildIdentity) []PlatformTunnelCapa
 		MissingPrerequisite: PlatformTunnelPrerequisiteHostImplementation,
 		Message:             fmt.Sprintf("The %s host does not yet implement platform tunnel startup for mode %s.", hostTargetLabel(build), mode),
 	}}
+	if mode == PlatformTunnelModeAndroidVPNService {
+		capabilities[0].SupportedUnderlayRoutePolicies = []PlatformTunnelUnderlayRoutePolicy{
+			PlatformTunnelUnderlayRoutePolicyStandard,
+		}
+	}
 	capabilities[0].ExecutionPlans = defaultRuntimeExecutionPlansForPlatformTunnel(capabilities[0])
 	return capabilities
 }
@@ -169,6 +183,16 @@ func validatePlatformTunnelCapability(capability PlatformTunnelCapability) error
 		}
 		seenPrerequisites[prerequisite] = struct{}{}
 	}
+	seenUnderlayPolicies := make(map[PlatformTunnelUnderlayRoutePolicy]struct{}, len(capability.SupportedUnderlayRoutePolicies))
+	for _, policy := range capability.SupportedUnderlayRoutePolicies {
+		if !isKnownPlatformTunnelUnderlayRoutePolicy(policy) {
+			return fmt.Errorf("mode %s reports unknown supported underlay_route_policy %q", capability.Mode, policy)
+		}
+		if _, exists := seenUnderlayPolicies[policy]; exists {
+			return fmt.Errorf("mode %s reports duplicate supported underlay_route_policy %q", capability.Mode, policy)
+		}
+		seenUnderlayPolicies[policy] = struct{}{}
+	}
 	if len(capability.ExecutionPlans) == 0 {
 		capability.ExecutionPlans = defaultRuntimeExecutionPlansForPlatformTunnel(capability)
 	}
@@ -218,6 +242,14 @@ func validatePlatformTunnelStartResult(req PlatformTunnelStartRequest, result Pl
 	if strings.TrimSpace(string(result.MissingPrerequisite)) != "" && !isKnownPlatformTunnelPrerequisite(result.MissingPrerequisite) {
 		return fmt.Errorf("startup result for mode %s reports unknown missing_prerequisite %q", result.Mode, result.MissingPrerequisite)
 	}
+	if strings.TrimSpace(string(result.UnderlayRoutePolicy)) != "" &&
+		!isKnownPlatformTunnelUnderlayRoutePolicy(result.UnderlayRoutePolicy) {
+		return fmt.Errorf("startup result for mode %s reports unknown underlay_route_policy %q", result.Mode, result.UnderlayRoutePolicy)
+	}
+	if len(result.UnderlayRouteExclusions) > 0 &&
+		result.UnderlayRoutePolicy != PlatformTunnelUnderlayRoutePolicyPreserveActiveLocalNetwork {
+		return fmt.Errorf("startup result for mode %s reports underlay_route_exclusions without preserve_active_local_network", result.Mode)
+	}
 	if result.ExecutionPlan != nil {
 		if err := validateRuntimeExecutionPlan(*result.ExecutionPlan); err != nil {
 			return fmt.Errorf("startup result for mode %s reports invalid execution_plan: %w", result.Mode, err)
@@ -264,6 +296,7 @@ func defaultPlatformTunnelStarter(capabilities []PlatformTunnelCapability) func(
 					Ready:               false,
 					Stage:               PlatformTunnelStartupStageCapabilityCheck,
 					MissingPrerequisite: PlatformTunnelPrerequisiteHostImplementation,
+					UnderlayRoutePolicy: req.UnderlayRoutePolicy,
 					Message:             err.Error(),
 				}, nil
 			}
@@ -274,6 +307,7 @@ func defaultPlatformTunnelStarter(capabilities []PlatformTunnelCapability) func(
 					Ready:               false,
 					Stage:               PlatformTunnelStartupStageCapabilityCheck,
 					MissingPrerequisite: capability.MissingPrerequisite,
+					UnderlayRoutePolicy: req.UnderlayRoutePolicy,
 					Message:             firstNonEmpty(selectedPlan.Message, capability.Message),
 				}, nil
 			}
@@ -283,6 +317,7 @@ func defaultPlatformTunnelStarter(capabilities []PlatformTunnelCapability) func(
 				Ready:               false,
 				Stage:               PlatformTunnelStartupStageHostBringup,
 				MissingPrerequisite: PlatformTunnelPrerequisiteHostImplementation,
+				UnderlayRoutePolicy: req.UnderlayRoutePolicy,
 				Message:             fmt.Sprintf("Platform tunnel mode %s documents execution plan %s/%s/%s/%s but this host does not implement startup yet.", req.Mode, selectedPlan.Plan.AccessMethod, selectedPlan.Plan.CarrierFamily, selectedPlan.Plan.EngineFamily, selectedPlan.Plan.HostAdapter),
 			}, nil
 		}
@@ -293,6 +328,7 @@ func defaultPlatformTunnelStarter(capabilities []PlatformTunnelCapability) func(
 			Ready:               false,
 			Stage:               PlatformTunnelStartupStageCapabilityCheck,
 			MissingPrerequisite: PlatformTunnelPrerequisiteHostImplementation,
+			UnderlayRoutePolicy: req.UnderlayRoutePolicy,
 			Message:             fmt.Sprintf("Platform tunnel mode %s is not reported by this host.", req.Mode),
 		}, nil
 	}
@@ -331,6 +367,16 @@ func isKnownPlatformTunnelApplicationRoutingPolicy(policy PlatformTunnelApplicat
 	case PlatformTunnelApplicationRoutingPolicyAllApps,
 		PlatformTunnelApplicationRoutingPolicyAllowedPackages,
 		PlatformTunnelApplicationRoutingPolicyDisallowedPackages:
+		return true
+	default:
+		return false
+	}
+}
+
+func isKnownPlatformTunnelUnderlayRoutePolicy(policy PlatformTunnelUnderlayRoutePolicy) bool {
+	switch policy {
+	case PlatformTunnelUnderlayRoutePolicyStandard,
+		PlatformTunnelUnderlayRoutePolicyPreserveActiveLocalNetwork:
 		return true
 	default:
 		return false
@@ -379,6 +425,9 @@ func normalizePlatformTunnelStartRequest(req PlatformTunnelStartRequest) (Platfo
 			len(req.DisallowedPackages) > 0 {
 			return PlatformTunnelStartRequest{}, fmt.Errorf("%w: mode %s does not accept application routing policy", ErrPlatformTunnelAppRoutingPolicyInvalid, req.Mode)
 		}
+		if strings.TrimSpace(string(req.UnderlayRoutePolicy)) != "" {
+			return PlatformTunnelStartRequest{}, fmt.Errorf("%w: mode %s does not accept underlay_route_policy", ErrPlatformTunnelUnderlayRoutePolicyInvalid, req.Mode)
+		}
 		return normalized, nil
 	}
 
@@ -406,6 +455,12 @@ func normalizePlatformTunnelStartRequest(req PlatformTunnelStartRequest) (Platfo
 		if len(normalized.DisallowedPackages) == 0 || len(normalized.AllowedPackages) > 0 {
 			return PlatformTunnelStartRequest{}, fmt.Errorf("%w: disallowed_packages requires a non-empty disallowed_packages list", ErrPlatformTunnelAppRoutingPolicyInvalid)
 		}
+	}
+	if strings.TrimSpace(string(normalized.UnderlayRoutePolicy)) == "" {
+		normalized.UnderlayRoutePolicy = PlatformTunnelUnderlayRoutePolicyStandard
+	}
+	if !isKnownPlatformTunnelUnderlayRoutePolicy(normalized.UnderlayRoutePolicy) {
+		return PlatformTunnelStartRequest{}, fmt.Errorf("%w: unknown underlay_route_policy %q", ErrPlatformTunnelUnderlayRoutePolicyInvalid, normalized.UnderlayRoutePolicy)
 	}
 	return normalized, nil
 }
