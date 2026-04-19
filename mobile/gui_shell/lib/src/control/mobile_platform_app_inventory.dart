@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter/services.dart';
 

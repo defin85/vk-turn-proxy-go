@@ -29,12 +29,12 @@ enum _ProviderRootSurface { savedProviders, templates }
 
 enum _ProviderChooserSurface { families, templates }
 
-class _ProviderChooserResult {
-  const _ProviderChooserResult.family(this.providerId)
-    : preset = null;
+enum _InlineActionDensity { compact, medium, wide }
 
-  const _ProviderChooserResult.template(this.preset)
-    : providerId = null;
+class _ProviderChooserResult {
+  const _ProviderChooserResult.family(this.providerId) : preset = null;
+
+  const _ProviderChooserResult.template(this.preset) : providerId = null;
 
   final String? providerId;
   final ProviderPreset? preset;
@@ -669,12 +669,42 @@ class _ProfilesPage extends StatelessWidget {
     await _showPortableImportPreview(context, envelope);
   }
 
+  void _copySelectedProfile(BuildContext context) {
+    final source = controller.focusedSavedProfile;
+    if (source == null) {
+      return;
+    }
+    controller.duplicateSelectedProfile();
+    _openProfileWorkspace(context, title: context.shellText.copyProfile);
+  }
+
+  void _focusProfile(ProfileRecord profile) {
+    if (controller.focusedProfileId == profile.id) {
+      return;
+    }
+    controller.focusProfile(profile.id);
+  }
+
+  void _copyProfile(BuildContext context, ProfileRecord profile) {
+    _focusProfile(profile);
+    _copySelectedProfile(context);
+  }
+
+  void _exportProfile(BuildContext context, ProfileRecord profile) {
+    _focusProfile(profile);
+    unawaited(_showPortableExport(context));
+  }
+
+  void _deleteProfile(ProfileRecord profile) {
+    _focusProfile(profile);
+    unawaited(controller.deleteSelectedProfile());
+  }
+
   @override
   Widget build(BuildContext context) {
     final wide =
         MediaQuery.sizeOf(context).width >= _compactNavigationBreakpoint;
     final notice = controller.surfaceNotice;
-    final focusedProfile = controller.focusedSavedProfile;
     final menuActions = <_CardActionEntry>[
       if (!wide && controller.activeModeSupportsAppRouting)
         _CardActionEntry(
@@ -757,32 +787,16 @@ class _ProfilesPage extends StatelessWidget {
                       child: Text(context.shellText.pasteEnvelope),
                     ),
                   ],
-              child: FilledButton.tonalIcon(
-                onPressed: null,
-                icon: const Icon(Icons.file_upload_outlined),
-                label: Text(context.shellText.importPortableProfile),
+              child: IgnorePointer(
+                child: FilledButton.tonalIcon(
+                  onPressed: controller.busy ? null : () {},
+                  icon: const Icon(Icons.move_to_inbox_outlined),
+                  label: Text(context.shellText.importPortableProfile),
+                ),
               ),
             ),
           ],
         ),
-        if (focusedProfile != null) ...<Widget>[
-          const SizedBox(height: 16),
-          _ProfileSelectionActions(
-            profile: focusedProfile,
-            busy: controller.busy,
-            currentForHome: controller.selectedProfileId == focusedProfile.id,
-            onEdit: () => _openProfileWorkspace(
-              context,
-              title: context.shellText.mobileEditProfile,
-              profileId: focusedProfile.id,
-            ),
-            onMakeCurrent: () =>
-                controller.makeProfileCurrent(focusedProfile.id),
-            onCopy: controller.duplicateSelectedProfile,
-            onExport: () => unawaited(_showPortableExport(context)),
-            onDelete: () => unawaited(controller.deleteSelectedProfile()),
-          ),
-        ],
         const SizedBox(height: 20),
         _ProfilesListSection(
           controller: controller,
@@ -791,6 +805,11 @@ class _ProfilesPage extends StatelessWidget {
             title: context.shellText.mobileEditProfile,
             profileId: profile.id,
           ),
+          onCopyProfile: (ProfileRecord profile) =>
+              _copyProfile(context, profile),
+          onExportProfile: (ProfileRecord profile) =>
+              _exportProfile(context, profile),
+          onDeleteProfile: _deleteProfile,
         ),
       ],
     );
@@ -801,10 +820,16 @@ class _ProfilesListSection extends StatelessWidget {
   const _ProfilesListSection({
     required this.controller,
     required this.onEditProfile,
+    required this.onCopyProfile,
+    required this.onExportProfile,
+    required this.onDeleteProfile,
   });
 
   final MobileShellController controller;
   final ValueChanged<ProfileRecord> onEditProfile;
+  final ValueChanged<ProfileRecord> onCopyProfile;
+  final ValueChanged<ProfileRecord> onExportProfile;
+  final ValueChanged<ProfileRecord> onDeleteProfile;
 
   @override
   Widget build(BuildContext context) {
@@ -850,12 +875,19 @@ class _ProfilesListSection extends StatelessWidget {
                 focused:
                     controller.focusedProfileId ==
                     controller.profiles[index].id,
+                busy: controller.busy,
                 currentForHome:
                     controller.selectedProfileId ==
                     controller.profiles[index].id,
                 onSelect: () =>
                     controller.focusProfile(controller.profiles[index].id),
                 onEdit: () => onEditProfile(controller.profiles[index]),
+                onCopy: () => onCopyProfile(controller.profiles[index]),
+                onMakeCurrent: () => controller.makeProfileCurrent(
+                  controller.profiles[index].id,
+                ),
+                onExport: () => onExportProfile(controller.profiles[index]),
+                onDelete: () => onDeleteProfile(controller.profiles[index]),
               ),
               if (index != controller.profiles.length - 1)
                 const Divider(height: 1),
@@ -867,24 +899,28 @@ class _ProfilesListSection extends StatelessWidget {
   }
 }
 
-class _ProfileSelectionActions extends StatelessWidget {
-  const _ProfileSelectionActions({
+class _ProfileListItem extends StatelessWidget {
+  const _ProfileListItem({
     required this.profile,
+    required this.focused,
     required this.busy,
     required this.currentForHome,
+    required this.onSelect,
     required this.onEdit,
-    required this.onMakeCurrent,
     required this.onCopy,
+    required this.onMakeCurrent,
     required this.onExport,
     required this.onDelete,
   });
 
   final ProfileRecord profile;
+  final bool focused;
   final bool busy;
   final bool currentForHome;
+  final VoidCallback onSelect;
   final VoidCallback onEdit;
-  final VoidCallback onMakeCurrent;
   final VoidCallback onCopy;
+  final VoidCallback onMakeCurrent;
   final VoidCallback onExport;
   final VoidCallback onDelete;
 
@@ -894,134 +930,166 @@ class _ProfileSelectionActions extends StatelessWidget {
     final title = profile.name.trim().isEmpty
         ? profile.id
         : profile.name.trim();
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
+    return _SelectableListRow(
+      selected: focused,
+      tile: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        onTap: onSelect,
+        leading: CircleAvatar(
+          backgroundColor: focused
+              ? theme.colorScheme.primary
+              : theme.colorScheme.surfaceContainerHighest,
+          foregroundColor: focused
+              ? theme.colorScheme.onPrimary
+              : theme.colorScheme.onSurfaceVariant,
+          child: Text(_profileInitials(profile)),
+        ),
+        title: Text(
+          title,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
+            const SizedBox(height: 4),
             Text(
-              context.shellText.selectedProfileActions,
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              title,
-              style: theme.textTheme.bodyMedium?.copyWith(
+              _profileSummary(context, profile),
+              style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: <Widget>[
-                FilledButton.tonalIcon(
-                  key: const ValueKey<String>('profiles-edit-button'),
-                  onPressed: busy ? null : onEdit,
-                  icon: const Icon(Icons.edit_outlined),
-                  label: Text(context.shellText.mobileEditProfile),
-                ),
-                OutlinedButton.icon(
-                  key: const ValueKey<String>('profiles-make-current-button'),
-                  onPressed: busy || currentForHome ? null : onMakeCurrent,
-                  icon: const Icon(Icons.home_outlined),
-                  label: Text(context.shellText.makeCurrent),
-                ),
+            if (currentForHome) ...<Widget>[
+              const SizedBox(height: 8),
+              _StatusChip(
+                label: context.shellText.mobileSelectedForHome,
+                accent: true,
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final density = _inlineActionDensityForWidth(constraints.maxWidth);
+          final overflowActions = <_CardActionEntry>[
+            if (!currentForHome)
+              _CardActionEntry(
+                id: 'profiles-make-current-button',
+                label: context.shellText.makeCurrent,
+                onSelected: () async => onMakeCurrent(),
+              ),
+            _CardActionEntry(
+              id: 'profiles-export-button',
+              label: context.shellText.exportSavedProfile,
+              onSelected: () async => onExport(),
+            ),
+            _CardActionEntry(
+              id: 'profiles-delete-button',
+              label: context.shellText.deleteProfile,
+              onSelected: () async => onDelete(),
+            ),
+          ];
+          final showCopyInline = density != _InlineActionDensity.compact;
+          final showMakeCurrentInline =
+              !currentForHome && density == _InlineActionDensity.wide;
+          if (showMakeCurrentInline) {
+            overflowActions.removeWhere(
+              (_CardActionEntry action) =>
+                  action.id == 'profiles-make-current-button',
+            );
+          }
+          return Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: <Widget>[
+              FilledButton.tonalIcon(
+                key: const ValueKey<String>('profiles-edit-button'),
+                onPressed: busy ? null : onEdit,
+                icon: const Icon(Icons.edit_outlined),
+                label: Text(context.shellText.mobileEditProfile),
+              ),
+              if (showCopyInline)
                 OutlinedButton.icon(
                   key: const ValueKey<String>('profiles-copy-button'),
                   onPressed: busy ? null : onCopy,
                   icon: const Icon(Icons.content_copy_outlined),
                   label: Text(context.shellText.copyProfile),
                 ),
+              if (showMakeCurrentInline)
                 OutlinedButton.icon(
-                  key: const ValueKey<String>('profiles-export-button'),
-                  onPressed: busy ? null : onExport,
-                  icon: const Icon(Icons.ios_share_outlined),
-                  label: Text(context.shellText.exportSavedProfile),
+                  key: const ValueKey<String>('profiles-make-current-button'),
+                  onPressed: busy ? null : onMakeCurrent,
+                  icon: const Icon(Icons.home_outlined),
+                  label: Text(context.shellText.makeCurrent),
                 ),
-                OutlinedButton.icon(
-                  key: const ValueKey<String>('profiles-delete-button'),
-                  onPressed: busy ? null : onDelete,
-                  icon: const Icon(Icons.delete_outline),
-                  label: Text(context.shellText.deleteProfile),
+              if (overflowActions.isNotEmpty)
+                _ActionOverflowButton(
+                  key: const ValueKey<String>('profiles-actions-overflow'),
+                  tooltip: MaterialLocalizations.of(context).showMenuTooltip,
+                  enabled: !busy,
+                  actions: overflowActions,
                 ),
-              ],
-            ),
-          ],
-        ),
+            ],
+          );
+        },
       ),
     );
   }
 }
 
-class _ProfileListItem extends StatelessWidget {
-  const _ProfileListItem({
-    required this.profile,
-    required this.focused,
-    required this.currentForHome,
-    required this.onSelect,
-    required this.onEdit,
+_InlineActionDensity _inlineActionDensityForWidth(double width) {
+  if (width < 520) {
+    return _InlineActionDensity.compact;
+  }
+  if (width < 860) {
+    return _InlineActionDensity.medium;
+  }
+  return _InlineActionDensity.wide;
+}
+
+class _SelectableListRow extends StatelessWidget {
+  const _SelectableListRow({
+    required this.selected,
+    required this.tile,
+    this.actions,
   });
 
-  final ProfileRecord profile;
-  final bool focused;
-  final bool currentForHome;
-  final VoidCallback onSelect;
-  final VoidCallback onEdit;
+  final bool selected;
+  final Widget tile;
+  final Widget? actions;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final title = profile.name.trim().isEmpty
-        ? profile.id
-        : profile.name.trim();
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      onTap: onSelect,
-      tileColor: focused
-          ? theme.colorScheme.primaryContainer.withValues(alpha: 0.45)
-          : null,
-      leading: CircleAvatar(
-        backgroundColor: focused
-            ? theme.colorScheme.primary
-            : theme.colorScheme.surfaceContainerHighest,
-        foregroundColor: focused
-            ? theme.colorScheme.onPrimary
-            : theme.colorScheme.onSurfaceVariant,
-        child: Text(_profileInitials(profile)),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      curve: Curves.easeOut,
+      decoration: BoxDecoration(
+        color: selected
+            ? theme.colorScheme.primaryContainer.withValues(alpha: 0.35)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
       ),
-      title: Text(
-        title,
-        style: theme.textTheme.titleMedium?.copyWith(
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          const SizedBox(height: 4),
-          Text(
-            _profileSummary(context, profile),
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+          tile,
+          if (selected && actions != null) ...<Widget>[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Divider(
+                height: 1,
+                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.7),
+              ),
             ),
-          ),
-          if (currentForHome) ...<Widget>[
-            const SizedBox(height: 8),
-            _StatusChip(
-              label: context.shellText.mobileSelectedForHome,
-              accent: true,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+              child: actions!,
             ),
           ],
         ],
-      ),
-      trailing: IconButton(
-        tooltip: context.shellText.mobileEditProfile,
-        onPressed: onEdit,
-        icon: const Icon(Icons.edit_outlined),
       ),
     );
   }
@@ -1210,17 +1278,6 @@ class _ProvidersPageState extends State<_ProvidersPage> {
           ),
           _ => const SizedBox.shrink(),
         };
-        final selectedManagedProvider =
-            controller.selectedManagedProviderId == null
-            ? null
-            : controller.managedProviderById(
-                controller.selectedManagedProviderId!,
-              );
-        final selectedTemplate = controller.selectedProviderTemplateId == null
-            ? null
-            : controller.providerTemplateById(
-                controller.selectedProviderTemplateId!,
-              );
         final rootPanel = _surface == _ProviderRootSurface.savedProviders
             ? _ProviderRecordsRootSection(controller: controller)
             : _TemplateRecordsRootSection(controller: controller);
@@ -1272,38 +1329,6 @@ class _ProvidersPageState extends State<_ProvidersPage> {
               ),
             ],
           ),
-          if (_surface == _ProviderRootSurface.savedProviders &&
-              selectedManagedProvider != null) ...<Widget>[
-            const SizedBox(height: 16),
-            _ManagedProviderSelectionActions(
-              provider: selectedManagedProvider,
-              busy: controller.busy,
-              onEdit: () =>
-                  controller.selectManagedProvider(selectedManagedProvider.id),
-              onCopy: controller.duplicateSelectedManagedProvider,
-              onUseInProfile: () => controller.useManagedProviderForDraft(
-                selectedManagedProvider.id,
-              ),
-              onSaveAsTemplate:
-                  controller.startProviderTemplateDraftFromManagedProvider,
-              onDelete: () =>
-                  unawaited(controller.deleteSelectedManagedProvider()),
-            ),
-          ],
-          if (_surface == _ProviderRootSurface.templates &&
-              selectedTemplate != null) ...<Widget>[
-            const SizedBox(height: 16),
-            _ProviderTemplateSelectionActions(
-              template: selectedTemplate,
-              busy: controller.busy,
-              onUse: () => controller.useProviderTemplate(selectedTemplate.id),
-              onCopy: controller.duplicateSelectedProviderTemplate,
-              onEdit: () =>
-                  controller.selectProviderTemplate(selectedTemplate.id),
-              onDelete: () =>
-                  unawaited(controller.deleteSelectedProviderTemplate()),
-            ),
-          ],
           const SizedBox(height: 20),
           rootPanel,
         ];
@@ -1951,39 +1976,38 @@ class _RoutingPageState extends State<_RoutingPage> {
                   ),
                 ),
               ),
-              RadioListTile<PlatformTunnelUnderlayRoutePolicy>(
-                value: PlatformTunnelUnderlayRoutePolicy.standard,
+              RadioGroup<PlatformTunnelUnderlayRoutePolicy>(
                 groupValue: underlayRoutePolicy,
-                onChanged: (_) {
-                  controller.updateUnderlayRoutePolicy(
-                    PlatformTunnelUnderlayRoutePolicy.standard,
-                  );
+                onChanged: (PlatformTunnelUnderlayRoutePolicy? nextValue) {
+                  if (nextValue == null) {
+                    return;
+                  }
+                  controller.updateUnderlayRoutePolicy(nextValue);
                   Navigator.of(context).pop();
                 },
-                title: Text(copy.routingProfileStandard),
-                subtitle: Text(copy.routingProfileStandardDescription),
-              ),
-              if (showDevelopmentWifiProfile)
-                RadioListTile<PlatformTunnelUnderlayRoutePolicy>(
-                  value: PlatformTunnelUnderlayRoutePolicy
-                      .preserveActiveLocalNetwork,
-                  groupValue: underlayRoutePolicy,
-                  onChanged: developmentWifiUnsupported
-                      ? null
-                      : (_) {
-                          controller.updateUnderlayRoutePolicy(
-                            PlatformTunnelUnderlayRoutePolicy
-                                .preserveActiveLocalNetwork,
-                          );
-                          Navigator.of(context).pop();
-                        },
-                  title: Text(copy.routingProfileDevelopmentWifi),
-                  subtitle: Text(
-                    developmentWifiUnsupported
-                        ? copy.developmentWifiRoutingSavedButUnsupported
-                        : copy.routingProfileDevelopmentWifiDescription,
-                  ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    RadioListTile<PlatformTunnelUnderlayRoutePolicy>(
+                      value: PlatformTunnelUnderlayRoutePolicy.standard,
+                      title: Text(copy.routingProfileStandard),
+                      subtitle: Text(copy.routingProfileStandardDescription),
+                    ),
+                    if (showDevelopmentWifiProfile)
+                      RadioListTile<PlatformTunnelUnderlayRoutePolicy>(
+                        value: PlatformTunnelUnderlayRoutePolicy
+                            .preserveActiveLocalNetwork,
+                        enabled: !developmentWifiUnsupported,
+                        title: Text(copy.routingProfileDevelopmentWifi),
+                        subtitle: Text(
+                          developmentWifiUnsupported
+                              ? copy.developmentWifiRoutingSavedButUnsupported
+                              : copy.routingProfileDevelopmentWifiDescription,
+                        ),
+                      ),
+                  ],
                 ),
+              ),
             ],
           ),
         );
@@ -2020,42 +2044,37 @@ class _RoutingPageState extends State<_RoutingPage> {
                   ),
                 ),
               ),
-              RadioListTile<PlatformTunnelApplicationRoutingPolicy>(
-                value: PlatformTunnelApplicationRoutingPolicy.allApps,
+              RadioGroup<PlatformTunnelApplicationRoutingPolicy>(
                 groupValue: routingPolicy,
-                onChanged: (_) {
-                  controller.updateApplicationRoutingPolicy(
-                    PlatformTunnelApplicationRoutingPolicy.allApps,
-                  );
+                onChanged: (PlatformTunnelApplicationRoutingPolicy? nextValue) {
+                  if (nextValue == null) {
+                    return;
+                  }
+                  controller.updateApplicationRoutingPolicy(nextValue);
                   Navigator.of(context).pop();
                 },
-                title: Text(copy.allApps),
-                subtitle: Text(copy.allInstalledAppsUseVpnPath),
-              ),
-              RadioListTile<PlatformTunnelApplicationRoutingPolicy>(
-                value: PlatformTunnelApplicationRoutingPolicy.allowedPackages,
-                groupValue: routingPolicy,
-                onChanged: (_) {
-                  controller.updateApplicationRoutingPolicy(
-                    PlatformTunnelApplicationRoutingPolicy.allowedPackages,
-                  );
-                  Navigator.of(context).pop();
-                },
-                title: Text(copy.includedApps),
-                subtitle: Text(summary),
-              ),
-              RadioListTile<PlatformTunnelApplicationRoutingPolicy>(
-                value:
-                    PlatformTunnelApplicationRoutingPolicy.disallowedPackages,
-                groupValue: routingPolicy,
-                onChanged: (_) {
-                  controller.updateApplicationRoutingPolicy(
-                    PlatformTunnelApplicationRoutingPolicy.disallowedPackages,
-                  );
-                  Navigator.of(context).pop();
-                },
-                title: Text(copy.excludedApps),
-                subtitle: Text(summary),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    RadioListTile<PlatformTunnelApplicationRoutingPolicy>(
+                      value: PlatformTunnelApplicationRoutingPolicy.allApps,
+                      title: Text(copy.allApps),
+                      subtitle: Text(copy.allInstalledAppsUseVpnPath),
+                    ),
+                    RadioListTile<PlatformTunnelApplicationRoutingPolicy>(
+                      value: PlatformTunnelApplicationRoutingPolicy
+                          .allowedPackages,
+                      title: Text(copy.includedApps),
+                      subtitle: Text(summary),
+                    ),
+                    RadioListTile<PlatformTunnelApplicationRoutingPolicy>(
+                      value: PlatformTunnelApplicationRoutingPolicy
+                          .disallowedPackages,
+                      title: Text(copy.excludedApps),
+                      subtitle: Text(summary),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -3198,9 +3217,21 @@ class _ProviderRecordsRootSection extends StatelessWidget {
                 selected:
                     controller.selectedManagedProviderId ==
                     controller.managedProviders[index].id,
+                busy: controller.busy,
                 onSelect: () => controller.focusManagedProvider(
                   controller.managedProviders[index].id,
                 ),
+                onEdit: () => controller.selectManagedProvider(
+                  controller.managedProviders[index].id,
+                ),
+                onCopy: controller.duplicateSelectedManagedProvider,
+                onUseInProfile: () => controller.useManagedProviderForDraft(
+                  controller.managedProviders[index].id,
+                ),
+                onSaveAsTemplate:
+                    controller.startProviderTemplateDraftFromManagedProvider,
+                onDelete: () =>
+                    unawaited(controller.deleteSelectedManagedProvider()),
               ),
               if (index != controller.managedProviders.length - 1)
                 const Divider(height: 1),
@@ -3261,9 +3292,19 @@ class _TemplateRecordsRootSection extends StatelessWidget {
                 selected:
                     controller.selectedProviderTemplateId ==
                     controller.providerTemplates[index].id,
+                busy: controller.busy,
                 onSelect: () => controller.focusProviderTemplate(
                   controller.providerTemplates[index].id,
                 ),
+                onUse: () => controller.useProviderTemplate(
+                  controller.providerTemplates[index].id,
+                ),
+                onCopy: controller.duplicateSelectedProviderTemplate,
+                onEdit: () => controller.selectProviderTemplate(
+                  controller.providerTemplates[index].id,
+                ),
+                onDelete: () =>
+                    unawaited(controller.deleteSelectedProviderTemplate()),
               ),
               if (index != controller.providerTemplates.length - 1)
                 const Divider(height: 1),
@@ -3275,10 +3316,12 @@ class _TemplateRecordsRootSection extends StatelessWidget {
   }
 }
 
-class _ManagedProviderSelectionActions extends StatelessWidget {
-  const _ManagedProviderSelectionActions({
+class _ManagedProviderListItem extends StatelessWidget {
+  const _ManagedProviderListItem({
     required this.provider,
+    required this.selected,
     required this.busy,
+    required this.onSelect,
     required this.onEdit,
     required this.onCopy,
     required this.onUseInProfile,
@@ -3287,7 +3330,9 @@ class _ManagedProviderSelectionActions extends StatelessWidget {
   });
 
   final ManagedProviderRecord provider;
+  final bool selected;
   final bool busy;
+  final VoidCallback onSelect;
   final VoidCallback onEdit;
   final VoidCallback onCopy;
   final VoidCallback onUseInProfile;
@@ -3298,216 +3343,132 @@ class _ManagedProviderSelectionActions extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final title = provider.name.trim().isEmpty ? provider.id : provider.name;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
+    final familyTitle =
+        supportedProviderDefinitionFor(provider.provider)?.title ??
+        provider.provider;
+
+    return _SelectableListRow(
+      selected: selected,
+      tile: ListTile(
+        key: ValueKey<String>('managed-provider-item-${provider.id}'),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        onTap: onSelect,
+        leading: CircleAvatar(
+          backgroundColor: selected
+              ? theme.colorScheme.primary
+              : theme.colorScheme.surfaceContainerHighest,
+          foregroundColor: selected
+              ? theme.colorScheme.onPrimary
+              : theme.colorScheme.onSurfaceVariant,
+          child: const Icon(Icons.cloud_outlined),
+        ),
+        title: Text(
+          title,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
+            const SizedBox(height: 4),
             Text(
-              context.shellText.selectedProviderActions,
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              title,
-              style: theme.textTheme.bodyMedium?.copyWith(
+              context.shellText.typeLabel(familyTitle),
+              style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: <Widget>[
-                FilledButton.tonalIcon(
-                  key: const ValueKey<String>('providers-edit-button'),
-                  onPressed: busy ? null : onEdit,
-                  icon: const Icon(Icons.edit_outlined),
-                  label: Text(context.shellText.mobileEditProvider),
+            const SizedBox(height: 4),
+            Text(
+              context.shellText.usedInProfiles,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            if (provider.availability.message.isNotEmpty) ...<Widget>[
+              const SizedBox(height: 4),
+              Text(
+                provider.availability.message,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
+              ),
+            ],
+          ],
+        ),
+        trailing: _StatusChip(
+          label: provider.availability.state.label,
+          accent: provider.isAvailable,
+        ),
+      ),
+      actions: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final density = _inlineActionDensityForWidth(constraints.maxWidth);
+          final overflowActions = <_CardActionEntry>[
+            if (density == _InlineActionDensity.compact)
+              _CardActionEntry(
+                id: 'providers-copy-button',
+                label: context.shellText.copyProvider,
+                onSelected: () async => onCopy(),
+              ),
+            if (density != _InlineActionDensity.wide)
+              _CardActionEntry(
+                id: 'providers-use-button',
+                label: context.shellText.mobileUseInProfileDraft,
+                onSelected: () async => onUseInProfile(),
+              ),
+            _CardActionEntry(
+              id: 'providers-save-template-button',
+              label: context.shellText.mobileSaveAsTemplate,
+              onSelected: () async => onSaveAsTemplate(),
+            ),
+            _CardActionEntry(
+              id: 'providers-delete-button',
+              label: context.shellText.mobileDeleteProvider,
+              onSelected: () async => onDelete(),
+            ),
+          ];
+          final showCopyInline = density != _InlineActionDensity.compact;
+          final showUseInline = density != _InlineActionDensity.compact;
+          if (density == _InlineActionDensity.wide) {
+            overflowActions.removeWhere(
+              (_CardActionEntry action) => action.id == 'providers-use-button',
+            );
+          }
+          return Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: <Widget>[
+              FilledButton.tonalIcon(
+                key: const ValueKey<String>('providers-edit-button'),
+                onPressed: busy ? null : onEdit,
+                icon: const Icon(Icons.edit_outlined),
+                label: Text(context.shellText.mobileEditProvider),
+              ),
+              if (showCopyInline)
                 OutlinedButton.icon(
                   key: const ValueKey<String>('providers-copy-button'),
                   onPressed: busy ? null : onCopy,
                   icon: const Icon(Icons.content_copy_outlined),
                   label: Text(context.shellText.copyProvider),
                 ),
+              if (showUseInline && density == _InlineActionDensity.wide)
                 OutlinedButton.icon(
                   key: const ValueKey<String>('providers-use-button'),
                   onPressed: busy ? null : onUseInProfile,
                   icon: const Icon(Icons.assignment_turned_in_outlined),
                   label: Text(context.shellText.mobileUseInProfileDraft),
                 ),
-                OutlinedButton.icon(
-                  key: const ValueKey<String>('providers-save-template-button'),
-                  onPressed: busy ? null : onSaveAsTemplate,
-                  icon: const Icon(Icons.bookmark_add_outlined),
-                  label: Text(context.shellText.mobileSaveAsTemplate),
+              if (overflowActions.isNotEmpty)
+                _ActionOverflowButton(
+                  key: const ValueKey<String>('providers-actions-overflow'),
+                  tooltip: MaterialLocalizations.of(context).showMenuTooltip,
+                  enabled: !busy,
+                  actions: overflowActions,
                 ),
-                OutlinedButton.icon(
-                  key: const ValueKey<String>('providers-delete-button'),
-                  onPressed: busy ? null : onDelete,
-                  icon: const Icon(Icons.delete_outline),
-                  label: Text(context.shellText.mobileDeleteProvider),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ProviderTemplateSelectionActions extends StatelessWidget {
-  const _ProviderTemplateSelectionActions({
-    required this.template,
-    required this.busy,
-    required this.onUse,
-    required this.onCopy,
-    required this.onEdit,
-    required this.onDelete,
-  });
-
-  final ProviderTemplateRecord template;
-  final bool busy;
-  final VoidCallback onUse;
-  final VoidCallback onCopy;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final title = template.name.trim().isEmpty ? template.id : template.name;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              context.shellText.selectedTemplateActions,
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              title,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: <Widget>[
-                FilledButton.tonalIcon(
-                  key: const ValueKey<String>('templates-use-button'),
-                  onPressed: busy ? null : onUse,
-                  icon: const Icon(Icons.playlist_add_check_outlined),
-                  label: Text(context.shellText.mobileUseTemplate),
-                ),
-                OutlinedButton.icon(
-                  key: const ValueKey<String>('templates-copy-button'),
-                  onPressed: busy ? null : onCopy,
-                  icon: const Icon(Icons.content_copy_outlined),
-                  label: Text(context.shellText.copyTemplate),
-                ),
-                OutlinedButton.icon(
-                  key: const ValueKey<String>('templates-edit-button'),
-                  onPressed: busy ? null : onEdit,
-                  icon: const Icon(Icons.edit_outlined),
-                  label: Text(context.shellText.mobileEditTemplate),
-                ),
-                OutlinedButton.icon(
-                  key: const ValueKey<String>('templates-delete-button'),
-                  onPressed: busy ? null : onDelete,
-                  icon: const Icon(Icons.delete_outline),
-                  label: Text(context.shellText.mobileDeleteTemplate),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ManagedProviderListItem extends StatelessWidget {
-  const _ManagedProviderListItem({
-    required this.provider,
-    required this.selected,
-    required this.onSelect,
-  });
-
-  final ManagedProviderRecord provider;
-  final bool selected;
-  final VoidCallback onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final title = provider.name.trim().isEmpty ? provider.id : provider.name;
-    final familyTitle =
-        supportedProviderDefinitionFor(provider.provider)?.title ??
-        provider.provider;
-
-    return ListTile(
-      key: ValueKey<String>('managed-provider-item-${provider.id}'),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      onTap: onSelect,
-      leading: CircleAvatar(
-        backgroundColor: selected
-            ? theme.colorScheme.primary
-            : theme.colorScheme.surfaceContainerHighest,
-        foregroundColor: selected
-            ? theme.colorScheme.onPrimary
-            : theme.colorScheme.onSurfaceVariant,
-        child: const Icon(Icons.cloud_outlined),
-      ),
-      title: Text(
-        title,
-        style: theme.textTheme.titleMedium?.copyWith(
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const SizedBox(height: 4),
-          Text(
-            context.shellText.typeLabel(familyTitle),
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            context.shellText.usedInProfiles,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          if (provider.availability.message.isNotEmpty) ...<Widget>[
-            const SizedBox(height: 4),
-            Text(
-              provider.availability.message,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ],
-      ),
-      trailing: _StatusChip(
-        label: provider.availability.state.label,
-        accent: provider.isAvailable,
+            ],
+          );
+        },
       ),
     );
   }
@@ -3517,12 +3478,22 @@ class _ProviderTemplateListItem extends StatelessWidget {
   const _ProviderTemplateListItem({
     required this.template,
     required this.selected,
+    required this.busy,
     required this.onSelect,
+    required this.onUse,
+    required this.onCopy,
+    required this.onEdit,
+    required this.onDelete,
   });
 
   final ProviderTemplateRecord template;
   final bool selected;
+  final bool busy;
   final VoidCallback onSelect;
+  final VoidCallback onUse;
+  final VoidCallback onCopy;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -3532,59 +3503,118 @@ class _ProviderTemplateListItem extends StatelessWidget {
         supportedProviderDefinitionFor(template.provider)?.title ??
         template.provider;
 
-    return ListTile(
-      key: ValueKey<String>('provider-template-item-${template.id}'),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      onTap: onSelect,
-      tileColor: selected
-          ? theme.colorScheme.primaryContainer.withValues(alpha: 0.45)
-          : null,
-      leading: CircleAvatar(
-        backgroundColor: selected
-            ? theme.colorScheme.primary
-            : theme.colorScheme.surfaceContainerHighest,
-        foregroundColor: selected
-            ? theme.colorScheme.onPrimary
-            : theme.colorScheme.onSurfaceVariant,
-        child: const Icon(Icons.bookmark_border_rounded),
-      ),
-      title: Text(
-        title,
-        style: theme.textTheme.titleMedium?.copyWith(
-          fontWeight: FontWeight.w700,
+    return _SelectableListRow(
+      selected: selected,
+      tile: ListTile(
+        key: ValueKey<String>('provider-template-item-${template.id}'),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        onTap: onSelect,
+        leading: CircleAvatar(
+          backgroundColor: selected
+              ? theme.colorScheme.primary
+              : theme.colorScheme.surfaceContainerHighest,
+          foregroundColor: selected
+              ? theme.colorScheme.onPrimary
+              : theme.colorScheme.onSurfaceVariant,
+          child: const Icon(Icons.bookmark_border_rounded),
         ),
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const SizedBox(height: 4),
-          Text(
-            context.shellText.typeLabel(familyTitle),
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+        title: Text(
+          title,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w700,
           ),
-          const SizedBox(height: 4),
-          Text(
-            context.shellText.prefillsNewProviders,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          if (template.availability.message.isNotEmpty) ...<Widget>[
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
             const SizedBox(height: 4),
             Text(
-              template.availability.message,
+              context.shellText.typeLabel(familyTitle),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
+            const SizedBox(height: 4),
+            Text(
+              context.shellText.prefillsNewProviders,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            if (template.availability.message.isNotEmpty) ...<Widget>[
+              const SizedBox(height: 4),
+              Text(
+                template.availability.message,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
+        trailing: _StatusChip(
+          label: template.availability.state.label,
+          accent: template.isAvailable,
+        ),
       ),
-      trailing: _StatusChip(
-        label: template.availability.state.label,
-        accent: template.isAvailable,
+      actions: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final density = _inlineActionDensityForWidth(constraints.maxWidth);
+          final overflowActions = <_CardActionEntry>[
+            if (density == _InlineActionDensity.compact)
+              _CardActionEntry(
+                id: 'templates-copy-button',
+                label: context.shellText.copyTemplate,
+                onSelected: () async => onCopy(),
+              ),
+            if (density != _InlineActionDensity.wide)
+              _CardActionEntry(
+                id: 'templates-edit-button',
+                label: context.shellText.mobileEditTemplate,
+                onSelected: () async => onEdit(),
+              ),
+            _CardActionEntry(
+              id: 'templates-delete-button',
+              label: context.shellText.mobileDeleteTemplate,
+              onSelected: () async => onDelete(),
+            ),
+          ];
+          final showCopyInline = density != _InlineActionDensity.compact;
+          final showEditInline = density == _InlineActionDensity.wide;
+          return Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: <Widget>[
+              FilledButton.tonalIcon(
+                key: const ValueKey<String>('templates-use-button'),
+                onPressed: busy ? null : onUse,
+                icon: const Icon(Icons.playlist_add_check_outlined),
+                label: Text(context.shellText.mobileUseTemplate),
+              ),
+              if (showCopyInline)
+                OutlinedButton.icon(
+                  key: const ValueKey<String>('templates-copy-button'),
+                  onPressed: busy ? null : onCopy,
+                  icon: const Icon(Icons.content_copy_outlined),
+                  label: Text(context.shellText.copyTemplate),
+                ),
+              if (showEditInline)
+                OutlinedButton.icon(
+                  key: const ValueKey<String>('templates-edit-button'),
+                  onPressed: busy ? null : onEdit,
+                  icon: const Icon(Icons.edit_outlined),
+                  label: Text(context.shellText.mobileEditTemplate),
+                ),
+              if (overflowActions.isNotEmpty)
+                _ActionOverflowButton(
+                  key: const ValueKey<String>('templates-actions-overflow'),
+                  tooltip: MaterialLocalizations.of(context).showMenuTooltip,
+                  enabled: !busy,
+                  actions: overflowActions,
+                ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -5812,6 +5842,7 @@ class _ActionRow extends StatelessWidget {
 
 class _ActionOverflowButton extends StatelessWidget {
   const _ActionOverflowButton({
+    super.key,
     required this.tooltip,
     required this.enabled,
     required this.actions,
@@ -5832,6 +5863,7 @@ class _ActionOverflowButton extends StatelessWidget {
         return actions
             .map((entry) {
               return PopupMenuItem<_CardActionEntry>(
+                key: ValueKey<String>(entry.id),
                 value: entry,
                 child: Text(entry.label),
               );

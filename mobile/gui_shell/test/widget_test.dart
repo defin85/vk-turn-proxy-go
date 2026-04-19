@@ -378,6 +378,93 @@ void main() {
   );
 
   testWidgets(
+    'profiles root actions keep current selection separate from focused detail and expose copy plus export',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final alpha = ProfileRecord(
+        id: 'profile-1',
+        name: 'Alpha',
+        spec: _profileSpec(),
+      );
+      final beta = ProfileRecord(
+        id: 'profile-2',
+        name: 'Beta',
+        spec: _profileSpec().copyWith(link: 'https://vk.com/call/join/beta'),
+      );
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(),
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[alpha, beta],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: alpha.id,
+            draft: ProfileDraft.fromProfile(alpha),
+          ),
+        ),
+      );
+
+      await controller.initialize();
+      await tester.pumpWidget(MobileShellApp(controller: controller));
+      await tester.pumpAndSettle();
+      await _openProfilesTab(tester);
+
+      await tester.tap(find.text('Beta').first);
+      await tester.pumpAndSettle();
+
+      expect(controller.selectedProfileId, alpha.id);
+      expect(controller.focusedProfileId, beta.id);
+      expect(
+        find.byKey(const ValueKey<String>('profiles-make-current-button')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('profiles-copy-button')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('profiles-actions-overflow')),
+        findsOneWidget,
+      );
+
+      await _selectOverflowAction(
+        tester,
+        overflowKey: 'profiles-actions-overflow',
+        actionKey: 'profiles-export-button',
+      );
+
+      expect(find.text('Portable profile envelope'), findsOneWidget);
+      await tester.tap(find.text('Close').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('profiles-make-current-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(controller.selectedProfileId, beta.id);
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('profiles-copy-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(controller.focusedProfileId, isNull);
+      expect(controller.selectedProfileId, beta.id);
+      expect(controller.profiles, hasLength(2));
+      expect(controller.draft.id, isNull);
+      expect(controller.draft.name, 'Beta copy');
+      expect(
+        find.byKey(const ValueKey<String>('profile-workspace-editor')),
+        findsOneWidget,
+      );
+      expect(find.text('Copy profile'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'providers move to top-level navigation while profiles overflow stays profile-only',
     (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1200, 1800);
@@ -399,6 +486,20 @@ void main() {
       expect(find.text('Add profile'), findsOneWidget);
       expect(
         find.byKey(const ValueKey<String>('profiles-import-button')),
+        findsOneWidget,
+      );
+      final importButton = tester.widget<FilledButton>(
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('profiles-import-button')),
+          matching: find.byType(FilledButton),
+        ),
+      );
+      expect(importButton.onPressed, isNotNull);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('profiles-import-button')),
+          matching: find.byIcon(Icons.move_to_inbox_outlined),
+        ),
         findsOneWidget,
       );
       expect(find.text('Manage providers'), findsNothing);
@@ -806,7 +907,7 @@ void main() {
               'Development Wi-Fi',
             ),
           );
-      expect(option.onChanged, isNull);
+      expect(option.enabled, isFalse);
       expect(
         find.textContaining('unsupported by the connected host'),
         findsNWidgets(2),
@@ -3167,10 +3268,11 @@ void main() {
         find.byKey(const ValueKey<String>('managed-provider-save-button')),
       );
       await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey<String>('providers-save-template-button')),
+      await _selectOverflowAction(
+        tester,
+        overflowKey: 'providers-actions-overflow',
+        actionKey: 'providers-save-template-button',
       );
-      await tester.pumpAndSettle();
 
       expect(
         find.byKey(const ValueKey<String>('provider-template-close-button')),
@@ -3241,10 +3343,11 @@ void main() {
         find.byKey(const ValueKey<String>('managed-provider-save-button')),
       );
       await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey<String>('providers-save-template-button')),
+      await _selectOverflowAction(
+        tester,
+        overflowKey: 'providers-actions-overflow',
+        actionKey: 'providers-save-template-button',
       );
-      await tester.pumpAndSettle();
 
       expect(
         controller.workflowSurface,
@@ -3382,13 +3485,97 @@ void main() {
         find.byKey(ValueKey<String>('provider-template-item-$templateId')),
       );
       await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey<String>('templates-delete-button')),
+      await _selectOverflowAction(
+        tester,
+        overflowKey: 'templates-actions-overflow',
+        actionKey: 'templates-delete-button',
       );
-      await tester.pumpAndSettle();
 
       expect(controller.providerTemplates, isEmpty);
       expect(controller.workflowSurface, MobileWorkflowSurface.provider);
+    },
+  );
+
+  testWidgets(
+    'providers and templates root actions open snapshot-copy drafts',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 2200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(providersList: _providerDescriptors),
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: const <ProfileRecord>[],
+            managedProviders: <ManagedProviderRecord>[
+              ManagedProviderRecord(
+                id: 'provider-config-1',
+                provider: 'vk',
+                name: 'VK Saved',
+                providerSettings: const <String, dynamic>{'region': 'eu-west'},
+                createdAt: DateTime.utc(2026, 4, 12, 18, 0),
+                updatedAt: DateTime.utc(2026, 4, 12, 18, 1),
+              ),
+            ],
+            providerTemplates: <ProviderTemplateRecord>[
+              ProviderTemplateRecord(
+                id: 'template-1',
+                provider: 'vk',
+                name: 'VK Template',
+                providerSettings: const <String, dynamic>{'region': 'eu-west'},
+                createdAt: DateTime.utc(2026, 4, 12, 18, 0),
+                updatedAt: DateTime.utc(2026, 4, 12, 18, 1),
+              ),
+            ],
+            draft: ProfileDraft.defaults(),
+          ),
+        ),
+      );
+
+      await controller.initialize();
+      await tester.pumpWidget(MobileShellApp(controller: controller));
+      await tester.pumpAndSettle();
+      await _openProvidersTab(tester);
+
+      await tester.tap(
+        find.byKey(
+          const ValueKey<String>('managed-provider-item-provider-config-1'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey<String>('providers-copy-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(controller.workflowSurface, MobileWorkflowSurface.providerConfig);
+      expect(controller.selectedManagedProviderId, isNull);
+      expect(controller.managedProviders.single.name, 'VK Saved');
+      expect(controller.managedProviderDraft.id, isNull);
+      expect(controller.managedProviderDraft.name, 'VK Saved copy');
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('providers-surface-templates')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey<String>('provider-template-item-template-1')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey<String>('templates-copy-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        controller.workflowSurface,
+        MobileWorkflowSurface.providerTemplate,
+      );
+      expect(controller.selectedProviderTemplateId, isNull);
+      expect(controller.providerTemplates.single.name, 'VK Template');
+      expect(controller.providerTemplateDraft.id, isNull);
+      expect(controller.providerTemplateDraft.name, 'VK Template copy');
     },
   );
 
@@ -3652,12 +3839,11 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      final deleteButton = tester.widget<OutlinedButton>(
-        find.byKey(const ValueKey<String>('providers-delete-button')),
+      await _selectOverflowAction(
+        tester,
+        overflowKey: 'providers-actions-overflow',
+        actionKey: 'providers-delete-button',
       );
-      expect(deleteButton.onPressed, isNotNull);
-      deleteButton.onPressed!.call();
-      await tester.pumpAndSettle();
 
       expect(controller.providerConfigs, isEmpty);
       expect(controller.workflowSurface, MobileWorkflowSurface.provider);
@@ -3721,13 +3907,16 @@ void main() {
       ),
       findsWidgets,
     );
+    await _selectOverflowAction(
+      tester,
+      overflowKey: 'providers-actions-overflow',
+      actionKey: 'providers-use-button',
+    );
+    expect(controller.workflowSurface, MobileWorkflowSurface.profile);
+    expect(controller.draft.providerBinding.isManaged, isTrue);
     expect(
-      tester
-          .widget<OutlinedButton>(
-            find.byKey(const ValueKey<String>('providers-use-button')),
-          )
-          .onPressed,
-      isNotNull,
+      controller.draft.providerBinding.managedProviderId,
+      'provider-config-1',
     );
   });
 
@@ -3802,13 +3991,16 @@ void main() {
             .onPressed,
         isNull,
       );
+      await _selectOverflowAction(
+        tester,
+        overflowKey: 'providers-actions-overflow',
+        actionKey: 'providers-use-button',
+      );
+      expect(controller.workflowSurface, MobileWorkflowSurface.profile);
+      expect(controller.draft.providerBinding.isManaged, isTrue);
       expect(
-        tester
-            .widget<OutlinedButton>(
-              find.byKey(const ValueKey<String>('providers-use-button')),
-            )
-            .onPressed,
-        isNotNull,
+        controller.draft.providerBinding.managedProviderId,
+        'provider-config-1',
       );
     },
   );
@@ -4038,15 +4230,27 @@ void main() {
   );
 
   testWidgets(
-    'portable transfer section can be expanded through a dedicated key',
+    'profiles root export action opens the portable transfer dialog',
     (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1600, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
+      final profile = ProfileRecord(
+        id: 'profile-1',
+        name: 'Portable profile',
+        spec: _profileSpec(),
+      );
       final controller = MobileShellController(
         bridge: _FakeMobileHostBridge(),
-        stateStore: _InMemoryStateStore(MobileShellState.empty()),
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[profile],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: profile.id,
+            draft: ProfileDraft.fromProfile(profile),
+          ),
+        ),
       );
 
       await controller.initialize();
@@ -4054,40 +4258,28 @@ void main() {
       await tester.pumpAndSettle();
 
       await _openProfilesTab(tester);
-      await _openProfileEditorFromProfiles(tester);
-      await tester.dragUntilVisible(
-        find.byKey(
-          const ValueKey<String>('profile-editor-portable-transfer-section'),
-        ),
-        _profileWorkspaceScrollable(),
-        const Offset(0, -160),
-      );
+      await tester.tap(find.text('Portable profile').first);
       await tester.pumpAndSettle();
-
-      await tester.tap(
-        find.byKey(
-          const ValueKey<String>('profile-editor-portable-transfer-section'),
-        ),
+      await _selectOverflowAction(
+        tester,
+        overflowKey: 'profiles-actions-overflow',
+        actionKey: 'profiles-export-button',
       );
-      await tester.pumpAndSettle();
 
       expect(
-        find.byKey(
-          const ValueKey<String>('profile-editor-portable-export-action'),
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.text('Export saved profile'),
         ),
         findsOneWidget,
       );
-      expect(
-        find.byKey(
-          const ValueKey<String>('profile-editor-portable-import-paste-action'),
-        ),
-        findsOneWidget,
-      );
+      expect(find.text('Portable profile envelope'), findsOneWidget);
+      expect(find.text('Copy text'), findsOneWidget);
     },
   );
 
   testWidgets(
-    'portable paste dialog stays usable when keyboard insets shrink the viewport',
+    'profiles root paste dialog stays usable when keyboard insets shrink the viewport',
     (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1600, 900);
       tester.view.devicePixelRatio = 1.0;
@@ -4103,21 +4295,11 @@ void main() {
       await tester.pumpAndSettle();
 
       await _openProfilesTab(tester);
-      await _openProfileEditorFromProfiles(tester);
-      await tester.dragUntilVisible(
-        find.text('Portable transfer'),
-        _profileWorkspaceScrollable(),
-        const Offset(0, -160),
-      );
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('Portable transfer'));
-      await tester.pumpAndSettle();
       await tester.tap(
-        find.byKey(
-          const ValueKey<String>('profile-editor-portable-import-paste-action'),
-        ),
+        find.byKey(const ValueKey<String>('profiles-import-button')),
       );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Paste envelope').last);
       await tester.pumpAndSettle();
 
       tester.view.viewInsets = const FakeViewPadding(bottom: 520);
@@ -4135,7 +4317,7 @@ void main() {
   );
 
   testWidgets(
-    'portable paste preview opens after the paste dialog closes cleanly',
+    'profiles root paste preview opens after the dialog closes cleanly',
     (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1600, 900);
       tester.view.devicePixelRatio = 1.0;
@@ -4151,27 +4333,11 @@ void main() {
       await tester.pumpAndSettle();
 
       await _openProfilesTab(tester);
-      await _openProfileEditorFromProfiles(tester);
-      await tester.dragUntilVisible(
-        find.byKey(
-          const ValueKey<String>('profile-editor-portable-transfer-section'),
-        ),
-        _profileWorkspaceScrollable(),
-        const Offset(0, -160),
+      await tester.tap(
+        find.byKey(const ValueKey<String>('profiles-import-button')),
       );
       await tester.pumpAndSettle();
-
-      await tester.tap(
-        find.byKey(
-          const ValueKey<String>('profile-editor-portable-transfer-section'),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(
-          const ValueKey<String>('profile-editor-portable-import-paste-action'),
-        ),
-      );
+      await tester.tap(find.text('Paste envelope').last);
       await tester.pumpAndSettle();
 
       await tester.enterText(
@@ -4183,7 +4349,13 @@ void main() {
       await tester.tap(find.text('Preview import'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Import portable profile'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.text('Import portable profile'),
+        ),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
@@ -4257,6 +4429,17 @@ Future<void> _openProfileEditorFromProfiles(
 
 Future<void> _openProfilesMenu(WidgetTester tester) async {
   await tester.tap(find.byTooltip('Profiles actions'));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _selectOverflowAction(
+  WidgetTester tester, {
+  required String overflowKey,
+  required String actionKey,
+}) async {
+  await tester.tap(find.byKey(ValueKey<String>(overflowKey)));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(ValueKey<String>(actionKey)).last);
   await tester.pumpAndSettle();
 }
 

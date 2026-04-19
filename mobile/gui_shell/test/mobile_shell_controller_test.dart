@@ -328,6 +328,150 @@ void main() {
   );
 
   test(
+    'controller restores current profile separately from focused detail state',
+    () async {
+      final alpha = ProfileRecord(
+        id: 'profile-1',
+        name: 'alpha',
+        spec: _profileSpec(),
+      );
+      final beta = ProfileRecord(
+        id: 'profile-2',
+        name: 'beta',
+        spec: _profileSpec().copyWith(link: 'https://vk.com/call/join/beta'),
+      );
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(),
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[alpha, beta],
+            providerConfigs: const <ProviderConfigRecord>[],
+            initialCurrentProfileId: alpha.id,
+            initialFocusedProfileId: beta.id,
+            draft: ProfileDraft.fromProfile(beta),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(controller.selectedProfileId, alpha.id);
+      expect(controller.focusedProfileId, beta.id);
+      expect(controller.selectedSavedProfile?.id, alpha.id);
+      expect(controller.focusedSavedProfile?.id, beta.id);
+      expect(controller.draft.id, beta.id);
+      expect(controller.draft.name, beta.name);
+    },
+  );
+
+  test(
+    'controller duplicateSelectedProfile seeds a new draft without mutating the source or current target',
+    () async {
+      final alpha = ProfileRecord(
+        id: 'profile-1',
+        name: 'alpha',
+        spec: _profileSpec(),
+      );
+      final beta = ProfileRecord(
+        id: 'profile-2',
+        name: 'beta',
+        spec: _profileSpec().copyWith(link: 'https://vk.com/call/join/beta'),
+      );
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(),
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[alpha, beta],
+            providerConfigs: const <ProviderConfigRecord>[],
+            initialCurrentProfileId: alpha.id,
+            initialFocusedProfileId: beta.id,
+            draft: ProfileDraft.fromProfile(beta),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      expect(controller.focusedProfileId, beta.id);
+      expect(controller.focusedSavedProfile?.id, beta.id);
+      controller.duplicateSelectedProfile();
+
+      expect(controller.profiles, hasLength(2));
+      expect(controller.selectedProfileId, alpha.id);
+      expect(controller.focusedProfileId, isNull);
+      expect(controller.draft.id, isNull);
+      expect(controller.draft.name, 'beta copy');
+      expect(controller.draft.spec.link, beta.spec.link);
+      expect(controller.notice, contains('beta'));
+    },
+  );
+
+  test(
+    'controller duplicateSelectedManagedProvider and duplicateSelectedProviderTemplate preserve source records',
+    () async {
+      final managedProvider = _managedProviderRecord(
+        id: 'provider-config-1',
+        name: 'VK Saved',
+      );
+      final template = ProviderTemplateRecord(
+        id: 'template-1',
+        provider: 'vk',
+        name: 'VK Template',
+        providerSettings: const <String, dynamic>{'region': 'eu-west'},
+        createdAt: DateTime.utc(2026, 4, 17, 12, 0),
+        updatedAt: DateTime.utc(2026, 4, 17, 12, 1),
+      );
+      final controller = MobileShellController(
+        bridge: _FakeMobileHostBridge(
+          providersList: const <ProviderDescriptor>[
+            ProviderDescriptor(
+              id: 'vk',
+              displayName: 'VK Calls',
+              inputKind: ProviderInputKind.link,
+              authPosture: ProviderAuthPosture.guestOrAccount,
+              browserPolicy: ProviderBrowserPolicy.externalRequired,
+              artifactFamilies: <ArtifactFamily>[ArtifactFamily.genericTurn],
+            ),
+          ],
+        ),
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: const <ProfileRecord>[],
+            managedProviders: <ManagedProviderRecord>[managedProvider],
+            providerTemplates: <ProviderTemplateRecord>[template],
+            draft: ProfileDraft.defaults(),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      controller.focusManagedProvider(managedProvider.id);
+      expect(controller.selectedManagedProviderId, managedProvider.id);
+      controller.duplicateSelectedManagedProvider();
+
+      expect(controller.managedProviders.single.name, 'VK Saved');
+      expect(controller.selectedManagedProviderId, isNull);
+      expect(controller.managedProviderDraft.id, isNull);
+      expect(controller.managedProviderDraft.name, 'VK Saved copy');
+
+      controller.focusProviderTemplate(template.id);
+      expect(controller.selectedProviderTemplateId, template.id);
+      controller.duplicateSelectedProviderTemplate();
+
+      expect(controller.providerTemplates.single.name, 'VK Template');
+      expect(controller.selectedProviderTemplateId, isNull);
+      expect(controller.providerTemplateDraft.id, isNull);
+      expect(controller.providerTemplateDraft.name, 'VK Template copy');
+    },
+  );
+
+  test(
     'controller fails closed when secure local state restore is unavailable',
     () async {
       final bridge = _FakeMobileHostBridge();
@@ -1439,7 +1583,7 @@ void main() {
             ],
             providerConfigs: const <ProviderConfigRecord>[],
             selectedProfileId: 'profile-1',
-            focusedProfileId: 'profile-1',
+            initialFocusedProfileId: 'profile-1',
             draft: ProfileDraft.fromProfile(
               ProfileRecord(
                 id: 'profile-1',

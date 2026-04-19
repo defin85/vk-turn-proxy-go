@@ -61,7 +61,7 @@ const ProviderDescriptor _unsupportedProviderSettingsDescriptor =
 
 void main() {
   testWidgets(
-    'mobile profile editor keeps saved-profile actions compact until overflow opens',
+    'mobile profile editor footer stays commit-only for saved profiles',
     (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1400, 1000);
       tester.view.devicePixelRatio = 1.0;
@@ -112,25 +112,10 @@ void main() {
         find.byKey(const ValueKey<String>('profile-editor-save-action')),
         findsOneWidget,
       );
-      expect(
-        find.byKey(const ValueKey<String>('profile-editor-more-actions')),
-        findsOneWidget,
-      );
+      expect(find.text('Portable transfer'), findsNothing);
       expect(find.text('Delete profile'), findsNothing);
-
-      await tester.tap(
-        find.byKey(const ValueKey<String>('profile-editor-more-actions')),
-      );
-      await tester.pumpAndSettle();
-
-      expect(
-        find.byKey(const ValueKey<String>('profile-editor-resolve-action')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const ValueKey<String>('profile-editor-delete-action')),
-        findsOneWidget,
-      );
+      expect(find.text('Import from file'), findsNothing);
+      expect(find.text('Export saved profile'), findsNothing);
     },
   );
 

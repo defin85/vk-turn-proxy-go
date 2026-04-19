@@ -190,40 +190,6 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     super.dispose();
   }
 
-  Future<void> _showPortableExportDialog() async {
-    final envelope = widget.onPreparePortableExport();
-    if (envelope == null || !mounted) {
-      return;
-    }
-    await showPortableProfileExportDialog(
-      context: context,
-      envelope: envelope,
-      onCopyText: widget.onCopyPortableExportText,
-      onShareText: widget.onSharePortableExportText,
-      onShareFile: widget.onSharePortableExportFile,
-    );
-  }
-
-  Future<void> _importPortableFromFile() async {
-    final envelope = await widget.onImportPortableFromFile();
-    if (envelope == null || !mounted) {
-      return;
-    }
-    await _showPortableImportPreview(envelope);
-  }
-
-  Future<void> _scanPortableQr() async {
-    final payload = await showPortableProfileQrScanner(context);
-    if (payload == null || payload.trim().isEmpty || !mounted) {
-      return;
-    }
-    final envelope = widget.onPreviewPortableImport(payload);
-    if (envelope == null || !mounted) {
-      return;
-    }
-    await _showPortableImportPreview(envelope);
-  }
-
   Future<void> _showPortableImportPreview(
     PortableProfileEnvelope envelope,
   ) async {
@@ -232,16 +198,6 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
       envelope: envelope,
       onConfirm: widget.onConfirmPortableImport,
     );
-  }
-
-  Future<void> _showPortablePasteDialog() async {
-    final previewEnvelope = await showPortableProfilePasteDialog(
-      context: context,
-      onPreviewImport: widget.onPreviewPortableImport,
-    );
-    if (previewEnvelope != null && mounted) {
-      await _showPortableImportPreview(previewEnvelope);
-    }
   }
 
   @override
@@ -337,58 +293,6 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
               children: _advancedRuntimeSection(context),
             ),
             const SizedBox(height: 12),
-            _disclosureSection(
-              title: copy.mobilePortableTransfer,
-              subtitle: copy.mobilePortableTransferSubtitle,
-              sectionKey: const ValueKey<String>(
-                'profile-editor-portable-transfer-section',
-              ),
-              initiallyExpanded: false,
-              children: <Widget>[
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: <Widget>[
-                    FilledButton.tonal(
-                      key: const ValueKey<String>(
-                        'profile-editor-portable-export-action',
-                      ),
-                      onPressed: widget.busy || !hasSavedProfile
-                          ? null
-                          : () => unawaited(_showPortableExportDialog()),
-                      child: Text(copy.exportSavedProfile),
-                    ),
-                    OutlinedButton(
-                      key: const ValueKey<String>(
-                        'profile-editor-portable-import-file-action',
-                      ),
-                      onPressed: widget.busy
-                          ? null
-                          : () => unawaited(_importPortableFromFile()),
-                      child: Text(copy.importFromFile),
-                    ),
-                    OutlinedButton(
-                      key: const ValueKey<String>(
-                        'profile-editor-portable-import-qr-action',
-                      ),
-                      onPressed: widget.busy
-                          ? null
-                          : () => unawaited(_scanPortableQr()),
-                      child: Text(copy.scanPortableProfileQr),
-                    ),
-                    OutlinedButton(
-                      key: const ValueKey<String>(
-                        'profile-editor-portable-import-paste-action',
-                      ),
-                      onPressed: widget.busy
-                          ? null
-                          : () => unawaited(_showPortablePasteDialog()),
-                      child: Text(copy.pasteEnvelope),
-                    ),
-                  ],
-                ),
-              ],
-            ),
             const SizedBox(height: 16),
             _footerActionBar(
               primaryLabel: primaryLabel,

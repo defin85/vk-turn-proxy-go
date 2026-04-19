@@ -933,7 +933,11 @@ class MobileShellController extends ChangeNotifier {
         source,
         providerBinding:
             profileBindings[source.id] ?? const ProfileProviderBinding(),
-      ).copyWith(id: null, name: _duplicatedLabel(sourceLabel)),
+      ).copyWith(
+        id: null,
+        replaceId: true,
+        name: _duplicatedLabel(sourceLabel),
+      ),
     );
     _clearSelectedResolutionSelection();
     showTransientNotice(_copy.seededProfileCopyDraft(sourceLabel));
@@ -997,9 +1001,12 @@ class MobileShellController extends ChangeNotifier {
     managedProviderDraft = _normalizeManagedProviderDraft(
       ManagedProviderDraft.fromRecord(source).copyWith(
         id: null,
+        replaceId: true,
         name: _duplicatedLabel(sourceLabel),
         createdAt: null,
+        replaceCreatedAt: true,
         updatedAt: null,
+        replaceUpdatedAt: true,
       ),
     );
     showTransientNotice(_copy.seededManagedProviderCopyDraft(sourceLabel));
@@ -1019,9 +1026,12 @@ class MobileShellController extends ChangeNotifier {
     providerTemplateDraft = _normalizeProviderTemplateDraft(
       ProviderTemplateDraft.fromRecord(source).copyWith(
         id: null,
+        replaceId: true,
         name: _duplicatedLabel(sourceLabel),
         createdAt: null,
+        replaceCreatedAt: true,
         updatedAt: null,
+        replaceUpdatedAt: true,
       ),
     );
     showTransientNotice(_copy.seededTemplateCopyDraft(sourceLabel));

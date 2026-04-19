@@ -53,12 +53,13 @@ class ProfileDraft {
 
   ProfileDraft copyWith({
     String? id,
+    bool replaceId = false,
     String? name,
     ProfileSpec? spec,
     ProfileProviderBinding? providerBinding,
   }) {
     return ProfileDraft(
-      id: id ?? this.id,
+      id: replaceId ? id : (id ?? this.id),
       name: name ?? this.name,
       spec: spec ?? this.spec,
       providerBinding: providerBinding ?? this.providerBinding,
@@ -144,20 +145,23 @@ class ProviderConfigDraft {
 
   ProviderConfigDraft copyWith({
     String? id,
+    bool replaceId = false,
     String? provider,
     String? name,
     Map<String, dynamic>? providerSettings,
     DateTime? createdAt,
+    bool replaceCreatedAt = false,
     DateTime? updatedAt,
+    bool replaceUpdatedAt = false,
     ProviderConfigAvailability? availability,
   }) {
     return ProviderConfigDraft(
-      id: id ?? this.id,
+      id: replaceId ? id : (id ?? this.id),
       provider: provider ?? this.provider,
       name: name ?? this.name,
       providerSettings: providerSettings ?? this.providerSettings,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
+      createdAt: replaceCreatedAt ? createdAt : (createdAt ?? this.createdAt),
+      updatedAt: replaceUpdatedAt ? updatedAt : (updatedAt ?? this.updatedAt),
       availability: availability ?? this.availability,
     );
   }
@@ -274,20 +278,23 @@ class ManagedProviderDraft {
 
   ManagedProviderDraft copyWith({
     String? id,
+    bool replaceId = false,
     String? provider,
     String? name,
     Map<String, dynamic>? providerSettings,
     DateTime? createdAt,
+    bool replaceCreatedAt = false,
     DateTime? updatedAt,
+    bool replaceUpdatedAt = false,
     ProviderConfigAvailability? availability,
   }) {
     return ManagedProviderDraft(
-      id: id ?? this.id,
+      id: replaceId ? id : (id ?? this.id),
       provider: provider ?? this.provider,
       name: name ?? this.name,
       providerSettings: providerSettings ?? this.providerSettings,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
+      createdAt: replaceCreatedAt ? createdAt : (createdAt ?? this.createdAt),
+      updatedAt: replaceUpdatedAt ? updatedAt : (updatedAt ?? this.updatedAt),
       availability: availability ?? this.availability,
     );
   }
@@ -402,20 +409,23 @@ class ProviderTemplateDraft {
 
   ProviderTemplateDraft copyWith({
     String? id,
+    bool replaceId = false,
     String? provider,
     String? name,
     Map<String, dynamic>? providerSettings,
     DateTime? createdAt,
+    bool replaceCreatedAt = false,
     DateTime? updatedAt,
+    bool replaceUpdatedAt = false,
     ProviderConfigAvailability? availability,
   }) {
     return ProviderTemplateDraft(
-      id: id ?? this.id,
+      id: replaceId ? id : (id ?? this.id),
       provider: provider ?? this.provider,
       name: name ?? this.name,
       providerSettings: providerSettings ?? this.providerSettings,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
+      createdAt: replaceCreatedAt ? createdAt : (createdAt ?? this.createdAt),
+      updatedAt: replaceUpdatedAt ? updatedAt : (updatedAt ?? this.updatedAt),
       availability: availability ?? this.availability,
     );
   }
