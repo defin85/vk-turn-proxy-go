@@ -1,9 +1,53 @@
+import org.gradle.api.tasks.Exec
+import java.util.Locale
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+val repoRootDir = file("../../../../")
+val androidEmbeddedHostDistDir = repoRootDir.resolve(
+    "dist/mobile/android-embedded-host",
+)
+val androidEmbeddedHostBuildScript = repoRootDir.resolve(
+    "scripts/build-android-embedded-host-linux.sh",
+)
+val shouldAutoBuildAndroidEmbeddedHost =
+    System.getProperty("os.name")
+        .lowercase(Locale.ROOT)
+        .contains("linux") &&
+        (System.getenv("VKTP_SKIP_ANDROID_EMBEDDED_HOST_BUILD")
+            ?.lowercase(Locale.ROOT) !in setOf("1", "true", "yes"))
+
+val buildAndroidEmbeddedHost =
+    if (shouldAutoBuildAndroidEmbeddedHost) {
+        tasks.register<Exec>("buildAndroidEmbeddedHost") {
+            group = "build"
+            description =
+                "Stages the packaged Android embedded host before Android builds."
+            workingDir = repoRootDir
+            commandLine("bash", androidEmbeddedHostBuildScript.absolutePath)
+            inputs.file(androidEmbeddedHostBuildScript)
+            inputs.file(repoRootDir.resolve("go.mod"))
+            inputs.file(repoRootDir.resolve("go.sum"))
+            inputs.file(repoRootDir.resolve("version.json"))
+            inputs.files(
+                fileTree(repoRootDir) {
+                    include("cmd/android-mobile-host/**")
+                    include("internal/**")
+                    include("pkg/**")
+                    exclude("dist/**")
+                    exclude("build/**")
+                },
+            )
+            outputs.dir(androidEmbeddedHostDistDir)
+        }
+    } else {
+        null
+    }
 
 android {
     namespace = "com.defin85.mobile_gui_shell"
@@ -62,4 +106,10 @@ flutter {
 
 dependencies {
     implementation("androidx.webkit:webkit:1.15.0")
+}
+
+buildAndroidEmbeddedHost?.let { task ->
+    tasks.named("preBuild") {
+        dependsOn(task)
+    }
 }

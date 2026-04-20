@@ -124,6 +124,7 @@ type Host struct {
 	resolutions     map[string]*managedResolution
 	sessions        map[string]*managedSession
 	challenges      map[string]*managedChallenge
+	startupRequests map[string]PlatformTunnelStartRequest
 	subscribers     map[uint64]chan Event
 	nextSubID       uint64
 }
@@ -137,6 +138,7 @@ type managedSession struct {
 	events        []Event
 	challenges    []Challenge
 	stopRequested bool
+	platformMode  PlatformTunnelMode
 }
 
 type managedChallenge struct {
@@ -247,6 +249,7 @@ func New(opts ...Option) *Host {
 		resolutions:               make(map[string]*managedResolution),
 		sessions:                  make(map[string]*managedSession),
 		challenges:                make(map[string]*managedChallenge),
+		startupRequests:           make(map[string]PlatformTunnelStartRequest),
 		subscribers:               make(map[uint64]chan Event),
 	}
 }
@@ -416,6 +419,10 @@ func (h *Host) StartPlatformTunnel(ctx context.Context, req PlatformTunnelStartR
 		}
 		return PlatformTunnelStartResult{}, err
 	}
+	result, err = h.finalizePlatformTunnelStart(ctx, normalizedReq, result)
+	if err != nil {
+		return PlatformTunnelStartResult{}, err
+	}
 	if validateErr := validatePlatformTunnelStartResult(normalizedReq, result); validateErr != nil {
 		return PlatformTunnelStartResult{}, fmt.Errorf("invalid platform tunnel startup result: %w", validateErr)
 	}
@@ -427,6 +434,7 @@ func (h *Host) ResumePlatformTunnel(ctx context.Context, req PlatformTunnelResum
 	if err != nil {
 		return PlatformTunnelStartResult{}, err
 	}
+	startReq, ok := h.takePlatformTunnelStartupRequest(normalizedReq.StartupAttemptID)
 	if h.resumeTunnel == nil {
 		return PlatformTunnelStartResult{}, fmt.Errorf("platform tunnel resumer is not configured")
 	}
@@ -437,6 +445,10 @@ func (h *Host) ResumePlatformTunnel(ctx context.Context, req PlatformTunnelResum
 				return PlatformTunnelStartResult{}, fmt.Errorf("invalid platform tunnel startup result: %w", validateErr)
 			}
 		}
+		return PlatformTunnelStartResult{}, err
+	}
+	result, err = h.finalizeResumedPlatformTunnel(ctx, normalizedReq, startReq, ok, result)
+	if err != nil {
 		return PlatformTunnelStartResult{}, err
 	}
 	if validateErr := validatePlatformTunnelStartResult(PlatformTunnelStartRequest{Mode: result.Mode}, result); validateErr != nil {
@@ -473,6 +485,8 @@ func (h *Host) StopPlatformTunnel(ctx context.Context, req PlatformTunnelStopReq
 			result.Mode,
 		)
 	}
+	h.clearPlatformTunnelStartupRequestsForMode(result.Mode)
+	h.publishPlatformTunnelStop(result.Mode, "stopped")
 	return result, nil
 }
 
@@ -573,12 +587,279 @@ func (h *Host) startSessionFromSpec(ctx context.Context, profileID string, profi
 	return snapshot, nil
 }
 
+func (h *Host) finalizePlatformTunnelStart(
+	ctx context.Context,
+	req PlatformTunnelStartRequest,
+	result PlatformTunnelStartResult,
+) (PlatformTunnelStartResult, error) {
+	if strings.TrimSpace(result.StartupAttemptID) != "" {
+		h.rememberPlatformTunnelStartupRequest(result.StartupAttemptID, req)
+	}
+	if !result.Ready {
+		return result, nil
+	}
+	return h.publishReadyPlatformTunnelResult(ctx, req, result)
+}
+
+func (h *Host) finalizeResumedPlatformTunnel(
+	ctx context.Context,
+	req PlatformTunnelResumeRequest,
+	startReq PlatformTunnelStartRequest,
+	haveStartReq bool,
+	result PlatformTunnelStartResult,
+) (PlatformTunnelStartResult, error) {
+	if !result.Ready {
+		return result, nil
+	}
+	if !haveStartReq {
+		return h.platformTunnelPublicationFailure(
+			ctx,
+			PlatformTunnelStartRequest{Mode: result.Mode},
+			result,
+			fmt.Errorf("platform tunnel resume %s lost startup request context before session publication", req.StartupAttemptID),
+		), nil
+	}
+	return h.publishReadyPlatformTunnelResult(ctx, startReq, result)
+}
+
+func (h *Host) publishReadyPlatformTunnelResult(
+	ctx context.Context,
+	req PlatformTunnelStartRequest,
+	result PlatformTunnelStartResult,
+) (PlatformTunnelStartResult, error) {
+	session, err := h.publishPlatformTunnelSession(req)
+	if err != nil {
+		return h.platformTunnelPublicationFailure(ctx, req, result, err), nil
+	}
+	result.SessionID = session.ID
+	return result, nil
+}
+
+func (h *Host) platformTunnelPublicationFailure(
+	ctx context.Context,
+	req PlatformTunnelStartRequest,
+	result PlatformTunnelStartResult,
+	cause error,
+) PlatformTunnelStartResult {
+	message := strings.TrimSpace(cause.Error())
+	if cleanupErr := h.cleanupPlatformTunnelRuntime(ctx, req.Mode); cleanupErr != nil {
+		if message == "" {
+			message = cleanupErr.Error()
+		} else {
+			message = fmt.Sprintf("%s cleanup after session publication failure also failed: %v", message, cleanupErr)
+		}
+	}
+	if message == "" {
+		message = "platform tunnel startup could not publish an ordinary session"
+	}
+	return PlatformTunnelStartResult{
+		Mode:                result.Mode,
+		ExecutionPlan:       cloneRuntimeExecutionPlan(result.ExecutionPlan),
+		Ready:               false,
+		Stage:               PlatformTunnelStartupStageRuntimeAttach,
+		MissingPrerequisite: PlatformTunnelPrerequisiteHostImplementation,
+		UnderlayRoutePolicy: req.UnderlayRoutePolicy,
+		Message:             message,
+	}
+}
+
+func (h *Host) cleanupPlatformTunnelRuntime(ctx context.Context, mode PlatformTunnelMode) error {
+	if h.stopTunnel == nil || strings.TrimSpace(string(mode)) == "" {
+		return nil
+	}
+	_, err := h.stopTunnel(ctx, PlatformTunnelStopRequest{Mode: mode})
+	if err == nil {
+		h.clearPlatformTunnelStartupRequestsForMode(mode)
+		h.publishPlatformTunnelStop(mode, "stopped")
+	}
+	return err
+}
+
+func (h *Host) publishPlatformTunnelSession(req PlatformTunnelStartRequest) (Session, error) {
+	if strings.TrimSpace(req.ResolutionID) == "" {
+		return Session{}, fmt.Errorf("platform tunnel session publication requires resolution_id")
+	}
+	if req.RuntimeDefaults == nil {
+		return Session{}, fmt.Errorf("platform tunnel session publication requires runtime_defaults")
+	}
+	spec, err := h.materializedProfileSpecForResolution(req.ResolutionID, *req.RuntimeDefaults)
+	if err != nil {
+		return Session{}, err
+	}
+	return h.startPlatformTunnelSession(req.Mode, spec, req.ResolutionID)
+}
+
+func (h *Host) materializedProfileSpecForResolution(
+	resolutionID string,
+	defaults RuntimeDefaults,
+) (ProfileSpec, error) {
+	h.mu.Lock()
+	managed, ok := h.resolutions[resolutionID]
+	if !ok {
+		h.mu.Unlock()
+		return ProfileSpec{}, ErrResolutionNotFound
+	}
+	event := h.expireResolutionLocked(managed)
+	snapshot := managed.snapshot
+	secret := managed.secret
+	h.mu.Unlock()
+
+	if event != nil {
+		h.publishEvent(*event)
+	}
+	if snapshot.State == ResolutionStateExpired {
+		return ProfileSpec{}, errResolutionExpired
+	}
+	if snapshot.State != ResolutionStateResolved {
+		return ProfileSpec{}, errResolutionNotTransportReady
+	}
+	if !resolutionSupportsAction(snapshot, ArtifactActionStartOnThisDevice) {
+		return ProfileSpec{}, &ResolutionActionError{
+			Action: ArtifactActionStartOnThisDevice,
+			Err:    errResolutionNotTransportReady,
+		}
+	}
+	return buildMaterializedProfileSpec(secret.Credentials, defaults)
+}
+
+func (h *Host) startPlatformTunnelSession(
+	mode PlatformTunnelMode,
+	spec ProfileSpec,
+	sourceResolutionID string,
+) (Session, error) {
+	startedAt := h.now().UTC()
+	sessionID, err := h.allocateSessionID()
+	if err != nil {
+		return Session{}, err
+	}
+	startingSnapshot := Session{
+		ID:                 sessionID,
+		SourceResolutionID: sourceResolutionID,
+		Profile:            h.redactProfileSpecForOrdinaryRead(spec),
+		State:              SessionStateStarting,
+		StartedAt:          startedAt,
+		UpdatedAt:          startedAt,
+	}
+	if sourceResolutionID != "" {
+		startingSnapshot.Profile.Link = observeSanitizedLink(spec.Link)
+	}
+	readySnapshot := startingSnapshot
+	readySnapshot.State = SessionStateReady
+	managed := &managedSession{
+		snapshot:     readySnapshot,
+		metrics:      observe.NewMetrics(),
+		done:         make(chan struct{}),
+		profile:      spec,
+		platformMode: mode,
+	}
+	startEvent := snapshotEvent(startingSnapshot, EventSessionStarting, "", "")
+	readyEvent := snapshotEvent(readySnapshot, EventSessionReady, string(PlatformTunnelStartupStageRuntimeAttach), "")
+	replacementEvents := make([]Event, 0)
+
+	h.mu.Lock()
+	replacementEvents = h.markPlatformTunnelSessionsStoppedLocked(mode, startedAt, "replaced")
+	managed.events = appendWithLimit(managed.events, startEvent, h.historyLimit)
+	managed.events = appendWithLimit(managed.events, readyEvent, h.historyLimit)
+	h.sessions[sessionID] = managed
+	h.mu.Unlock()
+
+	for _, event := range replacementEvents {
+		h.publishEvent(event)
+	}
+	h.publishEvent(startEvent)
+	h.publishEvent(readyEvent)
+
+	return readySnapshot, nil
+}
+
+func (h *Host) publishPlatformTunnelStop(mode PlatformTunnelMode, message string) {
+	h.mu.Lock()
+	events := h.markPlatformTunnelSessionsStoppedLocked(mode, h.now().UTC(), message)
+	h.mu.Unlock()
+	for _, event := range events {
+		h.publishEvent(event)
+	}
+}
+
+func (h *Host) markPlatformTunnelSessionsStoppedLocked(
+	mode PlatformTunnelMode,
+	now time.Time,
+	message string,
+) []Event {
+	events := make([]Event, 0)
+	for _, managed := range h.sessions {
+		if managed.platformMode != mode {
+			continue
+		}
+		switch managed.snapshot.State {
+		case SessionStateStopped, SessionStateFailed:
+			continue
+		}
+		managed.snapshot.State = SessionStateStopped
+		managed.snapshot.ActiveChallengeID = ""
+		managed.snapshot.UpdatedAt = now
+		stoppedAt := now
+		managed.snapshot.StoppedAt = &stoppedAt
+		event := snapshotEvent(managed.snapshot, EventSessionStopped, "", message)
+		managed.events = appendWithLimit(managed.events, event, h.historyLimit)
+		select {
+		case <-managed.done:
+		default:
+			close(managed.done)
+		}
+		events = append(events, event)
+	}
+	return events
+}
+
+func (h *Host) rememberPlatformTunnelStartupRequest(attemptID string, req PlatformTunnelStartRequest) {
+	attemptID = strings.TrimSpace(attemptID)
+	if attemptID == "" {
+		return
+	}
+	h.mu.Lock()
+	h.startupRequests[attemptID] = req
+	h.mu.Unlock()
+}
+
+func (h *Host) takePlatformTunnelStartupRequest(attemptID string) (PlatformTunnelStartRequest, bool) {
+	attemptID = strings.TrimSpace(attemptID)
+	if attemptID == "" {
+		return PlatformTunnelStartRequest{}, false
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	req, ok := h.startupRequests[attemptID]
+	if ok {
+		delete(h.startupRequests, attemptID)
+	}
+	return req, ok
+}
+
+func (h *Host) clearPlatformTunnelStartupRequestsForMode(mode PlatformTunnelMode) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for attemptID, req := range h.startupRequests {
+		if req.Mode == mode {
+			delete(h.startupRequests, attemptID)
+		}
+	}
+}
+
 func (h *Host) StopSession(sessionID string) (Session, error) {
 	h.mu.Lock()
 	managed, ok := h.sessions[sessionID]
 	if !ok {
 		h.mu.Unlock()
 		return Session{}, ErrSessionNotFound
+	}
+	if managed.platformMode != "" {
+		mode := managed.platformMode
+		h.mu.Unlock()
+		if _, err := h.StopPlatformTunnel(context.Background(), PlatformTunnelStopRequest{Mode: mode}); err != nil {
+			return Session{}, err
+		}
+		return h.Session(sessionID)
 	}
 	if managed.snapshot.State == SessionStateStopped || managed.snapshot.State == SessionStateFailed {
 		snapshot := managed.snapshot

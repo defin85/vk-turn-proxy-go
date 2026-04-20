@@ -875,6 +875,7 @@ void main() {
               jsonEncode(<String, dynamic>{
                 'mode': 'android_vpn_service',
                 'ready': true,
+                'session_id': 'session-android-1',
               }),
             );
             await request.response.close();
@@ -927,7 +928,59 @@ void main() {
         startupAttemptId: startResult.startupAttemptId,
       );
       expect(resumeResult.ready, isTrue);
+      expect(resumeResult.sessionId, 'session-android-1');
       expect(resumeResult.startupAttemptId, isEmpty);
+    },
+  );
+
+  test(
+    'control plane client accepts ready platform tunnel results without session_id for mixed-version hosts',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(server.close);
+
+      server.listen((HttpRequest request) async {
+        request.response.headers.contentType = ContentType.json;
+        switch (request.uri.path) {
+          case '/v1/platform-tunnels/start':
+            request.response.write(
+              jsonEncode(<String, dynamic>{
+                'mode': 'android_vpn_service',
+                'ready': true,
+              }),
+            );
+            await request.response.close();
+            return;
+          default:
+            request.response.statusCode = HttpStatus.notFound;
+            request.response.write(
+              jsonEncode(<String, dynamic>{
+                'code': 'not_found',
+                'message': 'missing fixture route',
+              }),
+            );
+            await request.response.close();
+            return;
+        }
+      });
+
+      final client = ControlPlaneClient(
+        baseUri: Uri.parse('http://${server.address.address}:${server.port}'),
+      );
+
+      final startResult = await client.startPlatformTunnel(
+        mode: PlatformTunnelMode.androidVpnService,
+        resolutionId: 'resolution-android-1',
+        runtimeDefaults: const RuntimeDefaults(
+          listenAddress: '127.0.0.1:7777',
+          peerAddress: 'relay.example.test:3478',
+          turnServer: 'turn.example.test',
+          turnPort: '3478',
+        ),
+      );
+      expect(startResult.ready, isTrue);
+      expect(startResult.sessionId, isEmpty);
+      expect(startResult.startupAttemptId, isEmpty);
     },
   );
 }

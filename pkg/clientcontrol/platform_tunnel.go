@@ -246,6 +246,9 @@ func validatePlatformTunnelStartResult(req PlatformTunnelStartRequest, result Pl
 		!isKnownPlatformTunnelUnderlayRoutePolicy(result.UnderlayRoutePolicy) {
 		return fmt.Errorf("startup result for mode %s reports unknown underlay_route_policy %q", result.Mode, result.UnderlayRoutePolicy)
 	}
+	if strings.TrimSpace(result.SessionID) != "" && result.StartupAttemptID != "" {
+		return fmt.Errorf("startup result for mode %s reports session_id together with startup_attempt_id", result.Mode)
+	}
 	if len(result.UnderlayRouteExclusions) > 0 &&
 		result.UnderlayRoutePolicy != PlatformTunnelUnderlayRoutePolicyPreserveActiveLocalNetwork {
 		return fmt.Errorf("startup result for mode %s reports underlay_route_exclusions without preserve_active_local_network", result.Mode)
@@ -270,7 +273,13 @@ func validatePlatformTunnelStartResult(req PlatformTunnelStartRequest, result Pl
 		if strings.TrimSpace(string(result.MissingPrerequisite)) != "" {
 			return fmt.Errorf("startup result for mode %s is ready but still reports missing_prerequisite %q", result.Mode, result.MissingPrerequisite)
 		}
+		if strings.TrimSpace(result.SessionID) == "" {
+			return fmt.Errorf("startup result for mode %s is ready but session_id is empty", result.Mode)
+		}
 		return nil
+	}
+	if strings.TrimSpace(result.SessionID) != "" {
+		return fmt.Errorf("startup result for mode %s is not ready but still reports session_id %q", result.Mode, result.SessionID)
 	}
 	if !isKnownPlatformTunnelStartupStage(result.Stage) {
 		return fmt.Errorf("startup result for mode %s is not ready but missing stage", result.Mode)

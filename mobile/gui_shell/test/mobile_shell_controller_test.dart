@@ -2589,6 +2589,133 @@ void main() {
     },
   );
 
+  test(
+    'controller focuses the returned session_id after a ready platform tunnel startup',
+    () async {
+      final profile = ProfileRecord(
+        id: 'profile-1',
+        name: 'vk live',
+        spec: _profileSpec(),
+      );
+      final bridge = _FakeMobileHostBridge(
+        resolutionsList: <ResolutionRecord>[
+          _resolutionRecord(id: 'resolution-android-1'),
+        ],
+        sessionsList: <SessionRecord>[
+          SessionRecord(
+            id: 'session-other',
+            profileId: 'profile-1',
+            profileName: 'vk live',
+            profile: _profileSpec(),
+            state: SessionState.ready,
+            startedAt: DateTime.utc(2026, 4, 7, 14, 5),
+            updatedAt: DateTime.utc(2026, 4, 7, 14, 6),
+          ),
+          SessionRecord(
+            id: 'session-android-1',
+            profileId: 'profile-1',
+            profileName: 'vk live',
+            profile: _profileSpec(),
+            state: SessionState.ready,
+            startedAt: DateTime.utc(2026, 4, 7, 14, 0),
+            updatedAt: DateTime.utc(2026, 4, 7, 14, 1),
+            sourceResolutionId: 'resolution-android-1',
+          ),
+        ],
+        startPlatformTunnelResult: const PlatformTunnelStartResult(
+          mode: PlatformTunnelMode.androidVpnService,
+          ready: true,
+          sessionId: 'session-android-1',
+        ),
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[profile],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: profile.id,
+            draft: ProfileDraft.fromProfile(profile),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      expect(controller.selectedSessionId, 'session-other');
+
+      await controller.startPlatformTunnel(
+        PlatformTunnelMode.androidVpnService,
+      );
+
+      expect(controller.selectedSessionId, 'session-android-1');
+    },
+  );
+
+  test(
+    'controller falls back to source_resolution_id when a ready platform tunnel omits session_id',
+    () async {
+      final profile = ProfileRecord(
+        id: 'profile-1',
+        name: 'vk live',
+        spec: _profileSpec(),
+      );
+      final bridge = _FakeMobileHostBridge(
+        resolutionsList: <ResolutionRecord>[
+          _resolutionRecord(id: 'resolution-android-1'),
+        ],
+        sessionsList: <SessionRecord>[
+          SessionRecord(
+            id: 'session-other',
+            profileId: 'profile-1',
+            profileName: 'vk live',
+            profile: _profileSpec(),
+            state: SessionState.ready,
+            startedAt: DateTime.utc(2026, 4, 7, 14, 5),
+            updatedAt: DateTime.utc(2026, 4, 7, 14, 6),
+          ),
+          SessionRecord(
+            id: 'session-android-1',
+            profileId: 'profile-1',
+            profileName: 'vk live',
+            profile: _profileSpec(),
+            state: SessionState.ready,
+            startedAt: DateTime.utc(2026, 4, 7, 14, 0),
+            updatedAt: DateTime.utc(2026, 4, 7, 14, 1),
+            sourceResolutionId: 'resolution-android-1',
+          ),
+        ],
+        startPlatformTunnelResult: const PlatformTunnelStartResult(
+          mode: PlatformTunnelMode.androidVpnService,
+          ready: true,
+        ),
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[profile],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: profile.id,
+            draft: ProfileDraft.fromProfile(profile),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      expect(controller.selectedSessionId, 'session-other');
+
+      await controller.startPlatformTunnel(
+        PlatformTunnelMode.androidVpnService,
+      );
+
+      expect(controller.selectedSessionId, 'session-android-1');
+    },
+  );
+
   test('controller clears ready platform tunnel state after stop', () async {
     final profile = ProfileRecord(
       id: 'profile-1',

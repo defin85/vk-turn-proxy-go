@@ -1385,6 +1385,7 @@ class PlatformTunnelStartResult {
     required this.mode,
     required this.ready,
     this.executionPlan,
+    this.sessionId = '',
     this.stage,
     this.missingPrerequisite,
     this.startupAttemptId = '',
@@ -1413,9 +1414,15 @@ class PlatformTunnelStartResult {
         'platform tunnel startup result missing failing prerequisite',
       );
     }
+    final sessionId = (json['session_id'] as String? ?? '').trim();
     if (ready && missingPrerequisite != null) {
       throw const FormatException(
         'ready platform tunnel startup result unexpectedly reports missing_prerequisite',
+      );
+    }
+    if (!ready && sessionId.isNotEmpty) {
+      throw const FormatException(
+        'non-ready platform tunnel startup result unexpectedly reports session_id',
       );
     }
     final startupAttemptId = (json['startup_attempt_id'] as String? ?? '')
@@ -1440,6 +1447,7 @@ class PlatformTunnelStartResult {
               json['execution_plan'] as Map<String, dynamic>,
             )
           : null,
+      sessionId: sessionId,
       stage: stage,
       missingPrerequisite: missingPrerequisite,
       startupAttemptId: startupAttemptId,
@@ -1454,6 +1462,7 @@ class PlatformTunnelStartResult {
   final PlatformTunnelMode mode;
   final bool ready;
   final RuntimeExecutionPlan? executionPlan;
+  final String sessionId;
   final PlatformTunnelStartupStage? stage;
   final PlatformTunnelPrerequisite? missingPrerequisite;
   final String startupAttemptId;
@@ -1465,6 +1474,7 @@ class PlatformTunnelStartResult {
       'mode': mode.value,
       'ready': ready,
       'execution_plan': executionPlan?.toJson(),
+      'session_id': sessionId.isEmpty ? null : sessionId,
       'stage': stage?.value,
       'missing_prerequisite': missingPrerequisite?.value,
       'startup_attempt_id': startupAttemptId.isEmpty ? null : startupAttemptId,

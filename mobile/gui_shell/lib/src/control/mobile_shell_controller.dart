@@ -1936,6 +1936,16 @@ class MobileShellController extends ChangeNotifier {
         );
       }
       _platformTunnelResults[mode] = result;
+      if (result.ready) {
+        await refresh();
+        final sessionId = _resolvePlatformTunnelReadySessionId(
+          sessionId: result.sessionId,
+          resolutionId: resolutionId,
+        );
+        if (sessionId != null) {
+          selectedSessionId = sessionId;
+        }
+      }
       notice = _platformTunnelNotice(result);
     });
   }
@@ -2454,6 +2464,36 @@ class MobileShellController extends ChangeNotifier {
       }
     }
     return null;
+  }
+
+  String? _resolvePlatformTunnelReadySessionId({
+    required String sessionId,
+    required String resolutionId,
+  }) {
+    final explicitSessionId = sessionId.trim();
+    if (explicitSessionId.isNotEmpty &&
+        sessions.any(
+          (SessionRecord session) => session.id == explicitSessionId,
+        )) {
+      return explicitSessionId;
+    }
+
+    final normalizedResolutionId = resolutionId.trim();
+    if (normalizedResolutionId.isEmpty) {
+      return null;
+    }
+
+    SessionRecord? fallbackMatch;
+    for (final session in sessions) {
+      if ((session.sourceResolutionId ?? '').trim() != normalizedResolutionId) {
+        continue;
+      }
+      fallbackMatch ??= session;
+      if (!_isTerminalSession(session)) {
+        return session.id;
+      }
+    }
+    return fallbackMatch?.id;
   }
 
   bool _isTerminalSession(SessionRecord session) {

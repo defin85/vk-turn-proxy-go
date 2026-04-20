@@ -431,6 +431,7 @@ type PlatformTunnelStartResult struct {
 	Mode                    PlatformTunnelMode                `json:"mode"`
 	ExecutionPlan           *RuntimeExecutionPlan             `json:"execution_plan,omitempty"`
 	Ready                   bool                              `json:"ready"`
+	SessionID               string                            `json:"session_id,omitempty"`
 	Stage                   PlatformTunnelStartupStage        `json:"stage,omitempty"`
 	MissingPrerequisite     PlatformTunnelPrerequisite        `json:"missing_prerequisite,omitempty"`
 	StartupAttemptID        string                            `json:"startup_attempt_id,omitempty"`
