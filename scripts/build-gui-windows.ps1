@@ -352,7 +352,7 @@ try {
     }
 
     $releaseDir = Join-Path $guiRoot "build\windows\x64\runner\Release"
-    $guiExePath = Join-Path $releaseDir "gui_shell.exe"
+    $guiExePath = Join-Path $releaseDir "RelayDock.exe"
     if (-not (Test-Path $guiExePath)) {
         throw "expected GUI executable not found after build: $guiExePath"
     }

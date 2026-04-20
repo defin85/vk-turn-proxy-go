@@ -62,6 +62,7 @@ if [[ -n "$(git -C "${ROOT_DIR}" status --porcelain --untracked-files=no)" ]]; t
 fi
 BUILT_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
+python3 "${ROOT_DIR}/scripts/sync-publish-identity.py" --repo-root "${ROOT_DIR}"
 python3 "${ROOT_DIR}/scripts/sync-version-assets.py" --repo-root "${ROOT_DIR}"
 
 mkdir -p "$(dirname "${ANDROID_GUI_BUILD_METADATA}")"

@@ -33,6 +33,7 @@ DOC_FILES = [
 ]
 
 MANUAL_PATHS = [
+    Path("publish_identity.json"),
     Path("scripts/codex-onboard.sh"),
     Path("scripts/verify-agent-docs.py"),
     Path(".agents/skills/vk-turn-desktop-shell/references/product-rules.md"),
@@ -53,6 +54,7 @@ PATH_PREFIXES = (
     "mobile/",
     "openspec/",
     "packages/",
+    "publish_identity.json",
     "pkg/",
     "scripts/",
     "test/",

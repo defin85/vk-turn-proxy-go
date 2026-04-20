@@ -1,0 +1,19 @@
+{
+  "manifest_version": 1,
+  "android": {
+    "application_id": "com.defin85.relaydock",
+    "namespace": "com.defin85.relaydock",
+    "kotlin_package": "com.defin85.relaydock"
+  },
+  "ios": {
+    "bundle_id": "com.defin85.relaydock",
+    "tests_bundle_id": "com.defin85.relaydock.RunnerTests"
+  },
+  "macos": {
+    "bundle_id": "com.defin85.relaydock",
+    "tests_bundle_id": "com.defin85.relaydock.RunnerTests"
+  },
+  "linux": {
+    "application_id": "com.defin85.relaydock"
+  }
+}

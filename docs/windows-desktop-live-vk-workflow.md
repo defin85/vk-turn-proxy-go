@@ -59,7 +59,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File E:\Projects\vk-turn-proxy-go
 ```
 
 That starts a fresh bundled `clientd.exe`, waits for `/v1/host`, launches
-`gui_shell.exe`, and stops the owned sidecar after the GUI exits.
+`RelayDock.exe`, and stops the owned sidecar after the GUI exits.
 
 ## Step 2: Resolve the live VK invite in the GUI
 

@@ -15,7 +15,7 @@ import 'package:mobile_gui_shell/src/control/mobile_shell_state_store.dart';
 import 'package:mobile_gui_shell/src/control/profile_draft.dart';
 
 const BuildIdentity _testGuiBuild = BuildIdentity(
-  product: 'vk-turn-proxy-go',
+  product: 'RelayDock',
   version: '0.1.0',
   buildNumber: '1',
   revision: 'mobilegui1234',
@@ -24,7 +24,7 @@ const BuildIdentity _testGuiBuild = BuildIdentity(
 );
 
 const BuildIdentity _testHostBuild = BuildIdentity(
-  product: 'vk-turn-proxy-go',
+  product: 'RelayDock',
   version: '0.1.0',
   buildNumber: '1',
   revision: 'embeddedhost123',

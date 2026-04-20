@@ -248,7 +248,7 @@ void main() {
 
   test('build identity keeps shared labels and round-trips through json', () {
     const build = BuildIdentity(
-      product: 'vk-turn-proxy-go',
+      product: 'RelayDock',
       version: '0.1.0',
       buildNumber: '7',
       revision: 'deadbeef',
@@ -262,7 +262,7 @@ void main() {
 
     expect(build.versionLabel, '0.1.0+7');
     expect(build.shortLabel, '0.1.0+7 @deadbeef*');
-    expect(restored.product, 'vk-turn-proxy-go');
+    expect(restored.product, 'RelayDock');
     expect(restored.role, 'clientd');
     expect(restored.target, 'linux/amd64');
     expect(restored.builtAt, '2026-04-12T09:30:00Z');

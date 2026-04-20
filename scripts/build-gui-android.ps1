@@ -67,6 +67,34 @@ function Get-VersionManifest {
     }
 }
 
+function Get-PublishIdentityManifest {
+    param(
+        [string]$RepoRootPath
+    )
+
+    $manifestPath = Join-Path $RepoRootPath "publish_identity.json"
+    if (-not (Test-Path $manifestPath)) {
+        throw "publish identity manifest not found: $manifestPath"
+    }
+
+    $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+    if ([string]::IsNullOrWhiteSpace("$($manifest.android.application_id)")) {
+        throw "publish identity manifest missing android.application_id"
+    }
+    if ([string]::IsNullOrWhiteSpace("$($manifest.android.namespace)")) {
+        throw "publish identity manifest missing android.namespace"
+    }
+    if ([string]::IsNullOrWhiteSpace("$($manifest.android.kotlin_package)")) {
+        throw "publish identity manifest missing android.kotlin_package"
+    }
+
+    return @{
+        ApplicationId = "$($manifest.android.application_id)".Trim()
+        Namespace = "$($manifest.android.namespace)".Trim()
+        KotlinPackage = "$($manifest.android.kotlin_package)".Trim()
+    }
+}
+
 function Get-PubspecVersion {
     param(
         [string]$GuiRoot
@@ -84,6 +112,83 @@ function Get-PubspecVersion {
     }
 
     return $match.Groups[1].Value.Trim()
+}
+
+function Sync-AndroidPublishIdentityAssets {
+    param(
+        [string]$RepoRootPath,
+        [hashtable]$Manifest
+    )
+
+    $gradlePath = Join-Path $RepoRootPath "mobile\gui_shell\android\app\build.gradle.kts"
+    if (-not (Test-Path $gradlePath)) {
+        throw "Android build.gradle.kts not found: $gradlePath"
+    }
+
+    $gradleContent = Get-Content $gradlePath -Raw
+    $updatedGradle = [regex]::Replace(
+        $gradleContent,
+        '(?m)^(\s*namespace\s*=\s*")[^"]+("\s*)$',
+        ('$1' + $Manifest.Namespace + '$2'),
+        1
+    )
+    if ($updatedGradle -eq $gradleContent -and $gradleContent -notmatch [regex]::Escape($Manifest.Namespace)) {
+        throw "Android namespace line not found in $gradlePath"
+    }
+    $updatedGradle = [regex]::Replace(
+        $updatedGradle,
+        '(?m)^(\s*applicationId\s*=\s*")[^"]+("\s*)$',
+        ('$1' + $Manifest.ApplicationId + '$2'),
+        1
+    )
+    if ($updatedGradle -eq $gradleContent -and $gradleContent -notmatch [regex]::Escape($Manifest.ApplicationId)) {
+        throw "Android applicationId line not found in $gradlePath"
+    }
+    Set-Content -Path $gradlePath -Value $updatedGradle -NoNewline
+
+    $kotlinRoot = Join-Path $RepoRootPath "mobile\gui_shell\android\app\src\main\kotlin"
+    if (-not (Test-Path $kotlinRoot)) {
+        throw "Android Kotlin source root not found: $kotlinRoot"
+    }
+
+    $packagePath = $Manifest.KotlinPackage -replace '\.', '\'
+    $targetPackageDir = Join-Path $kotlinRoot $packagePath
+    New-Item -ItemType Directory -Force -Path $targetPackageDir | Out-Null
+
+    $kotlinFiles = Get-ChildItem -Path $kotlinRoot -Filter *.kt -Recurse -File
+    if ($kotlinFiles.Count -eq 0) {
+        throw "No Android Kotlin sources found under $kotlinRoot"
+    }
+
+    foreach ($file in $kotlinFiles) {
+        $content = Get-Content $file.FullName -Raw
+        $updated = [regex]::Replace(
+            $content,
+            '(?m)^package\s+[^\r\n]+$',
+            "package $($Manifest.KotlinPackage)",
+            1
+        )
+        if ($updated -eq $content -and $content -notmatch ("(?m)^package\s+" + [regex]::Escape($Manifest.KotlinPackage) + "$")) {
+            throw "Android Kotlin package declaration not found in $($file.FullName)"
+        }
+
+        $destination = Join-Path $targetPackageDir $file.Name
+        if ($file.FullName -ieq $destination) {
+            Set-Content -Path $file.FullName -Value $updated -NoNewline
+            continue
+        }
+
+        Set-Content -Path $destination -Value $updated -NoNewline
+        Remove-Item $file.FullName -Force
+    }
+
+    Get-ChildItem -Path $kotlinRoot -Directory -Recurse |
+        Sort-Object FullName -Descending |
+        ForEach-Object {
+            if (-not (Get-ChildItem -Path $_.FullName -Force | Select-Object -First 1)) {
+                Remove-Item $_.FullName -Force
+            }
+        }
 }
 
 function Sync-GuiVersionAssets {
@@ -243,6 +348,7 @@ if (-not (Test-Path $guiRoot)) {
     throw "mobile/gui_shell not found under $resolvedRepoRoot"
 }
 
+$publishIdentity = Get-PublishIdentityManifest -RepoRootPath $resolvedRepoRoot
 $manifest = Get-VersionManifest -RepoRootPath $resolvedRepoRoot
 if ([string]::IsNullOrWhiteSpace($ProductName)) {
     $ProductName = $manifest.Product
@@ -290,6 +396,7 @@ if ([string]::IsNullOrWhiteSpace($BuiltAt)) {
     $BuiltAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 }
 
+Sync-AndroidPublishIdentityAssets -RepoRootPath $resolvedRepoRoot -Manifest $publishIdentity
 Sync-GuiVersionAssets -RepoRootPath $resolvedRepoRoot -Manifest $manifest
 
 $expectedGuiVersion = "$ProductVersion+$BuildNumber"

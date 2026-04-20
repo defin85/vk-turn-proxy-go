@@ -2645,7 +2645,7 @@ void main() {
             info: const HostInfo(
               contractVersion: '2',
               build: BuildIdentity(
-                product: 'vk-turn-proxy-go',
+                product: 'RelayDock',
                 version: '0.1.0',
                 buildNumber: '1',
                 revision: 'mobilehost9999',
@@ -4582,7 +4582,7 @@ Finder _profileWorkspaceScrollable() {
 const HostInfo _readyHostInfo = HostInfo(
   contractVersion: '1',
   build: BuildIdentity(
-    product: 'vk-turn-proxy-go',
+    product: 'RelayDock',
     version: '0.1.0',
     buildNumber: '1',
     revision: 'mobilehost1234',
@@ -4621,7 +4621,7 @@ const HostInfo _readyHostInfo = HostInfo(
 const HostInfo _androidReadyHostInfoWithoutDevelopmentRouting = HostInfo(
   contractVersion: '1',
   build: BuildIdentity(
-    product: 'vk-turn-proxy-go',
+    product: 'RelayDock',
     version: '0.1.0',
     buildNumber: '1',
     revision: 'mobilehost1234',
@@ -4659,7 +4659,7 @@ const HostInfo _androidReadyHostInfoWithoutDevelopmentRouting = HostInfo(
 const HostInfo _nonRoutingReadyHostInfo = HostInfo(
   contractVersion: '1',
   build: BuildIdentity(
-    product: 'vk-turn-proxy-go',
+    product: 'RelayDock',
     version: '0.1.0',
     buildNumber: '1',
     revision: 'mobilehost1234',

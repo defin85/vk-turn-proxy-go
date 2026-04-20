@@ -39,7 +39,7 @@ Findings:
 - The app process and `MainActivity` stayed alive and resumed after VPN start.
 - Wireless ADB did **not** stay continuously connected across
   `VpnService.Builder.establish()`. Device `logcat` showed:
-  - `Vpn: Established by com.defin85.mobile_gui_shell on tun0`
+  - `Vpn: Established by com.defin85.relaydock on tun0`
   - immediately followed by `adbd ... Software caused connection abort`
   - `ADB wifi device disconnected`
   - then a new `adbd_wifi_secure_connect: connected host-...`

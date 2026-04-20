@@ -37,6 +37,7 @@ external `WireGuard` app instead of the packaged `VpnService` path, see
 From the repository root:
 
 ```bash
+./scripts/sync-publish-identity.py
 ./scripts/sync-version-assets.py
 dart pub get
 cd mobile/gui_shell
@@ -47,6 +48,7 @@ flutter run -d <android-device>
 
 The pinned Flutter SDK version for this project is stored in `mobile/gui_shell/.flutter-version`.
 The canonical product version source remains `version.json` at the repository root.
+The canonical publish-facing native identifier source is `publish_identity.json` at the repository root.
 The repository-root Dart workspace owns dependency resolution for this shell: keep using the root `pubspec.lock`, and rerun `dart pub get` from the repo root after dependency changes or a fresh checkout.
 The primary Android debug loop now assumes a Linux Android SDK/NDK inside WSL plus a physical device connected through `adb` from WSL, rather than the Windows mirror or an Android emulator.
 
@@ -157,6 +159,10 @@ restart as persisted shell state.
 The mobile store still keeps a fail-closed migration guard for older installs
 that referenced secure-only link state; if that legacy secure payload is
 missing, the operator must use `Reset local state` before reconnecting.
+The current RelayDock package/bundle cutover is still documented as a
+fresh-install or reinstall boundary for ordinary mobile shell state and secure
+storage. Do not present it as an in-place continuity path unless a reviewed
+migration mechanism ships later.
 
 Portable profile transfer is a separate explicit path.
 The app does not persist portable-profile envelopes as ordinary shell state,

@@ -26,7 +26,7 @@ void main() {
               'contract_version': '1',
               'version': '1',
               'build': <String, dynamic>{
-                'product': 'vk-turn-proxy-go',
+                'product': 'RelayDock',
                 'version': '0.1.0',
                 'build_number': '1',
                 'revision': 'deadbeefcafe',
@@ -256,7 +256,7 @@ void main() {
             'contract_version': '1',
             'version': '1',
             'build': <String, dynamic>{
-              'product': 'vk-turn-proxy-go',
+              'product': 'RelayDock',
               'version': '0.1.0',
               'build_number': '1',
             },
@@ -340,7 +340,7 @@ void main() {
             'contract_version': '1',
             'version': '1',
             'build': <String, dynamic>{
-              'product': 'vk-turn-proxy-go',
+              'product': 'RelayDock',
               'version': '0.1.0',
               'build_number': '1',
             },

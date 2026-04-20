@@ -11,7 +11,7 @@ import 'package:mobile_gui_shell/src/control/mobile_shell_state_store.dart';
 import 'test_i18n.dart';
 
 const BuildIdentity _testHostBuild = BuildIdentity(
-  product: 'vk-turn-proxy-go',
+  product: 'RelayDock',
   version: '0.1.0',
   buildNumber: '1',
   revision: 'embeddedhost123',

@@ -17,7 +17,7 @@ import 'package:gui_shell/src/ui/dashboard_page.dart';
 import 'test_i18n.dart';
 
 const BuildIdentity _testGuiBuild = BuildIdentity(
-  product: 'vk-turn-proxy-go',
+  product: 'RelayDock',
   version: '0.1.0',
   buildNumber: '1',
   revision: 'gui123456789',
@@ -26,7 +26,7 @@ const BuildIdentity _testGuiBuild = BuildIdentity(
 );
 
 const BuildIdentity _testHostBuild = BuildIdentity(
-  product: 'vk-turn-proxy-go',
+  product: 'RelayDock',
   version: '0.1.0',
   buildNumber: '1',
   revision: 'deadbeefcafe',

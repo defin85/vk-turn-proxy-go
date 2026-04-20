@@ -432,7 +432,7 @@ void main() {
           jsonEncode(<String, dynamic>{
             'contract_version': '1',
             'build': <String, dynamic>{
-              'product': 'vk-turn-proxy-go',
+              'product': 'RelayDock',
               'version': '0.1.0',
               'build_number': '1',
             },
@@ -523,7 +523,7 @@ void main() {
           jsonEncode(<String, dynamic>{
             'contract_version': '1',
             'build': <String, dynamic>{
-              'product': 'vk-turn-proxy-go',
+              'product': 'RelayDock',
               'version': '0.1.0',
               'build_number': '1',
             },
@@ -707,7 +707,7 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
   static const HostInfo _hostInfo = HostInfo(
     contractVersion: '1',
     build: BuildIdentity(
-      product: 'vk-turn-proxy-go',
+      product: 'RelayDock',
       version: '0.1.0',
       buildNumber: '1',
       revision: 'nativebridge123',

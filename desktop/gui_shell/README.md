@@ -69,10 +69,17 @@ The repository-root Dart workspace owns dependency resolution for this shell: ke
 
 The pinned Flutter SDK version for this project is stored in `desktop/gui_shell/.flutter-version`.
 The canonical product version source for supported builds is `version.json` at the repository root.
+The canonical publish-facing native identifier source is `publish_identity.json` at the repository root.
 Keep the Flutter-facing defaults aligned with that manifest through:
 
 ```bash
 ./scripts/sync-version-assets.py
+```
+
+Keep publish-facing native identifiers aligned through:
+
+```bash
+./scripts/sync-publish-identity.py
 ```
 
 For Windows packaging from the canonical WSL checkout, use the repo-owned wrapper instead of running Flutter directly from `\\wsl.localhost\...`:
@@ -89,7 +96,7 @@ bundle directly from `E:\Projects\vk-turn-proxy-go\dist\windows-gui` and follow
 `docs/windows-desktop-wg-poc.md`.
 That document captures the required host route, the `WireGuard` profile shape,
 the repo-owned `scripts/run-windows-gui-shell.ps1` helper that starts a fresh
-bundled `clientd.exe` before `gui_shell.exe`, waits for the GUI to exit, and
+bundled `clientd.exe` before `RelayDock.exe`, waits for the GUI to exit, and
 then stops the owned sidecar, and the companion
 `scripts/windows-desktop-generic-turn.ps1` helper that seeds and starts the
 desktop `generic-turn` session through the local control plane.

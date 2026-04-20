@@ -1,5 +1,5 @@
 name: gui_shell
-description: "Desktop GUI shell for vk-turn-proxy-go."
+description: "Desktop shell for RelayDock."
 publish_to: 'none'
 version: 0.1.0+1
 environment:
@@ -26,3 +26,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/branding/app_icon_256.png

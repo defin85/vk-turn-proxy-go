@@ -2,6 +2,8 @@
 
 Use repo-owned scripts for reproducible local and CI builds instead of ad-hoc commands.
 The canonical human-facing product version source for supported artifacts is `version.json` at the repository root.
+The canonical publish-facing package, bundle, and application identifier source is `publish_identity.json` at the repository root.
+Run `./scripts/sync-publish-identity.py` when `publish_identity.json` changes so native packaging surfaces and package-oriented automation stay aligned.
 Run `./scripts/sync-version-assets.py` when `version.json` changes so Flutter-facing defaults stay aligned during local development across desktop and mobile Flutter workspaces.
 
 ## Flutter workspace resolution
@@ -113,7 +115,7 @@ That workflow:
 3. runs the native Windows GUI build from that mirrored path
 4. stages the packaged bundle under `dist/windows-gui/`
 
-The Windows GUI package includes a sibling `clientd.exe` next to `gui_shell.exe`.
+The Windows GUI package includes a sibling `clientd.exe` next to `RelayDock.exe`.
 The workflow also validates that `desktop/gui_shell/pubspec.yaml` matches `version.json` before packaging.
 The WSL wrapper also writes `dist/build/windows-gui-build-metadata.json` so the mirrored native Windows build path can keep revision/dirty stamping even when the mirror does not include `.git`.
 
@@ -138,7 +140,7 @@ local transport ingress, follow `docs/windows-desktop-wg-poc.md`.
 That workflow also includes the repo-owned sidecar launch helper
 `scripts/run-windows-gui-shell.ps1` and the packaged-session helper
 `scripts/windows-desktop-generic-turn.ps1`. The sidecar helper keeps ownership
-of the bundled `clientd.exe` and stops it after `gui_shell.exe` exits.
+of the bundled `clientd.exe` and stops it after `RelayDock.exe` exits.
 
 For the packaged Windows desktop workflow that starts from a real VK invite in
 the GUI, moves through typed resolution and browser continuation when needed,
@@ -153,6 +155,8 @@ The iOS side still has no native packaging workflow in this change.
 Prerequisites:
 - Flutter SDK version matches `mobile/gui_shell/.flutter-version`
 - platform SDKs are installed locally when running on a real Android or iOS target
+- `./scripts/sync-publish-identity.py` has been run after any
+  `publish_identity.json` change
 - `./scripts/sync-version-assets.py` has been run after any `version.json` change
 
 Use the local verification path from the mobile workspace:
@@ -198,19 +202,22 @@ make build-gui-android
 ```
 
 That workflow:
-1. synchronizes Flutter version assets from `version.json`
-2. rebuilds the packaged Android embedded host against the Linux Android NDK in
+1. synchronizes publish-facing package and bundle identifiers from
+   `publish_identity.json`
+2. synchronizes Flutter version assets from `version.json`
+3. rebuilds the packaged Android embedded host against the Linux Android NDK in
    WSL
-3. writes Linux-native `android/local.properties` with the active Android SDK
+4. writes Linux-native `android/local.properties` with the active Android SDK
    and Flutter SDK roots
-4. optionally stages the local Android WireGuard dev profile from
+5. optionally stages the local Android WireGuard dev profile from
    `VKTP_ANDROID_WIREGUARD_PROFILE` or
    `~/.local/state/vk-turn-proxy-go/wg/phone1.conf` into the packaged app
    assets for the debug `android_vpn_service` path
-5. builds the debug APK through the pinned Linux Flutter SDK with stamped build
+6. builds the debug APK through the pinned Linux Flutter SDK with stamped build
    identity
-5. stages the final APK under `dist/mobile/android-gui-shell/`
-6. validates that the APK contains the packaged JNI and embedded-host `.so` files
+7. stages the final APK under `dist/mobile/android-gui-shell/`
+8. validates that the APK contains the packaged JNI and embedded-host `.so`
+   files
 
 The staged directory includes:
 - `app-debug.apk`
@@ -224,6 +231,10 @@ The Linux Android SDK/NDK path currently required by the repo-owned scripts is:
 - `build-tools;36.0.0`
 - `cmake;3.22.1`
 - `ndk;28.2.13676358`
+
+Because the canonical Android package is now `com.defin85.relaydock`, treat any
+older `com.defin85.mobile_gui_shell` installation as a legacy package cleanup
+case instead of an in-place upgrade target.
 
 For a repo-owned smoke of the packaged-host shared-library path reaching control-plane `ready` without an external `clientd` or `VKTP_MOBILE_HOST_URL`:
 

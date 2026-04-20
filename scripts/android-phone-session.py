@@ -33,7 +33,7 @@ def default_adb_path() -> str:
 
 
 DEFAULT_ADB = default_adb_path()
-DEFAULT_APP_PACKAGE = "com.defin85.mobile_gui_shell"
+DEFAULT_APP_PACKAGE = "com.defin85.relaydock"
 DEFAULT_WIREGUARD_PACKAGE = "com.wireguard.android"
 DEFAULT_LISTEN_ADDR = "127.0.0.1:39000"
 DEFAULT_PEER_ADDR = "176.109.104.105:56040"

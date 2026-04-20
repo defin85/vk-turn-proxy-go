@@ -97,8 +97,8 @@ The helper:
 - stops any existing `clientd.exe` that already owns `127.0.0.1:7777`
 - starts the bundled `clientd.exe`
 - waits until `/v1/host` is reachable
-- starts `gui_shell.exe`
-- waits for `gui_shell.exe` to exit and then stops the owned `clientd.exe`
+- starts `RelayDock.exe`
+- waits for `RelayDock.exe` to exit and then stops the owned `clientd.exe`
 
 Use the companion session helper to upsert and start the packaged
 `generic-turn` desktop profile without manual form editing:
@@ -169,7 +169,7 @@ stay predictable across retries.
   The imported profile is wrong. Re-import the profile with
   `AllowedIPs = 0.0.0.0/1, 128.0.0.0/1` and keep the persistent host route to
   the current TURN host from the `generic-turn://...` link.
-- `gui_shell.exe` starts but nothing listens on `127.0.0.1:7777`
+- `RelayDock.exe` starts but nothing listens on `127.0.0.1:7777`
   Start the bundle through `scripts/run-windows-gui-shell.ps1` instead of
   launching the GUI by hand.
 - Session helper fails before `ready`

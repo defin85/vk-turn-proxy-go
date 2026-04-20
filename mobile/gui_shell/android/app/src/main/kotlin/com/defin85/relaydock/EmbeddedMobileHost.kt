@@ -1,4 +1,4 @@
-package com.defin85.mobile_gui_shell
+package com.defin85.relaydock
 
 import android.content.Context
 import java.io.File

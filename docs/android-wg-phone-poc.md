@@ -46,7 +46,7 @@ The working profile for the first phone lives outside the repository in:
 That profile must keep this exclusion:
 
 ```ini
-ExcludedApplications = com.defin85.mobile_gui_shell
+ExcludedApplications = com.defin85.relaydock
 ```
 
 Without that exclusion, `WireGuard` captures the transport app itself and the
@@ -58,6 +58,9 @@ shows only `local_to_relay` traffic and no `relay_to_local`.
 If the `WireGuard` profile changes, stop and recreate the phone transport
 session.
 Do not keep using a session that was started before the exclusion was present.
+After the RelayDock Android package cutover, treat the package change as a
+fresh-install boundary: remove any older `com.defin85.mobile_gui_shell`
+build before assuming the exclusion or helper scripts point at the correct app.
 
 ## Live TURN resolution
 
@@ -113,7 +116,7 @@ make android-phone-stop
 The helper script:
 
 - finds the physical phone through `adb`
-- auto-launches `com.defin85.mobile_gui_shell` if needed
+- auto-launches `com.defin85.relaydock` if needed
 - discovers the current embedded-host loopback port inside the app process
 - talks to `/v1/host`, `/v1/sessions`, and `/v1/sessions/<id>/diagnostics`
 - starts or stops the phone transport session without manual UI editing
@@ -146,7 +149,7 @@ adb shell ping -c 3 -W 2 1.1.1.1
 
 - `wireguard_excludes_mobile_app=no`
   The imported `WireGuard` profile is wrong. Re-import the profile with
-  `ExcludedApplications = com.defin85.mobile_gui_shell`, then recreate the
+  `ExcludedApplications = com.defin85.relaydock`, then recreate the
   phone session with `--replace-existing`.
 - `browser_continuation_failed`
   The Android app tried to resolve live VK directly. That path is still

@@ -91,6 +91,7 @@ if ! grep -Fq "[✓] Android toolchain - develop for Android devices" <<<"${DOCT
   exit 1
 fi
 
+python3 "${ROOT_DIR}/scripts/sync-publish-identity.py" --repo-root "${ROOT_DIR}"
 python3 "${ROOT_DIR}/scripts/sync-version-assets.py" --repo-root "${ROOT_DIR}"
 
 ACTUAL_GUI_VERSION="$(

@@ -68,12 +68,12 @@ $resolvedBundleRoot = (Resolve-Path $BundleRoot).Path
 Assert-WindowsNativePath -PathValue $resolvedBundleRoot -Label "BundleRoot"
 
 $clientdPath = Join-Path $resolvedBundleRoot "clientd.exe"
-$guiPath = Join-Path $resolvedBundleRoot "gui_shell.exe"
+$guiPath = Join-Path $resolvedBundleRoot "RelayDock.exe"
 if (-not (Test-Path $clientdPath)) {
     throw "bundled clientd.exe not found: $clientdPath"
 }
 if (-not (Test-Path $guiPath)) {
-    throw "bundled gui_shell.exe not found: $guiPath"
+    throw "bundled RelayDock.exe not found: $guiPath"
 }
 
 $endpoint = Get-ListenEndpoint -Value $ListenAddress
@@ -113,8 +113,8 @@ try {
         -PassThru
 
     Write-Host "clientd pid=$($clientdProcess.Id) ready on $ListenAddress"
-    Write-Host "gui_shell pid=$($guiProcess.Id) started from $guiPath"
-    Write-Host "Waiting for gui_shell to exit before stopping owned clientd.exe"
+    Write-Host "RelayDock pid=$($guiProcess.Id) started from $guiPath"
+    Write-Host "Waiting for RelayDock to exit before stopping owned clientd.exe"
 
     Wait-Process -Id $guiProcess.Id -ErrorAction Stop
 }

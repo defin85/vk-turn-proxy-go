@@ -22,7 +22,7 @@ void main() {
               'contract_version': '0',
               'version': '0',
               'build': <String, dynamic>{
-                'product': 'vk-turn-proxy-go',
+                'product': 'RelayDock',
                 'version': '0.0.9',
                 'build_number': '7',
                 'revision': 'badcafe12345',
@@ -162,7 +162,7 @@ void main() {
                     'contract_version': '0',
                     'version': '0',
                     'build': <String, dynamic>{
-                      'product': 'vk-turn-proxy-go',
+                      'product': 'RelayDock',
                       'version': '0.0.9',
                       'build_number': '7',
                       'revision': 'badcafe12345',
@@ -178,7 +178,7 @@ void main() {
                     'contract_version': '1',
                     'version': '1',
                     'build': <String, dynamic>{
-                      'product': 'vk-turn-proxy-go',
+                      'product': 'RelayDock',
                       'version': '0.1.0',
                       'build_number': '1',
                       'revision': 'deadbeefcafe',
@@ -241,7 +241,7 @@ void main() {
                 'contract_version': '1',
                 'version': '1',
                 'build': <String, dynamic>{
-                  'product': 'vk-turn-proxy-go',
+                  'product': 'RelayDock',
                   'version': '0.1.0',
                   'build_number': '1',
                   'revision': 'deadbeefcafe',
@@ -333,10 +333,10 @@ void main() {
   test('macOS bundled sidecar path resolves inside Contents/Frameworks', () {
     expect(
       macOSBundledSidecarPath(
-        '/Applications/gui_shell.app/Contents/MacOS/gui_shell',
+        '/Applications/RelayDock.app/Contents/MacOS/RelayDock',
         'clientd',
       ),
-      '/Applications/gui_shell.app/Contents/Frameworks/clientd',
+      '/Applications/RelayDock.app/Contents/Frameworks/clientd',
     );
   });
 }
