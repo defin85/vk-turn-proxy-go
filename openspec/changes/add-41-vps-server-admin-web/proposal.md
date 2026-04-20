@@ -26,9 +26,15 @@ falling back to arbitrary shell access.
 ## What Changes
 - Add a first-party authenticated web admin surface for the server-side project
   runtime on the VPS.
+- Treat the first slice as a Render-style service admin with Railway-style
+  action audit, so the product shape stays focused on one managed service view
+  instead of drifting into a generic hosting panel.
 - Scope the first slice to an allow-listed set of repo-owned server services,
   explicit runtime status, build identity, recent logs, metrics summaries, and
   controlled lifecycle actions such as start, stop, restart, or reload.
+- Keep proxy account or client creation, share-link issuance, quota or expiry
+  policy editing, and other 3X-UI-style account-control workflows out of scope
+  for this change; track them as a later dedicated control-plane capability.
 - Keep browser interaction on the supported management path and keep arbitrary
   shell execution, unrestricted process control, and unrelated host inspection
   out of scope.
