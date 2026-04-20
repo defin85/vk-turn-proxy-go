@@ -208,8 +208,17 @@ errors that identify the failing field and rule.
 
 ### Requirement: Client control plane exposes typed challenge completion and browser-return metadata
 
-The system SHALL expose machine-readable challenge completion and browser-return metadata so shells can distinguish manual confirmation, app-return-assisted continuation, and host-observed browser continuation without parsing provider text.
-For app-return-assisted continuation, the challenge record SHALL also declare the supported return-signal kinds for that challenge and whether one automatic continue attempt is allowed.
+The system SHALL expose machine-readable challenge completion, browser-return,
+and owned-browser continuation metadata so shells can distinguish manual
+confirmation, app-return-assisted continuation, and app-owned
+browser-observed continuation without parsing provider text.
+For app-return-assisted continuation, the challenge record SHALL also declare
+the supported return-signal kinds for that challenge and whether one automatic
+continue attempt is allowed.
+For app-owned browser-observed continuation, the challenge record SHALL also
+declare owned-browser cookie-scope metadata, and the continue contract SHALL
+accept same-session embedded cookies and browser-observed request evidence from
+that same owned-browser session.
 
 #### Scenario: Challenge event advertises app-return-assisted continuation
 
@@ -224,3 +233,296 @@ For app-return-assisted continuation, the challenge record SHALL also declare th
 - **WHEN** the runtime surfaces that challenge through the control plane
 - **THEN** the challenge record keeps the same stable challenge identifier model
 - **AND** it explicitly reports manual confirmation semantics instead of implying automatic resume support
+
+#### Scenario: Challenge event advertises owned-browser-observed continuation
+
+- **GIVEN** a session whose approved mobile provider challenge can continue inside one app-owned browser session
+- **WHEN** the runtime surfaces that challenge through the control plane
+- **THEN** the challenge record includes a stable challenge identifier, the `owned_browser_observed` completion mode, and owned-browser metadata with the cookie URL scope for that session
+- **AND** the shell can open the approved app-owned browser path without inferring cookie scope from provider prompt text alone
+
+#### Scenario: Owned-browser continuation accepts same-session observed evidence
+
+- **GIVEN** an approved mobile provider challenge whose committed continuation contour depends on same-session browser-observed evidence
+- **WHEN** the shell continues that challenge with a typed owned-browser payload captured from the same embedded session
+- **THEN** the host accepts embedded cookies and browser-observed request evidence from that session through the control-plane contract
+- **AND** approval does not depend on the challenge also exposing browser-owned replay requests
+
+### Requirement: Client control plane negotiates runtime execution planning explicitly
+
+The system SHALL advertise the runtime-execution-planning surface through an explicit host capability so updated shells can fail closed against hosts that still expose only artifact-family actions without typed execution plans.
+
+#### Scenario: Updated shell negotiates against an older host
+
+- **GIVEN** a shell build that expects typed runtime execution plans for host-owned same-device actions
+- **WHEN** it negotiates with a host that does not implement the runtime-execution-planning surface
+- **THEN** the host does not falsely claim that capability
+- **AND** the shell can reject the host as incompatible before rendering plan-driven execution UX
+
+### Requirement: Client control plane exposes typed runtime execution plans
+
+The system SHALL expose typed runtime execution plans for supported host-owned same-device actions through the local control plane.
+
+#### Scenario: Shell reads execution plans for a resolved artifact
+
+- **GIVEN** a compatible host and a resolved artifact with one or more supported host-owned same-device actions
+- **WHEN** a shell reads that artifact or requests its execution metadata through the control plane
+- **THEN** the host returns the available runtime execution plans with explicit `access_method`, `carrier_family`, `engine_family`, optional `host_adapter`, and support-state metadata
+- **AND** the shell does not need to recover those choices from provider-specific heuristics
+
+#### Scenario: Shell requests an unavailable runtime execution plan
+
+- **GIVEN** a resolved artifact and a host that exposes one or more runtime execution plans
+- **WHEN** the shell requests startup through a plan that is unavailable, unsupported, or no longer valid for the current host build
+- **THEN** the control plane fails explicitly before claiming readiness
+- **AND** it identifies that requested execution plan as unavailable or unsupported
+- **AND** it does not silently substitute another plan
+
+### Requirement: Client control plane keeps strict WireGuard carrier material host-owned
+
+The system SHALL let the host materialize and consume secret-bearing carrier
+state for strict `turn_datagram` `wireguard_native` startup without serializing
+that state through ordinary shell-facing control-plane reads.
+
+#### Scenario: Host starts a strict WireGuard path without exporting the carrier lease
+
+- **GIVEN** a resolved `generic_turn` artifact and a selected same-device
+  execution plan with `carrier_family=turn_datagram` and
+  `engine_family=wireguard_native`
+- **WHEN** a shell requests same-device startup through the control plane
+- **THEN** the host materializes and consumes any required strict WireGuard
+  carrier state internally
+- **AND** the control plane returns only typed session, resolution, or platform
+  tunnel state
+- **AND** the shell does not receive raw private keys, peer keys, or other
+  startable carrier-secret material in ordinary API responses
+
+#### Scenario: Host lacks the strict WireGuard materializer or carrier
+
+- **GIVEN** a host build that can expose the requested platform adapter mode but
+  does not implement the documented strict `turn_datagram` `wireguard_native`
+  materializer or carrier
+- **WHEN** a shell requests same-device startup through the control plane
+- **THEN** the host fails explicitly before `ready=true`
+- **AND** it reports the requested execution plan as unavailable or unsupported
+- **AND** it does not silently fall back to the current overlay runtime
+
+### Requirement: Client control plane remains the canonical Android VPN startup API
+
+The system SHALL keep Android packaged VPN startup under the same versioned
+client-control-plane contract instead of introducing a parallel Flutter-only or
+Android-only startup protocol.
+
+#### Scenario: Packaged Android build starts system tunnel through the control plane
+
+- **GIVEN** a packaged Android build with the documented `android_vpn_service`
+  path
+- **WHEN** the mobile shell requests startup
+- **THEN** it uses the versioned local control-plane contract as the canonical
+  API surface
+- **AND** the host coordinates any native Android adapter work behind that
+  contract instead of exposing a second tunnel startup API to the shell
+- **AND** any package-internal bridge to the Android adapter remains a
+  host-internal implementation detail rather than a second shell-visible
+  protocol
+
+### Requirement: Shared startup semantics remain stage-oriented instead of Android-API-oriented
+
+The system SHALL keep the packaged mobile system-tunnel boundary expressed in
+typed startup stages and prerequisites instead of direct Android API objects or
+method names.
+
+#### Scenario: Shared control-plane contract is reused by a future mobile adapter
+
+- **GIVEN** a future packaged mobile host that implements a different native
+  adapter from Android `VpnService`
+- **WHEN** that host reuses the packaged startup contract
+- **THEN** the client-control-plane surface still uses typed stages,
+  prerequisites, and ready/failure state
+- **AND** it may cross a different native process or extension boundary than
+  Android `VpnService`
+- **AND** it does not require Flutter shells or the embedded Go host to speak
+  Android-specific `VpnService` APIs directly
+
+### Requirement: Client control plane exposes typed underlay-route policy support for platform tunnels
+
+The system SHALL expose supported underlay-route policies through the local
+control-plane contract so shells can request development-safe local-network
+preservation without guessing host-specific behavior.
+
+#### Scenario: Host advertises development underlay-route policy support
+
+- **GIVEN** a compatible host that supports preserving the active local network
+  for `android_vpn_service`
+- **WHEN** a shell inspects the typed platform-tunnel capability metadata
+- **THEN** the host advertises that underlay-route policy explicitly for that
+  mode
+- **AND** the shell does not need to infer support from package-routing fields
+  or Android-version heuristics alone
+
+#### Scenario: Shell starts a platform tunnel with a typed underlay-route policy
+
+- **GIVEN** a shell requests platform tunnel startup through the local control
+  plane
+- **WHEN** it needs the development local-network-preserving profile
+- **THEN** the startup request carries a typed `underlay_route_policy` value
+- **AND** the host validates that value through the same versioned contract
+  instead of treating it as an untyped Android-only hint
+
+#### Scenario: Older or incompatible host lacks typed underlay-route policy support
+
+- **GIVEN** a shell build that expects typed underlay-route policy support
+- **WHEN** it negotiates with an older or incompatible host that does not
+  advertise that capability
+- **THEN** the shell can fail closed or suppress the unsupported workflow
+  explicitly
+- **AND** the control plane does not silently reinterpret the request as the
+  default routing profile
+
+### Requirement: Client control plane exposes locale-aware display metadata
+
+The system SHALL let shells request locale-aware provider and validation
+display metadata without changing stable machine-readable ids, field keys, or
+violation codes.
+
+#### Scenario: Shell requests provider catalog display metadata with locale preference
+
+- **GIVEN** a compatible host and a shell with an active locale preference
+- **WHEN** the shell requests provider catalog or provider-setting display
+  metadata through the local control plane
+- **THEN** the host may return localized provider names, provider
+  descriptions, provider-setting labels, and provider-setting descriptions for
+  the requested locale
+- **AND** the stable provider identifiers and provider-setting keys remain
+  unchanged for program logic
+- **AND** the locale preference is carried with that metadata request or stream
+  subscription instead of mutating a host-global locale flag shared by other
+  shells
+
+#### Scenario: Shell receives localized validation or availability messages
+
+- **GIVEN** a host that validates provider settings or reports provider
+  availability
+- **WHEN** the host emits display-oriented availability or validation messages
+- **THEN** the host may include localized display text that matches the
+  shell-requested locale
+- **AND** the stable machine-readable state and violation fields remain
+  locale-neutral
+- **AND** the shell does not need to recover action meaning from localized text
+- **AND** localized display text does not become a cross-shell shared mutable
+  state that forces one shell's locale onto another shell
+
+#### Scenario: Older or untranslated hosts stay compatible
+
+- **GIVEN** a shell that supports localized control-plane display metadata
+- **WHEN** it connects to a host that returns only base display strings
+- **THEN** the host remains compatible for the existing provider catalog and
+  validation contracts
+- **AND** the shell falls back to the base strings instead of rejecting the
+  host or inventing translations from machine-readable identifiers
+
+### Requirement: Client control plane publishes runtime-backed platform tunnels through ordinary sessions
+
+The system SHALL expose any runtime-backed platform-tunnel startup that reaches
+`ready=true` through the ordinary typed session surface instead of leaving that
+runtime visible only through tunnel-specific state.
+
+#### Scenario: Ready platform-tunnel startup creates a session
+
+- **GIVEN** a local shell starts a supported platform-tunnel mode through the
+  control plane
+- **AND** that startup reaches `ready=true` after runtime attach succeeds
+- **WHEN** the shell reads the resulting typed control-plane state
+- **THEN** the control plane publishes an ordinary typed session record for
+  that runtime
+- **AND** the ready startup result includes the stable `session_id`
+- **AND** the resulting session links back to the source resolution when the
+  startup originated from a resolution-backed flow
+
+#### Scenario: Startup fails before ready runtime attach
+
+- **GIVEN** a local shell starts a supported platform-tunnel mode through the
+  control plane
+- **WHEN** startup fails during permission acquisition, route validation, host
+  bring-up, or runtime attach
+- **THEN** the control plane does not leave behind a misleading active session
+  for that failed startup attempt
+- **AND** the failure remains visible through the typed startup result and
+  ordinary diagnostics or event surfaces
+
+### Requirement: Client control plane accepts Android tunnel startup policy through the canonical contract
+
+The system SHALL carry packaged Android `android_vpn_service` startup inputs
+through the canonical versioned client-control-plane contract instead of
+requiring Flutter shells to infer or apply Android package policy locally.
+
+#### Scenario: Shell starts Android system tunnel with an explicit app-scope policy
+
+- **GIVEN** a packaged Android host that advertises the documented
+  `android_vpn_service` mode
+- **WHEN** the mobile shell starts that mode with one supported
+  `application_routing_policy` and any required selected package set
+- **THEN** the startup request flows through the canonical control-plane
+  contract
+- **AND** the packaged host validates and applies that app-scope policy inside
+  the Android host boundary
+- **AND** the shell does not reinterpret or widen the package policy locally
+
+#### Scenario: Shell requests an invalid Android app-scope policy
+
+- **GIVEN** a packaged Android host starting `android_vpn_service`
+- **WHEN** the shell sends a mixed, incomplete, or otherwise invalid
+  `application_routing_policy` request through the control plane
+- **THEN** the host returns a typed startup failure through that same contract
+- **AND** the shell does not guess a fallback package policy outside the host
+
+### Requirement: Android permission acquisition stays under the canonical control plane
+
+The system SHALL surface Android VPN permission acquisition through the same
+versioned client-control-plane startup contract instead of introducing a second
+shell-visible Android tunnel protocol.
+
+#### Scenario: Android startup requires VPN permission before host bring-up can continue
+
+- **GIVEN** a packaged Android host starting the documented
+  `android_vpn_service` path
+- **WHEN** the host reaches the Android permission prerequisite before it can
+  continue with route validation or runtime attach
+- **THEN** the host reports that prerequisite through the canonical
+  client-control-plane startup semantics
+- **AND** the shell can drive the documented Android permission workflow
+  without switching to a parallel shell-visible tunnel API
+- **AND** any package-internal bridge to the Kotlin `VpnService` adapter
+  remains a host-internal implementation detail
+
+### Requirement: Android platform-tunnel startup is resumable after permission
+
+The system SHALL model packaged Android `android_vpn_service` startup as a
+resumable control-plane workflow when Android VPN permission must be granted by
+the operator before host bring-up can continue.
+
+#### Scenario: Host returns a resumable startup attempt for Android permission
+
+- **GIVEN** a packaged Android host starting the documented
+  `android_vpn_service` path
+- **AND** the requested startup input already includes the selected
+  `application_routing_policy`
+- **WHEN** the host reaches the Android VPN permission prerequisite before it
+  can continue startup
+- **THEN** the host returns a typed startup result that reports the permission
+  prerequisite
+- **AND** it includes a stable startup attempt identifier for later resume
+- **AND** the shell does not need to keep the original startup request open
+  while the operator responds to the Android permission prompt
+
+#### Scenario: Shell resumes Android startup after permission grant
+
+- **GIVEN** a packaged Android host that previously returned a resumable
+  Android startup attempt waiting on VPN permission
+- **WHEN** the operator grants that permission and the shell resumes the
+  documented startup attempt through the canonical control plane
+- **THEN** the host continues that same startup flow with route validation,
+  host bring-up, and runtime attach
+- **AND** it returns the final typed ready or failure result through the same
+  versioned control-plane contract
+

@@ -76,3 +76,254 @@ The system SHALL keep OS-specific tunnel behavior and packet-capture mechanics s
 - **WHEN** the host establishes packet capture and route handling for that mode
 - **THEN** those OS-specific mechanics remain inside the platform host or extension boundary
 - **AND** the shared runtime receives traffic through the documented host boundary instead of embedding platform-specific tunnel APIs
+
+### Requirement: Platform tunnel support claims are execution-plan-specific
+
+The system SHALL scope platform tunnel support claims to the documented runtime execution plans that a packaged host actually supports for that mode.
+Support for one packaged system-tunnel plan SHALL NOT imply support for another engine or carrier family on the same host adapter.
+
+#### Scenario: Supported platform tunnel mode does not imply non-TURN execution
+
+- **GIVEN** a packaged host that supports one documented platform tunnel mode through a TURN-backed `wireguard_native` execution plan
+- **WHEN** the client queries platform tunnel support for that mode
+- **THEN** the host reports support only for that documented execution plan
+- **AND** it does not imply that `webrtc_datachannel`, `proxy_core_adapter`, `trusttunnel_native`, or another carrier or engine family is also supported on that same host adapter
+
+#### Scenario: Packaged host lacks the requested execution plan
+
+- **GIVEN** a platform tunnel mode whose host adapter exists on the current build
+- **AND** the current build does not satisfy the documented execution-plan prerequisites for the requested carrier or engine family
+- **WHEN** startup validation checks that plan
+- **THEN** startup fails before `ready=true`
+- **AND** the failure keeps the unsupported execution plan explicit instead of falling back to a guessed system-tunnel path
+
+### Requirement: Platform tunnel readiness depends on the documented carrier as well as the host adapter
+
+The system SHALL require the documented strict carrier and execution
+materialization prerequisites for a packaged `wireguard_native` platform tunnel
+mode in addition to the OS-specific tunnel primitive.
+
+#### Scenario: Host adapter exists but the strict WireGuard carrier is missing
+
+- **GIVEN** a packaged host can acquire the OS tunnel primitive for one
+  platform mode such as `android_vpn_service` or `windows_wintun`
+- **AND** the host does not implement the documented strict `turn_datagram`
+  `wireguard_native` carrier or its execution-materialization step
+- **WHEN** startup validates the requested execution plan for that mode
+- **THEN** startup fails before `ready=true`
+- **AND** the failure keeps the requested execution plan explicit
+- **AND** the host does not silently reuse the current overlay runtime as if it
+  were the same platform-tunnel path
+
+#### Scenario: Packaged host reaches ready state only after strict carrier attach
+
+- **GIVEN** a packaged host has prepared routes and established the OS tunnel
+  primitive for one strict `wireguard_native` mode
+- **WHEN** the host attaches the documented strict `turn_datagram`
+  `wireguard_native` carrier successfully
+- **THEN** readiness is reported only after that carrier attach succeeds
+- **AND** the host may claim support for that mode only on builds that satisfy
+  both the adapter and carrier prerequisites
+
+### Requirement: Android platform-tunnel startup may cross a packaged host boundary without splitting the contract
+
+The system SHALL allow the documented Android `android_vpn_service` startup
+path to cross a package-internal boundary between the embedded Go host and the
+Kotlin `VpnService` adapter while keeping one typed platform-tunnel contract.
+
+#### Scenario: Android host adapter succeeds but runtime attach still decides readiness
+
+- **GIVEN** a packaged Android host whose Kotlin `VpnService` adapter can
+  acquire permission and establish the Android VPN primitive
+- **WHEN** the embedded Go host has not yet attached the documented runtime
+  successfully
+- **THEN** the repository does not claim `ready=true`
+- **AND** readiness remains governed by the typed startup result from the
+  packaged host boundary as a whole
+- **AND** the cross-boundary startup path does not collapse that result into an
+  adapter-local success bit
+
+### Requirement: Cross-boundary platform-tunnel semantics stay reusable across native adapters
+
+The system SHALL keep the cross-boundary platform-tunnel contract expressed in
+typed startup semantics that later native adapters can reuse without inheriting
+Android API names.
+
+#### Scenario: Later packaged host uses a different native system-tunnel primitive
+
+- **GIVEN** a later packaged host that uses a different native system-tunnel
+  primitive from Android `VpnService`
+- **WHEN** that host reuses the same platform-tunnel contract shape
+- **THEN** readiness still depends on native bring-up plus runtime attach
+- **AND** that reuse does not require the future native adapter to share the
+  same process or service lifecycle as Android `VpnService`
+- **AND** the shared contract does not require Android-only API objects to
+  appear outside the native adapter boundary
+
+### Requirement: Platform tunnel startup accepts explicit underlay-route policies
+
+The system SHALL treat application-routing scope and underlay-route preservation
+as separate startup concerns for supported platform tunnel modes.
+
+#### Scenario: Android system tunnel preserves the active local network for development
+
+- **GIVEN** a supported `android_vpn_service` host
+- **AND** the caller requests the typed underlay-route policy
+  `preserve_active_local_network`
+- **WHEN** platform tunnel startup prepares routes for that mode
+- **THEN** the host preserves the active local underlay network outside the
+  tunnel for development or control traffic
+- **AND** the mode remains the documented Android system-tunnel mode rather
+  than a different runtime mode
+- **AND** application-routing policy continues to apply independently of the
+  underlay-route policy
+
+#### Scenario: Standard profile keeps normal route preparation
+
+- **GIVEN** a supported platform tunnel mode
+- **WHEN** the caller uses the default underlay-route policy
+  `standard`
+- **THEN** startup keeps the normal route-preparation behavior for that mode
+- **AND** it does not imply local-network preservation unless the caller
+  requested it explicitly
+
+### Requirement: Platform tunnel startup fails closed for unsupported underlay-route policies
+
+The system SHALL reject unsupported or unsafe underlay-route policy requests
+explicitly instead of silently downgrading them.
+
+#### Scenario: Host does not support the requested underlay-route policy
+
+- **GIVEN** a caller requests a typed underlay-route policy that the current
+  host does not advertise for the requested mode
+- **WHEN** startup validation runs
+- **THEN** startup fails closed with an explicit typed failure
+- **AND** the host does not silently replace the request with `standard`
+
+#### Scenario: Requested local-network preservation cannot be prepared safely
+
+- **GIVEN** the caller requests `preserve_active_local_network`
+- **WHEN** the host cannot determine or apply the required route exclusions for
+  the active underlay network
+- **THEN** startup fails before readiness is reported
+- **AND** the failure identifies route preparation or route exclusion as the
+  responsible prerequisite
+
+### Requirement: Platform tunnel ready state reflects an attached runtime session
+
+The system SHALL treat `ready=true` for a runtime-backed platform-tunnel mode
+as proof that the packaged host attached the shared runtime successfully, and
+SHALL surface that runtime through the ordinary session contract.
+
+#### Scenario: Host reaches ready for a runtime-backed platform tunnel
+
+- **GIVEN** a packaged host starts one supported platform-tunnel mode
+- **AND** the host completes permission, route validation, host bring-up, and
+  runtime attach successfully
+- **WHEN** startup reports `ready=true`
+- **THEN** the resulting runtime is visible through the ordinary typed session
+  surface
+- **AND** tunnel-stage detail remains available through the startup result or
+  diagnostics instead of replacing the session surface
+
+#### Scenario: Host fails before runtime-backed readiness
+
+- **GIVEN** a packaged host starts one supported platform-tunnel mode
+- **WHEN** startup fails before runtime attach reaches ready state
+- **THEN** the host does not claim a ready runtime session for that attempt
+- **AND** the host still reports the failing tunnel stage and cleanup outcome
+  through the documented platform-tunnel result
+
+### Requirement: Android packaged hosts can establish a ready `android_vpn_service` path
+
+The system SHALL support one concrete platform tunnel ready path for packaged Android hosts through `android_vpn_service`.
+
+#### Scenario: Packaged Android host reaches ready state
+
+- **GIVEN** an Android package that includes the documented `android_vpn_service` implementation and route policy for the supported target
+- **AND** the operator grants the required VPN permission
+- **WHEN** the operator starts system tunnel mode for `android_vpn_service`
+- **THEN** startup returns `ready=true` for `android_vpn_service`
+- **AND** the host reports readiness only after route validation, host bring-up, and runtime attach succeed
+- **AND** the mobile shell may treat that mode as supported for that packaged target
+
+#### Scenario: Operator denies Android VPN permission
+
+- **GIVEN** a packaged Android host that requires VPN permission before `android_vpn_service` can start
+- **WHEN** the operator denies that permission during startup
+- **THEN** startup returns `ready=false`
+- **AND** it reports `permission_acquire` as the failing stage
+- **AND** it reports `permission` as the missing prerequisite
+
+#### Scenario: Android startup resumes after permission grant
+
+- **GIVEN** a packaged Android host that paused `android_vpn_service` startup
+  at the VPN permission prerequisite
+- **WHEN** the operator grants that permission and the shell resumes the
+  documented startup attempt
+- **THEN** the packaged host continues the same startup flow instead of asking
+  the shell to rebuild Android tunnel state from scratch
+- **AND** readiness still depends on later route validation, host bring-up, and
+  runtime attach success
+
+### Requirement: Android `android_vpn_service` startup protects control traffic and cleans up on failure
+
+The system SHALL validate Android route exclusion and DNS bypass policy before claiming readiness, and SHALL tear down partial Android VPN resources when startup fails after partial progress.
+
+#### Scenario: Control-traffic exclusion or DNS bypass is unsafe
+
+- **GIVEN** an Android packaged host starting `android_vpn_service`
+- **AND** the documented control-plane, provider-challenge, or required underlay exclusions cannot be applied safely
+- **WHEN** startup validates the Android route policy
+- **THEN** startup returns `ready=false`
+- **AND** it reports `route_validate` as the failing stage
+- **AND** it reports `route_exclusion` or `dns_bypass` as the missing prerequisite
+- **AND** the host does not claim readiness
+
+#### Scenario: Runtime attach fails after Android VPN bring-up
+
+- **GIVEN** an Android packaged host that has already created the VPN interface and prepared the documented route policy
+- **WHEN** the host cannot attach the shared runtime to that `android_vpn_service` path
+- **THEN** startup returns `ready=false`
+- **AND** it reports `runtime_attach` as the failing stage
+- **AND** the host tears down the partial Android VPN resources before returning failure
+
+### Requirement: Android `android_vpn_service` app-routing policy is explicit and fail-closed
+
+The system SHALL treat Android app-routing scope as an explicit startup policy
+for the first `android_vpn_service` path instead of assuming that every Android
+VPN mode captures all apps equally.
+
+#### Scenario: Packaged Android host starts with an explicit selected-app policy
+
+- **GIVEN** a packaged Android host starting `android_vpn_service`
+- **AND** the documented startup request chooses one supported
+  `application_routing_policy` such as `all_apps`, `allowed_packages`, or
+  `disallowed_packages`
+- **WHEN** startup validates route and package policy together
+- **THEN** the host applies that documented app-scope policy before claiming
+  readiness
+- **AND** the mobile shell can report whether the mode covers all apps or only
+  the selected app set
+
+#### Scenario: Android app-routing policy is invalid or mixed
+
+- **GIVEN** a startup request for `android_vpn_service`
+- **AND** the request mixes allowlist and denylist package semantics, or names
+  one or more invalid packages
+- **WHEN** the packaged Android host validates startup prerequisites
+- **THEN** startup returns `ready=false`
+- **AND** it reports `route_validate` as the failing stage
+- **AND** it reports `app_routing_policy` as the missing prerequisite
+- **AND** the host does not silently widen the scope to full-device routing
+
+#### Scenario: Operator changes Android app scope after readiness
+
+- **GIVEN** an Android packaged host whose `android_vpn_service` path is already
+  ready with one documented `application_routing_policy`
+- **WHEN** the operator changes the requested package scope for that mode
+- **THEN** the repository treats that change as a new startup attempt and VPN
+  connection instead of a live mutation of the existing ready path
+- **AND** the shell does not imply that the running Android VPN scope changed
+  without that reconnect
+

@@ -1,3 +1,7 @@
+## RENAMED Requirements
+- FROM: `### Requirement: First mobile GUI slice does not imply system tunnel support`
+- TO: `### Requirement: Mobile GUI system tunnel support remains explicit and host-driven`
+
 ## MODIFIED Requirements
 ### Requirement: Mobile GUI system tunnel support remains explicit and host-driven
 
@@ -18,6 +22,7 @@ Installing the mobile app SHALL NOT silently claim device-wide traffic capture s
 - **THEN** the app offers the documented Android system tunnel workflow for that mode
 - **AND** it uses the typed startup result instead of guessing support from OS heuristics alone
 
+## ADDED Requirements
 ### Requirement: Mobile GUI shell renders explicit Android app-scope policy
 
 The system SHALL let the mobile GUI render the supported Android

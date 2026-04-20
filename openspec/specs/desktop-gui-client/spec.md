@@ -465,3 +465,116 @@ the same entity or task already open in the main canvas.
   inspector`
 - **AND** the default ready layout does not read as multiple equal-weight card
   regions competing for the operator's first attention
+
+### Requirement: Desktop GUI shell supports explicit portable profile transfer
+
+The system SHALL let the desktop shell explicitly export and import saved
+profiles through the shared portable-profile envelope instead of relying on
+ordinary shell-state files or runtime handoff export.
+
+#### Scenario: Desktop exports a saved profile through file/text and QR-ready transfer
+
+- **GIVEN** a saved profile in the desktop shell
+- **WHEN** the operator chooses profile export
+- **THEN** the desktop shell can produce the shared portable-profile envelope
+  for supported file or text transfer paths
+- **AND** it can present an operator-visible QR transfer surface from that same
+  envelope when the payload fits the supported QR bounds
+- **AND** if the payload does not fit those QR bounds, the shell fails closed
+  for QR and keeps non-QR export available instead of truncating the payload
+
+#### Scenario: Desktop imports a portable profile into the Profiles workspace
+
+- **GIVEN** the operator provides a valid portable-profile envelope through a
+  supported desktop import path such as file import or pasted envelope text
+- **WHEN** the desktop shell accepts that import
+- **THEN** it first shows a preview and explicit confirmation surface for the
+  imported profile
+- **AND** after operator confirmation it creates a local imported profile in
+  the Profiles workspace
+- **AND** it restores managed-provider mode when the envelope includes the
+  required managed-provider snapshot
+- **AND** it allocates fresh local ids for the imported profile and imported
+  managed-provider snapshot
+- **AND** it does not auto-resolve, auto-start runtime, or silently overwrite
+  an existing local profile
+
+#### Scenario: Desktop keeps secret-bearing profile transfer explicit
+
+- **GIVEN** a portable profile export or import whose envelope is marked as
+  secret-bearing
+- **WHEN** the desktop shell presents that transfer action
+- **THEN** it surfaces that sensitivity to the operator before completing the
+  transfer
+- **AND** it does not generate or persist that portable envelope as part of
+  ordinary background shell state
+
+### Requirement: Desktop GUI shell localizes shell-owned operator copy
+
+The system SHALL localize desktop shell-owned operator copy and select the
+active locale from device defaults plus an explicit shell-local operator
+override.
+
+#### Scenario: Desktop boot picks persisted override or device locale
+
+- **GIVEN** the desktop GUI shell launches on a workstation with a preferred
+  locale
+- **WHEN** no shell-local locale override has been saved
+- **THEN** the app uses the supported device locale or the documented default
+  locale when the device locale is unsupported
+- **AND** when a shell-local locale override exists the app restores that
+  override on launch
+- **AND** locale preference remains desktop-shell-local instead of becoming a
+  host-global runtime setting
+- **AND** the desktop app root resolves framework localization delegates,
+  supported locales, and the localized app title from the shared shell
+  localization package instead of leaving framework chrome or title copy
+  hardcoded in English
+
+#### Scenario: Desktop falls back cleanly when localized host metadata is unavailable
+
+- **GIVEN** the desktop shell renders provider or validation metadata from the
+  local control plane
+- **WHEN** localized display metadata for the active locale is unavailable
+- **THEN** the desktop shell falls back to the base descriptor or message text
+- **AND** shell-owned chrome such as actions, navigation, and empty states
+  still renders in the active shell locale
+- **AND** the desktop shell does not invent translations by parsing
+  machine-readable ids, field keys, or violation codes
+
+#### Scenario: Desktop exposes locale override through compact shell chrome
+
+- **GIVEN** an operator needs to override the workstation locale on desktop
+- **WHEN** they use the first localized desktop shell slice
+- **THEN** the locale switch is reachable through a compact shell menu or
+  equivalent top-level shell chrome entry
+- **AND** the first slice does not require a dedicated settings surface only to
+  change locale
+
+### Requirement: Desktop packaged shell uses canonical RelayDock desktop packaging identity
+
+The system SHALL package the desktop shell with canonical RelayDock desktop
+packaging identity on platforms that expose bundle or application identifiers
+or bundled app output names instead of placeholder `gui_shell` identifier
+families.
+
+#### Scenario: Linux desktop runtime uses the canonical application identifier
+
+- **GIVEN** a packaged Linux desktop build
+- **WHEN** the app launches and integrates with the host desktop environment
+- **THEN** the GTK application identifier and related desktop-integration
+  metadata use the canonical RelayDock desktop identifier
+- **AND** the published Linux build does not keep `com.defin85.gui_shell` or
+  the legacy `gui_shell` desktop shell stem as its supported packaged desktop
+  identity
+
+#### Scenario: macOS bundle uses the canonical desktop bundle identifier
+
+- **GIVEN** the repo-owned macOS desktop build metadata and bundled app output
+- **WHEN** the Runner app bundle is packaged or signed
+- **THEN** the main bundle, related test targets, and bundled app output
+  derive from the canonical RelayDock desktop identity
+- **AND** the published desktop app does not keep example or placeholder
+  bundle identifiers such as `com.example.guiShell` or legacy shell output
+  names such as `gui_shell.app`
+

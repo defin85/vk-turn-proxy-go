@@ -42,3 +42,100 @@ The system SHALL treat external Android bridge endpoints as explicit development
 - **WHEN** the operator runs that build for debugging or compatibility work
 - **THEN** the app may use the explicit override instead of the packaged host
 - **AND** that path remains a development-only exception to the production packaging model
+
+### Requirement: Android embedded host bridges the Go control plane to the Kotlin `VpnService` adapter
+
+The system SHALL let the packaged Android embedded host coordinate the first
+`android_vpn_service` path through a package-internal bridge to the Kotlin
+`VpnService` adapter instead of routing VPN startup through Flutter-only logic.
+
+#### Scenario: Packaged host starts Android VPN through the native adapter bridge
+
+- **GIVEN** a production Android package with the documented embedded host and
+  Android `VpnService` adapter
+- **WHEN** the operator starts the Android system-tunnel workflow
+- **THEN** the packaged embedded host reaches the native `VpnService` adapter
+  through the documented package-internal bridge
+- **AND** the app does not require an external sidecar host or shell-local VPN
+  orchestration to reach the typed startup result
+- **AND** the mobile shell still reaches that startup only through the
+  documented mobile host bridge and versioned control-plane contract rather
+  than a direct adapter-specific API
+
+### Requirement: Android embedded host can preserve the active local network for development-safe VPN startup
+
+The system SHALL let the packaged Android embedded host prepare an explicit
+development underlay-route profile for `android_vpn_service` startup while
+keeping the mode itself a normal Android system tunnel.
+
+#### Scenario: Host starts Android VPN with development local-network preservation
+
+- **GIVEN** the packaged Android host supports the typed underlay-route policy
+  `preserve_active_local_network`
+- **AND** the device has an active local underlay network
+- **WHEN** the mobile GUI requests Android VPN startup with that policy
+- **THEN** the host computes and applies the required local-network route
+  exclusions for that active network
+- **AND** the packaged runtime still starts through the documented Android VPN
+  host boundary
+
+#### Scenario: Host cannot prepare the requested development profile
+
+- **GIVEN** the mobile GUI requests `preserve_active_local_network`
+- **WHEN** the packaged Android host cannot determine or safely apply the
+  active local-network exclusion set
+- **THEN** startup fails closed before readiness is reported
+- **AND** the app does not silently fall back to the standard routing profile
+
+#### Scenario: Host surfaces effective development underlay-route state
+
+- **GIVEN** Android VPN startup succeeded with a typed underlay-route policy
+- **WHEN** the shell inspects host-reported status or diagnostics
+- **THEN** the host reports the selected underlay-route policy and the fact
+  that local-network preservation was applied
+- **AND** diagnostics can distinguish that state from the standard routing
+  profile
+
+### Requirement: Android embedded host owns the first `android_vpn_service` ready path
+
+The system SHALL let the packaged Android embedded host own the first supported `android_vpn_service` lifecycle so production installs can start the documented Android system tunnel mode without an external companion runtime.
+
+#### Scenario: Packaged host starts the documented Android VPN path
+
+- **GIVEN** a production Android package with the documented embedded host and `android_vpn_service` implementation
+- **WHEN** the operator starts the packaged Android system tunnel workflow
+- **THEN** the packaged host owns the permission, route, and runtime-attach workflow for that mode
+- **AND** the app does not require an external `clientd`, external bridge endpoint, or host download to reach the typed startup result
+
+#### Scenario: Packaged host cannot satisfy the Android VPN prerequisites
+
+- **GIVEN** a production Android package whose packaged host cannot satisfy a documented `android_vpn_service` prerequisite
+- **WHEN** the operator requests Android system tunnel startup
+- **THEN** the packaged host reports the typed failing stage and missing prerequisite explicitly
+- **AND** the app fails closed for that mode instead of redirecting the operator to a development bridge path
+
+### Requirement: Android embedded host owns `VpnService` app-scope policy
+
+The system SHALL let the packaged Android embedded host own package allow/deny
+policy for the first `android_vpn_service` path instead of pushing that logic
+into shell heuristics.
+
+#### Scenario: Packaged host applies an allowed-package policy
+
+- **GIVEN** a production Android package with the documented embedded host and
+  `android_vpn_service` implementation
+- **WHEN** the operator starts the Android system tunnel workflow for one
+  selected package set
+- **THEN** the packaged host applies the documented package allow/deny policy
+  through the Android host boundary
+- **AND** the shell remains a typed consumer of the resulting startup state
+
+#### Scenario: Packaged host cannot apply the requested app-scope policy
+
+- **GIVEN** a production Android package whose packaged host cannot satisfy the
+  requested package allow/deny policy for `android_vpn_service`
+- **WHEN** startup validates that app-scope policy
+- **THEN** the packaged host reports the typed failing stage and missing
+  prerequisite explicitly
+- **AND** it does not silently widen or narrow the operator-requested scope
+

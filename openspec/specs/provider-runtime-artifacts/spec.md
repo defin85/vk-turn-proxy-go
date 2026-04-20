@@ -184,3 +184,50 @@ pretending they are ordinary reusable profile settings.
 - **THEN** the shell can render it as prompt-only input
 - **AND** ordinary saved-profile flows do not require that value to be echoed
   back from the host as plaintext profile metadata
+
+### Requirement: Resolved artifacts advertise typed access methods for same-device execution
+
+The system SHALL let a resolved artifact advertise the typed `access_method` values that host-owned same-device actions may consume, separately from the artifact family itself.
+
+#### Scenario: Generic TURN artifact exposes TURN access methods
+
+- **GIVEN** a resolved artifact whose family is `generic_turn`
+- **WHEN** the host reports the supported host-owned same-device actions and their planning metadata for that artifact
+- **THEN** the artifact advertises `turn_credentials` or another documented TURN-backed access method explicitly
+- **AND** the host does not require the shell to infer that access method from the artifact family name alone
+
+#### Scenario: Conference artifact does not masquerade as TURN
+
+- **GIVEN** a resolved artifact whose family is `conference_room`
+- **WHEN** the host reports access methods or actions for that artifact
+- **THEN** it may advertise `webrtc_call_attach`, `open_room`, or another documented conference-appropriate path
+- **AND** it does not imply `turn_credentials` unless the provider also resolved a separate TURN-backed access surface
+
+### Requirement: Generic TURN artifacts keep strict WireGuard carrier state internal
+
+The system SHALL keep ordinary `generic_turn` artifact reads limited to
+non-secret access methods and planning metadata even when a host can later
+materialize a strict `turn_datagram` `wireguard_native` path from that artifact.
+
+#### Scenario: Ordinary artifact reads do not expose a startable WireGuard lease
+
+- **GIVEN** a resolved `generic_turn` artifact and a host build that can later
+  start a strict `wireguard_native` plan with `carrier_family=turn_datagram`
+- **WHEN** the host returns ordinary resolution reads or resolution events for
+  that artifact
+- **THEN** it advertises only `turn_credentials`, typed action metadata, and
+  execution-planning fields
+- **AND** it does not include raw WireGuard key material, peer configuration, or
+  a startable carrier lease in the ordinary artifact payload
+
+#### Scenario: Expired generic TURN artifact cannot imply a startable strict WireGuard path
+
+- **GIVEN** a resolved `generic_turn` artifact whose credential or export
+  lifetime has expired
+- **WHEN** a caller inspects ordinary artifact state or requests same-device
+  startup
+- **THEN** the host does not imply that a strict `turn_datagram`
+  `wireguard_native` path is still startable from that artifact
+- **AND** it fails explicitly before materializing any secret-bearing carrier
+  state
+
