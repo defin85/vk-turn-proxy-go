@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import shutil
+import subprocess
 from pathlib import Path
 
 from PIL import Image
@@ -8,6 +10,7 @@ from PIL import Image
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SOURCE_ICON = REPO_ROOT / "branding/source/app_icon.png"
+SOURCE_ICON_SVG = REPO_ROOT / "branding/source/app_icon.svg"
 
 
 def resized(image: Image.Image, size: int) -> Image.Image:
@@ -18,7 +21,37 @@ def ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
+def render_svg_master() -> None:
+    tool = shutil.which("rsvg-convert")
+    if tool is None:
+        raise SystemExit(
+            "branding/source/app_icon.svg is newer than branding/source/app_icon.png, "
+            "but rsvg-convert is not available on PATH"
+        )
+    ensure_parent(SOURCE_ICON)
+    subprocess.run(
+        [
+            tool,
+            "--width",
+            "1024",
+            "--height",
+            "1024",
+            "--output",
+            str(SOURCE_ICON),
+            str(SOURCE_ICON_SVG),
+        ],
+        check=True,
+    )
+
+
 def load_master_icon() -> Image.Image:
+    if SOURCE_ICON_SVG.is_file():
+        png_missing = not SOURCE_ICON.is_file()
+        svg_is_newer = png_missing or (
+            SOURCE_ICON_SVG.stat().st_mtime > SOURCE_ICON.stat().st_mtime
+        )
+        if svg_is_newer:
+            render_svg_master()
     if not SOURCE_ICON.is_file():
         raise SystemExit(f"canonical icon source not found: {SOURCE_ICON}")
     return Image.open(SOURCE_ICON).convert("RGBA")

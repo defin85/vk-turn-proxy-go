@@ -2212,10 +2212,12 @@ void main() {
     },
   );
 
-  testWidgets('owned-browser page applies the VK desktop-like user agent', (
+  testWidgets('owned-browser page applies a desktop Chromium user agent for VK', (
     WidgetTester tester,
   ) async {
     final requestedUserAgents = <String>[];
+    final syncedUserAgentMetadata = <String?>[];
+    final requestedWideViewports = <bool>[];
     final runner = WebViewOwnedBrowserChallengeRunner(
       sessionFactory:
           (
@@ -2227,8 +2229,17 @@ void main() {
                   const SizedBox.expand(child: ColoredBox(color: Colors.black)),
               load: (Uri uri) async {},
               clearSessionState: () async {},
+              getUserAgent: () async =>
+                  'Mozilla/5.0 (Linux; Android 14; 21051182G Build/UKQ1.240116.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/146.0.7680.178 Safari/537.36',
               setUserAgent: (String userAgent) async {
                 requestedUserAgents.add(userAgent);
+              },
+              syncUserAgentMetadata: (String? userAgent) async {
+                syncedUserAgentMetadata.add(userAgent);
+                return true;
+              },
+              setUseWideViewPort: (bool enabled) async {
+                requestedWideViewports.add(enabled);
               },
               collectCookies: (List<String> urls) async =>
                   const <BrowserCookieRecord>[],
@@ -2275,9 +2286,99 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(requestedUserAgents, <String>[
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:144.0) Gecko/20100101 Firefox/144.0',
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.7680.178 Safari/537.36',
     ]);
+    expect(syncedUserAgentMetadata, <String?>[
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.7680.178 Safari/537.36',
+    ]);
+    expect(requestedWideViewports, <bool>[true]);
   });
+
+  testWidgets(
+    'owned-browser page fails closed when desktop metadata sync is unavailable',
+    (WidgetTester tester) async {
+      var loadCalls = 0;
+      final requestedUserAgents = <String>[];
+      final requestedWideViewports = <bool>[];
+      final runner = WebViewOwnedBrowserChallengeRunner(
+        sessionFactory:
+            (
+              ValueChanged<String> onWebResourceError,
+              ValueChanged<Uri> onPageNavigation,
+            ) {
+              return OwnedBrowserWebSession(
+                viewBuilder: (BuildContext context) => const SizedBox.expand(
+                  child: ColoredBox(color: Colors.black),
+                ),
+                load: (Uri uri) async {
+                  loadCalls += 1;
+                },
+                clearSessionState: () async {},
+                getUserAgent: () async =>
+                    'Mozilla/5.0 (Linux; Android 14; 21051182G Build/UKQ1.240116.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/146.0.7680.178 Safari/537.36',
+                syncUserAgentMetadata: (String? userAgent) async => false,
+                setUserAgent: (String userAgent) async {
+                  requestedUserAgents.add(userAgent);
+                },
+                setUseWideViewPort: (bool enabled) async {
+                  requestedWideViewports.add(enabled);
+                },
+                collectCookies: (List<String> urls) async =>
+                    const <BrowserCookieRecord>[],
+              );
+            },
+      );
+      final challenge = ChallengeRecord(
+        id: 'challenge-1',
+        sessionId: 'session-1',
+        provider: 'vk',
+        stage: 'provider_resolve',
+        kind: 'captcha',
+        prompt: 'Continue inside the in-app browser.',
+        openUrl: 'https://vk.com/call/join/test',
+        status: ChallengeStatus.pending,
+        completionMode: ChallengeCompletionMode.ownedBrowserObserved,
+        ownedBrowser: const ChallengeOwnedBrowserMetadata(
+          cookieUrls: <String>['https://login.vk.ru/'],
+        ),
+        createdAt: DateTime.utc(2026, 4, 7, 12, 0),
+        updatedAt: DateTime.utc(2026, 4, 7, 12, 1),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (BuildContext context) {
+              return Scaffold(
+                body: Center(
+                  child: FilledButton(
+                    onPressed: () {
+                      unawaited(runner.run(context, challenge));
+                    },
+                    child: const Text('Open challenge'),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open challenge'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(loadCalls, 0);
+      expect(requestedUserAgents, isEmpty);
+      expect(requestedWideViewports, isEmpty);
+      expect(
+        find.textContaining(
+          'desktop browser metadata required for the in-app VK flow',
+        ),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets(
     'owned-browser page preserves browser state only when remember_sign_in is approved',

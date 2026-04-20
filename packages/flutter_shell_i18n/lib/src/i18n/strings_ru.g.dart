@@ -2032,6 +2032,9 @@ class TranslationsRu extends Translations
   String get shellTextOwnedBrowserNoEvidence =>
       'Сессия встроенного браузера не предоставила пригодных данных для продолжения.';
   @override
+  String get shellTextOwnedBrowserDesktopFingerprintUnavailable =>
+      'Это устройство не умеет отдавать desktop-метаданные браузера, обязательные для встроенного VK flow. Обновите Android System WebView или Chrome и повторите попытку.';
+  @override
   String shellTextOwnedBrowserTitle({required Object provider}) =>
       'Проверка провайдера ${provider}';
   @override
@@ -3393,6 +3396,8 @@ extension on TranslationsRu {
             'Эта проверка не предоставляет URL встроенного браузера.',
           'shellTextOwnedBrowserNoEvidence' =>
             'Сессия встроенного браузера не предоставила пригодных данных для продолжения.',
+          'shellTextOwnedBrowserDesktopFingerprintUnavailable' =>
+            'Это устройство не умеет отдавать desktop-метаданные браузера, обязательные для встроенного VK flow. Обновите Android System WebView или Chrome и повторите попытку.',
           'shellTextOwnedBrowserTitle' =>
             ({required Object provider}) => 'Проверка провайдера ${provider}',
           'shellTextOwnedBrowserOpenInvite' => 'Открыть инвайт',

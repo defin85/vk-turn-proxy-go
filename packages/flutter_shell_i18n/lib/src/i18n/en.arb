@@ -708,6 +708,7 @@
   "shellTextOwnedBrowserMissingMetadata": "This challenge does not advertise the app-owned browser metadata required for in-app continuation.",
   "shellTextOwnedBrowserMissingUrl": "This challenge does not expose an in-app browser URL.",
   "shellTextOwnedBrowserNoEvidence": "The embedded browser session did not expose any usable continuation evidence.",
+  "shellTextOwnedBrowserDesktopFingerprintUnavailable": "This device cannot expose the desktop browser metadata required for the in-app VK flow. Update Android System WebView or Chrome and try again.",
   "shellTextOwnedBrowserTitle": "{provider} challenge",
   "shellTextOwnedBrowserOpenInvite": "Open invite",
   "shellTextOwnedBrowserCollecting": "Collecting...",

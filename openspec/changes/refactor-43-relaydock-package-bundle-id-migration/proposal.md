@@ -1,4 +1,4 @@
-# Change: [43] Migrate RelayDock package and bundle identifiers
+# Change: [43] Migrate RelayDock publish identifiers and desktop native output names
 
 ## Why
 The publication-facing product name is now `RelayDock`, but the native project
@@ -23,8 +23,9 @@ already accepted display-name and icon work.
   - store-ready mobile and desktop package identities
   - one canonical repo-owned package/bundle ID contract instead of scattered
     placeholder values
-  - later follow-up work such as binary-name cleanup without mixing identity
-    concerns into one oversized migration
+  - later follow-up work such as Dart package/import cleanup or artifact-role
+    cleanup without mixing internal identity concerns into one oversized
+    migration
 
 ## What Changes
 - Define the canonical RelayDock package/bundle/application identifiers for
@@ -35,10 +36,13 @@ already accepted display-name and icon work.
 - Migrate native project metadata, Android package paths, packaging scripts,
   smoke automation, and docs away from `mobile_gui_shell` / `gui_shell`
   identifier surfaces where this change applies.
+- Align publication-facing desktop native output names and repo-owned desktop
+  launch or staging helpers with the RelayDock shell identity where packaged
+  desktop builds still expose legacy shell output stems.
 - Add fail-closed verification so packaging does not silently ship mixed legacy
   and canonical identifiers.
-- Keep Dart package names, artifact-role strings, and Windows executable rename
-  out of scope for this change.
+- Keep Dart package names, artifact-role strings, and shell state directory
+  roots out of scope for this change.
 
 ## Impact
 - Affected specs:
@@ -50,4 +54,6 @@ already accepted display-name and icon work.
   - `mobile/gui_shell/ios/...`
   - `desktop/gui_shell/linux/...`
   - `desktop/gui_shell/macos/...`
-  - repo-owned packaging scripts, smoke scripts, and publication runbooks
+  - `desktop/gui_shell/windows/...`
+  - repo-owned packaging scripts, smoke scripts, launch helpers, and
+    publication runbooks

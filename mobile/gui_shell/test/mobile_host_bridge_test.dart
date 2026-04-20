@@ -291,6 +291,35 @@ void main() {
   );
 
   test(
+    'platform webview user-agent metadata controller invokes the native bridge',
+    () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall call) async {
+            expect(call.method, 'setWebViewUserAgentMetadata');
+            expect(call.arguments, <String, Object?>{
+              'webViewIdentifier': 42,
+              'userAgent':
+                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.7680.178 Safari/537.36',
+            });
+            return null;
+          });
+
+      final controller = PlatformMobileWebViewUserAgentMetadataController(
+        methodChannel: channel,
+      );
+
+      expect(
+        await controller.sync(
+          webViewIdentifier: 42,
+          userAgent:
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.7680.178 Safari/537.36',
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  test(
     'platform owned-browser session resetter invokes the native bridge',
     () async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger

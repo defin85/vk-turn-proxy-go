@@ -92,6 +92,10 @@ def cleanup_empty_dirs(root: pathlib.Path) -> None:
                 continue
 
 
+def jni_mangle_identifier(value: str) -> str:
+    return value.replace("_", "_1")
+
+
 def sync_android_kotlin(
     kotlin_root: pathlib.Path,
     kotlin_package: str,
@@ -128,6 +132,28 @@ def sync_android_kotlin(
     if changed and not check:
         cleanup_empty_dirs(kotlin_root)
     return changed
+
+
+def sync_android_jni(
+    path: pathlib.Path,
+    kotlin_package: str,
+    check: bool,
+) -> bool:
+    content = path.read_text(encoding="utf-8")
+    jni_class_prefix = "Java_" + "_".join(
+        [jni_mangle_identifier(part) for part in kotlin_package.split(".")]
+        + [jni_mangle_identifier("EmbeddedMobileHostNative")]
+    )
+    updated, count = re.subn(
+        r"Java_[A-Za-z0-9_]+_EmbeddedMobileHostNative_"
+        r"(ensureStarted|lastError|stopEmbeddedHost|registerPlatformTunnelBridge|"
+        r"clearPlatformTunnelBridge|setAndroidWireGuardProfilePath)",
+        lambda match: f"{jni_class_prefix}_{match.group(1)}",
+        content,
+    )
+    if count != 6:
+        raise SystemExit(f"Android EmbeddedMobileHostNative JNI symbols not found in {path}")
+    return write_or_check(path, content, updated, check)
 
 
 def sync_ios_pbxproj(
@@ -282,6 +308,11 @@ def main() -> int:
     )
     changed |= sync_android_kotlin(
         repo_root / "mobile/gui_shell/android/app/src/main/kotlin",
+        manifest["android"]["kotlin_package"],
+        args.check,
+    )
+    changed |= sync_android_jni(
+        repo_root / "mobile/gui_shell/android/app/src/main/cpp/mobile_host_bridge_jni.cpp",
         manifest["android"]["kotlin_package"],
         args.check,
     )

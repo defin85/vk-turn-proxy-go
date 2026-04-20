@@ -20,6 +20,8 @@ import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import androidx.core.content.getSystemService
 import androidx.webkit.ScriptHandler
+import androidx.webkit.UserAgentMetadata
+import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebStorageCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
@@ -32,6 +34,7 @@ import io.flutter.plugins.webviewflutter.WebViewFlutterAndroidExternalApi
 import io.flutter.plugins.webviewflutter.WebViewProxyApi
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.util.regex.Pattern
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import kotlin.math.roundToInt
@@ -57,6 +60,7 @@ class MainActivity : FlutterActivity() {
     private val pendingPortableProfileIngressPayloads = mutableListOf<String>()
     private var pendingPlatformTunnelPermissionResult: MethodChannel.Result? = null
     private val documentStartScriptHandlers = mutableMapOf<Long, ScriptHandler>()
+    private val defaultUserAgentMetadataByWebView = mutableMapOf<Long, UserAgentMetadata>()
     private val appInventoryExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val platformTunnelBridge by lazy {
         AndroidPlatformTunnelBridge(applicationContext)
@@ -131,6 +135,23 @@ class MainActivity : FlutterActivity() {
                             result.error(
                                 "document_start_script_unavailable",
                                 error.message ?: "Document-start JavaScript is unavailable.",
+                                null,
+                            )
+                        }
+                    "setWebViewUserAgentMetadata" ->
+                        try {
+                            setWebViewUserAgentMetadata(call)
+                            result.success(null)
+                        } catch (error: IllegalArgumentException) {
+                            result.error(
+                                "invalid_webview_user_agent_metadata_request",
+                                error.message ?: "Invalid native WebView user-agent metadata request.",
+                                null,
+                            )
+                        } catch (error: IllegalStateException) {
+                            result.error(
+                                "webview_user_agent_metadata_unavailable",
+                                error.message ?: "Native WebView user-agent metadata is unavailable.",
                                 null,
                             )
                         }
@@ -610,6 +631,89 @@ class MainActivity : FlutterActivity() {
         return snapshot
     }
 
+    private fun setWebViewUserAgentMetadata(call: MethodCall) {
+        val webViewIdentifier =
+            call.argument<Number>("webViewIdentifier")?.toLong()
+                ?: throw IllegalArgumentException("webViewIdentifier is required.")
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA)) {
+            throw IllegalStateException("Android WebView user-agent metadata is unsupported.")
+        }
+        val flutterEngine =
+            boundFlutterEngine
+                ?: throw IllegalStateException("Flutter engine is not currently attached.")
+        val webView =
+            WebViewFlutterAndroidExternalApi.getWebView(flutterEngine, webViewIdentifier)
+                ?: throw IllegalStateException(
+                    "No native Android WebView is registered for identifier $webViewIdentifier.",
+                )
+        val settings = webView.settings
+        defaultUserAgentMetadataByWebView.getOrPut(webViewIdentifier) {
+            WebSettingsCompat.getUserAgentMetadata(settings)
+        }
+        val userAgent = call.argument<String>("userAgent")?.trim().orEmpty()
+        if (userAgent.isEmpty()) {
+            defaultUserAgentMetadataByWebView[webViewIdentifier]?.let { metadata ->
+                WebSettingsCompat.setUserAgentMetadata(settings, metadata)
+            }
+            return
+        }
+        val baselineMetadata =
+            defaultUserAgentMetadataByWebView[webViewIdentifier]
+                ?: WebSettingsCompat.getUserAgentMetadata(settings)
+        WebSettingsCompat.setUserAgentMetadata(
+            settings,
+            buildDesktopUserAgentMetadata(baselineMetadata, userAgent),
+        )
+    }
+
+    private fun buildDesktopUserAgentMetadata(
+        baseline: UserAgentMetadata,
+        userAgent: String,
+    ): UserAgentMetadata {
+        val versionMatch = CHROME_VERSION_PATTERN.matcher(userAgent)
+        if (!versionMatch.find()) {
+            throw IllegalArgumentException("Chrome version is required in userAgent.")
+        }
+        val fullVersion = versionMatch.group(1)?.trim().orEmpty()
+        if (fullVersion.isEmpty()) {
+            throw IllegalArgumentException("Chrome version is required in userAgent.")
+        }
+        val majorVersion = fullVersion.substringBefore('.').ifEmpty { fullVersion }
+        val brands =
+            listOf(
+                UserAgentMetadata.BrandVersion.Builder()
+                    .setBrand("Chromium")
+                    .setMajorVersion(majorVersion)
+                    .setFullVersion(fullVersion)
+                    .build(),
+                UserAgentMetadata.BrandVersion.Builder()
+                    .setBrand("Not-A.Brand")
+                    .setMajorVersion("24")
+                    .setFullVersion("24.0.0.0")
+                    .build(),
+                UserAgentMetadata.BrandVersion.Builder()
+                    .setBrand("Google Chrome")
+                    .setMajorVersion(majorVersion)
+                    .setFullVersion(fullVersion)
+                    .build(),
+            )
+        val metadataBuilder =
+            UserAgentMetadata.Builder(baseline)
+                .setBrandVersionList(brands)
+                .setFullVersion(fullVersion)
+                .setPlatform("Windows")
+                .setPlatformVersion("10.0.0")
+                .setArchitecture("x86")
+                .setModel("")
+                .setMobile(false)
+                .setBitness(64)
+                .setWow64(false)
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA_FORM_FACTORS)) {
+            metadataBuilder.setFormFactors(listOf(UserAgentMetadata.FORM_FACTOR_DESKTOP))
+        }
+        return metadataBuilder.build()
+    }
+
     private fun listInstalledApps(result: MethodChannel.Result) {
         appInventoryExecutor.execute {
             try {
@@ -698,3 +802,5 @@ class MainActivity : FlutterActivity() {
         documentStartScriptHandlers.clear()
     }
 }
+
+private val CHROME_VERSION_PATTERN: Pattern = Pattern.compile("Chrome/([0-9.]+)")

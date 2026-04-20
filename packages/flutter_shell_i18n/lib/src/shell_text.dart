@@ -1329,6 +1329,8 @@ class ShellText {
       t.shellTextOwnedBrowserMissingMetadata;
   String get ownedBrowserMissingUrl => t.shellTextOwnedBrowserMissingUrl;
   String get ownedBrowserNoEvidence => t.shellTextOwnedBrowserNoEvidence;
+  String get ownedBrowserDesktopFingerprintUnavailable =>
+      t.shellTextOwnedBrowserDesktopFingerprintUnavailable;
   String ownedBrowserTitle(String provider) =>
       t.shellTextOwnedBrowserTitle(provider: provider);
   String get ownedBrowserOpenInvite => t.shellTextOwnedBrowserOpenInvite;

@@ -16,9 +16,9 @@ scattered across native project files and scripts.
 - **AND** it does not treat hard-coded placeholder values such as
   `com.defin85.mobile_gui_shell`, `com.defin85.gui_shell`, or example bundle
   identifier families as the supported published identity surface
-- **AND** internal out-of-scope names such as Dart package names, artifact-role
-  strings, or Windows executable stems are not misclassified as publish-facing
-  identifier drift
+- **AND** internal out-of-scope names such as Dart package names, import roots,
+  artifact-role strings, or shell state directory stems are not misclassified
+  as publish-facing identifier drift
 
 #### Scenario: Build verification rejects mixed legacy and canonical identifiers
 

@@ -43,7 +43,7 @@ class _OwnedBrowserHarnessHomeState extends State<_OwnedBrowserHarnessHome> {
     'https://calls.vk.com/#codex-invite=${Uri.encodeComponent(_vkInviteUri.toString())}&codex-auto-complete=${_autoCompleteOnTransportReady ? '1' : '0'}',
   );
   // Flip this locally when the Android WebView IME path needs live diagnostics again.
-  static const bool _showHarnessDiagnostics = true;
+  static const bool _showHarnessDiagnostics = false;
 
   bool _opened = false;
   String? _lastContinuationSummary;

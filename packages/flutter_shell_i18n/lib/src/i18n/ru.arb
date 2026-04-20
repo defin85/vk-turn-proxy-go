@@ -708,6 +708,7 @@
   "shellTextOwnedBrowserMissingMetadata": "Эта проверка не объявляет метаданные браузера приложения, необходимые для продолжения внутри приложения.",
   "shellTextOwnedBrowserMissingUrl": "Эта проверка не предоставляет URL встроенного браузера.",
   "shellTextOwnedBrowserNoEvidence": "Сессия встроенного браузера не предоставила пригодных данных для продолжения.",
+  "shellTextOwnedBrowserDesktopFingerprintUnavailable": "Это устройство не умеет отдавать desktop-метаданные браузера, обязательные для встроенного VK flow. Обновите Android System WebView или Chrome и повторите попытку.",
   "shellTextOwnedBrowserTitle": "Проверка провайдера {provider}",
   "shellTextOwnedBrowserOpenInvite": "Открыть инвайт",
   "shellTextOwnedBrowserCollecting": "Сбор...",

@@ -2682,6 +2682,10 @@ class Translations with BaseTranslations<AppLocale, Translations> {
   String get shellTextOwnedBrowserNoEvidence =>
       'The embedded browser session did not expose any usable continuation evidence.';
 
+  /// en: 'This device cannot expose the desktop browser metadata required for the in-app VK flow. Update Android System WebView or Chrome and try again.'
+  String get shellTextOwnedBrowserDesktopFingerprintUnavailable =>
+      'This device cannot expose the desktop browser metadata required for the in-app VK flow. Update Android System WebView or Chrome and try again.';
+
   /// en: '{provider} challenge'
   String shellTextOwnedBrowserTitle({required Object provider}) =>
       '${provider} challenge';
@@ -4048,6 +4052,8 @@ extension on Translations {
             'This challenge does not expose an in-app browser URL.',
           'shellTextOwnedBrowserNoEvidence' =>
             'The embedded browser session did not expose any usable continuation evidence.',
+          'shellTextOwnedBrowserDesktopFingerprintUnavailable' =>
+            'This device cannot expose the desktop browser metadata required for the in-app VK flow. Update Android System WebView or Chrome and try again.',
           'shellTextOwnedBrowserTitle' =>
             ({required Object provider}) => '${provider} challenge',
           'shellTextOwnedBrowserOpenInvite' => 'Open invite',

@@ -89,7 +89,7 @@ jstring toJString(JNIEnv *env, const char *value) {
 }  // namespace
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_com_defin85_mobile_1gui_1shell_EmbeddedMobileHostNative_ensureStarted(JNIEnv *env, jclass /*clazz*/) {
+Java_com_defin85_relaydock_EmbeddedMobileHostNative_ensureStarted(JNIEnv *env, jclass /*clazz*/) {
     HostLibrary &library = hostLibrary();
     if (library.ensure_started == nullptr) {
         return nullptr;
@@ -98,7 +98,7 @@ Java_com_defin85_mobile_1gui_1shell_EmbeddedMobileHostNative_ensureStarted(JNIEn
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_com_defin85_mobile_1gui_1shell_EmbeddedMobileHostNative_lastError(JNIEnv *env, jclass /*clazz*/) {
+Java_com_defin85_relaydock_EmbeddedMobileHostNative_lastError(JNIEnv *env, jclass /*clazz*/) {
     HostLibrary &library = hostLibrary();
     if (library.last_error == nullptr) {
         if (library.load_error.empty()) {
@@ -110,7 +110,7 @@ Java_com_defin85_mobile_1gui_1shell_EmbeddedMobileHostNative_lastError(JNIEnv *e
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_defin85_mobile_1gui_1shell_EmbeddedMobileHostNative_stopEmbeddedHost(JNIEnv * /*env*/, jclass /*clazz*/) {
+Java_com_defin85_relaydock_EmbeddedMobileHostNative_stopEmbeddedHost(JNIEnv * /*env*/, jclass /*clazz*/) {
     HostLibrary &library = hostLibrary();
     if (library.stop != nullptr) {
         library.stop();
@@ -118,7 +118,7 @@ Java_com_defin85_mobile_1gui_1shell_EmbeddedMobileHostNative_stopEmbeddedHost(JN
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_defin85_mobile_1gui_1shell_EmbeddedMobileHostNative_registerPlatformTunnelBridge(
+Java_com_defin85_relaydock_EmbeddedMobileHostNative_registerPlatformTunnelBridge(
     JNIEnv *env,
     jclass /*clazz*/,
     jobject bridge
@@ -130,7 +130,7 @@ Java_com_defin85_mobile_1gui_1shell_EmbeddedMobileHostNative_registerPlatformTun
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_defin85_mobile_1gui_1shell_EmbeddedMobileHostNative_clearPlatformTunnelBridge(
+Java_com_defin85_relaydock_EmbeddedMobileHostNative_clearPlatformTunnelBridge(
     JNIEnv *env,
     jclass /*clazz*/
 ) {
@@ -141,7 +141,7 @@ Java_com_defin85_mobile_1gui_1shell_EmbeddedMobileHostNative_clearPlatformTunnel
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_defin85_mobile_1gui_1shell_EmbeddedMobileHostNative_setAndroidWireGuardProfilePath(
+Java_com_defin85_relaydock_EmbeddedMobileHostNative_setAndroidWireGuardProfilePath(
     JNIEnv *env,
     jclass /*clazz*/,
     jstring value

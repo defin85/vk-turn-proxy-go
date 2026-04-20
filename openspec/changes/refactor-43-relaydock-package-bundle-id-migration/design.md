@@ -8,6 +8,8 @@ Current examples in the tree include:
 - Android package and namespace values under `com.defin85.mobile_gui_shell`
 - macOS bundle identifiers under `com.example.guiShell`
 - Linux desktop application identifiers under `com.defin85.gui_shell`
+- desktop packaged output names and launch helpers that still exposed legacy
+  shell stems such as `gui_shell`, `gui_shell.app`, or `gui_shell.exe`
 - repo-owned automation and docs that still look up the legacy Android package
   or refer to placeholder shell identities as if they were canonical
 
@@ -25,14 +27,15 @@ internal identifier rename into the same rollout.
   - Remove placeholder or example package/bundle IDs from repo-owned packaging,
     native project metadata, and supported automation where this change
     applies.
+  - Align publication-facing desktop native output names and repo-owned launch
+    or staging helpers when those surfaces still expose the legacy shell stem.
   - Make build and verification workflows fail closed on mixed old/new publish
     identifiers.
   - Document the migration boundary so package/bundle IDs can move now without
     hiding unrelated identity cleanup.
 - Non-Goals:
   - Rename Dart package names such as `gui_shell` or `mobile_gui_shell`.
-  - Rename Windows binaries or staging paths such as `gui_shell.exe`.
-  - Rename local artifact-role strings or local state directory roots in the
+  - Rename local artifact-role strings or shell state directory roots in the
     same pass.
   - Redesign product branding, iconography, or shell UX in this change.
 
@@ -73,10 +76,29 @@ expands the migration:
 
 - Dart package names and import roots
 - Flutter artifact-role strings
-- Windows executable names and staging directory stems
+- shell state directory roots and similar non-packaged local persistence stems
 
 Keeping that boundary explicit avoids turning a package/bundle migration into a
 large multi-language rename with broader regression risk.
+
+### Decision: Desktop packaged output names move with the desktop publish identity
+
+Some desktop surfaces that operators see or invoke are neither reverse-DNS
+identifiers nor Dart package names. They still carry the same publication-facing
+shell identity and become misleading if they keep the legacy `gui_shell` stem
+after the package and bundle cutover.
+
+This migration therefore also moves the packaged desktop output names that are
+part of the repo-owned published desktop surface:
+
+- the Linux packaged binary stem
+- the macOS bundled app output name and related test-host references
+- the Windows packaged executable name or metadata plus repo-owned launch and
+  staging helpers that point at it
+
+That desktop output-name cleanup stays intentionally narrower than a full
+internal rename. Dart package names, import roots, artifact-role strings, and
+other internal shell identifiers remain separate.
 
 ### Decision: Mobile publish-identity cutover must declare its state-continuity boundary
 
@@ -125,17 +147,22 @@ than treating the old package as an equal long-term runtime identity.
   old values.
   Mitigation: add preflight or verification checks that fail on mixed legacy
   and canonical identifiers.
+- Risk: desktop launch helpers or packaged sidecar discovery can drift if app
+  output names change without updating repo-owned launch paths and tests.
+  Mitigation: update launch or staging helpers and keep a targeted desktop test
+  or verification path around bundled-app naming assumptions.
 - Risk: widening this migration to every internal identifier would create an
   oversized rename with low signal and high regression surface.
-  Mitigation: keep internal Dart package names, artifact roles, and Windows
-  binary names out of scope for this change.
+  Mitigation: keep internal Dart package names, artifact roles, and shell state
+  directory roots out of scope for this change.
 
 ## Migration Plan
 
 1. Define the canonical RelayDock identifier set and its single repo-managed
    source of truth.
 2. Migrate Android package/namespace surfaces, Apple bundle identifiers, and
-   Linux application identifiers to that source.
+   Linux application identifiers to that source, and align desktop packaged
+   output names that still expose the legacy shell stem.
 3. Update repo-owned packaging scripts, smoke automation, and docs so they use
    the canonical identifiers, and make the mobile continuity boundary explicit
    whenever the package/bundle cutover cannot preserve local state in place.
@@ -144,5 +171,6 @@ than treating the old package as an equal long-term runtime identity.
 
 ## Open Questions
 
-- Whether Windows executable naming should stay a separate follow-up change or
-  be folded into a later broader artifact-identity cleanup.
+- Whether the remaining internal shell identifiers such as Dart package names,
+  import roots, artifact-role strings, or state-directory stems should stay a
+  separate follow-up cleanup.

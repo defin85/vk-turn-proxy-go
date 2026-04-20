@@ -143,6 +143,13 @@ abstract class MobileWebViewDocumentStartScriptInstaller {
   });
 }
 
+abstract class MobileWebViewUserAgentMetadataController {
+  Future<bool> sync({
+    required int webViewIdentifier,
+    String? userAgent,
+  });
+}
+
 abstract class MobileOwnedBrowserSessionStateResetter {
   Future<void> clearSessionState();
 }
@@ -360,6 +367,39 @@ class PlatformMobileWebViewDocumentStartScriptInstaller
           'webViewIdentifier': webViewIdentifier,
           'javaScript': javaScript,
           'allowedOriginRules': allowedOriginRules,
+        },
+      );
+      return true;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+}
+
+class PlatformMobileWebViewUserAgentMetadataController
+    implements MobileWebViewUserAgentMetadataController {
+  const PlatformMobileWebViewUserAgentMetadataController({
+    MethodChannel? methodChannel,
+  }) : _methodChannel =
+           methodChannel ?? const MethodChannel(_bridgeChannelName);
+
+  final MethodChannel _methodChannel;
+
+  @override
+  Future<bool> sync({
+    required int webViewIdentifier,
+    String? userAgent,
+  }) async {
+    try {
+      await _methodChannel.invokeMethod<void>(
+        'setWebViewUserAgentMetadata',
+        <String, Object?>{
+          'webViewIdentifier': webViewIdentifier,
+          'userAgent': userAgent?.trim(),
         },
       );
       return true;

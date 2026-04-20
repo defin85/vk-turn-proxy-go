@@ -62,6 +62,9 @@ class OwnedBrowserWebSession {
     required this.collectCookies,
     this.collectObservedRequests = _collectNoObservedRequests,
     this.setUserAgent,
+    this.getUserAgent,
+    this.syncUserAgentMetadata,
+    this.setUseWideViewPort,
     this.refreshViewport,
     this.collectDebugSnapshot,
   });
@@ -74,12 +77,15 @@ class OwnedBrowserWebSession {
   final Future<List<BrowserObservedRequestRecord>> Function()
   collectObservedRequests;
   final Future<void> Function(String userAgent)? setUserAgent;
+  final Future<String?> Function()? getUserAgent;
+  final Future<bool> Function(String? userAgent)? syncUserAgentMetadata;
+  final Future<void> Function(bool enabled)? setUseWideViewPort;
   final Future<void> Function()? refreshViewport;
   final Future<Map<String, Object?>> Function()? collectDebugSnapshot;
 }
 
-const String _vkDesktopLikeUserAgent =
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:144.0) Gecko/20100101 Firefox/144.0';
+const String _vkDesktopChromiumFallbackUserAgent =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36';
 const String _ownedBrowserObservedRequestChannelName =
     'OwnedBrowserStageObserver';
 const List<String> _ownedBrowserObservedRequestAllowedOriginRules = <String>[
@@ -97,6 +103,71 @@ const String _ownedBrowserObservedRequestBootstrap = r'''
     return;
   }
   window.__ownedBrowserStageObserverInstalled = true;
+  function overrideReadonlyProperty(target, name, getter) {
+    if (!target || typeof getter !== 'function') {
+      return;
+    }
+    try {
+      Object.defineProperty(target, name, {
+        configurable: true,
+        enumerable: true,
+        get: getter
+      });
+    } catch (_) {}
+  }
+  function createMediaQueryList(query, matches) {
+    return {
+      matches: matches,
+      media: query,
+      onchange: null,
+      addListener: function() {},
+      removeListener: function() {},
+      addEventListener: function() {},
+      removeEventListener: function() {},
+      dispatchEvent: function() { return true; }
+    };
+  }
+  function installDesktopBrowserShims() {
+    var ua = navigator.userAgent || '';
+    if (ua.indexOf('Windows NT') === -1) {
+      return;
+    }
+    var navigatorPrototype = Object.getPrototypeOf(navigator);
+    overrideReadonlyProperty(navigatorPrototype, 'platform', function() {
+      return 'Win32';
+    });
+    overrideReadonlyProperty(navigatorPrototype, 'maxTouchPoints', function() {
+      return 0;
+    });
+    overrideReadonlyProperty(navigatorPrototype, 'vendor', function() {
+      return 'Google Inc.';
+    });
+    overrideReadonlyProperty(window, 'orientation', function() {
+      return undefined;
+    });
+    if (typeof window.matchMedia === 'function' &&
+        !window.__ownedBrowserDesktopMatchMediaInstalled) {
+      var originalMatchMedia = window.matchMedia.bind(window);
+      window.matchMedia = function(query) {
+        var normalized = String(query || '').toLowerCase().replace(/\s+/g, '');
+        if (normalized === '(pointer:coarse)' ||
+            normalized === '(any-pointer:coarse)' ||
+            normalized === '(hover:none)' ||
+            normalized === '(any-hover:none)') {
+          return createMediaQueryList(query, false);
+        }
+        if (normalized === '(pointer:fine)' ||
+            normalized === '(any-pointer:fine)' ||
+            normalized === '(hover:hover)' ||
+            normalized === '(any-hover:hover)') {
+          return createMediaQueryList(query, true);
+        }
+        return originalMatchMedia(query);
+      };
+      window.__ownedBrowserDesktopMatchMediaInstalled = true;
+    }
+  }
+  installDesktopBrowserShims();
   var channel = window.OwnedBrowserStageObserver;
   if (!channel || typeof channel.postMessage !== 'function') {
     return;
@@ -302,6 +373,7 @@ class WebViewOwnedBrowserChallengeRunner
   ) {
     final cookieManager = WebviewCookieManager();
     final observedRequests = <BrowserObservedRequestRecord>[];
+    final consoleMessages = <String>[];
     final controllerCreationParams =
         WebViewPlatform.instance is AndroidWebViewPlatform
         ? AndroidWebViewControllerCreationParams.fromPlatformWebViewControllerCreationParams(
@@ -313,6 +385,18 @@ class WebViewOwnedBrowserChallengeRunner
     );
     controller
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setOnConsoleMessage((JavaScriptConsoleMessage message) {
+        final level = message.level.name.trim();
+        final text = message.message.trim();
+        if (text.isEmpty) {
+          return;
+        }
+        final summary = level.isEmpty ? text : '$level: $text';
+        consoleMessages.add(summary);
+        if (consoleMessages.length > 8) {
+          consoleMessages.removeRange(0, consoleMessages.length - 8);
+        }
+      })
       ..addJavaScriptChannel(
         _ownedBrowserObservedRequestChannelName,
         onMessageReceived: (JavaScriptMessage message) {
@@ -342,6 +426,9 @@ class WebViewOwnedBrowserChallengeRunner
     PlatformWebViewWidgetCreationParams widgetCreationParams =
         PlatformWebViewWidgetCreationParams(controller: controller.platform);
     Future<Map<String, Object?>> Function()? collectDebugSnapshot;
+    PlatformMobileWebViewUserAgentMetadataController?
+    userAgentMetadataController;
+    int? androidWebViewIdentifier;
     if (WebViewPlatform.instance is AndroidWebViewPlatform) {
       widgetCreationParams =
           AndroidWebViewWidgetCreationParams.fromPlatformWebViewWidgetCreationParams(
@@ -351,18 +438,22 @@ class WebViewOwnedBrowserChallengeRunner
       final androidController = controller.platform as AndroidWebViewController;
       const scriptInstaller =
           PlatformMobileWebViewDocumentStartScriptInstaller();
+      userAgentMetadataController =
+          const PlatformMobileWebViewUserAgentMetadataController();
+      androidWebViewIdentifier = androidController.webViewIdentifier;
       unawaited(
         scriptInstaller.install(
-          webViewIdentifier: androidController.webViewIdentifier,
+          webViewIdentifier: androidWebViewIdentifier,
           javaScript: _ownedBrowserObservedRequestBootstrap,
           allowedOriginRules: _ownedBrowserObservedRequestAllowedOriginRules,
         ),
       );
       const inspector = PlatformMobileWebViewDebugInspector();
-      collectDebugSnapshot = () => inspector.snapshot(
-        webViewIdentifier: androidController.webViewIdentifier,
-      );
+      collectDebugSnapshot = () =>
+          inspector.snapshot(webViewIdentifier: androidWebViewIdentifier!);
     }
+
+    final debugSnapshotCollector = collectDebugSnapshot;
 
     return OwnedBrowserWebSession(
       viewBuilder: (BuildContext context) =>
@@ -375,6 +466,27 @@ class WebViewOwnedBrowserChallengeRunner
       },
       clearSessionState: sessionStateResetter.clearSessionState,
       setUserAgent: (String userAgent) => controller.setUserAgent(userAgent),
+      getUserAgent: () async {
+        if (controller.platform case final AndroidWebViewController android) {
+          return android.getUserAgent();
+        }
+        return null;
+      },
+      syncUserAgentMetadata: (String? userAgent) async {
+        if (userAgentMetadataController == null ||
+            androidWebViewIdentifier == null) {
+          return true;
+        }
+        return userAgentMetadataController.sync(
+          webViewIdentifier: androidWebViewIdentifier,
+          userAgent: userAgent,
+        );
+      },
+      setUseWideViewPort: (bool enabled) async {
+        if (controller.platform case final AndroidWebViewController android) {
+          await android.setUseWideViewPort(enabled);
+        }
+      },
       collectCookies: (List<String> urls) async {
         final cookies = <BrowserCookieRecord>[];
         final seen = <String>{};
@@ -409,7 +521,29 @@ class WebViewOwnedBrowserChallengeRunner
       collectObservedRequests: () async =>
           List<BrowserObservedRequestRecord>.unmodifiable(observedRequests),
       refreshViewport: () => nudgeOwnedBrowserViewport(controller),
-      collectDebugSnapshot: collectDebugSnapshot,
+      collectDebugSnapshot: debugSnapshotCollector == null
+          ? null
+          : () async {
+              final snapshot = await debugSnapshotCollector();
+              final currentUrl = await controller.currentUrl();
+              if (currentUrl != null && currentUrl.trim().isNotEmpty) {
+                snapshot['page_url'] = currentUrl.trim();
+              }
+              final pageTitle = await controller.getTitle();
+              if (pageTitle != null && pageTitle.trim().isNotEmpty) {
+                snapshot['page_title'] = pageTitle.trim();
+              }
+              if (consoleMessages.isNotEmpty) {
+                snapshot['page_console_messages'] = List<String>.unmodifiable(
+                  consoleMessages,
+                );
+              }
+              final pageState = await _collectOwnedBrowserPageState(controller);
+              if (pageState != null) {
+                snapshot.addAll(pageState);
+              }
+              return snapshot;
+            },
     );
   }
 }
@@ -502,9 +636,18 @@ class _OwnedBrowserChallengePageState extends State<_OwnedBrowserChallengePage>
 
   Future<void> _start(Uri uri) async {
     try {
+      final copy = context.shellText;
       final preferredUserAgent = _preferredUserAgentForChallenge(
         widget.challenge,
+        currentUserAgent: await _session.getUserAgent?.call(),
       );
+      final metadataSynced = await _session.syncUserAgentMetadata?.call(
+        preferredUserAgent,
+      );
+      if (preferredUserAgent != null && metadataSynced == false) {
+        throw StateError(copy.ownedBrowserDesktopFingerprintUnavailable);
+      }
+      await _session.setUseWideViewPort?.call(preferredUserAgent != null);
       if (preferredUserAgent != null) {
         await _session.setUserAgent?.call(preferredUserAgent);
       }
@@ -890,11 +1033,27 @@ bool _isVkHost(String host) {
       normalized == 'm.vk.com';
 }
 
-String? _preferredUserAgentForChallenge(ChallengeRecord challenge) {
+String? _preferredUserAgentForChallenge(
+  ChallengeRecord challenge, {
+  String? currentUserAgent,
+}) {
   if (!_isVkOwnedBrowserLikeChallenge(challenge)) {
     return null;
   }
-  return _vkDesktopLikeUserAgent;
+  return _desktopChromiumUserAgentFrom(currentUserAgent);
+}
+
+String _desktopChromiumUserAgentFrom(String? currentUserAgent) {
+  final raw = currentUserAgent?.trim() ?? '';
+  if (raw.isEmpty) {
+    return _vkDesktopChromiumFallbackUserAgent;
+  }
+  final chromeMatch = RegExp(r'Chrome/([0-9.]+)').firstMatch(raw);
+  final chromeVersion = chromeMatch?.group(1)?.trim();
+  if (chromeVersion == null || chromeVersion.isEmpty) {
+    return _vkDesktopChromiumFallbackUserAgent;
+  }
+  return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/$chromeVersion Safari/537.36';
 }
 
 bool _shouldResetBrowserStateForChallenge(ChallengeRecord challenge) {
@@ -991,6 +1150,32 @@ String _formatDebugSnapshot(Map<String, Object?> snapshot) {
   if (pageTitle is String && pageTitle.isNotEmpty) {
     lines.add('page title=$pageTitle');
   }
+  final pageReadyState = snapshot['page_ready_state'];
+  if (pageReadyState is String && pageReadyState.isNotEmpty) {
+    lines.add('page ready=$pageReadyState');
+  }
+  final pageNavigatorPlatform = snapshot['page_navigator_platform'];
+  if (pageNavigatorPlatform is String && pageNavigatorPlatform.isNotEmpty) {
+    lines.add('page platform=$pageNavigatorPlatform');
+  }
+  final pageNavigatorUa = snapshot['page_navigator_user_agent'];
+  if (pageNavigatorUa is String && pageNavigatorUa.isNotEmpty) {
+    lines.add('page ua=$pageNavigatorUa');
+  }
+  final pageNavigatorUaData = snapshot['page_navigator_user_agent_data'];
+  if (pageNavigatorUaData is String && pageNavigatorUaData.isNotEmpty) {
+    lines.add('page uaData=$pageNavigatorUaData');
+  }
+  final pageNavigatorTouchPoints = snapshot['page_navigator_max_touch_points'];
+  final pagePointerCoarse = snapshot['page_pointer_coarse'];
+  final pageHoverNone = snapshot['page_hover_none'];
+  if (pageNavigatorTouchPoints != null ||
+      pagePointerCoarse != null ||
+      pageHoverNone != null) {
+    lines.add(
+      'page input touchPoints=${pageNavigatorTouchPoints ?? '-'} coarse=${pagePointerCoarse ?? '-'} hoverNone=${pageHoverNone ?? '-'}',
+    );
+  }
   final pageActive = snapshot['page_active_element'];
   if (pageActive is Map<Object?, Object?>) {
     lines.add(
@@ -1011,7 +1196,120 @@ String _formatDebugSnapshot(Map<String, Object?> snapshot) {
   if (pageDebugError is String && pageDebugError.isNotEmpty) {
     lines.add('page debug error=$pageDebugError');
   }
+  final consoleMessages = snapshot['page_console_messages'];
+  if (consoleMessages is List && consoleMessages.isNotEmpty) {
+    lines.add('page console=${consoleMessages.take(4).join(' | ')}');
+  }
   return lines.join('\n');
+}
+
+Future<Map<String, Object?>?> _collectOwnedBrowserPageState(
+  WebViewController controller,
+) async {
+  try {
+    final raw = await controller.runJavaScriptReturningResult('''
+      (function() {
+        function describeElement(element) {
+          if (!element) {
+            return null;
+          }
+          return {
+            tag: element.tagName || null,
+            type: element.type || null,
+            id: element.id || null,
+            name: element.name || null,
+            inputMode: element.inputMode || null,
+            text: (element.innerText || element.textContent || '').trim().slice(0, 120) || null
+          };
+        }
+        function collectVisibleCtas() {
+          var nodes = Array.from(
+            document.querySelectorAll(
+              'button, a, [role="button"], input[type="submit"], input[type="button"]'
+            )
+          );
+          return nodes
+            .filter(function(node) {
+              var rect = node.getBoundingClientRect();
+              if (rect.width <= 0 || rect.height <= 0) {
+                return false;
+              }
+              var style = window.getComputedStyle(node);
+              return style && style.display !== 'none' && style.visibility !== 'hidden';
+            })
+            .map(function(node) {
+              return (node.innerText || node.textContent || node.value || node.getAttribute('aria-label') || '')
+                .replace(/\\s+/g, ' ')
+                .trim();
+            })
+            .filter(function(text) { return text.length > 0; })
+            .slice(0, 8);
+        }
+        return JSON.stringify({
+          page_ready_state: document.readyState || null,
+          page_location_href: window.location.href || null,
+          page_navigator_platform: navigator.platform || null,
+          page_navigator_user_agent: navigator.userAgent || null,
+          page_navigator_max_touch_points:
+            typeof navigator.maxTouchPoints === 'number' ? navigator.maxTouchPoints : null,
+          page_navigator_user_agent_data:
+            typeof navigator.userAgentData === 'object' &&
+                navigator.userAgentData &&
+                typeof navigator.userAgentData.toJSON === 'function'
+            ? JSON.stringify(navigator.userAgentData.toJSON())
+            : null,
+          page_pointer_coarse:
+            typeof window.matchMedia === 'function'
+            ? window.matchMedia('(pointer: coarse)').matches
+            : null,
+          page_hover_none:
+            typeof window.matchMedia === 'function'
+            ? window.matchMedia('(hover: none)').matches
+            : null,
+          page_active_element: describeElement(document.activeElement),
+          page_first_input: describeElement(
+            document.querySelector('input, textarea, [contenteditable="true"]')
+          ),
+          page_visible_ctas: collectVisibleCtas()
+        });
+      })();
+    ''');
+    final normalized = _normalizeOwnedBrowserJavaScriptResult(raw);
+    if (normalized == null || normalized.isEmpty) {
+      return null;
+    }
+    final decoded = jsonDecode(normalized);
+    if (decoded is! Map) {
+      return null;
+    }
+    return decoded.map<String, Object?>(
+      (dynamic key, dynamic value) => MapEntry('$key', value),
+    );
+  } catch (error) {
+    return <String, Object?>{'page_debug_error': '$error'};
+  }
+}
+
+String? _normalizeOwnedBrowserJavaScriptResult(Object? raw) {
+  if (raw == null) {
+    return null;
+  }
+  if (raw is String) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty || trimmed == 'null' || trimmed == 'undefined') {
+      return null;
+    }
+    if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+      try {
+        final decoded = jsonDecode(trimmed);
+        if (decoded is String) {
+          return decoded;
+        }
+      } catch (_) {}
+    }
+    return trimmed;
+  }
+  return '$raw';
 }
 
 Future<void> _installOwnedBrowserObserver(WebViewController controller) async {
@@ -1098,30 +1396,111 @@ BrowserObservedRequestRecord? _parseObservedBrowserRequestMessage(
   );
 }
 
-class _OwnedBrowserDebugPanel extends StatelessWidget {
+class _OwnedBrowserDebugPanel extends StatefulWidget {
   const _OwnedBrowserDebugPanel({required this.snapshot});
 
   final String snapshot;
 
   @override
+  State<_OwnedBrowserDebugPanel> createState() =>
+      _OwnedBrowserDebugPanelState();
+}
+
+class _OwnedBrowserDebugPanelState extends State<_OwnedBrowserDebugPanel> {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final summary = _debugSummary(widget.snapshot);
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 520),
+      constraints: const BoxConstraints(maxWidth: 440),
       child: Card(
         key: const ValueKey<String>('owned-browser-debug-panel'),
         color: theme.colorScheme.surface.withValues(alpha: 0.94),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Text(
-            snapshot,
-            style: theme.textTheme.bodySmall?.copyWith(
-              fontFamily: 'monospace',
-              height: 1.3,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            setState(() {
+              _expanded = !_expanded;
+            });
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    Icon(
+                      Icons.bug_report_outlined,
+                      size: 18,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        summary,
+                        maxLines: _expanded ? 3 : 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      _expanded ? 'Hide' : 'Debug',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                if (_expanded) ...<Widget>[
+                  const SizedBox(height: 10),
+                  Text(
+                    widget.snapshot,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontFamily: 'monospace',
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ),
       ),
     );
   }
+}
+
+String _debugSummary(String snapshot) {
+  String? extract(String prefix) {
+    for (final line in snapshot.split('\n')) {
+      if (line.startsWith(prefix)) {
+        return line.substring(prefix.length).trim();
+      }
+    }
+    return null;
+  }
+
+  final ready = extract('page ready=');
+  final title = extract('page title=');
+  final url = extract('page url=');
+  final uaData = extract('page uaData=');
+  final host = url == null ? null : Uri.tryParse(url)?.host;
+  final fingerprint = uaData != null && uaData.contains('"platform":"Windows"')
+      ? 'desktop hints'
+      : 'mixed hints';
+  final parts = <String>[
+    if (ready != null && ready.isNotEmpty) 'ready=$ready',
+    fingerprint,
+    if (host != null && host.isNotEmpty) host,
+    if (title != null && title.isNotEmpty) title,
+  ];
+  return parts.join(' · ');
 }
