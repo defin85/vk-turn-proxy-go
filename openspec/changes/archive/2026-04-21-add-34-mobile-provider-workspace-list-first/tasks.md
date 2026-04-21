@@ -25,5 +25,5 @@
 - [x] 4.2 Add or update widget coverage for list-first `Providers`, template
   entry points, compact drill-down/back behavior, wide list-detail behavior,
   and the absence of the old overloaded root layout.
-- [ ] 4.3 Validate the redesigned `Providers` flow manually on a mobile device
+- [x] 4.3 Validate the redesigned `Providers` flow manually on a mobile device
   or emulator after implementation, covering both compact and wide layouts.
