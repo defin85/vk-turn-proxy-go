@@ -111,6 +111,19 @@ void main() {
             expect(runtimeDefaults['peer_addr'], 'peer.example.test:443');
             expect(runtimeDefaults['turn_server'], 'turn.example.test');
             expect(runtimeDefaults['turn_port'], '3478');
+            final executionPlan =
+                payload['execution_plan'] as Map<String, dynamic>;
+            expect(executionPlan['access_method'], 'turn_credentials');
+            expect(executionPlan['carrier_family'], 'turn_datagram');
+            expect(executionPlan['engine_family'], 'wireguard_native');
+            expect(executionPlan['host_adapter'], 'windows_wintun');
+            expect(
+              payload['underlay_route_policy'],
+              'preserve_active_local_network',
+            );
+            expect(payload.containsKey('application_routing_policy'), isFalse);
+            expect(payload.containsKey('allowed_packages'), isFalse);
+            expect(payload.containsKey('disallowed_packages'), isFalse);
             request.response.headers.contentType = ContentType.json;
             request.response.write(
               jsonEncode(<String, dynamic>{
@@ -305,6 +318,14 @@ void main() {
           turnServer: 'turn.example.test',
           turnPort: '3478',
         ),
+        executionPlan: const RuntimeExecutionPlan(
+          accessMethod: RuntimeAccessMethod.turnCredentials,
+          carrierFamily: RuntimeCarrierFamily.turnDatagram,
+          engineFamily: RuntimeEngineFamily.wireguardNative,
+          hostAdapter: RuntimeHostAdapter.windowsWintun,
+        ),
+        underlayRoutePolicy:
+            PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork,
       );
       expect(startResult.ready, isFalse);
       expect(startResult.stage, PlatformTunnelStartupStage.capabilityCheck);

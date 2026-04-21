@@ -33,7 +33,8 @@ It remains distinct from packaged system-tunnel work.
 Current support claims are:
 
 - `android_vpn_service`: supported on the documented packaged Android target
-- `windows_wintun`, `linux_tun`, `apple_network_extension`: still unavailable until those packaged hosts ship the adapter path
+- `windows_wintun`: supported on the documented packaged Windows target through the bundled host-owned Wintun lifecycle
+- `linux_tun`, `apple_network_extension`: still unavailable until those packaged hosts ship the adapter path
 
 Hosts must keep every adapter-specific claim honest.
 The planning contract says which packaged path is in scope; it does not authorize future adapters to report support early.
@@ -67,12 +68,16 @@ evidence for all of the following:
 - explicit carrier truth rather than inferred DTLS overlay compatibility
 - real WireGuard payload traffic over the strict `turn_datagram` path
 
-Current repo-owned evidence now covers the first packaged Android path through
-`android_vpn_service`, including typed `ready=true` startup on the supported
-device target for:
+Current repo-owned evidence now covers:
 
-- `all_apps`
-- `allowed_packages`
+- the first packaged Android path through `android_vpn_service`, including
+  typed `ready=true` startup on the supported device target for:
+
+  - `all_apps`
+  - `allowed_packages`
+- the first packaged Windows path through `windows_wintun`, including
+  repo-owned `ready=true` startup on the supported packaged target and
+  host-owned route or DNS preparation plus teardown in the bundled host
 
 ## Remote endpoint ownership
 
@@ -92,7 +97,7 @@ The current `turn-server` role is not a universal backend for all future executi
 
 ## Follow-on slices
 
-1. `add-18-flow-1-desktop-core-platform-tunnel-ready-paths`: ship one desktop packaged host path that turns the documented TURN-backed `wireguard_native` plan into a real desktop adapter ready path.
+1. `add-18-flow-1-desktop-core-platform-tunnel-ready-paths`: shipped the first desktop packaged host path that turns the documented TURN-backed `wireguard_native` plan into a real Windows desktop adapter ready path.
 3. Experimental `webrtc_datachannel`: define a real remote endpoint, framing, and lifecycle verification path before any host advertises it as startable.
 4. Foreign-core engines: add packaging, lifecycle ownership, and verification evidence before any host advertises `proxy_core_adapter` or `trusttunnel_native` as startable.
 

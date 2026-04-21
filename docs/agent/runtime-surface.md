@@ -8,6 +8,7 @@ It is the concise first-pass view for Codex and other repository-local agents.
 - `vk-turn-proxy-go` is the canonical Go rewrite for the TURN/DTLS tunnel product.
 - The legacy repository `/home/egor/code/vk-turn-proxy` remains the compatibility oracle until equivalent coverage exists here.
 - Current shipped slices cover provider resolution for `vk` and `generic-turn`, the local client control plane, runtime observability, the turnlab harness, and desktop/mobile Flutter shells.
+- The first packaged Windows system-tunnel ready path is now repo-owned through `windows_wintun`; use `docs/windows-desktop-wg-poc.md` for the verified operator and VMware execution-cell runbook.
 - The local control plane now exposes typed runtime execution planning so current overlay startup, future packaged `wireguard_native` plans, and later experimental carriers stay explicitly separated.
 - Provider logic stays in `internal/provider/...`; transport stays in `internal/transport/...`; runtime orchestration stays in `internal/session`.
 - Active behavior lives in `openspec/specs/*/spec.md` plus any approved active change under `openspec/changes/`.
@@ -43,4 +44,5 @@ Use `docs/agent/verification.md` to choose the smallest relevant checks before e
 - `docs/provider-matrix.md`: provider support and scope
 - `docs/runtime-observability.md`: logs, metrics, stage taxonomy
 - `docs/runtime-execution-planning.md`: explicit same-device execution matrix, remote endpoint ownership, and follow-on slices
+- `docs/windows-desktop-wg-poc.md`: repo-owned Windows `windows_wintun` ready-path runbook and safe VMware execution cell
 - `README.md`: full operator quick start, CLI examples, and deeper workflow details

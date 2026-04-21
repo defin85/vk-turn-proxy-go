@@ -1046,6 +1046,63 @@ func TestHostStartPlatformTunnelDefaultsAndroidAppRoutingPolicyToAllApps(t *test
 	}
 }
 
+func TestHostStartPlatformTunnelDefaultsWindowsUnderlayRoutePolicy(t *testing.T) {
+	var captured PlatformTunnelStartRequest
+	host := New(
+		WithBuildIdentity(BuildIdentity{Target: "windows/amd64"}),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{{
+			Mode:      PlatformTunnelModeWindowsWintun,
+			Available: true,
+			SatisfiedPrerequisites: []PlatformTunnelPrerequisite{
+				PlatformTunnelPrerequisiteDriver,
+				PlatformTunnelPrerequisiteRouteExclusion,
+				PlatformTunnelPrerequisiteDNSBypass,
+			},
+		}}),
+		WithWireGuardTurnMaterializer(func(context.Context, WireGuardTurnMaterializeRequest) (*WireGuardTurnExecutionLease, error) {
+			return &WireGuardTurnExecutionLease{
+				ResolutionID:         "resolution-windows-1",
+				AccessMethod:         RuntimeAccessMethodTURNCredentials,
+				CarrierFamily:        RuntimeCarrierFamilyTURNDatagram,
+				EngineFamily:         RuntimeEngineFamilyWireGuardNative,
+				RemoteEndpointFamily: RuntimeRemoteEndpointFamilyTURNServer,
+				RemoteEndpointRole:   WireGuardTurnRemoteEndpointRoleDatagramTermination,
+				TURNServerAddress:    "turn.example.test:3478",
+				TURNUsername:         "turn-user",
+				TURNPassword:         "turn-pass",
+				PeerEndpointAddress:  "relay.example.test:3478",
+				ClientPrivateKey:     "key",
+				ClientAddresses:      []string{"10.10.0.2/32"},
+				PeerPublicKey:        "peer",
+				AllowedIPs:           []string{"0.0.0.0/0"},
+			}, nil
+		}),
+		WithPlatformTunnelStarter(func(_ context.Context, req PlatformTunnelStartRequest) (PlatformTunnelStartResult, error) {
+			captured = req
+			return PlatformTunnelStartResult{
+				Mode:                req.Mode,
+				Ready:               false,
+				Stage:               PlatformTunnelStartupStageCapabilityCheck,
+				MissingPrerequisite: PlatformTunnelPrerequisiteHostImplementation,
+				UnderlayRoutePolicy: req.UnderlayRoutePolicy,
+			}, nil
+		}),
+	)
+
+	if _, err := host.StartPlatformTunnel(context.Background(), PlatformTunnelStartRequest{
+		Mode: PlatformTunnelModeWindowsWintun,
+	}); err != nil {
+		t.Fatalf("StartPlatformTunnel() error = %v", err)
+	}
+	if captured.UnderlayRoutePolicy != PlatformTunnelUnderlayRoutePolicyPreserveActiveLocalNetwork {
+		t.Fatalf(
+			"underlay_route_policy = %q, want %q",
+			captured.UnderlayRoutePolicy,
+			PlatformTunnelUnderlayRoutePolicyPreserveActiveLocalNetwork,
+		)
+	}
+}
+
 func TestHostStartPlatformTunnelRejectsInvalidAndroidAppRoutingPolicy(t *testing.T) {
 	host := New(WithBuildIdentity(BuildIdentity{Target: "android/embedded"}))
 

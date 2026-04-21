@@ -57,6 +57,52 @@ const HostInfo _readyHostInfo = HostInfo(
   ],
 );
 
+const RuntimeExecutionPlan _windowsWintunExecutionPlan = RuntimeExecutionPlan(
+  accessMethod: RuntimeAccessMethod.turnCredentials,
+  carrierFamily: RuntimeCarrierFamily.turnDatagram,
+  engineFamily: RuntimeEngineFamily.wireguardNative,
+  hostAdapter: RuntimeHostAdapter.windowsWintun,
+);
+
+const HostInfo _readyWindowsWintunHostInfo = HostInfo(
+  contractVersion: '1',
+  build: _testHostBuild,
+  capabilities: <Capability>[
+    Capability.desktopSidecar,
+    Capability.platformTunnels,
+    Capability.profiles,
+    Capability.providerConfigs,
+    Capability.providerRuntimeArtifacts,
+    Capability.runtimeExecutionPlanning,
+    Capability.sessions,
+    Capability.challenges,
+    Capability.diagnostics,
+    Capability.eventStream,
+  ],
+  platformTunnels: <PlatformTunnelCapability>[
+    PlatformTunnelCapability(
+      mode: PlatformTunnelMode.windowsWintun,
+      available: true,
+      satisfiedPrerequisites: <PlatformTunnelPrerequisite>[
+        PlatformTunnelPrerequisite.driver,
+        PlatformTunnelPrerequisite.routeExclusion,
+        PlatformTunnelPrerequisite.dnsBypass,
+      ],
+      supportedUnderlayRoutePolicies: <PlatformTunnelUnderlayRoutePolicy>[
+        PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork,
+      ],
+      executionPlans: <RuntimeExecutionPlanDescriptor>[
+        RuntimeExecutionPlanDescriptor(
+          plan: _windowsWintunExecutionPlan,
+          supportState: RuntimeExecutionPlanSupportState.supported,
+          remoteEndpointFamily: RuntimeRemoteEndpointFamily.turnServer,
+          isDefault: true,
+        ),
+      ],
+    ),
+  ],
+);
+
 const List<ProviderDescriptor> _providerDescriptors = <ProviderDescriptor>[
   ProviderDescriptor(
     id: 'vk',
@@ -775,7 +821,7 @@ void main() {
           HostConnectionResult(
             state: HostLifecycleState.ready,
             message: 'ready',
-            info: _readyHostInfo,
+            info: _readyWindowsWintunHostInfo,
           ),
         ]),
       );
@@ -815,12 +861,12 @@ void main() {
     );
     addTearDown(controller.dispose);
 
-      await controller.initialize();
-      controller.managedProviders = const <ManagedProviderRecord>[];
-      controller.selectedManagedProviderId = null;
-      controller.draft = ProfileDraft.defaults();
-      controller.activateManagedProviderMode();
-      expect(controller.notice, 'Управляемые провайдеры пока недоступны.');
+    await controller.initialize();
+    controller.managedProviders = const <ManagedProviderRecord>[];
+    controller.selectedManagedProviderId = null;
+    controller.draft = ProfileDraft.defaults();
+    controller.activateManagedProviderMode();
+    expect(controller.notice, 'Управляемые провайдеры пока недоступны.');
 
     await controller.startResolutionFromDraft();
     expect(
@@ -957,7 +1003,7 @@ void main() {
           HostConnectionResult(
             state: HostLifecycleState.ready,
             message: 'ready',
-            info: _readyHostInfo,
+            info: _readyWindowsWintunHostInfo,
           ),
         ]),
       );
@@ -1159,7 +1205,7 @@ void main() {
           HostConnectionResult(
             state: HostLifecycleState.ready,
             message: 'ready',
-            info: _readyHostInfo,
+            info: _readyWindowsWintunHostInfo,
           ),
         ]),
       );
@@ -1201,7 +1247,7 @@ void main() {
           HostConnectionResult(
             state: HostLifecycleState.ready,
             message: 'ready',
-            info: _readyHostInfo,
+            info: _readyWindowsWintunHostInfo,
           ),
         ]),
       );
@@ -1210,9 +1256,11 @@ void main() {
       await controller.initialize();
       await controller.startPlatformTunnel(PlatformTunnelMode.windowsWintun);
 
-      expect(api.startPlatformTunnelCalls, <PlatformTunnelMode>[
+      expect(api.startPlatformTunnelCalls, hasLength(1));
+      expect(
+        api.startPlatformTunnelCalls.single.mode,
         PlatformTunnelMode.windowsWintun,
-      ]);
+      );
       expect(
         controller.platformTunnels.single.mode,
         PlatformTunnelMode.windowsWintun,
@@ -1228,6 +1276,99 @@ void main() {
   );
 
   test(
+    'controller forwards selected resolution and default windows execution plan for platform tunnel start',
+    () async {
+      final api = _FakeControlPlaneApi(
+        profiles: const <ProfileRecord>[],
+        resolutions: <ResolutionRecord>[_resolutionRecord(id: 'resolution-7')],
+        sessions: const <SessionRecord>[],
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(const <HostConnectionResult>[
+          HostConnectionResult(
+            state: HostLifecycleState.ready,
+            message: 'ready',
+            info: _readyWindowsWintunHostInfo,
+          ),
+        ]),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      controller.materializeDefaults = const RuntimeDefaults(
+        listenAddress: '127.0.0.1:9101',
+        peerAddress: 'relay.example.test:3478',
+        turnServer: 'turn.example.test',
+        turnPort: '3478',
+      );
+      await controller.startPlatformTunnel(PlatformTunnelMode.windowsWintun);
+
+      expect(api.startPlatformTunnelCalls, hasLength(1));
+      final call = api.startPlatformTunnelCalls.single;
+      expect(call.mode, PlatformTunnelMode.windowsWintun);
+      expect(call.resolutionId, 'resolution-7');
+      expect(call.runtimeDefaults, isNotNull);
+      expect(call.runtimeDefaults?.listenAddress, '127.0.0.1:9101');
+      expect(call.runtimeDefaults?.peerAddress, 'relay.example.test:3478');
+      expect(call.runtimeDefaults?.turnServer, 'turn.example.test');
+      expect(call.runtimeDefaults?.turnPort, '3478');
+      expect(call.executionPlan, isNotNull);
+      expect(
+        call.executionPlan?.accessMethod,
+        RuntimeAccessMethod.turnCredentials,
+      );
+      expect(
+        call.executionPlan?.carrierFamily,
+        RuntimeCarrierFamily.turnDatagram,
+      );
+      expect(
+        call.executionPlan?.engineFamily,
+        RuntimeEngineFamily.wireguardNative,
+      );
+      expect(call.executionPlan?.hostAdapter, RuntimeHostAdapter.windowsWintun);
+      expect(
+        call.underlayRoutePolicy,
+        PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork,
+      );
+    },
+  );
+
+  test(
+    'controller refuses startup for unavailable desktop platform tunnel modes',
+    () async {
+      final api = _FakeControlPlaneApi(
+        profiles: const <ProfileRecord>[],
+        sessions: const <SessionRecord>[],
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(const <HostConnectionResult>[
+          HostConnectionResult(
+            state: HostLifecycleState.ready,
+            message: 'ready',
+            info: _readyHostInfo,
+          ),
+        ]),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.startPlatformTunnel(PlatformTunnelMode.windowsWintun);
+
+      expect(api.startPlatformTunnelCalls, isEmpty);
+      expect(
+        controller.platformTunnelResultFor(PlatformTunnelMode.windowsWintun),
+        isNull,
+      );
+      expect(
+        controller.notice,
+        'desktop sidecar does not implement system tunnel startup yet',
+      );
+    },
+  );
+
+  test(
     'controller clears platform tunnel startup results after reconnecting to the same mode',
     () async {
       final api = _FakeControlPlaneApi(
@@ -1238,12 +1379,12 @@ void main() {
         HostConnectionResult(
           state: HostLifecycleState.ready,
           message: 'ready',
-          info: _readyHostInfo,
+          info: _readyWindowsWintunHostInfo,
         ),
         HostConnectionResult(
           state: HostLifecycleState.ready,
           message: 'ready again',
-          info: _readyHostInfo,
+          info: _readyWindowsWintunHostInfo,
         ),
       ]);
       final controller = DesktopShellController(
@@ -1312,8 +1453,8 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   final List<String> materializeResolutionCalls = <String>[];
   final List<RuntimeDefaults> materializeResolutionDefaults =
       <RuntimeDefaults>[];
-  final List<PlatformTunnelMode> startPlatformTunnelCalls =
-      <PlatformTunnelMode>[];
+  final List<_StartPlatformTunnelCall> startPlatformTunnelCalls =
+      <_StartPlatformTunnelCall>[];
   final List<ProfileRecord> upsertedProfiles = <ProfileRecord>[];
   final List<ProviderConfigRecord> upsertedProviderConfigs =
       <ProviderConfigRecord>[];
@@ -1468,7 +1609,18 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
     List<String> allowedPackages = const <String>[],
     List<String> disallowedPackages = const <String>[],
   }) async {
-    startPlatformTunnelCalls.add(mode);
+    startPlatformTunnelCalls.add(
+      _StartPlatformTunnelCall(
+        mode: mode,
+        resolutionId: resolutionId,
+        runtimeDefaults: runtimeDefaults,
+        executionPlan: executionPlan,
+        applicationRoutingPolicy: applicationRoutingPolicy,
+        underlayRoutePolicy: underlayRoutePolicy,
+        allowedPackages: allowedPackages,
+        disallowedPackages: disallowedPackages,
+      ),
+    );
     return const PlatformTunnelStartResult(
       mode: PlatformTunnelMode.windowsWintun,
       ready: false,
@@ -1857,4 +2009,26 @@ class _StartResolutionCall {
   final String provider;
   final ProviderInputEnvelope input;
   final Map<String, dynamic> providerSettings;
+}
+
+class _StartPlatformTunnelCall {
+  const _StartPlatformTunnelCall({
+    required this.mode,
+    required this.applicationRoutingPolicy,
+    required this.underlayRoutePolicy,
+    this.resolutionId,
+    this.runtimeDefaults,
+    this.executionPlan,
+    this.allowedPackages = const <String>[],
+    this.disallowedPackages = const <String>[],
+  });
+
+  final PlatformTunnelMode mode;
+  final String? resolutionId;
+  final RuntimeDefaults? runtimeDefaults;
+  final RuntimeExecutionPlan? executionPlan;
+  final PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy;
+  final PlatformTunnelUnderlayRoutePolicy underlayRoutePolicy;
+  final List<String> allowedPackages;
+  final List<String> disallowedPackages;
 }

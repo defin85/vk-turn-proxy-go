@@ -222,7 +222,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Платформенные туннельные режимы'), findsOneWidget);
-      expect(find.text('Запросить запуск'), findsWidgets);
+      expect(find.text('Запросить запуск'), findsNothing);
       expect(find.textContaining('Локальный хост'), findsWidgets);
 
       await tester.pumpWidget(const SizedBox.shrink());
@@ -616,9 +616,9 @@ void main() {
     expect(find.text('Platform tunnel modes'), findsOneWidget);
     expect(
       find.text(
-        'The connected host only reports fail-closed platform tunnel modes, so this section stays compact until you explicitly test startup.',
+        'The desktop shell reads typed host tunnel capabilities and startup stages instead of guessing system routing support from the OS or app bundle.',
       ),
-      findsOneWidget,
+      findsWidgets,
     );
     expect(find.text('Windows Wintun'), findsOneWidget);
     expect(find.text('Linux TUN'), findsNothing);
@@ -627,17 +627,8 @@ void main() {
       find.textContaining('host implementation is still missing'),
       findsOneWidget,
     );
-    final tunnelButton = find.text('Request startup', skipOffstage: false);
-    await tester.ensureVisible(tunnelButton);
-    await tester.pump();
-    await tester.tap(tunnelButton);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 200));
-
-    expect(api.startedPlatformTunnels, <PlatformTunnelMode>[
-      PlatformTunnelMode.windowsWintun,
-    ]);
-    expect(find.textContaining('Capability check'), findsWidgets);
+    expect(find.text('Request startup', skipOffstage: false), findsNothing);
+    expect(api.startedPlatformTunnels, isEmpty);
 
     controller.dispose();
     await tester.pumpWidget(const SizedBox.shrink());

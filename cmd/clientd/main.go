@@ -34,7 +34,7 @@ func runClientd(ctx context.Context, stdout, stderr *os.File, args []string) int
 	}
 
 	logger := observe.NewLoggerWriter(logLevel, stdout)
-	host := clientcontrol.New(clientcontrol.WithLogger(logger))
+	host := newClientHost(logger)
 
 	listener, err := net.Listen("tcp", listenAddr)
 	if err != nil {

@@ -35,6 +35,99 @@ This workflow does not claim:
 - the VPS `wg-quick@wgvktp0.service` and `vk-turn-tunnel-wg.service` already
   running
 
+## Safe VMware execution cell
+
+When the operator must prove the Windows desktop transport path without
+changing the host machine routes, run this PoC inside a Windows VM and keep the
+Linux or WSL checkout only as the build machine.
+
+Validated contour on this workstation:
+
+- VMware-hosted Windows 10 guest
+- guest networking kept inside the VM; desktop VPN enable or disable does not
+  rewrite the Linux or Windows host routes
+- guest access over `ssh` with key auth
+- elevated PowerShell available inside the guest for the repo-owned
+  `windows_wintun` path
+- artifact sync through `scp -O`, because this Windows OpenSSH setup may reject
+  the modern `scp` or `sftp` subsystem path
+- repo-owned guest sync helper:
+  `./scripts/sync-windows-vm-lab.sh`
+- repo-owned guest launcher:
+  `C:\Users\codex\vk-turn-lab\scripts\run-vm-lab-shell.ps1`
+- repo-owned guest host smoke:
+  `C:\Users\codex\vk-turn-lab\scripts\assert-vm-lab-host.ps1`
+
+The verified operator loop is:
+
+1. build the fresh Windows bundle from WSL:
+
+```bash
+./scripts/build-windows-gui-from-wsl.sh
+```
+
+2. sync the packaged bundle and Windows helpers into the guest:
+
+```bash
+./scripts/sync-windows-vm-lab.sh
+```
+
+3. verify the bundled guest-side host surface before launching the GUI:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\codex\vk-turn-lab\scripts\assert-vm-lab-host.ps1 -RequireWireGuardProfile
+```
+
+That smoke fails closed unless:
+
+- bundled `RelayDock.exe`, `clientd.exe`, and `wintun.dll` are all present
+- the PowerShell session is elevated
+- `/v1/host` answers from the bundled `clientd.exe`
+- `platform_tunnels` reports `windows_wintun available=true`
+- the host advertises `preserve_active_local_network`
+- the validated guest-side `desktop1-windows.conf` profile is present when
+  `-RequireWireGuardProfile` is used
+
+4. prove the repo-owned `windows_wintun` startup path can return `ready=true`:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\codex\vk-turn-lab\scripts\smoke-windows-wintun.ps1 -RequireWireGuardProfile
+```
+
+That smoke starts the bundled `clientd.exe`, selects the documented supported
+`windows_wintun` execution plan, creates or reuses one resolved
+`generic-turn` source, starts `/v1/platform-tunnels/start`, requires
+`ready=true`, then stops the platform tunnel again.
+
+If the operator does not pass `-TurnLink`, the smoke first looks for the saved
+`desktop-generic-turn` profile and reuses its `generic-turn://...` link.
+
+5. start the bundled guest-side sidecar and GUI inside the VM:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\codex\vk-turn-lab\scripts\run-vm-lab-shell.ps1
+```
+
+The guest sync and launcher are fail-closed:
+
+- it requires bundled `RelayDock.exe`
+- it requires bundled `clientd.exe`
+- it requires bundled `wintun.dll`
+- it does not fall back to legacy `gui_shell.exe`
+- the sync helper clears the old guest bundle before extraction so stale files
+  do not survive rebuilds
+- when `~/.local/state/vk-turn-proxy-go/wg/desktop1-windows.conf` exists on the
+  Linux or WSL build machine, the sync helper also stages it into the guest at
+  `C:\Users\codex\.local\state\vk-turn-proxy-go\wg\desktop1-windows.conf`
+
+Use this VM contour when you need a safe desktop VPN lab. Use the mirrored
+native checkout under `E:\Projects\vk-turn-proxy-go` only for the Windows build
+itself, not as proof that the host machine stayed untouched.
+
+If you expect route or firewall experiments to drift over time, keep this VM as
+disposable state: use a clone, a cold backup of the VM directory, or an
+explicit VMware snapshot policy before risky runs.
+
 ## One-time route exclusion
 
 The transport app must reach the TURN server outside the desktop VPN.
@@ -71,6 +164,11 @@ in:
 On Windows, that same file is:
 
 - `C:\Users\<user>\.local\state\vk-turn-proxy-go\wg\desktop1-windows.conf`
+
+The VM sync helper copies that file into the guest automatically when the Linux
+or WSL source file exists at sync time. If the source machine keeps it in a
+different location, point `scripts/sync-windows-vm-lab.sh` at it with
+`LOCAL_WIREGUARD_PROFILE=/custom/path/desktop1-windows.conf`.
 
 The critical `AllowedIPs` line is:
 

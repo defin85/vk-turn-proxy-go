@@ -1,33 +1,28 @@
-package androidembeddedhost
+package windowsdesktophost
 
 import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/defin85/vk-turn-proxy-go/internal/wireguardprofile"
 	"github.com/defin85/vk-turn-proxy-go/pkg/clientcontrol"
 )
 
-const androidWireGuardProfileEnv = "VKTP_ANDROID_WIREGUARD_PROFILE"
+const windowsWireGuardProfileEnv = "VKTP_WINDOWS_WIREGUARD_PROFILE"
 
-var (
-	androidWireGuardProfilePathMu sync.RWMutex
-	androidWireGuardProfilePath   string
-)
-
-func defaultAndroidWireGuardTurnMaterializer() clientcontrol.WireGuardTurnMaterializer {
-	profilePath, ok := detectAndroidWireGuardProfilePath()
-	if !ok {
-		return nil
-	}
+func defaultWindowsWireGuardTurnMaterializer() clientcontrol.WireGuardTurnMaterializer {
 	return func(
 		_ context.Context,
 		req clientcontrol.WireGuardTurnMaterializeRequest,
 	) (*clientcontrol.WireGuardTurnExecutionLease, error) {
+		profilePath, err := detectWindowsWireGuardProfilePath()
+		if err != nil {
+			return nil, err
+		}
 		profile, err := wireguardprofile.Load(profilePath)
 		if err != nil {
 			return nil, err
@@ -37,14 +32,14 @@ func defaultAndroidWireGuardTurnMaterializer() clientcontrol.WireGuardTurnMateri
 			turnServerAddress = strings.TrimSpace(req.Credentials.Address)
 		}
 		if turnServerAddress == "" {
-			return nil, fmt.Errorf("strict Android WireGuard materializer requires a TURN server address")
+			return nil, fmt.Errorf("strict Windows WireGuard materializer requires a TURN server address")
 		}
 		peerEndpointAddress := strings.TrimSpace(req.Defaults.PeerAddr)
 		if peerEndpointAddress == "" {
 			peerEndpointAddress = strings.TrimSpace(profile.Endpoint)
 		}
 		if peerEndpointAddress == "" {
-			return nil, fmt.Errorf("strict Android WireGuard materializer requires a peer endpoint address")
+			return nil, fmt.Errorf("strict Windows WireGuard materializer requires a peer endpoint address")
 		}
 		var expiresAt *time.Time
 		if req.Credentials.TTL > 0 {
@@ -73,27 +68,20 @@ func defaultAndroidWireGuardTurnMaterializer() clientcontrol.WireGuardTurnMateri
 	}
 }
 
-func SetAndroidWireGuardProfilePath(path string) {
-	androidWireGuardProfilePathMu.Lock()
-	androidWireGuardProfilePath = strings.TrimSpace(path)
-	androidWireGuardProfilePathMu.Unlock()
-}
-
-func detectAndroidWireGuardProfilePath() (string, bool) {
-	androidWireGuardProfilePathMu.RLock()
-	overridePath := androidWireGuardProfilePath
-	androidWireGuardProfilePathMu.RUnlock()
-	if override := strings.TrimSpace(overridePath); override != "" {
+func detectWindowsWireGuardProfilePath() (string, error) {
+	if override := strings.TrimSpace(os.Getenv(windowsWireGuardProfileEnv)); override != "" {
 		if wireguardprofile.FileExists(override) {
-			return override, true
+			return override, nil
 		}
-		return "", false
+		return "", fmt.Errorf("Windows WireGuard profile %s does not exist", override)
 	}
-	if override := strings.TrimSpace(os.Getenv(androidWireGuardProfileEnv)); override != "" {
-		if wireguardprofile.FileExists(override) {
-			return override, true
-		}
-		return "", false
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("locate Windows home directory: %w", err)
 	}
-	return "", false
+	defaultPath := filepath.Join(home, ".local", "state", "vk-turn-proxy-go", "wg", "desktop1-windows.conf")
+	if wireguardprofile.FileExists(defaultPath) {
+		return defaultPath, nil
+	}
+	return "", fmt.Errorf("Windows WireGuard profile %s does not exist", defaultPath)
 }

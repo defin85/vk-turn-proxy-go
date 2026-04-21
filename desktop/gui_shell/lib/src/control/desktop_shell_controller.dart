@@ -1057,7 +1057,27 @@ class DesktopShellController extends ChangeNotifier {
 
   Future<void> startPlatformTunnel(PlatformTunnelMode mode) async {
     await _runMutation(() async {
-      final result = await api.startPlatformTunnel(mode: mode);
+      final capability = _platformTunnelCapabilityFor(mode);
+      if (capability == null) {
+        notice = _copy.desktopNoPlatformTunnelModesReported;
+        return;
+      }
+      if (!capability.available) {
+        final message = capability.message.trim();
+        notice = message.isNotEmpty
+            ? message
+            : _copy.desktopTypedHostTunnelSummary;
+        return;
+      }
+      final result = await api.startPlatformTunnel(
+        mode: mode,
+        resolutionId: _platformTunnelResolutionIdFor(mode),
+        runtimeDefaults: _platformTunnelRuntimeDefaultsFor(mode),
+        executionPlan: _defaultPlatformTunnelExecutionPlan(capability),
+        underlayRoutePolicy: _defaultPlatformTunnelUnderlayRoutePolicy(
+          capability,
+        ),
+      );
       _platformTunnelResults[mode] = result;
       notice = _platformTunnelNotice(result);
     });
@@ -1101,6 +1121,69 @@ class DesktopShellController extends ChangeNotifier {
       }
     }
     return null;
+  }
+
+  PlatformTunnelCapability? _platformTunnelCapabilityFor(
+    PlatformTunnelMode mode,
+  ) {
+    for (final capability in platformTunnels) {
+      if (capability.mode == mode) {
+        return capability;
+      }
+    }
+    return null;
+  }
+
+  String? _platformTunnelResolutionIdFor(PlatformTunnelMode mode) {
+    if (!_platformTunnelModeRequiresResolution(mode)) {
+      return null;
+    }
+    final resolutionId = selectedResolutionId?.trim() ?? '';
+    return resolutionId.isEmpty ? null : resolutionId;
+  }
+
+  RuntimeDefaults? _platformTunnelRuntimeDefaultsFor(PlatformTunnelMode mode) {
+    if (!_platformTunnelModeRequiresRuntimeDefaults(mode)) {
+      return null;
+    }
+    return materializeDefaults;
+  }
+
+  RuntimeExecutionPlan? _defaultPlatformTunnelExecutionPlan(
+    PlatformTunnelCapability? capability,
+  ) {
+    if (capability == null) {
+      return null;
+    }
+    for (final descriptor in capability.executionPlans) {
+      if (descriptor.isDefault) {
+        return descriptor.plan;
+      }
+    }
+    if (capability.executionPlans.length == 1) {
+      return capability.executionPlans.first.plan;
+    }
+    return null;
+  }
+
+  PlatformTunnelUnderlayRoutePolicy _defaultPlatformTunnelUnderlayRoutePolicy(
+    PlatformTunnelCapability? capability,
+  ) {
+    if (capability?.supportedUnderlayRoutePolicies.contains(
+          PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork,
+        ) ??
+        false) {
+      return PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork;
+    }
+    return PlatformTunnelUnderlayRoutePolicy.standard;
+  }
+
+  bool _platformTunnelModeRequiresResolution(PlatformTunnelMode mode) {
+    return mode == PlatformTunnelMode.windowsWintun;
+  }
+
+  bool _platformTunnelModeRequiresRuntimeDefaults(PlatformTunnelMode mode) {
+    return mode == PlatformTunnelMode.windowsWintun;
   }
 
   ProviderDescriptor? descriptorForProvider(String providerId) {

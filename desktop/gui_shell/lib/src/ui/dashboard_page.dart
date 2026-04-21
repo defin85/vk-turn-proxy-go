@@ -1771,16 +1771,6 @@ class _PlatformTunnelPanel extends StatelessWidget {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  FilledButton.tonal(
-                    onPressed:
-                        controller.busy ||
-                            controller.hostConnection?.isReady != true
-                        ? null
-                        : () => unawaited(
-                            controller.startPlatformTunnel(capability.mode),
-                          ),
-                    child: Text(copy.requestStartup),
-                  ),
                 ],
               ),
             );
@@ -1832,11 +1822,7 @@ class _PlatformTunnelPanel extends StatelessWidget {
             ),
             SizedBox(height: compact ? 4 : 6),
             Text(
-              showCompactUnavailableSummary
-                  ? compact
-                        ? copy.desktopFailClosedCompactUntilStartup
-                        : copy.desktopFailClosedSectionCompactUntilStartup
-                  : copy.desktopTypedHostTunnelSummary,
+              _platformTunnelHeaderSummary(context, controller),
               style:
                   (compact
                           ? theme.textTheme.bodySmall
@@ -1922,13 +1908,14 @@ class _CompactPlatformTunnelCard extends StatelessWidget {
                 : theme.textTheme.bodyMedium,
           ),
           SizedBox(height: compact ? 8 : 10),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: FilledButton.tonal(
-              onPressed: busy || !ready ? null : () => unawaited(onStart()),
-              child: Text(copy.requestStartup),
+          if (capability.available)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FilledButton.tonal(
+                onPressed: busy || !ready ? null : () => unawaited(onStart()),
+                child: Text(copy.requestStartup),
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -2011,20 +1998,30 @@ class _PlatformTunnelCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(capability.message, style: theme.textTheme.bodySmall),
           ],
-          const SizedBox(height: 12),
-          FilledButton.tonal(
-            onPressed: busy || !ready ? null : () => unawaited(onStart()),
-            child: Text(copy.requestStartup),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            result == null
-                ? copy.desktopNoStartupRequestYet
-                : _platformTunnelResultSummary(context, result!),
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+          if (capability.available) ...<Widget>[
+            const SizedBox(height: 12),
+            FilledButton.tonal(
+              onPressed: busy || !ready ? null : () => unawaited(onStart()),
+              child: Text(copy.requestStartup),
             ),
-          ),
+            const SizedBox(height: 10),
+            Text(
+              result == null
+                  ? copy.desktopNoStartupRequestYet
+                  : _platformTunnelResultSummary(context, result!),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ] else if (result != null) ...<Widget>[
+            const SizedBox(height: 10),
+            Text(
+              _platformTunnelResultSummary(context, result!),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -2878,7 +2875,7 @@ String _platformTunnelHeaderSummary(
     return copy.desktopAllModesFailClosedLatestEvidence;
   }
 
-  return copy.desktopAllModesFailClosedTestStartup;
+  return copy.desktopTypedHostTunnelSummary;
 }
 
 String _platformTunnelCapabilitySummary(

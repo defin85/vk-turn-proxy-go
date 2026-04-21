@@ -312,7 +312,15 @@ Current repository-owned host responsibilities stay split by OS family:
 - Linux hosts own `linux_tun`, capability elevation, and route/DNS preparation
 
 Current repo-owned hosts still fail closed by default for those modes with `stage=capability_check` and `missing_prerequisite=host_implementation` until a platform-specific host wires a real implementation.
-Desktop and mobile shells now render that typed capability report in-app and let the operator request startup explicitly so the stage-aware failure remains visible without guessing from OS heuristics.
+Current support claims are now:
+- `android_vpn_service`: supported on the documented packaged Android target
+- `windows_wintun`: supported on the documented packaged Windows target through the bundled host-owned Wintun lifecycle
+- `linux_tun`, `apple_network_extension`: still fail closed until those packaged hosts ship their adapter path
+
+Desktop and mobile shells render that typed capability report in-app instead of guessing from OS heuristics.
+The desktop shell now offers system-tunnel startup only for the packaged target and mode that the connected host explicitly reports as available.
+For the repo-owned Windows ready path, use `docs/windows-desktop-wg-poc.md`.
+`docs/windows-desktop-live-vk-workflow.md` remains the explicit external `WireGuard for Windows` compatibility workflow, not the same claim as repo-owned `windows_wintun`.
 Provider resolution, browser challenges, TURN credentials, and relay policy remain outside that tunnel boundary.
 Before the repository claims a concrete platform tunnel mode as supported, keep evidence for:
 - a host capability report for the packaged target from `/v1/host`

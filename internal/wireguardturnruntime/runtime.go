@@ -27,6 +27,7 @@ type SocketProtector func(fd int) error
 type Config struct {
 	Lease         *clientcontrol.WireGuardTurnExecutionLease
 	TUNFD         int
+	TUNDevice     tun.Device
 	ProtectSocket SocketProtector
 }
 
@@ -49,8 +50,8 @@ func Start(ctx context.Context, cfg Config) (*Runtime, error) {
 	if cfg.Lease == nil {
 		return nil, fmt.Errorf("wireguard TURN runtime requires an execution lease")
 	}
-	if cfg.TUNFD <= 0 {
-		return nil, fmt.Errorf("wireguard TURN runtime requires a valid TUN file descriptor")
+	if cfg.TUNFD <= 0 && cfg.TUNDevice == nil {
+		return nil, fmt.Errorf("wireguard TURN runtime requires a valid TUN file descriptor or device")
 	}
 	if strings.TrimSpace(cfg.Lease.PeerEndpointAddress) == "" {
 		return nil, fmt.Errorf("wireguard TURN runtime requires peer_endpoint_address")
@@ -127,11 +128,15 @@ func Start(ctx context.Context, cfg Config) (*Runtime, error) {
 		}
 	}()
 
-	tunDevice, _, err := tun.CreateUnmonitoredTUNFromFD(cfg.TUNFD)
-	if err != nil {
-		return nil, fmt.Errorf("create userspace TUN device: %w", err)
+	tunDevice := cfg.TUNDevice
+	cleanupTun := false
+	if tunDevice == nil {
+		tunDevice, err = tunDeviceFromFD(cfg.TUNFD)
+		if err != nil {
+			return nil, fmt.Errorf("create userspace TUN device: %w", err)
+		}
+		cleanupTun = true
 	}
-	cleanupTun := true
 	defer func() {
 		if cleanupTun {
 			_ = tunDevice.Close()

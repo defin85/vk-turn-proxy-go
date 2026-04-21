@@ -139,14 +139,13 @@ class ControlPlaneClient implements ControlPlaneApi {
           'runtime_defaults': runtimeDefaults.toJson(),
         'mode': mode.value,
         if (executionPlan != null) 'execution_plan': executionPlan.toJson(),
-        if (mode == PlatformTunnelMode.androidVpnService)
+        if (_modeSupportsApplicationRouting(mode))
           'application_routing_policy': applicationRoutingPolicy.value,
-        if (mode == PlatformTunnelMode.androidVpnService)
+        if (_modeSupportsUnderlayRoutePolicy(mode))
           'underlay_route_policy': underlayRoutePolicy.value,
-        if (mode == PlatformTunnelMode.androidVpnService &&
-            allowedPackages.isNotEmpty)
+        if (_modeSupportsApplicationRouting(mode) && allowedPackages.isNotEmpty)
           'allowed_packages': allowedPackages,
-        if (mode == PlatformTunnelMode.androidVpnService &&
+        if (_modeSupportsApplicationRouting(mode) &&
             disallowedPackages.isNotEmpty)
           'disallowed_packages': disallowedPackages,
       },
@@ -417,6 +416,15 @@ class ControlPlaneClient implements ControlPlaneApi {
     return (jsonDecode(response.body) as List<dynamic>)
         .map((dynamic raw) => raw as Map<String, dynamic>)
         .toList(growable: false);
+  }
+
+  bool _modeSupportsApplicationRouting(PlatformTunnelMode mode) {
+    return mode == PlatformTunnelMode.androidVpnService;
+  }
+
+  bool _modeSupportsUnderlayRoutePolicy(PlatformTunnelMode mode) {
+    return mode == PlatformTunnelMode.androidVpnService ||
+        mode == PlatformTunnelMode.windowsWintun;
   }
 
   Future<_ResponsePayload> _request(

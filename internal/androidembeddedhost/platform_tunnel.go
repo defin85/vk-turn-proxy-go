@@ -264,7 +264,6 @@ func (c *androidVPNServiceController) finishStartup(
 	req clientcontrol.PlatformTunnelStartRequest,
 	selectedPlanPtr *clientcontrol.RuntimeExecutionPlan,
 ) (clientcontrol.PlatformTunnelStartResult, error) {
-	cleanupRequired := true
 	if err := c.lifecycle.ValidateRoutePolicy(ctx, req); err != nil {
 		return startFailureResult(
 			req.Mode,
@@ -272,7 +271,7 @@ func (c *androidVPNServiceController) finishStartup(
 			clientcontrol.PlatformTunnelStartupStageRouteValidate,
 			routePolicyPrerequisite(err),
 			req.UnderlayRoutePolicy,
-			withCleanupMessage(ctx, c.lifecycle, cleanupRequired, err.Error()),
+			err.Error(),
 		)
 	}
 	var lease *clientcontrol.WireGuardTurnExecutionLease
@@ -288,12 +287,7 @@ func (c *androidVPNServiceController) finishStartup(
 				clientcontrol.PlatformTunnelStartupStageRuntimeAttach,
 				clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
 				req.UnderlayRoutePolicy,
-				withCleanupMessage(
-					ctx,
-					c.lifecycle,
-					cleanupRequired,
-					"android embedded host cannot materialize the strict TURN datagram WireGuard runtime lease",
-				),
+				"android embedded host cannot materialize the strict TURN datagram WireGuard runtime lease",
 			)
 		}
 		var err error
@@ -305,7 +299,7 @@ func (c *androidVPNServiceController) finishStartup(
 				clientcontrol.PlatformTunnelStartupStageRuntimeAttach,
 				clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
 				req.UnderlayRoutePolicy,
-				withCleanupMessage(ctx, c.lifecycle, cleanupRequired, err.Error()),
+				err.Error(),
 			)
 		}
 	}
@@ -316,7 +310,7 @@ func (c *androidVPNServiceController) finishStartup(
 			clientcontrol.PlatformTunnelStartupStageHostBringup,
 			clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
 			req.UnderlayRoutePolicy,
-			withCleanupMessage(ctx, c.lifecycle, cleanupRequired, err.Error()),
+			err.Error(),
 		)
 	}
 	if err := c.lifecycle.AttachRuntime(ctx, req, selectedPlanPtr, lease); err != nil {
@@ -326,7 +320,7 @@ func (c *androidVPNServiceController) finishStartup(
 			clientcontrol.PlatformTunnelStartupStageRuntimeAttach,
 			clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
 			req.UnderlayRoutePolicy,
-			withCleanupMessage(ctx, c.lifecycle, cleanupRequired, err.Error()),
+			err.Error(),
 		)
 	}
 
@@ -426,25 +420,6 @@ func startFailureResult(
 		Message:             strings.TrimSpace(message),
 	}
 	return clientcontrol.PlatformTunnelStartResult{}, &clientcontrol.PlatformTunnelStartError{Result: result}
-}
-
-func withCleanupMessage(
-	ctx context.Context,
-	lifecycle AndroidVPNServiceLifecycle,
-	cleanupRequired bool,
-	message string,
-) string {
-	message = strings.TrimSpace(message)
-	if !cleanupRequired || lifecycle == nil {
-		return message
-	}
-	if err := lifecycle.Cleanup(ctx); err != nil {
-		if message == "" {
-			return fmt.Sprintf("cleanup failed: %v", err)
-		}
-		return fmt.Sprintf("%s; cleanup failed: %v", message, err)
-	}
-	return message
 }
 
 func routePolicyPrerequisite(err error) clientcontrol.PlatformTunnelPrerequisite {

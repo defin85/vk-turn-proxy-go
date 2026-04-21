@@ -115,7 +115,8 @@ That workflow:
 3. runs the native Windows GUI build from that mirrored path
 4. stages the packaged bundle under `dist/windows-gui/`
 
-The Windows GUI package includes a sibling `clientd.exe` next to `RelayDock.exe`.
+The Windows GUI package includes sibling `clientd.exe` and `wintun.dll`
+artifacts next to `RelayDock.exe`.
 The workflow also validates that `desktop/gui_shell/pubspec.yaml` matches `version.json` before packaging.
 The WSL wrapper also writes `dist/build/windows-gui-build-metadata.json` so the mirrored native Windows build path can keep revision/dirty stamping even when the mirror does not include `.git`.
 
@@ -141,6 +142,15 @@ That workflow also includes the repo-owned sidecar launch helper
 `scripts/run-windows-gui-shell.ps1` and the packaged-session helper
 `scripts/windows-desktop-generic-turn.ps1`. The sidecar helper keeps ownership
 of the bundled `clientd.exe` and stops it after `RelayDock.exe` exits.
+When the operator must keep the host machine out of the desktop VPN path, the
+same runbook now also documents the verified VMware-backed Windows execution
+cell using `scripts/sync-windows-vm-lab.sh` and the guest-side
+`run-vm-lab-shell.ps1` launcher.
+That VM contour now also ships the guest-side
+`assert-vm-lab-host.ps1` smoke so the bundled `clientd.exe` can prove
+`windows_wintun available=true` before the GUI or VPN step, plus the
+guest-side `smoke-windows-wintun.ps1` helper for the full repo-owned
+`ready=true` Windows smoke.
 
 For the packaged Windows desktop workflow that starts from a real VK invite in
 the GUI, moves through typed resolution and browser continuation when needed,

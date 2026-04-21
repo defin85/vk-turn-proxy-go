@@ -4,6 +4,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WINDOWS_MIRROR_UNIX="/mnt/e/Projects/vk-turn-proxy-go"
 VERSION_MANIFEST="${ROOT_DIR}/version.json"
+WINTUN_VERSION="0.14.1"
+WINTUN_URL="https://www.wintun.net/builds/wintun-${WINTUN_VERSION}.zip"
+WINTUN_SHA256="07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51"
 
 log_phase() {
   echo "==> $1"
@@ -13,6 +16,93 @@ phase_complete() {
   local label="$1"
   local started_at="$2"
   echo "--> ${label} complete ($((SECONDS - started_at))s)"
+}
+
+sha256_file() {
+  python3 -c '
+import hashlib
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+h = hashlib.sha256()
+with path.open("rb") as handle:
+    while True:
+        chunk = handle.read(1024 * 1024)
+        if not chunk:
+            break
+        h.update(chunk)
+print(h.hexdigest())
+' "$1"
+}
+
+download_wintun_zip() {
+  local zip_path="$1"
+  python3 -c '
+import pathlib
+import sys
+import urllib.request
+
+url = sys.argv[1]
+path = pathlib.Path(sys.argv[2])
+path.parent.mkdir(parents=True, exist_ok=True)
+with urllib.request.urlopen(url) as response, path.open("wb") as handle:
+    while True:
+        chunk = response.read(1024 * 1024)
+        if not chunk:
+            break
+        handle.write(chunk)
+' "${WINTUN_URL}" "${zip_path}"
+}
+
+extract_wintun_dll() {
+  local zip_path="$1"
+  local dll_path="$2"
+  python3 -c '
+import pathlib
+import sys
+import zipfile
+
+zip_path = pathlib.Path(sys.argv[1])
+dll_path = pathlib.Path(sys.argv[2])
+member = "wintun/bin/amd64/wintun.dll"
+with zipfile.ZipFile(zip_path) as archive:
+    try:
+        payload = archive.read(member)
+    except KeyError as exc:
+        raise SystemExit(f"expected {member} in {zip_path}") from exc
+dll_path.parent.mkdir(parents=True, exist_ok=True)
+dll_path.write_bytes(payload)
+' "${zip_path}" "${dll_path}"
+}
+
+ensure_wintun_dll() {
+  local cache_root="${ROOT_DIR}/dist/build/vendor/wintun/${WINTUN_VERSION}"
+  local zip_path="${cache_root}/wintun-${WINTUN_VERSION}.zip"
+  local dll_path="${cache_root}/amd64/wintun.dll"
+  local actual_sha
+
+  mkdir -p "${cache_root}"
+  if [[ ! -f "${zip_path}" ]]; then
+    download_wintun_zip "${zip_path}"
+  fi
+
+  actual_sha="$(sha256_file "${zip_path}")"
+  if [[ "${actual_sha}" != "${WINTUN_SHA256}" ]]; then
+    rm -f "${zip_path}"
+    download_wintun_zip "${zip_path}"
+    actual_sha="$(sha256_file "${zip_path}")"
+    if [[ "${actual_sha}" != "${WINTUN_SHA256}" ]]; then
+      echo "wintun archive hash mismatch for ${zip_path}" >&2
+      exit 1
+    fi
+  fi
+
+  if [[ ! -f "${dll_path}" ]]; then
+    extract_wintun_dll "${zip_path}" "${dll_path}"
+  fi
+
+  echo "${dll_path}"
 }
 
 require_command() {
@@ -26,6 +116,7 @@ require_command go
 require_command git
 require_command python3
 require_command powershell.exe
+require_command rsync
 require_command wslpath
 
 if [[ ! -d /mnt/e/Projects ]]; then
@@ -107,58 +198,53 @@ log_phase "build Go sidecar artifacts for windows/amd64"
 "${ROOT_DIR}/scripts/build-go-matrix.sh" windows/amd64
 phase_complete "build Go sidecar artifacts for windows/amd64" "${phase_started_at}"
 
+phase_started_at=$SECONDS
+log_phase "prepare official wintun.dll cache"
+local_wintun_dll="$(ensure_wintun_dll)"
+phase_complete "prepare official wintun.dll cache" "${phase_started_at}"
+
 mkdir -p "${WINDOWS_MIRROR_UNIX}"
 
-source_windows_path="$(wslpath -w "${ROOT_DIR}")"
 mirror_windows_path="$(wslpath -w "${WINDOWS_MIRROR_UNIX}")"
 clientd_windows_path="$(wslpath -w "${WINDOWS_MIRROR_UNIX}/dist/go/windows-amd64/clientd.exe")"
 build_script_windows_path="$(wslpath -w "${WINDOWS_MIRROR_UNIX}/scripts/build-gui-windows.ps1")"
+wintun_dll_windows_path="$(wslpath -w "${WINDOWS_MIRROR_UNIX}/dist/build/vendor/wintun/${WINTUN_VERSION}/amd64/wintun.dll")"
 
 readonly MIRROR_SYNC_EXCLUDES=(
   ".git"
   ".beads"
   ".dart_tool"
   "artifacts"
-  "dist\\mobile"
-  "dist\\windows-gui"
-  "desktop\\gui_shell\\.dart_tool"
-  "desktop\\gui_shell\\build"
-  "desktop\\gui_shell\\.idea"
-  "desktop\\gui_shell\\linux\\flutter\\ephemeral"
-  "desktop\\gui_shell\\macos\\Flutter\\ephemeral"
-  "desktop\\gui_shell\\windows\\flutter\\ephemeral"
-  "mobile\\gui_shell\\.dart_tool"
-  "mobile\\gui_shell\\build"
-  "mobile\\gui_shell\\.idea"
-  "mobile\\gui_shell\\android\\.gradle"
-  "packages\\flutter_shell_core\\.dart_tool"
-  "packages\\flutter_shell_core\\build"
+  "dist/mobile"
+  "dist/windows-gui"
+  "desktop/gui_shell/.dart_tool"
+  "desktop/gui_shell/build"
+  "desktop/gui_shell/.idea"
+  "desktop/gui_shell/linux/flutter/ephemeral"
+  "desktop/gui_shell/macos/Flutter/ephemeral"
+  "desktop/gui_shell/windows/flutter/ephemeral"
+  "mobile/gui_shell/.dart_tool"
+  "mobile/gui_shell/build"
+  "mobile/gui_shell/.idea"
+  "mobile/gui_shell/android/.gradle"
+  "packages/flutter_shell_core/.dart_tool"
+  "packages/flutter_shell_core/build"
 )
-
-excluded_dirs_ps=""
-for rel_path in "${MIRROR_SYNC_EXCLUDES[@]}"; do
-  excluded_dirs_ps+="  (Join-Path \$src '${rel_path}'), "
-done
-excluded_dirs_ps="${excluded_dirs_ps%, }"
-
-sync_command="\
-\$src='${source_windows_path}'; \
-\$dst='${mirror_windows_path}'; \
-New-Item -ItemType Directory -Force -Path \$dst | Out-Null; \
-\$excludedDirs=@( \
-${excluded_dirs_ps} \
-); \
-\$args=@(\$src,\$dst,'/MIR','/R:3','/W:5','/NP','/NDL') + @('/XD') + \$excludedDirs + @('/XF','turnlab-shell'); \
-& robocopy @args; \
-if (\$LASTEXITCODE -gt 7) { exit \$LASTEXITCODE }; \
-exit 0"
 
 phase_started_at=$SECONDS
 log_phase "sync repository into Windows mirror"
 echo "    source: ${ROOT_DIR}"
 echo "    mirror: ${WINDOWS_MIRROR_UNIX}"
 echo "    excluded generated dirs: ${#MIRROR_SYNC_EXCLUDES[@]}"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "${sync_command}"
+rsync_args=(
+  -a
+  --delete
+)
+for rel_path in "${MIRROR_SYNC_EXCLUDES[@]}"; do
+  rsync_args+=(--exclude="${rel_path}")
+done
+rsync_args+=(--exclude="turnlab-shell")
+rsync "${rsync_args[@]}" "${ROOT_DIR}/" "${WINDOWS_MIRROR_UNIX}/"
 phase_complete "sync repository into Windows mirror" "${phase_started_at}"
 
 phase_started_at=$SECONDS
@@ -167,6 +253,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass \
   -File "${build_script_windows_path}" \
   -RepoRoot "${mirror_windows_path}" \
   -ClientdPath "${clientd_windows_path}" \
+  -WintunDllPath "${wintun_dll_windows_path}" \
   -ProductName "${PRODUCT_NAME}" \
   -ProductVersion "${PRODUCT_VERSION}" \
   -BuildNumber "${BUILD_NUMBER}" \
@@ -175,18 +262,14 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass \
   -BuiltAt "${BUILT_AT}"
 phase_complete "build Windows GUI in mirror" "${phase_started_at}"
 
-sync_back_command="\
-\$src='${mirror_windows_path}\\dist\\windows-gui'; \
-\$dst='${source_windows_path}\\dist\\windows-gui'; \
-if (-not (Test-Path \$src)) { throw 'windows GUI bundle not found in mirror dist' }; \
-New-Item -ItemType Directory -Force -Path \$dst | Out-Null; \
-& robocopy \$src \$dst /MIR /R:3 /W:5 /NP /NDL; \
-if (\$LASTEXITCODE -gt 7) { exit \$LASTEXITCODE }; \
-exit 0"
-
 phase_started_at=$SECONDS
 log_phase "sync staged Windows GUI bundle back into WSL checkout"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "${sync_back_command}"
+if [[ ! -d "${WINDOWS_MIRROR_UNIX}/dist/windows-gui" ]]; then
+  echo "windows GUI bundle not found in mirror dist: ${WINDOWS_MIRROR_UNIX}/dist/windows-gui" >&2
+  exit 1
+fi
+mkdir -p "${ROOT_DIR}/dist/windows-gui"
+rsync -a --delete "${WINDOWS_MIRROR_UNIX}/dist/windows-gui/" "${ROOT_DIR}/dist/windows-gui/"
 phase_complete "sync staged Windows GUI bundle back into WSL checkout" "${phase_started_at}"
 
 echo "staged Windows GUI bundle under ${ROOT_DIR}/dist/windows-gui"

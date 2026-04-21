@@ -1,6 +1,7 @@
 param(
     [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
     [string]$ClientdPath = "",
+    [string]$WintunDllPath = "",
     [string]$FlutterVersionFile = "",
     [string]$ProductName = "",
     [string]$ProductVersion = "",
@@ -11,6 +12,10 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+$WintunVersion = "0.14.1"
+$WintunUrl = "https://www.wintun.net/builds/wintun-$WintunVersion.zip"
+$WintunSha256 = "07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51"
 
 function Assert-WindowsNativePath {
     param(
@@ -207,6 +212,62 @@ function Invoke-DartChecked {
     }
 }
 
+function Get-WintunDllPath {
+    param(
+        [string]$RepoRootPath,
+        [string]$ExplicitPath = ""
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($ExplicitPath)) {
+        $resolvedExplicitPath = (Resolve-Path $ExplicitPath).Path
+        if (-not (Test-Path $resolvedExplicitPath)) {
+            throw "explicit Wintun DLL path does not exist: $resolvedExplicitPath"
+        }
+        return $resolvedExplicitPath
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($env:VKTP_WINTUN_DLL)) {
+        $overridePath = (Resolve-Path $env:VKTP_WINTUN_DLL).Path
+        if (-not (Test-Path $overridePath)) {
+            throw "VKTP_WINTUN_DLL points to a missing file: $overridePath"
+        }
+        return $overridePath
+    }
+
+    $cacheRoot = Join-Path $RepoRootPath "dist\build\vendor\wintun\$WintunVersion"
+    $dllPath = Join-Path $cacheRoot "amd64\wintun.dll"
+    if (Test-Path $dllPath) {
+        return $dllPath
+    }
+
+    $zipPath = Join-Path $cacheRoot "wintun-$WintunVersion.zip"
+    $extractRoot = Join-Path $cacheRoot "extract"
+    New-Item -ItemType Directory -Force -Path $cacheRoot | Out-Null
+    if (-not (Test-Path $zipPath)) {
+        Invoke-WebRequest -Uri $WintunUrl -OutFile $zipPath
+    }
+
+    $zipHash = (Get-FileHash -Algorithm SHA256 $zipPath).Hash.ToLowerInvariant()
+    if ($zipHash -ne $WintunSha256) {
+        throw "Wintun archive hash mismatch for $zipPath"
+    }
+
+    if (Test-Path $extractRoot) {
+        Remove-Item $extractRoot -Recurse -Force
+    }
+    Expand-Archive -Path $zipPath -DestinationPath $extractRoot -Force
+
+    $extractedDllPath = Join-Path $extractRoot "wintun\bin\amd64\wintun.dll"
+    if (-not (Test-Path $extractedDllPath)) {
+        throw "expected amd64 wintun.dll not found in extracted archive: $extractedDllPath"
+    }
+
+    $dllDir = Split-Path $dllPath -Parent
+    New-Item -ItemType Directory -Force -Path $dllDir | Out-Null
+    Copy-Item $extractedDllPath $dllPath -Force
+    return $dllPath
+}
+
 function Normalize-ConsoleText {
     param(
         [AllowNull()]
@@ -220,6 +281,35 @@ function Normalize-ConsoleText {
     $escape = [regex]::Escape([string][char]27)
     $withoutAnsi = [regex]::Replace($Text, "${escape}\[[0-9;?]*[ -/]*[@-~]", "")
     return $withoutAnsi.Replace("`r`n", "`n")
+}
+
+function Invoke-NativeCommandCapture {
+    param(
+        [string]$Command,
+        [string[]]$Arguments = @()
+    )
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    $hasNativePreference = Test-Path variable:PSNativeCommandUseErrorActionPreference
+    if ($hasNativePreference) {
+        $previousNativePreference = $PSNativeCommandUseErrorActionPreference
+        $script:PSNativeCommandUseErrorActionPreference = $false
+    }
+
+    $ErrorActionPreference = "Continue"
+    try {
+        $text = (& $Command @Arguments 2>&1 | Out-String)
+        return @{
+            Text = $text
+            ExitCode = $LASTEXITCODE
+        }
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+        if ($hasNativePreference) {
+            $script:PSNativeCommandUseErrorActionPreference = $previousNativePreference
+        }
+    }
 }
 
 $resolvedRepoRoot = (Resolve-Path $RepoRoot).Path
@@ -303,10 +393,12 @@ if ([string]::IsNullOrWhiteSpace($ClientdPath)) {
 
 $resolvedClientdPath = (Resolve-Path $ClientdPath).Path
 Assert-WindowsNativePath -PathValue $resolvedClientdPath -Label "ClientdPath"
+$windowsBuildDir = Join-Path $guiRoot "build\windows\x64"
 Push-Location $resolvedRepoRoot
 try {
-    $flutterVersionText = Normalize-ConsoleText ((& flutter --version 2>&1 | Out-String))
-    if ($LASTEXITCODE -ne 0) {
+    $flutterVersionResult = Invoke-NativeCommandCapture -Command "flutter" -Arguments @("--version")
+    $flutterVersionText = Normalize-ConsoleText $flutterVersionResult.Text
+    if ($flutterVersionResult.ExitCode -ne 0) {
         throw "flutter --version failed"
     }
 
@@ -314,9 +406,10 @@ try {
         throw "Windows Flutter version mismatch. Expected $requiredFlutterVersion based on desktop/gui_shell/.flutter-version."
     }
 
-    $doctorText = Normalize-ConsoleText ((& flutter doctor -v 2>&1 | Out-String))
-    if ($LASTEXITCODE -ne 0) {
-        throw "flutter doctor -v failed"
+    $doctorResult = Invoke-NativeCommandCapture -Command "flutter" -Arguments @("doctor", "-v")
+    $doctorText = Normalize-ConsoleText $doctorResult.Text
+    if ([string]::IsNullOrWhiteSpace($doctorText)) {
+        throw "flutter doctor -v produced no output"
     }
     if ($doctorText -notmatch "\[(?:✓|√)\]\s+Windows Version") {
         throw "flutter doctor -v did not confirm a working Windows host."
@@ -330,6 +423,13 @@ try {
 
     Push-Location $guiRoot
     try {
+        if (Test-Path $windowsBuildDir) {
+            # A previous native target rename can leave Visual Studio/CMake
+            # state wired to the old executable name, so package builds must
+            # start from a clean generated tree.
+            Remove-Item $windowsBuildDir -Recurse -Force
+        }
+
         Invoke-FlutterChecked -Arguments @(
             "build",
             "windows",
@@ -357,7 +457,9 @@ try {
         throw "expected GUI executable not found after build: $guiExePath"
     }
 
+    $resolvedWintunDllPath = Get-WintunDllPath -RepoRootPath $resolvedRepoRoot -ExplicitPath $WintunDllPath
     Copy-Item $resolvedClientdPath (Join-Path $releaseDir "clientd.exe") -Force
+    Copy-Item $resolvedWintunDllPath (Join-Path $releaseDir "wintun.dll") -Force
 
     $stageDir = Join-Path $resolvedRepoRoot "dist\windows-gui"
     if (Test-Path $stageDir) {

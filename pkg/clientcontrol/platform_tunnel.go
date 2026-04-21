@@ -437,7 +437,7 @@ func normalizePlatformTunnelStartRequest(req PlatformTunnelStartRequest) (Platfo
 		normalized.RuntimeDefaults = &defaults
 	}
 
-	if req.Mode != PlatformTunnelModeAndroidVPNService {
+	if req.Mode != PlatformTunnelModeAndroidVPNService && req.Mode != PlatformTunnelModeWindowsWintun {
 		if strings.TrimSpace(string(req.ApplicationRoutingPolicy)) != "" ||
 			len(req.AllowedPackages) > 0 ||
 			len(req.DisallowedPackages) > 0 {
@@ -445,6 +445,21 @@ func normalizePlatformTunnelStartRequest(req PlatformTunnelStartRequest) (Platfo
 		}
 		if strings.TrimSpace(string(req.UnderlayRoutePolicy)) != "" {
 			return PlatformTunnelStartRequest{}, fmt.Errorf("%w: mode %s does not accept underlay_route_policy", ErrPlatformTunnelUnderlayRoutePolicyInvalid, req.Mode)
+		}
+		return normalized, nil
+	}
+
+	if req.Mode == PlatformTunnelModeWindowsWintun {
+		if strings.TrimSpace(string(normalized.ApplicationRoutingPolicy)) != "" ||
+			len(normalized.AllowedPackages) > 0 ||
+			len(normalized.DisallowedPackages) > 0 {
+			return PlatformTunnelStartRequest{}, fmt.Errorf("%w: mode %s does not accept application routing policy", ErrPlatformTunnelAppRoutingPolicyInvalid, req.Mode)
+		}
+		if strings.TrimSpace(string(normalized.UnderlayRoutePolicy)) == "" {
+			normalized.UnderlayRoutePolicy = PlatformTunnelUnderlayRoutePolicyPreserveActiveLocalNetwork
+		}
+		if !isKnownPlatformTunnelUnderlayRoutePolicy(normalized.UnderlayRoutePolicy) {
+			return PlatformTunnelStartRequest{}, fmt.Errorf("%w: unknown underlay_route_policy %q", ErrPlatformTunnelUnderlayRoutePolicyInvalid, normalized.UnderlayRoutePolicy)
 		}
 		return normalized, nil
 	}
