@@ -92,7 +92,7 @@ The current `turn-server` role is not a universal backend for all future executi
 
 ## Follow-on slices
 
-1. `add-18-desktop-platform-tunnel-ready-paths`: ship one desktop packaged host path that turns the documented TURN-backed `wireguard_native` plan into a real desktop adapter ready path.
+1. `add-18-flow-1-desktop-core-platform-tunnel-ready-paths`: ship one desktop packaged host path that turns the documented TURN-backed `wireguard_native` plan into a real desktop adapter ready path.
 3. Experimental `webrtc_datachannel`: define a real remote endpoint, framing, and lifecycle verification path before any host advertises it as startable.
 4. Foreign-core engines: add packaging, lifecycle ownership, and verification evidence before any host advertises `proxy_core_adapter` or `trusttunnel_native` as startable.
 

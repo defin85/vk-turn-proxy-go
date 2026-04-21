@@ -18,7 +18,7 @@ rules for ordinary shell persistence.
 ## Sequence
 - Order: `31`
 - Depends on: `add-29-mobile-vpn-product-shell`,
-  `add-30-desktop-vpn-workbench-shell`
+  `add-30-flow-1-desktop-core-vpn-workbench-shell`
 - Unblocks: practical desktop-to-mobile and mobile-to-desktop profile transfer,
   reinstall recovery, and product-grade QR handoff for saved profiles
 

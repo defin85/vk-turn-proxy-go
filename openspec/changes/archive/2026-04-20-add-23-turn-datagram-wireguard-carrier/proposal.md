@@ -21,7 +21,7 @@ or silently drift away from the strict `add-22` contract.
 ## Sequence
 - Order: `23`
 - Depends on: `add-05-platform-tunnel-integrations`, `add-20-multi-provider-runtime-families`, `add-22-runtime-execution-planning`
-- Unblocks: strict `add-17-android-vpn-service-ready-path` and `add-18-desktop-platform-tunnel-ready-paths` delivery under the documented TURN-backed `wireguard_native` plan
+- Unblocks: strict `add-17-android-vpn-service-ready-path` and `add-18-flow-1-desktop-core-platform-tunnel-ready-paths` delivery under the documented TURN-backed `wireguard_native` plan
 
 ## What Changes
 - Add a new `wireguard-turn-carrier` capability spec that defines the

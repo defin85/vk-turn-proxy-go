@@ -12,7 +12,7 @@ and diagnostics live behind dedicated secondary destinations.
 
 ## Sequence
 - Order: `29`
-- Depends on: `add-17-android-vpn-service-ready-path`, `add-25-android-execution-mode-separation`
+- Depends on: `add-17-android-vpn-service-ready-path`, `add-25-flow-3-android-modes-execution-mode-separation`
 - Unblocks: a product-grade Android mobile shell that uses the delivered VPN
   path without forcing ordinary operators through a diagnostics-heavy workflow
 

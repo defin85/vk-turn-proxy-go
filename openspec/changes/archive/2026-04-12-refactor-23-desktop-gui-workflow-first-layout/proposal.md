@@ -16,7 +16,7 @@ when the shell opens with mostly empty secondary panels.
   `add-21-provider-defined-entry-fields`,
   `refactor-12-flutter-workspace-shell-core`
 - Unblocks: later desktop platform-tunnel UX polish under
-  `add-18-desktop-platform-tunnel-ready-paths`
+  `add-18-flow-1-desktop-core-platform-tunnel-ready-paths`
 
 ## What Changes
 - Refactor the desktop shell layout so saved-profile navigation, active profile

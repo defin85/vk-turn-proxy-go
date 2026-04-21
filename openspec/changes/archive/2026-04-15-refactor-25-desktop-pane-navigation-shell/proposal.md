@@ -18,7 +18,7 @@ secondary inspectors with progressive disclosure.
 - Depends on: `refactor-23-desktop-gui-workflow-first-layout`,
   `update-23-app-owned-provider-catalog`
 - Unblocks: later desktop support and tunnel-surface polish, including
-  follow-up work under `add-18-desktop-platform-tunnel-ready-paths`
+  follow-up work under `add-18-flow-1-desktop-core-platform-tunnel-ready-paths`
 
 ## What Changes
 - Refactor the desktop shell from a competing multi-card dashboard into a

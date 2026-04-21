@@ -13,7 +13,7 @@ active local underlay network instead of relying on partial hidden heuristics.
 
 ## Sequence
 - Order: `33`
-- Depends on: `add-17-android-vpn-service-ready-path`, `add-25-android-execution-mode-separation`, `add-29-mobile-vpn-product-shell`
+- Depends on: `add-17-android-vpn-service-ready-path`, `add-25-flow-3-android-modes-execution-mode-separation`, `add-29-mobile-vpn-product-shell`
 - Unblocks: reliable Android Wi-Fi debugging while the packaged VPN path is active, plus future local-network-aware mobile validation workflows
 
 ## What Changes
