@@ -1331,6 +1331,131 @@ func TestHostStartPlatformTunnelFailsClosedWhenReadyRuntimeCannotPublishSession(
 	}
 }
 
+func TestHostStartPlatformTunnelCleansUpPreReadyFailureStages(t *testing.T) {
+	tests := []struct {
+		name                string
+		stage               PlatformTunnelStartupStage
+		missingPrerequisite PlatformTunnelPrerequisite
+		message             string
+	}{
+		{
+			name:                "route validate failure",
+			stage:               PlatformTunnelStartupStageRouteValidate,
+			missingPrerequisite: PlatformTunnelPrerequisiteDNSBypass,
+			message:             "route validation left control traffic without required DNS bypass",
+		},
+		{
+			name:                "host bringup failure",
+			stage:               PlatformTunnelStartupStageHostBringup,
+			missingPrerequisite: PlatformTunnelPrerequisiteDriver,
+			message:             "desktop host bring-up could not attach the packaged wintun adapter",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			build := testBuildIdentity()
+			build.Target = "windows/amd64"
+			stopCalls := 0
+			host := New(
+				WithBuildIdentity(build),
+				WithPlatformTunnelStarter(func(_ context.Context, req PlatformTunnelStartRequest) (PlatformTunnelStartResult, error) {
+					return PlatformTunnelStartResult{
+						Mode:                req.Mode,
+						Ready:               false,
+						Stage:               tt.stage,
+						MissingPrerequisite: tt.missingPrerequisite,
+						Message:             tt.message,
+					}, nil
+				}),
+				WithPlatformTunnelStopper(func(_ context.Context, req PlatformTunnelStopRequest) (PlatformTunnelStopResult, error) {
+					stopCalls++
+					return PlatformTunnelStopResult{
+						Mode:    req.Mode,
+						Stopped: true,
+						Message: "windows wintun disconnected",
+					}, nil
+				}),
+			)
+
+			result, err := host.StartPlatformTunnel(context.Background(), PlatformTunnelStartRequest{
+				Mode: PlatformTunnelModeWindowsWintun,
+			})
+			if err != nil {
+				t.Fatalf("StartPlatformTunnel() error = %v", err)
+			}
+			if result.Ready {
+				t.Fatalf("StartPlatformTunnel().Ready = true, want false: %+v", result)
+			}
+			if result.Stage != tt.stage {
+				t.Fatalf("StartPlatformTunnel().Stage = %q, want %q", result.Stage, tt.stage)
+			}
+			if result.MissingPrerequisite != tt.missingPrerequisite {
+				t.Fatalf(
+					"StartPlatformTunnel().MissingPrerequisite = %q, want %q",
+					result.MissingPrerequisite,
+					tt.missingPrerequisite,
+				)
+			}
+			if stopCalls != 1 {
+				t.Fatalf("platform tunnel cleanup calls = %d, want 1", stopCalls)
+			}
+		})
+	}
+}
+
+func TestHostStartPlatformTunnelCleansUpTypedRuntimeAttachFailure(t *testing.T) {
+	build := testBuildIdentity()
+	build.Target = "windows/amd64"
+	stopCalls := 0
+	host := New(
+		WithBuildIdentity(build),
+		WithPlatformTunnelStarter(func(_ context.Context, req PlatformTunnelStartRequest) (PlatformTunnelStartResult, error) {
+			return PlatformTunnelStartResult{}, &PlatformTunnelStartError{
+				Result: PlatformTunnelStartResult{
+					Mode:                req.Mode,
+					Ready:               false,
+					Stage:               PlatformTunnelStartupStageRuntimeAttach,
+					MissingPrerequisite: PlatformTunnelPrerequisiteDNSBypass,
+					Message:             "runtime attach failed after partial desktop host bring-up",
+				},
+			}
+		}),
+		WithPlatformTunnelStopper(func(_ context.Context, req PlatformTunnelStopRequest) (PlatformTunnelStopResult, error) {
+			stopCalls++
+			return PlatformTunnelStopResult{
+				Mode:    req.Mode,
+				Stopped: true,
+				Message: "windows wintun disconnected",
+			}, nil
+		}),
+	)
+
+	_, err := host.StartPlatformTunnel(context.Background(), PlatformTunnelStartRequest{
+		Mode: PlatformTunnelModeWindowsWintun,
+	})
+	if err == nil {
+		t.Fatal("StartPlatformTunnel() error = nil, want typed runtime_attach failure")
+	}
+	result, ok := platformTunnelStartResultFromError(err)
+	if !ok {
+		t.Fatalf("StartPlatformTunnel() error = %v, want PlatformTunnelStartError", err)
+	}
+	if result.Stage != PlatformTunnelStartupStageRuntimeAttach {
+		t.Fatalf("typed failure stage = %q, want %q", result.Stage, PlatformTunnelStartupStageRuntimeAttach)
+	}
+	if result.MissingPrerequisite != PlatformTunnelPrerequisiteDNSBypass {
+		t.Fatalf(
+			"typed failure missing_prerequisite = %q, want %q",
+			result.MissingPrerequisite,
+			PlatformTunnelPrerequisiteDNSBypass,
+		)
+	}
+	if stopCalls != 1 {
+		t.Fatalf("platform tunnel cleanup calls = %d, want 1", stopCalls)
+	}
+}
+
 func TestHostStartsReadySessionAndExportsDiagnostics(t *testing.T) {
 	host := New(
 		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),

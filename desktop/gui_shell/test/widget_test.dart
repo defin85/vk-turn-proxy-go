@@ -614,7 +614,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Platform tunnel modes'), findsOneWidget);
+    expect(
+      find.text(
+        'The connected host only reports fail-closed platform tunnel modes, so this section stays compact until you explicitly test startup.',
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Windows Wintun'), findsOneWidget);
+    expect(find.text('Linux TUN'), findsNothing);
+    expect(find.text('Apple Network Extension'), findsNothing);
     expect(
       find.textContaining('host implementation is still missing'),
       findsOneWidget,

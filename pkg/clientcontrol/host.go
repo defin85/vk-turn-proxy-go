@@ -413,9 +413,11 @@ func (h *Host) StartPlatformTunnel(ctx context.Context, req PlatformTunnelStartR
 	result, err := h.startTunnel(ctx, normalizedReq)
 	if err != nil {
 		if startResult, ok := platformTunnelStartResultFromError(err); ok {
+			startResult = h.finalizePlatformTunnelFailure(ctx, normalizedReq, startResult)
 			if validateErr := validatePlatformTunnelStartResult(normalizedReq, startResult); validateErr != nil {
 				return PlatformTunnelStartResult{}, fmt.Errorf("invalid platform tunnel startup result: %w", validateErr)
 			}
+			return PlatformTunnelStartResult{}, &PlatformTunnelStartError{Result: startResult}
 		}
 		return PlatformTunnelStartResult{}, err
 	}
@@ -441,9 +443,11 @@ func (h *Host) ResumePlatformTunnel(ctx context.Context, req PlatformTunnelResum
 	result, err := h.resumeTunnel(ctx, normalizedReq)
 	if err != nil {
 		if startResult, ok := platformTunnelStartResultFromError(err); ok {
+			startResult = h.finalizeResumedPlatformTunnelFailure(ctx, startReq, ok, startResult)
 			if validateErr := validatePlatformTunnelStartResult(PlatformTunnelStartRequest{Mode: startResult.Mode}, startResult); validateErr != nil {
 				return PlatformTunnelStartResult{}, fmt.Errorf("invalid platform tunnel startup result: %w", validateErr)
 			}
+			return PlatformTunnelStartResult{}, &PlatformTunnelStartError{Result: startResult}
 		}
 		return PlatformTunnelStartResult{}, err
 	}
@@ -592,13 +596,24 @@ func (h *Host) finalizePlatformTunnelStart(
 	req PlatformTunnelStartRequest,
 	result PlatformTunnelStartResult,
 ) (PlatformTunnelStartResult, error) {
+	if !result.Ready {
+		return h.finalizePlatformTunnelFailure(ctx, req, result), nil
+	}
+	return h.publishReadyPlatformTunnelResult(ctx, req, result)
+}
+
+func (h *Host) finalizePlatformTunnelFailure(
+	ctx context.Context,
+	req PlatformTunnelStartRequest,
+	result PlatformTunnelStartResult,
+) PlatformTunnelStartResult {
 	if strings.TrimSpace(result.StartupAttemptID) != "" {
 		h.rememberPlatformTunnelStartupRequest(result.StartupAttemptID, req)
 	}
-	if !result.Ready {
-		return result, nil
+	if !platformTunnelFailureNeedsCleanup(result) {
+		return result
 	}
-	return h.publishReadyPlatformTunnelResult(ctx, req, result)
+	return h.attachPlatformTunnelCleanupResult(ctx, req.Mode, result)
 }
 
 func (h *Host) finalizeResumedPlatformTunnel(
@@ -609,7 +624,7 @@ func (h *Host) finalizeResumedPlatformTunnel(
 	result PlatformTunnelStartResult,
 ) (PlatformTunnelStartResult, error) {
 	if !result.Ready {
-		return result, nil
+		return h.finalizeResumedPlatformTunnelFailure(ctx, startReq, haveStartReq, result), nil
 	}
 	if !haveStartReq {
 		return h.platformTunnelPublicationFailure(
@@ -620,6 +635,25 @@ func (h *Host) finalizeResumedPlatformTunnel(
 		), nil
 	}
 	return h.publishReadyPlatformTunnelResult(ctx, startReq, result)
+}
+
+func (h *Host) finalizeResumedPlatformTunnelFailure(
+	ctx context.Context,
+	startReq PlatformTunnelStartRequest,
+	haveStartReq bool,
+	result PlatformTunnelStartResult,
+) PlatformTunnelStartResult {
+	if strings.TrimSpace(result.StartupAttemptID) != "" && haveStartReq {
+		h.rememberPlatformTunnelStartupRequest(result.StartupAttemptID, startReq)
+	}
+	if !platformTunnelFailureNeedsCleanup(result) {
+		return result
+	}
+	mode := result.Mode
+	if strings.TrimSpace(string(mode)) == "" {
+		mode = startReq.Mode
+	}
+	return h.attachPlatformTunnelCleanupResult(ctx, mode, result)
 }
 
 func (h *Host) publishReadyPlatformTunnelResult(
@@ -660,6 +694,32 @@ func (h *Host) platformTunnelPublicationFailure(
 		MissingPrerequisite: PlatformTunnelPrerequisiteHostImplementation,
 		UnderlayRoutePolicy: req.UnderlayRoutePolicy,
 		Message:             message,
+	}
+}
+
+func (h *Host) attachPlatformTunnelCleanupResult(
+	ctx context.Context,
+	mode PlatformTunnelMode,
+	result PlatformTunnelStartResult,
+) PlatformTunnelStartResult {
+	if cleanupErr := h.cleanupPlatformTunnelRuntime(ctx, mode); cleanupErr != nil {
+		if strings.TrimSpace(result.Message) == "" {
+			result.Message = cleanupErr.Error()
+		} else {
+			result.Message = fmt.Sprintf("%s cleanup after startup failure also failed: %v", result.Message, cleanupErr)
+		}
+	}
+	return result
+}
+
+func platformTunnelFailureNeedsCleanup(result PlatformTunnelStartResult) bool {
+	switch result.Stage {
+	case PlatformTunnelStartupStageRouteValidate,
+		PlatformTunnelStartupStageHostBringup,
+		PlatformTunnelStartupStageRuntimeAttach:
+		return true
+	default:
+		return false
 	}
 }
 
