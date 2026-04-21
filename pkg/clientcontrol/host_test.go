@@ -202,6 +202,64 @@ func TestHostInfoExposesContractVersionAndBuildIdentity(t *testing.T) {
 	}
 }
 
+func TestHostInfoDefaultsPlatformTunnelModePerDesktopBuildTarget(t *testing.T) {
+	tests := []struct {
+		name       string
+		target     string
+		wantMode   PlatformTunnelMode
+		wantPrefix string
+	}{
+		{
+			name:       "linux target publishes linux_tun only",
+			target:     "linux/amd64",
+			wantMode:   PlatformTunnelModeLinuxTun,
+			wantPrefix: "The linux/amd64 host does not yet implement platform tunnel startup for mode linux_tun.",
+		},
+		{
+			name:       "windows target publishes windows_wintun only",
+			target:     "windows/amd64",
+			wantMode:   PlatformTunnelModeWindowsWintun,
+			wantPrefix: "The windows/amd64 host does not yet implement platform tunnel startup for mode windows_wintun.",
+		},
+		{
+			name:       "macos target publishes apple_network_extension only",
+			target:     "macos/universal",
+			wantMode:   PlatformTunnelModeAppleNetworkExtension,
+			wantPrefix: "The macos/universal host does not yet implement platform tunnel startup for mode apple_network_extension.",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			build := testBuildIdentity()
+			build.Target = tt.target
+			host := New(WithBuildIdentity(build))
+
+			info := host.Info()
+			if len(info.PlatformTunnels) != 1 {
+				t.Fatalf("platform_tunnels len = %d, want 1", len(info.PlatformTunnels))
+			}
+			capability := info.PlatformTunnels[0]
+			if capability.Mode != tt.wantMode {
+				t.Fatalf("platform_tunnels[0].mode = %q, want %q", capability.Mode, tt.wantMode)
+			}
+			if capability.Available {
+				t.Fatal("platform_tunnels[0].available = true, want false")
+			}
+			if capability.MissingPrerequisite != PlatformTunnelPrerequisiteHostImplementation {
+				t.Fatalf(
+					"platform_tunnels[0].missing_prerequisite = %q, want %q",
+					capability.MissingPrerequisite,
+					PlatformTunnelPrerequisiteHostImplementation,
+				)
+			}
+			if capability.Message != tt.wantPrefix {
+				t.Fatalf("platform_tunnels[0].message = %q, want %q", capability.Message, tt.wantPrefix)
+			}
+		})
+	}
+}
+
 func TestHostNegotiateRejectsIncompatibleVersionAndCapability(t *testing.T) {
 	host := New()
 
@@ -749,6 +807,79 @@ func TestHostNormalizesInvalidPlatformTunnelCapabilitiesToFailClosedDefault(t *t
 	}
 	if info.PlatformTunnels[0].MissingPrerequisite != PlatformTunnelPrerequisiteHostImplementation {
 		t.Fatalf("platform_tunnels[0].missing_prerequisite = %q, want %q", info.PlatformTunnels[0].MissingPrerequisite, PlatformTunnelPrerequisiteHostImplementation)
+	}
+}
+
+func TestHostNormalizesDesktopPlatformTunnelModesThatDoNotMatchBuildTarget(t *testing.T) {
+	tests := []struct {
+		name            string
+		target          string
+		configuredModes []PlatformTunnelCapability
+		wantMode        PlatformTunnelMode
+	}{
+		{
+			name:   "windows build rejects linux_tun report",
+			target: "windows/amd64",
+			configuredModes: []PlatformTunnelCapability{{
+				Mode:      PlatformTunnelModeLinuxTun,
+				Available: true,
+				SatisfiedPrerequisites: []PlatformTunnelPrerequisite{
+					PlatformTunnelPrerequisiteRouteExclusion,
+				},
+			}},
+			wantMode: PlatformTunnelModeWindowsWintun,
+		},
+		{
+			name:   "macos build rejects mixed desktop family report",
+			target: "macos/universal",
+			configuredModes: []PlatformTunnelCapability{
+				{
+					Mode:      PlatformTunnelModeAppleNetworkExtension,
+					Available: true,
+					SatisfiedPrerequisites: []PlatformTunnelPrerequisite{
+						PlatformTunnelPrerequisiteEntitlement,
+					},
+				},
+				{
+					Mode:      PlatformTunnelModeWindowsWintun,
+					Available: true,
+					SatisfiedPrerequisites: []PlatformTunnelPrerequisite{
+						PlatformTunnelPrerequisiteDriver,
+					},
+				},
+			},
+			wantMode: PlatformTunnelModeAppleNetworkExtension,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			build := testBuildIdentity()
+			build.Target = tt.target
+			host := New(
+				WithBuildIdentity(build),
+				WithPlatformTunnelCapabilities(tt.configuredModes),
+			)
+
+			info := host.Info()
+			if len(info.PlatformTunnels) != 1 {
+				t.Fatalf("platform_tunnels len = %d, want 1", len(info.PlatformTunnels))
+			}
+			capability := info.PlatformTunnels[0]
+			if capability.Mode != tt.wantMode {
+				t.Fatalf("platform_tunnels[0].mode = %q, want %q", capability.Mode, tt.wantMode)
+			}
+			if capability.Available {
+				t.Fatal("platform_tunnels[0].available = true, want false after target mismatch fallback")
+			}
+			if capability.MissingPrerequisite != PlatformTunnelPrerequisiteHostImplementation {
+				t.Fatalf(
+					"platform_tunnels[0].missing_prerequisite = %q, want %q",
+					capability.MissingPrerequisite,
+					PlatformTunnelPrerequisiteHostImplementation,
+				)
+			}
+		})
 	}
 }
 

@@ -76,7 +76,7 @@ func normalizePlatformTunnelCapabilities(capabilities []PlatformTunnelCapability
 			}
 		}
 	}
-	if err := validatePlatformTunnelCapabilities(snapshot); err != nil {
+	if err := validatePlatformTunnelCapabilities(snapshot, build); err != nil {
 		return defaultPlatformTunnelCapabilities(build), err
 	}
 	return snapshot, nil
@@ -155,11 +155,20 @@ func defaultPlatformTunnelMode(build BuildIdentity) (PlatformTunnelMode, bool) {
 	}
 }
 
-func validatePlatformTunnelCapabilities(capabilities []PlatformTunnelCapability) error {
+func validatePlatformTunnelCapabilities(capabilities []PlatformTunnelCapability, build BuildIdentity) error {
 	seenModes := make(map[PlatformTunnelMode]struct{}, len(capabilities))
+	targetMode, constrainTargetMode := defaultPlatformTunnelMode(build)
 	for _, capability := range capabilities {
 		if err := validatePlatformTunnelCapability(capability); err != nil {
 			return err
+		}
+		if constrainTargetMode && capability.Mode != targetMode {
+			return fmt.Errorf(
+				"build target %s cannot report platform tunnel mode %s; want %s",
+				hostTargetLabel(build),
+				capability.Mode,
+				targetMode,
+			)
 		}
 		if _, exists := seenModes[capability.Mode]; exists {
 			return fmt.Errorf("duplicate platform tunnel mode %s in capability report", capability.Mode)
