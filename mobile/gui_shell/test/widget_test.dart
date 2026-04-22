@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_shell_core/shell_visuals.dart';
 import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_shell_core/portable_profile_transfer.dart';
@@ -236,6 +237,41 @@ void main() {
     );
   });
 
+  testWidgets('mobile shell uses shared semantic badges for tunnel states', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 1800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final controller = MobileShellController(
+      bridge: _FakeMobileHostBridge(),
+      stateStore: _InMemoryStateStore(MobileShellState.empty()),
+    );
+    await controller.initialize();
+    await pumpMobileShellTestApp(
+      tester,
+      controller: controller,
+      locale: AppLocale.en,
+    );
+
+    final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    final theme = app.theme!;
+    final visuals = theme.extension<ShellVisualTheme>();
+    final copy = tester.element(find.byType(MaterialApp)).shellText;
+
+    expect(theme.colorScheme.primary, const Color(0xFF214B66));
+    expect(visuals, isNotNull);
+
+    await _openSupportDiagnostics(tester);
+
+    final labels = tester
+        .widgetList<ShellToneBadge>(find.byType(ShellToneBadge))
+        .map((ShellToneBadge badge) => badge.label)
+        .toList(growable: false);
+    expect(labels, contains(copy.unavailableLowercase));
+  });
+
   testWidgets(
     'shell host indicator keeps host connection details out of the main workflow until requested',
     (WidgetTester tester) async {
@@ -368,8 +404,10 @@ void main() {
       await tester.tap(find.text('Home').first);
       await tester.pumpAndSettle();
 
+      expect(find.text('Current profile'), findsOneWidget);
       expect(find.text('Choose a profile'), findsNothing);
       expect(find.text('Current mode'), findsOneWidget);
+      expect(find.text('Need deeper detail?'), findsOneWidget);
       expect(find.text('Turn on VPN'), findsOneWidget);
       expect(find.text('Open profiles'), findsNothing);
       expect(find.text('Open activity'), findsOneWidget);
@@ -4083,6 +4121,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    final copy = tester.element(find.byType(MaterialApp)).shellText;
+    final labels = tester
+        .widgetList<ShellToneBadge>(find.byType(ShellToneBadge))
+        .map((ShellToneBadge badge) => badge.label)
+        .toList(growable: false);
+
     expect(controller.workflowSurface, MobileWorkflowSurface.providerConfig);
     expect(
       find.textContaining(
@@ -4090,6 +4134,7 @@ void main() {
       ),
       findsWidgets,
     );
+    expect(labels, contains(copy.unavailable));
     await _selectOverflowAction(
       tester,
       overflowKey: 'providers-actions-overflow',

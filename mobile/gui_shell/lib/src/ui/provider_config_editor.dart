@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter_shell_core/provider_settings_form.dart';
+import 'package:flutter_shell_core/shell_visuals.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_models.dart';
 import 'package:mobile_gui_shell/src/control/profile_draft.dart';
 
@@ -285,14 +286,11 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
         descriptor?.providerSettingsSupportError == null;
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.38,
-        ),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.55),
-        ),
+      decoration: shellSurfaceDecoration(
+        context,
+        style: ShellSurfaceStyle.highlight,
+        tone: ShellSemanticTone.info,
+        borderRadius: const BorderRadius.all(Radius.circular(14)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -309,7 +307,6 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
               ),
               if (availability != null)
                 _metaChip(
-                  theme,
                   label: availability.isAvailable
                       ? copy.available
                       : copy.unavailable,
@@ -329,8 +326,8 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
             spacing: 8,
             runSpacing: 8,
             children: <Widget>[
-              _metaChip(theme, label: copy.selectedType, accent: true),
-              _metaChip(theme, label: fieldLabel, accent: fieldAccent),
+              _metaChip(label: copy.selectedType, accent: true),
+              _metaChip(label: fieldLabel, accent: fieldAccent),
             ],
           ),
           if (compactNote != null) ...<Widget>[
@@ -348,41 +345,28 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
   }
 
   Widget _unavailableCard(ThemeData theme, String message) {
+    final palette = context.shellVisuals.tone(ShellSemanticTone.danger);
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFE2DE),
-        borderRadius: BorderRadius.circular(14),
+      decoration: shellSurfaceDecoration(
+        context,
+        style: ShellSurfaceStyle.highlight,
+        tone: ShellSemanticTone.danger,
+        borderRadius: const BorderRadius.all(Radius.circular(14)),
       ),
-      child: Text(message, style: theme.textTheme.bodyMedium),
+      child: Text(
+        message,
+        style: theme.textTheme.bodyMedium?.copyWith(color: palette.onContainer),
+      ),
     );
   }
 
-  Widget _metaChip(
-    ThemeData theme, {
-    required String label,
-    required bool accent,
-  }) {
-    return Container(
+  Widget _metaChip({required String label, required bool accent}) {
+    return ShellToneBadge(
+      label: label,
+      tone: accent ? ShellSemanticTone.info : ShellSemanticTone.neutral,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color:
-            (accent
-                    ? theme.colorScheme.secondary
-                    : theme.colorScheme.onSurfaceVariant)
-                .withValues(alpha: accent ? 0.12 : 0.08),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: accent
-              ? theme.colorScheme.secondary
-              : theme.colorScheme.onSurfaceVariant,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
     );
   }
 

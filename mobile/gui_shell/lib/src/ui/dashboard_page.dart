@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_shell_core/home_workflow_surface.dart';
 import 'package:flutter_shell_core/portable_profile_transfer.dart';
 import 'package:flutter_shell_core/shell_visuals.dart';
 import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
@@ -536,50 +537,51 @@ class _HomePage extends StatelessWidget {
           subtitle: t.mobileHomeSubtitle,
           trailing: headerAccessory,
         ),
-        if (notice != null) ...<Widget>[
-          const SizedBox(height: 12),
-          _NoticeBanner(message: notice),
-        ],
-        if (controller.requiresLocalStateReset) ...<Widget>[
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton(
-              onPressed: controller.busy
-                  ? null
-                  : () => unawaited(controller.clearLocalState()),
-              child: Text(context.shellText.resetLocalState),
-            ),
-          ),
-        ],
         const SizedBox(height: 12),
-        if (controller.profiles.isEmpty)
-          _HomeEmptyState(onOpenProfiles: onOpenProfiles)
-        else if (selectedProfile != null)
-          _HomeProfileCard(profile: selectedProfile),
-        if (showRuntimeCards) ...<Widget>[
-          const SizedBox(height: 16),
-          _HomePrimaryActionCard(
-            controller: controller,
-            hasSelectedProfile: selectedProfile != null,
-            onOpenProfiles: onOpenProfiles,
-            tunnelReady: tunnelReady,
-            challenge: homeChallenge,
-            onLaunchChallengeSurface: onLaunchChallengeSurface,
-            openChallengeLabel: openChallengeLabel,
-            showsManualChallengeContinue: showsManualChallengeContinue,
-          ),
-          const SizedBox(height: 16),
-          _HomeModeCard(controller: controller),
-          const SizedBox(height: 16),
-          _HomeSupportActions(
-            controller: controller,
-            onOpenActivity: () =>
-                onOpenSupport(surface: _SupportSurface.activity),
-            onOpenDiagnostics: () =>
-                onOpenSupport(surface: _SupportSurface.diagnostics),
-          ),
-        ],
+        HomeWorkflowBody(
+          noticeMessage: notice,
+          noticeAction: controller.requiresLocalStateReset
+              ? HomeWorkflowAction(
+                  label: context.shellText.resetLocalState,
+                  style: HomeWorkflowActionStyle.outlined,
+                  onPressed: controller.busy
+                      ? null
+                      : () => unawaited(controller.clearLocalState()),
+                )
+              : null,
+          emptyState: controller.profiles.isEmpty
+              ? _mobileHomeEmptyStateData(context, onOpenProfiles)
+              : null,
+          profileSummary: selectedProfile == null
+              ? null
+              : _mobileHomeProfileSummaryData(context, selectedProfile),
+          primaryAction: showRuntimeCards
+              ? _mobileHomePrimaryActionData(
+                  context,
+                  controller: controller,
+                  hasSelectedProfile: selectedProfile != null,
+                  onOpenProfiles: onOpenProfiles,
+                  tunnelReady: tunnelReady,
+                  challenge: homeChallenge,
+                  onLaunchChallengeSurface: onLaunchChallengeSurface,
+                  openChallengeLabel: openChallengeLabel,
+                  showsManualChallengeContinue: showsManualChallengeContinue,
+                )
+              : null,
+          modeSection: showRuntimeCards
+              ? _mobileHomeModeSectionData(context, controller)
+              : null,
+          supportSection: showRuntimeCards
+              ? _mobileHomeSupportSectionData(
+                  context,
+                  controller,
+                  onOpenActivity: () =>
+                      onOpenSupport(surface: _SupportSurface.activity),
+                  onOpenDiagnostics: () =>
+                      onOpenSupport(surface: _SupportSurface.diagnostics),
+                )
+              : null,
+        ),
       ],
     );
   }
@@ -2775,522 +2777,6 @@ class _RoutingFilterToolbar extends StatelessWidget {
   }
 }
 
-class _HomeEmptyState extends StatelessWidget {
-  const _HomeEmptyState({required this.onOpenProfiles});
-
-  final VoidCallback onOpenProfiles;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              context.shellText.homeNoSavedProfilesYet,
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              context.shellText.homeNoSavedProfilesMessage,
-              style: theme.textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: <Widget>[
-                FilledButton(
-                  onPressed: onOpenProfiles,
-                  child: Text(t.mobileProfilesAddProfile),
-                ),
-                FilledButton.tonal(
-                  onPressed: onOpenProfiles,
-                  child: Text(t.mobileProfilesImportInvite),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _HomeProfileCard extends StatelessWidget {
-  const _HomeProfileCard({required this.profile});
-
-  final ProfileRecord profile;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              context.shellText.currentProfile,
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              profile.name.isEmpty ? profile.id : profile.name,
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '${profile.spec.provider} -> ${profile.spec.peerAddress}',
-              style: theme.textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              context.shellText.listeningOn(profile.spec.listenAddress),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _HomeModeCard extends StatelessWidget {
-  const _HomeModeCard({required this.controller});
-
-  final MobileShellController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final activeMode = controller.activePlatformTunnelMode;
-    final activeCapability = controller.activePlatformTunnelCapability;
-    final executionPlans = activeMode == null
-        ? const <RuntimeExecutionPlanDescriptor>[]
-        : controller.executionPlanOptionsForMode(activeMode);
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.22,
-        ),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.6),
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              context.shellText.currentMode,
-              style: theme.textTheme.labelLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              activeMode == null
-                  ? context.shellText.noMobileTunnelModeAdvertised
-                  : _modeSummary(context, controller),
-              style: theme.textTheme.bodySmall,
-            ),
-            if (activeCapability?.message.isNotEmpty == true) ...<Widget>[
-              const SizedBox(height: 8),
-              Text(
-                activeCapability!.message,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-            if (controller.platformTunnels.length > 1) ...<Widget>[
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: controller.platformTunnels
-                    .map((capability) {
-                      return ChoiceChip(
-                        selected:
-                            controller.activePlatformTunnelMode ==
-                            capability.mode,
-                        label: Text(capability.mode.label),
-                        onSelected: (_) => controller.selectPlatformTunnelMode(
-                          capability.mode,
-                        ),
-                      );
-                    })
-                    .toList(growable: false),
-              ),
-            ],
-            if (executionPlans.length > 1) ...<Widget>[
-              const SizedBox(height: 12),
-              Text(
-                context.shellText.executionPath,
-                style: theme.textTheme.labelLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: executionPlans
-                    .map((descriptor) {
-                      return ChoiceChip(
-                        selected: _sameExecutionPlanForUi(
-                          descriptor.plan,
-                          controller.activeExecutionPlan,
-                        ),
-                        label: Text(
-                          _executionPlanLabel(context, descriptor.plan),
-                        ),
-                        onSelected: (_) =>
-                            controller.selectExecutionPlan(descriptor.plan),
-                      );
-                    })
-                    .toList(growable: false),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _HomePrimaryActionCard extends StatelessWidget {
-  const _HomePrimaryActionCard({
-    required this.controller,
-    required this.hasSelectedProfile,
-    required this.onOpenProfiles,
-    required this.tunnelReady,
-    required this.challenge,
-    required this.onLaunchChallengeSurface,
-    required this.openChallengeLabel,
-    required this.showsManualChallengeContinue,
-  });
-
-  final MobileShellController controller;
-  final bool hasSelectedProfile;
-  final VoidCallback onOpenProfiles;
-  final bool tunnelReady;
-  final ChallengeRecord? challenge;
-  final Future<void> Function(ChallengeRecord challenge)
-  onLaunchChallengeSurface;
-  final String Function(ChallengeRecord? challenge) openChallengeLabel;
-  final bool Function(ChallengeRecord? challenge) showsManualChallengeContinue;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final mode = controller.activePlatformTunnelMode;
-    final activeChallenge = challenge;
-    final needsProfileSelection = !tunnelReady && !hasSelectedProfile;
-    final stateTone = switch ((
-      activeChallenge,
-      tunnelReady,
-      needsProfileSelection,
-    )) {
-      (final ChallengeRecord _, _, _) => const (
-        null,
-        Color(0xFFFFF3D6),
-        Color(0xFFE4C16F),
-        Color(0xFF8A4B00),
-        Icons.travel_explore_rounded,
-        Icons.open_in_browser_rounded,
-      ),
-      (null, true, _) => const (
-        null,
-        Color(0xFFE2F5E9),
-        Color(0xFF88C9A4),
-        Color(0xFF17693F),
-        Icons.shield_rounded,
-        Icons.power_settings_new_rounded,
-      ),
-      (null, false, true) => const (
-        null,
-        Color(0xFFF0F3F7),
-        Color(0xFFBAC3CF),
-        Color(0xFF4A5868),
-        Icons.folder_open_rounded,
-        Icons.arrow_forward_rounded,
-      ),
-      (null, false, false) => const (
-        null,
-        Color(0xFFE3F0FF),
-        Color(0xFF90B8E6),
-        Color(0xFF0D5EAF),
-        Icons.power_rounded,
-        Icons.power_settings_new_rounded,
-      ),
-    };
-    final toneLabel = switch ((
-      activeChallenge,
-      tunnelReady,
-      needsProfileSelection,
-    )) {
-      (final ChallengeRecord _, _, _) => context.shellText.providerStepTone,
-      (null, true, _) => context.shellText.connectionLiveTone,
-      (null, false, true) => context.shellText.setupNeededTone,
-      (null, false, false) => context.shellText.mainActionTone,
-    };
-    final title = switch ((
-      activeChallenge,
-      tunnelReady,
-      needsProfileSelection,
-    )) {
-      (final ChallengeRecord _, _, _) =>
-        context.shellText.finishProviderValidation,
-      (null, true, _) => context.shellText.vpnIsOn,
-      (null, false, true) => context.shellText.profileRequired,
-      (null, false, false) => context.shellText.vpnIsOff,
-    };
-    final subtitle = switch ((
-      activeChallenge,
-      tunnelReady,
-      needsProfileSelection,
-    )) {
-      (final ChallengeRecord challenge, _, _) =>
-        controller.challengeRequiresOwnedBrowser(challenge)
-            ? (challenge.prompt?.trim().isNotEmpty == true
-                  ? challenge.prompt!
-                  : context.shellText.continueProviderFlowInApp)
-            : context.shellText.openRequiredBrowserStepFromHome,
-      (null, true, _) => context.shellText.disconnectCurrentMobileVpnPath,
-      (null, false, true) =>
-        context.shellText.chooseOrFinishProfileBeforeStartingVpn,
-      (null, false, false) => context.shellText.startCurrentMobileVpnPath,
-    };
-    final buttonLabel = switch ((
-      activeChallenge,
-      tunnelReady,
-      needsProfileSelection,
-    )) {
-      (final ChallengeRecord challenge, _, _) => openChallengeLabel(challenge),
-      (null, true, _) => context.shellText.mobileTurnOffVpn,
-      (null, false, true) => context.shellText.continueInProfiles,
-      (null, false, false) => context.shellText.mobileTurnOnVpn,
-    };
-    final VoidCallback? onPressed;
-    if (activeChallenge != null) {
-      onPressed = controller.busy
-          ? null
-          : () => unawaited(onLaunchChallengeSurface(activeChallenge));
-    } else if (needsProfileSelection) {
-      onPressed = controller.busy ? null : onOpenProfiles;
-    } else if (controller.busy ||
-        controller.hostConnection?.isReady != true ||
-        mode == null) {
-      onPressed = null;
-    } else {
-      onPressed = () => unawaited(
-        tunnelReady
-            ? controller.stopPlatformTunnel(mode)
-            : controller.startPlatformTunnel(mode),
-      );
-    }
-    return Card(
-      color: stateTone.$2,
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              toneLabel,
-              style: theme.textTheme.labelLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: stateTone.$4,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.72),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: stateTone.$3.withValues(alpha: 0.16),
-                    ),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Icon(stateTone.$5, color: stateTone.$4, size: 28),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        title,
-                        style: theme.textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(subtitle, style: theme.textTheme.bodyMedium),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            if (activeChallenge != null) ...<Widget>[
-              const SizedBox(height: 10),
-              Text(
-                context.shellText.challengeKind(activeChallenge.kind),
-                style: theme.textTheme.labelLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: onPressed,
-                icon: Icon(stateTone.$6, size: 22),
-                style: FilledButton.styleFrom(
-                  backgroundColor: stateTone.$4,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size.fromHeight(68),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 18,
-                    vertical: 16,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  textStyle: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                label: Text(buttonLabel),
-              ),
-            ),
-            if (activeChallenge != null) ...<Widget>[
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: <Widget>[
-                  if (showsManualChallengeContinue(activeChallenge))
-                    OutlinedButton(
-                      onPressed: controller.busy
-                          ? null
-                          : () => unawaited(
-                              controller.continueChallenge(activeChallenge.id),
-                            ),
-                      child: Text(context.shellText.iveCompletedIt),
-                    ),
-                  TextButton(
-                    onPressed: controller.busy
-                        ? null
-                        : () => unawaited(
-                            controller.cancelChallenge(activeChallenge.id),
-                          ),
-                    child: Text(context.shellText.cancelChallenge),
-                  ),
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _HomeSupportActions extends StatelessWidget {
-  const _HomeSupportActions({
-    required this.controller,
-    required this.onOpenActivity,
-    required this.onOpenDiagnostics,
-  });
-
-  final MobileShellController controller;
-  final VoidCallback onOpenActivity;
-  final VoidCallback onOpenDiagnostics;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final activeMode = controller.activePlatformTunnelMode;
-    final activeResult = activeMode == null
-        ? null
-        : controller.platformTunnelResultFor(activeMode);
-    final liveSummary = activeResult == null
-        ? context.shellText.noStartupRequestYetShort
-        : _platformTunnelResultSummary(context, activeResult);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text(
-          context.shellText.needDeeperDetail,
-          style: theme.textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          context.shellText.resolutionsSessionsSummary(
-            resolutions: controller.resolutions.length,
-            sessions: controller.sessions.length,
-            liveSummary: liveSummary,
-          ),
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: <Widget>[
-            FilledButton.tonal(
-              onPressed: onOpenActivity,
-              child: Text(context.shellText.openActivity),
-            ),
-            OutlinedButton(
-              onPressed: onOpenDiagnostics,
-              child: Text(context.shellText.openDiagnostics),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
 class _RoutingUnavailableCard extends StatelessWidget {
   const _RoutingUnavailableCard({required this.onOpenProfiles});
 
@@ -5041,9 +4527,10 @@ class _SystemTunnelBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final platformTunnels = controller.platformTunnels;
+    final panelPalette = context.shellVisuals.tone(ShellSemanticTone.info);
 
     return Card(
-      color: const Color(0xFFE6EDF7),
+      color: panelPalette.container,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -5113,15 +4600,13 @@ class _PlatformTunnelCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final statusColor = capability.available
-        ? const Color(0xFFDEF2E1)
-        : const Color(0xFFFFF1D6);
 
     return Container(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(18),
+      decoration: shellSurfaceDecoration(
+        context,
+        style: ShellSurfaceStyle.highlight,
+        tone: ShellSemanticTone.info,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -5136,21 +4621,13 @@ class _PlatformTunnelCard extends StatelessWidget {
                   ),
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: statusColor,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  capability.available
-                      ? context.shellText.availableLowercase
-                      : context.shellText.unavailableLowercase,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
+              ShellToneBadge(
+                label: capability.available
+                    ? context.shellText.availableLowercase
+                    : context.shellText.unavailableLowercase,
+                tone: capability.available
+                    ? ShellSemanticTone.ready
+                    : ShellSemanticTone.attention,
               ),
             ],
           ),
@@ -5239,6 +4716,10 @@ class _ResolutionCard extends StatelessWidget {
     final containerColor = selected
         ? theme.colorScheme.primary.withValues(alpha: 0.08)
         : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45);
+    final dangerPalette = context.shellVisuals.tone(ShellSemanticTone.danger);
+    final challengePalette = context.shellVisuals.tone(
+      ShellSemanticTone.attention,
+    );
 
     return Material(
       color: containerColor,
@@ -5322,7 +4803,7 @@ class _ResolutionCard extends StatelessWidget {
                         context.shellText.unknownValue,
                   ),
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: const Color(0xFF7A1F16),
+                    color: dangerPalette.onContainer,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -5331,9 +4812,11 @@ class _ResolutionCard extends StatelessWidget {
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFF1D6),
-                    borderRadius: BorderRadius.circular(14),
+                  decoration: shellSurfaceDecoration(
+                    context,
+                    style: ShellSurfaceStyle.highlight,
+                    tone: ShellSemanticTone.attention,
+                    borderRadius: const BorderRadius.all(Radius.circular(14)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -5341,11 +4824,17 @@ class _ResolutionCard extends StatelessWidget {
                       Text(
                         context.shellText.challengeKind(challenge!.kind),
                         style: theme.textTheme.titleSmall?.copyWith(
+                          color: challengePalette.onContainer,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(challenge!.prompt ?? challenge!.stage),
+                      Text(
+                        challenge!.prompt ?? challenge!.stage,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: challengePalette.onContainer,
+                        ),
+                      ),
                       const SizedBox(height: 10),
                       Wrap(
                         spacing: 10,
@@ -5617,6 +5106,10 @@ class _SessionCard extends StatelessWidget {
     final containerColor = selected
         ? theme.colorScheme.primary.withValues(alpha: 0.08)
         : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45);
+    final dangerPalette = context.shellVisuals.tone(ShellSemanticTone.danger);
+    final challengePalette = context.shellVisuals.tone(
+      ShellSemanticTone.attention,
+    );
 
     return Material(
       color: containerColor,
@@ -5677,7 +5170,7 @@ class _SessionCard extends StatelessWidget {
                         context.shellText.unknownValue,
                   ),
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: const Color(0xFF7A1F16),
+                    color: dangerPalette.onContainer,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -5686,9 +5179,11 @@ class _SessionCard extends StatelessWidget {
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFF1D6),
-                    borderRadius: BorderRadius.circular(14),
+                  decoration: shellSurfaceDecoration(
+                    context,
+                    style: ShellSurfaceStyle.highlight,
+                    tone: ShellSemanticTone.attention,
+                    borderRadius: const BorderRadius.all(Radius.circular(14)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -5696,11 +5191,17 @@ class _SessionCard extends StatelessWidget {
                       Text(
                         context.shellText.challengeKind(challenge!.kind),
                         style: theme.textTheme.titleSmall?.copyWith(
+                          color: challengePalette.onContainer,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(challenge!.prompt ?? challenge!.stage),
+                      Text(
+                        challenge!.prompt ?? challenge!.stage,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: challengePalette.onContainer,
+                        ),
+                      ),
                       const SizedBox(height: 10),
                       Wrap(
                         spacing: 10,
@@ -6132,6 +5633,270 @@ String _platformTunnelResultSummary(
     buffer.write(' ${result.message}');
   }
   return buffer.toString();
+}
+
+HomeWorkflowEmptyStateData _mobileHomeEmptyStateData(
+  BuildContext context,
+  VoidCallback onOpenProfiles,
+) {
+  return HomeWorkflowEmptyStateData(
+    title: context.shellText.homeNoSavedProfilesYet,
+    message: context.shellText.homeNoSavedProfilesMessage,
+    actions: <HomeWorkflowAction>[
+      HomeWorkflowAction(
+        label: t.mobileProfilesAddProfile,
+        onPressed: onOpenProfiles,
+      ),
+      HomeWorkflowAction(
+        label: t.mobileProfilesImportInvite,
+        onPressed: onOpenProfiles,
+        style: HomeWorkflowActionStyle.tonal,
+      ),
+    ],
+  );
+}
+
+HomeWorkflowProfileSummaryData _mobileHomeProfileSummaryData(
+  BuildContext context,
+  ProfileRecord profile,
+) {
+  return HomeWorkflowProfileSummaryData(
+    eyebrow: context.shellText.currentProfile,
+    title: profile.name.isEmpty ? profile.id : profile.name,
+    subtitle: '${profile.spec.provider} -> ${profile.spec.peerAddress}',
+    caption: context.shellText.listeningOn(profile.spec.listenAddress),
+  );
+}
+
+HomeWorkflowPrimaryActionData _mobileHomePrimaryActionData(
+  BuildContext context, {
+  required MobileShellController controller,
+  required bool hasSelectedProfile,
+  required VoidCallback onOpenProfiles,
+  required bool tunnelReady,
+  required ChallengeRecord? challenge,
+  required Future<void> Function(ChallengeRecord challenge)
+  onLaunchChallengeSurface,
+  required String Function(ChallengeRecord? challenge) openChallengeLabel,
+  required bool Function(ChallengeRecord? challenge)
+  showsManualChallengeContinue,
+}) {
+  final activeChallenge = challenge;
+  final needsProfileSelection = !tunnelReady && !hasSelectedProfile;
+  final tone = switch ((activeChallenge, tunnelReady, needsProfileSelection)) {
+    (final ChallengeRecord _, _, _) => ShellSemanticTone.attention,
+    (null, true, _) => ShellSemanticTone.ready,
+    (null, false, true) => ShellSemanticTone.neutral,
+    (null, false, false) => ShellSemanticTone.info,
+  };
+  final title = switch ((activeChallenge, tunnelReady, needsProfileSelection)) {
+    (final ChallengeRecord _, _, _) =>
+      context.shellText.finishProviderValidation,
+    (null, true, _) => context.shellText.vpnIsOn,
+    (null, false, true) => context.shellText.profileRequired,
+    (null, false, false) => context.shellText.vpnIsOff,
+  };
+  final subtitle = switch ((
+    activeChallenge,
+    tunnelReady,
+    needsProfileSelection,
+  )) {
+    (final ChallengeRecord currentChallenge, _, _) =>
+      controller.challengeRequiresOwnedBrowser(currentChallenge)
+          ? (currentChallenge.prompt?.trim().isNotEmpty == true
+                ? currentChallenge.prompt!
+                : context.shellText.continueProviderFlowInApp)
+          : context.shellText.openRequiredBrowserStepFromHome,
+    (null, true, _) => context.shellText.disconnectCurrentMobileVpnPath,
+    (null, false, true) =>
+      context.shellText.chooseOrFinishProfileBeforeStartingVpn,
+    (null, false, false) => context.shellText.startCurrentMobileVpnPath,
+  };
+  final primaryAction = switch ((
+    activeChallenge,
+    tunnelReady,
+    needsProfileSelection,
+  )) {
+    (final ChallengeRecord currentChallenge, _, _) => HomeWorkflowAction(
+      label: openChallengeLabel(currentChallenge),
+      icon: controller.challengeRequiresOwnedBrowser(currentChallenge)
+          ? Icons.open_in_browser_rounded
+          : Icons.arrow_forward_rounded,
+      onPressed: controller.busy
+          ? null
+          : () => unawaited(onLaunchChallengeSurface(currentChallenge)),
+    ),
+    (null, true, _) => HomeWorkflowAction(
+      label: context.shellText.mobileTurnOffVpn,
+      icon: Icons.power_settings_new_rounded,
+      onPressed: controller.busy || controller.hostConnection?.isReady != true
+          ? null
+          : () {
+              final mode = controller.activePlatformTunnelMode;
+              if (mode == null) {
+                return;
+              }
+              unawaited(controller.stopPlatformTunnel(mode));
+            },
+    ),
+    (null, false, true) => HomeWorkflowAction(
+      label: context.shellText.continueInProfiles,
+      icon: Icons.arrow_forward_rounded,
+      onPressed: controller.busy ? null : onOpenProfiles,
+    ),
+    (null, false, false) => HomeWorkflowAction(
+      label: context.shellText.mobileTurnOnVpn,
+      icon: Icons.power_settings_new_rounded,
+      onPressed: controller.busy || controller.hostConnection?.isReady != true
+          ? null
+          : () {
+              final mode = controller.activePlatformTunnelMode;
+              if (mode == null) {
+                return;
+              }
+              unawaited(controller.startPlatformTunnel(mode));
+            },
+    ),
+  };
+
+  final secondaryActions = <HomeWorkflowAction>[
+    if (activeChallenge != null &&
+        showsManualChallengeContinue(activeChallenge))
+      HomeWorkflowAction(
+        label: context.shellText.iveCompletedIt,
+        style: HomeWorkflowActionStyle.outlined,
+        onPressed: controller.busy
+            ? null
+            : () => unawaited(controller.continueChallenge(activeChallenge.id)),
+      ),
+    if (activeChallenge != null)
+      HomeWorkflowAction(
+        label: context.shellText.cancelChallenge,
+        style: HomeWorkflowActionStyle.text,
+        onPressed: controller.busy
+            ? null
+            : () => unawaited(controller.cancelChallenge(activeChallenge.id)),
+      ),
+  ];
+
+  return HomeWorkflowPrimaryActionData(
+    tone: tone,
+    eyebrow: switch ((activeChallenge, tunnelReady, needsProfileSelection)) {
+      (final ChallengeRecord _, _, _) => context.shellText.providerStepTone,
+      (null, true, _) => context.shellText.connectionLiveTone,
+      (null, false, true) => context.shellText.setupNeededTone,
+      (null, false, false) => context.shellText.mainActionTone,
+    },
+    title: title,
+    subtitle: subtitle,
+    leadingIcon: switch ((
+      activeChallenge,
+      tunnelReady,
+      needsProfileSelection,
+    )) {
+      (final ChallengeRecord _, _, _) => Icons.travel_explore_rounded,
+      (null, true, _) => Icons.shield_rounded,
+      (null, false, true) => Icons.folder_open_rounded,
+      (null, false, false) => Icons.power_rounded,
+    },
+    primaryAction: primaryAction,
+    annotation: activeChallenge == null
+        ? null
+        : context.shellText.challengeKind(activeChallenge.kind),
+    secondaryActions: secondaryActions,
+  );
+}
+
+HomeWorkflowModeSectionData _mobileHomeModeSectionData(
+  BuildContext context,
+  MobileShellController controller,
+) {
+  final activeCapability = controller.activePlatformTunnelCapability;
+  final choiceGroups = <HomeWorkflowChoiceGroup>[];
+  if (controller.platformTunnels.length > 1) {
+    choiceGroups.add(
+      HomeWorkflowChoiceGroup(
+        options: controller.platformTunnels
+            .map(
+              (PlatformTunnelCapability capability) => HomeWorkflowChoiceOption(
+                label: capability.mode.label,
+                selected:
+                    controller.activePlatformTunnelMode == capability.mode,
+                onSelected: () =>
+                    controller.selectPlatformTunnelMode(capability.mode),
+              ),
+            )
+            .toList(growable: false),
+      ),
+    );
+  }
+  final executionPlans = controller.activePlatformTunnelMode == null
+      ? const <RuntimeExecutionPlanDescriptor>[]
+      : controller.executionPlanOptionsForMode(
+          controller.activePlatformTunnelMode!,
+        );
+  if (executionPlans.length > 1) {
+    choiceGroups.add(
+      HomeWorkflowChoiceGroup(
+        label: context.shellText.executionPath,
+        options: executionPlans
+            .map(
+              (RuntimeExecutionPlanDescriptor descriptor) =>
+                  HomeWorkflowChoiceOption(
+                    label: _executionPlanLabel(context, descriptor.plan),
+                    selected: _sameExecutionPlanForUi(
+                      descriptor.plan,
+                      controller.activeExecutionPlan,
+                    ),
+                    onSelected: () =>
+                        controller.selectExecutionPlan(descriptor.plan),
+                  ),
+            )
+            .toList(growable: false),
+      ),
+    );
+  }
+  return HomeWorkflowModeSectionData(
+    title: context.shellText.currentMode,
+    summary: _modeSummary(context, controller),
+    detail: activeCapability?.message,
+    choiceGroups: choiceGroups,
+  );
+}
+
+HomeWorkflowSupportSectionData _mobileHomeSupportSectionData(
+  BuildContext context,
+  MobileShellController controller, {
+  required VoidCallback onOpenActivity,
+  required VoidCallback onOpenDiagnostics,
+}) {
+  final activeMode = controller.activePlatformTunnelMode;
+  final activeResult = activeMode == null
+      ? null
+      : controller.platformTunnelResultFor(activeMode);
+  final liveSummary = activeResult == null
+      ? context.shellText.noStartupRequestYetShort
+      : _platformTunnelResultSummary(context, activeResult);
+  return HomeWorkflowSupportSectionData(
+    title: context.shellText.needDeeperDetail,
+    summary: context.shellText.resolutionsSessionsSummary(
+      resolutions: controller.resolutions.length,
+      sessions: controller.sessions.length,
+      liveSummary: liveSummary,
+    ),
+    actions: <HomeWorkflowAction>[
+      HomeWorkflowAction(
+        label: context.shellText.openActivity,
+        style: HomeWorkflowActionStyle.tonal,
+        onPressed: onOpenActivity,
+      ),
+      HomeWorkflowAction(
+        label: context.shellText.openDiagnostics,
+        style: HomeWorkflowActionStyle.outlined,
+        onPressed: onOpenDiagnostics,
+      ),
+    ],
+  );
 }
 
 ProfileRecord? _selectedProfile(MobileShellController controller) {

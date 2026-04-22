@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_shell_core/home_workflow_surface.dart';
 import 'package:flutter_shell_core/shell_visuals.dart';
 import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:gui_shell/src/control/control_plane_models.dart';
@@ -55,6 +56,11 @@ class _DashboardPageState extends State<DashboardPage> {
 
   void _showProfilesRoute() {
     controller.showProfiles();
+    _restoreWorkflowFocus();
+  }
+
+  void _showProvidersRoute() {
+    controller.showProviders();
     _restoreWorkflowFocus();
   }
 
@@ -158,8 +164,10 @@ class _DashboardPageState extends State<DashboardPage> {
           const SingleActivator(LogicalKeyboardKey.digit2, control: true):
               _showProfilesRoute,
           const SingleActivator(LogicalKeyboardKey.digit3, control: true):
-              _showRoutingRoute,
+              _showProvidersRoute,
           const SingleActivator(LogicalKeyboardKey.digit4, control: true):
+              _showRoutingRoute,
+          const SingleActivator(LogicalKeyboardKey.digit5, control: true):
               _showSettingsRoute,
           const SingleActivator(
             LogicalKeyboardKey.keyD,
@@ -224,6 +232,10 @@ class _DashboardPageState extends State<DashboardPage> {
                           onShowProfiles: () {
                             Navigator.of(context).maybePop();
                             _showProfilesRoute();
+                          },
+                          onShowProviders: () {
+                            Navigator.of(context).maybePop();
+                            _showProvidersRoute();
                           },
                           onShowRouting: () {
                             Navigator.of(context).maybePop();
@@ -297,6 +309,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           activeWorkbenchFocusNode: _activeWorkbenchFocusNode,
                           onShowHome: _showHomeRoute,
                           onShowProfiles: _showProfilesRoute,
+                          onShowProviders: _showProvidersRoute,
                           onShowRouting: _showRoutingRoute,
                           onShowActivity: _showActivityRoute,
                           onShowDiagnostics: _showDiagnosticsRoute,
@@ -326,6 +339,7 @@ class _ShellBody extends StatelessWidget {
     required this.activeWorkbenchFocusNode,
     required this.onShowHome,
     required this.onShowProfiles,
+    required this.onShowProviders,
     required this.onShowRouting,
     required this.onShowActivity,
     required this.onShowDiagnostics,
@@ -338,6 +352,7 @@ class _ShellBody extends StatelessWidget {
   final FocusNode activeWorkbenchFocusNode;
   final VoidCallback onShowHome;
   final VoidCallback onShowProfiles;
+  final VoidCallback onShowProviders;
   final VoidCallback onShowRouting;
   final VoidCallback onShowActivity;
   final VoidCallback onShowDiagnostics;
@@ -408,6 +423,7 @@ class _ShellBody extends StatelessWidget {
                         controller: controller,
                         onShowHome: onShowHome,
                         onShowProfiles: onShowProfiles,
+                        onShowProviders: onShowProviders,
                         onShowRouting: onShowRouting,
                         onShowActivity: onShowActivity,
                         onShowDiagnostics: onShowDiagnostics,
@@ -794,6 +810,7 @@ class _CompactNavigationDrawer extends StatelessWidget {
     required this.controller,
     required this.onShowHome,
     required this.onShowProfiles,
+    required this.onShowProviders,
     required this.onShowRouting,
     required this.onShowActivity,
     required this.onShowDiagnostics,
@@ -803,6 +820,7 @@ class _CompactNavigationDrawer extends StatelessWidget {
   final DesktopShellController controller;
   final VoidCallback onShowHome;
   final VoidCallback onShowProfiles;
+  final VoidCallback onShowProviders;
   final VoidCallback onShowRouting;
   final VoidCallback onShowActivity;
   final VoidCallback onShowDiagnostics;
@@ -821,12 +839,14 @@ class _CompactNavigationDrawer extends StatelessWidget {
           case 1:
             onShowProfiles();
           case 2:
-            onShowRouting();
+            onShowProviders();
           case 3:
-            onShowActivity();
+            onShowRouting();
           case 4:
-            onShowDiagnostics();
+            onShowActivity();
           case 5:
+            onShowDiagnostics();
+          case 6:
             onShowSettings();
         }
       },
@@ -844,6 +864,11 @@ class _CompactNavigationDrawer extends StatelessWidget {
           key: ValueKey<String>('desktop-section-profiles'),
           icon: Icon(Icons.fact_check_outlined),
           label: Text(t.commonProfiles),
+        ),
+        NavigationDrawerDestination(
+          key: ValueKey<String>('desktop-section-provider'),
+          icon: Icon(Icons.tune_outlined),
+          label: Text(t.commonProviders),
         ),
         NavigationDrawerDestination(
           key: ValueKey<String>('desktop-section-routing'),
@@ -879,6 +904,7 @@ class _ExpandedNavigationPad extends StatelessWidget {
     required this.controller,
     required this.onShowHome,
     required this.onShowProfiles,
+    required this.onShowProviders,
     required this.onShowRouting,
     required this.onShowActivity,
     required this.onShowDiagnostics,
@@ -888,6 +914,7 @@ class _ExpandedNavigationPad extends StatelessWidget {
   final DesktopShellController controller;
   final VoidCallback onShowHome;
   final VoidCallback onShowProfiles;
+  final VoidCallback onShowProviders;
   final VoidCallback onShowRouting;
   final VoidCallback onShowActivity;
   final VoidCallback onShowDiagnostics;
@@ -929,6 +956,17 @@ class _ExpandedNavigationPad extends StatelessWidget {
                   controller.activeWorkbenchRoute ==
                   DesktopWorkbenchRoute.profiles,
               onTap: onShowProfiles,
+            ),
+            const SizedBox(height: 8),
+            _SectionListTile(
+              key: const ValueKey<String>('desktop-section-provider'),
+              icon: Icons.tune_outlined,
+              title: t.commonProviders,
+              subtitle: t.desktopSectionProvidersSubtitle,
+              selected:
+                  controller.activeWorkbenchRoute ==
+                  DesktopWorkbenchRoute.providers,
+              onTap: onShowProviders,
             ),
             const SizedBox(height: 8),
             _SectionListTile(
@@ -988,89 +1026,6 @@ class _ExpandedNavigationPad extends StatelessWidget {
   }
 }
 
-class _WorkflowQuickActions extends StatelessWidget {
-  const _WorkflowQuickActions({
-    required this.controller,
-    required this.onOpenSavedProfiles,
-    required this.onOpenManagedProvidersForProfile,
-    required this.onOpenManagedProvidersForProvider,
-    required this.onOpenPresetBootstrap,
-    required this.onOpenProviderFamilies,
-  });
-
-  final DesktopShellController controller;
-  final VoidCallback onOpenSavedProfiles;
-  final VoidCallback onOpenManagedProvidersForProfile;
-  final VoidCallback onOpenManagedProvidersForProvider;
-  final VoidCallback onOpenPresetBootstrap;
-  final VoidCallback onOpenProviderFamilies;
-
-  @override
-  Widget build(BuildContext context) {
-    final profileWorkflow =
-        controller.activeSection == DesktopShellSection.profileWorkflow;
-    final actions = profileWorkflow
-        ? <Widget>[
-            FilledButton.tonal(
-              key: const ValueKey<String>(
-                'desktop-open-profile-library-button',
-              ),
-              onPressed: onOpenSavedProfiles,
-              child: Text(t.commonSavedProfiles),
-            ),
-            OutlinedButton(
-              key: const ValueKey<String>(
-                'desktop-create-profile-draft-button',
-              ),
-              onPressed: controller.busy ? null : controller.resetDraft,
-              child: Text(t.commonNewDraft),
-            ),
-            OutlinedButton(
-              key: const ValueKey<String>(
-                'desktop-context-open-profile-managed-providers-button',
-              ),
-              onPressed: controller.managedProviders.isEmpty
-                  ? null
-                  : onOpenManagedProvidersForProfile,
-              child: Text(t.commonProviderRecords),
-            ),
-          ]
-        : <Widget>[
-            FilledButton.tonal(
-              key: const ValueKey<String>(
-                'desktop-open-preset-bootstrap-button',
-              ),
-              onPressed: onOpenPresetBootstrap,
-              child: Text(t.commonNewFromPreset),
-            ),
-            FilledButton.tonal(
-              key: const ValueKey<String>(
-                'desktop-open-managed-provider-library-button',
-              ),
-              onPressed: onOpenManagedProvidersForProvider,
-              child: Text(t.commonProviderRecords),
-            ),
-            OutlinedButton(
-              key: const ValueKey<String>(
-                'desktop-open-provider-family-chooser-button',
-              ),
-              onPressed: onOpenProviderFamilies,
-              child: Text(t.commonProviderFamilies),
-            ),
-          ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        for (var i = 0; i < actions.length; i++) ...<Widget>[
-          actions[i],
-          if (i != actions.length - 1) const SizedBox(height: 8),
-        ],
-      ],
-    );
-  }
-}
-
 class _CanvasSurface extends StatelessWidget {
   const _CanvasSurface({required this.controller});
 
@@ -1086,6 +1041,8 @@ class _CanvasSurface extends StatelessWidget {
             return _HomeWorkbenchSurface(controller: controller);
           case DesktopWorkbenchRoute.profiles:
             return _ProfilesWorkbenchSurface(controller: controller);
+          case DesktopWorkbenchRoute.providers:
+            return _ProvidersWorkbenchSurface(controller: controller);
           case DesktopWorkbenchRoute.routing:
             return _RoutingWorkbenchSurface(controller: controller);
           case DesktopWorkbenchRoute.activity:
@@ -1116,12 +1073,6 @@ class _HomeWorkbenchSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final copy = context.shellText;
-    final selectedProfile = controller.selectedSavedProfile;
-    final activeWorkCount =
-        controller.resolutions.length + controller.sessions.length;
-    final readyTunnelModes = controller.platformTunnels
-        .where((PlatformTunnelCapability capability) => capability.available)
-        .length;
 
     return Card(
       child: Padding(
@@ -1132,185 +1083,24 @@ class _HomeWorkbenchSurface extends StatelessWidget {
             _WorkbenchRouteHeader(
               title: copy.overview,
               detail: _workflowAssuranceSummary(context, controller),
-              trailing: Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: <Widget>[
-                  FilledButton.tonal(
-                    key: const ValueKey<String>(
-                      'desktop-open-profile-library-button',
-                    ),
-                    onPressed: controller.showProfiles,
-                    child: Text(t.commonProfiles),
-                  ),
-                  FilledButton.tonal(
-                    key: const ValueKey<String>('desktop-home-open-routing'),
-                    onPressed: controller.showRouting,
-                    child: Text(t.commonRouting),
-                  ),
-                  OutlinedButton(
-                    key: const ValueKey<String>('desktop-home-open-activity'),
-                    onPressed: controller.hasLiveWork
-                        ? controller.showActivityRoute
-                        : null,
-                    child: Text(t.commonLiveWork),
-                  ),
-                  OutlinedButton(
-                    key: const ValueKey<String>(
-                      'desktop-home-open-diagnostics',
-                    ),
-                    onPressed: controller.showDiagnosticsRoute,
-                    child: Text(t.commonDiagnostics),
-                  ),
-                ],
-              ),
             ),
             const SizedBox(height: 16),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: <Widget>[
-                _WorkbenchStatCard(
-                  title: t.desktopStatusReadyTitle,
-                  value: switch (controller.status) {
-                    ShellStatus.booting => t.desktopStatusConnectingTitle,
-                    ShellStatus.ready => t.desktopStatusReadyTitle,
-                    ShellStatus.blocked => t.desktopStatusBlockedTitle,
-                  },
-                  detail:
-                      controller.hostConnection?.message ??
-                      t.desktopStatusConnectedDetail,
-                ),
-                _WorkbenchStatCard(
-                  title: copy.selectedProfileActions,
-                  value: selectedProfile?.name.isNotEmpty == true
-                      ? selectedProfile!.name
-                      : (selectedProfile?.id ?? copy.homeNoSavedProfilesYet),
-                  detail: selectedProfile == null
-                      ? copy.desktopNoSavedProfilesYetShort
-                      : '${selectedProfile.spec.provider} · ${selectedProfile.spec.listenAddress}',
-                ),
-                _WorkbenchStatCard(
-                  title: t.commonLiveWork,
-                  value: '$activeWorkCount',
-                  detail: copy.desktopResolutionsSessionsCompact(
-                    controller.resolutions.length,
-                    controller.sessions.length,
-                  ),
-                ),
-                _WorkbenchStatCard(
-                  title: copy.desktopPlatformTunnelSummary,
-                  value: readyTunnelModes > 0
-                      ? copy.desktopTunnelModesReadySummary(
-                          readyTunnelModes,
-                          controller.platformTunnels.length,
-                        )
-                      : copy.desktopTypedHostTunnelSummary,
-                  detail: _platformTunnelHeaderSummary(context, controller),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            LayoutBuilder(
-              builder: (BuildContext context, BoxConstraints constraints) {
-                final stacked = constraints.maxWidth < 1120;
-                final selectedProfileCard = _WorkbenchSummaryCard(
-                  title: copy.selectedProfileActions,
-                  detail: selectedProfile == null
-                      ? copy.homeNoSavedProfilesYet
-                      : selectedProfile.spec.provider,
-                  child: selectedProfile == null
-                      ? Text(copy.desktopNoSavedProfilesYetShort)
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            Text(
-                              selectedProfile.name.isEmpty
-                                  ? selectedProfile.id
-                                  : selectedProfile.name,
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.w800),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              '${selectedProfile.spec.listenAddress} -> ${selectedProfile.spec.peerAddress}',
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${selectedProfile.spec.mode.value} · ${selectedProfile.spec.useDtls ? copy.dtlsEnabled : copy.notSet}',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                            const SizedBox(height: 12),
-                            Wrap(
-                              spacing: 10,
-                              runSpacing: 10,
-                              children: <Widget>[
-                                FilledButton(
-                                  key: const ValueKey<String>(
-                                    'desktop-home-start-selected-profile',
-                                  ),
-                                  onPressed:
-                                      controller.status == ShellStatus.ready &&
-                                          !controller.busy
-                                      ? () => unawaited(
-                                          controller.startSelectedProfile(),
-                                        )
-                                      : null,
-                                  child: Text(copy.startOnThisDevice),
-                                ),
-                                OutlinedButton(
-                                  onPressed: controller.showProfiles,
-                                  child: Text(t.commonProfiles),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                );
-                final supportCard = _WorkbenchSummaryCard(
-                  title: t.commonSupport,
-                  detail: controller.hasLiveWork
-                      ? copy.desktopSupportReadyLiveDetail
-                      : copy.desktopSupportReadyIdleDetail,
-                  child: Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: <Widget>[
-                      FilledButton.tonal(
-                        onPressed: controller.hasLiveWork
-                            ? controller.showActivityRoute
-                            : null,
-                        child: Text(t.commonLiveWork),
-                      ),
-                      FilledButton.tonal(
-                        onPressed: controller.showDiagnosticsRoute,
-                        child: Text(t.commonDiagnostics),
-                      ),
-                      OutlinedButton(
-                        onPressed: controller.showSettings,
-                        child: Text(t.commonSettings),
-                      ),
-                    ],
-                  ),
-                );
-                if (stacked) {
-                  return Column(
-                    children: <Widget>[
-                      selectedProfileCard,
-                      const SizedBox(height: 12),
-                      supportCard,
-                    ],
-                  );
-                }
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Expanded(child: selectedProfileCard),
-                    const SizedBox(width: 12),
-                    Expanded(child: supportCard),
-                  ],
-                );
-              },
+            HomeWorkflowBody(
+              emptyState: controller.profiles.isEmpty
+                  ? _desktopHomeEmptyStateData(context, controller)
+                  : null,
+              profileSummary: controller.selectedSavedProfile == null
+                  ? null
+                  : _desktopHomeProfileSummaryData(
+                      context,
+                      controller.selectedSavedProfile!,
+                    ),
+              primaryAction: _desktopHomePrimaryActionData(context, controller),
+              modeSection: _desktopHomeModeSectionData(context, controller),
+              supportSection: _desktopHomeSupportSectionData(
+                context,
+                controller,
+              ),
             ),
           ],
         ),
@@ -1354,6 +1144,113 @@ class _ProfilesWorkbenchSurface extends StatelessWidget {
             onSelectManagedProvider: controller.useManagedProviderForDraft,
           ),
         );
+      case DesktopCanvasRoute.profileEditor:
+      case DesktopCanvasRoute.managedProviderEditor:
+      case DesktopCanvasRoute.managedProviderPicker:
+      case DesktopCanvasRoute.presetPicker:
+      case DesktopCanvasRoute.providerFamilyPicker:
+        break;
+    }
+
+    final library = SavedProfilesLibrarySurface(
+      profiles: controller.profiles,
+      selectedProfileId: controller.selectedProfileId,
+      busy: busy,
+      onSelectProfile: controller.selectProfile,
+      onCreateDraft: controller.resetDraft,
+    );
+    final editor = ProfileEditorPanel(
+      providerDescriptors: controller.providerDescriptors,
+      managedProviders: controller.managedProviders,
+      initialManagedProviderId:
+          controller.draft.providerBinding.managedProviderId,
+      selectedProfileId: controller.selectedProfileId,
+      draft: controller.draft,
+      busy: busy,
+      onDraftChanged: controller.updateDraft,
+      onActivateManagedProviderMode: controller.activateManagedProviderMode,
+      onUseCustomProvider: controller.useCustomProviderForDraft,
+      onSave: controller.saveDraft,
+      onDelete: controller.deleteSelectedProfile,
+      onReset: controller.resetDraft,
+      onResolve: controller.startResolutionFromDraft,
+      onStart: controller.startSelectedProfile,
+      onPreparePortableExport: controller.selectedPortableProfileEnvelope,
+      onCopyPortableExportText: controller.copyPortableProfileEnvelopeText,
+      onSavePortableExportFile: controller.savePortableProfileEnvelopeToFile,
+      onImportPortableFromFile:
+          controller.importPortableProfileEnvelopeFromFile,
+      onPreviewPortableImport: controller.previewPortableProfileEnvelope,
+      onConfirmPortableImport: controller.confirmPortableProfileImport,
+      onBrowseManagedProviders: () async {
+        controller.openManagedProviderPickerForProfile();
+      },
+    );
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints shellConstraints) {
+            final lowHeightWorkbench = shellConstraints.maxHeight < 440;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                _WorkbenchRouteHeader(
+                  title: t.commonProfiles,
+                  detail: t.desktopSectionProfilesSubtitle,
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: LayoutBuilder(
+                    builder:
+                        (BuildContext context, BoxConstraints constraints) {
+                          final stacked = constraints.maxWidth < 1280;
+                          final lowHeightEditor = constraints.maxHeight < 260;
+                          if (stacked &&
+                              (lowHeightWorkbench || lowHeightEditor)) {
+                            return editor;
+                          }
+                          if (stacked) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: <Widget>[
+                                Expanded(flex: 3, child: library),
+                                const SizedBox(height: 12),
+                                Expanded(flex: 4, child: editor),
+                              ],
+                            );
+                          }
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: <Widget>[
+                              SizedBox(width: 360, child: library),
+                              const SizedBox(width: 12),
+                              Expanded(child: editor),
+                            ],
+                          );
+                        },
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _ProvidersWorkbenchSurface extends StatelessWidget {
+  const _ProvidersWorkbenchSurface({required this.controller});
+
+  final DesktopShellController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final busy = controller.busy || controller.status != ShellStatus.ready;
+
+    switch (controller.activeCanvasRoute) {
       case DesktopCanvasRoute.managedProviderPicker:
         return _CanvasRouteFrame(
           title: context.shellText.desktopProviderRecordsLibraryTitle,
@@ -1398,76 +1295,37 @@ class _ProfilesWorkbenchSurface extends StatelessWidget {
             },
           ),
         );
-      case DesktopCanvasRoute.profileEditor:
       case DesktopCanvasRoute.managedProviderEditor:
+      case DesktopCanvasRoute.profileEditor:
+      case DesktopCanvasRoute.savedProfilePicker:
+      case DesktopCanvasRoute.managedProviderPickerForProfile:
         break;
     }
 
-    final profileWorkflow =
-        controller.activeSection == DesktopShellSection.profileWorkflow;
-    final library = profileWorkflow
-        ? SavedProfilesLibrarySurface(
-            profiles: controller.profiles,
-            selectedProfileId: controller.selectedProfileId,
-            busy: busy,
-            onSelectProfile: controller.selectProfile,
-            onCreateDraft: controller.resetDraft,
-          )
-        : ManagedProvidersLibrarySurface(
-            managedProviders: controller.managedProviders,
-            selectedManagedProviderId: controller.selectedManagedProviderId,
-            onSelectManagedProvider: controller.selectManagedProvider,
-            onCreateManagedProvider: controller.startManagedProviderCreation,
-          );
-    final editor = profileWorkflow
-        ? ProfileEditorPanel(
-            providerDescriptors: controller.providerDescriptors,
-            managedProviders: controller.managedProviders,
-            initialManagedProviderId:
-                controller.draft.providerBinding.managedProviderId,
-            selectedProfileId: controller.selectedProfileId,
-            draft: controller.draft,
-            busy: busy,
-            onDraftChanged: controller.updateDraft,
-            onActivateManagedProviderMode:
-                controller.activateManagedProviderMode,
-            onUseCustomProvider: controller.useCustomProviderForDraft,
-            onSave: controller.saveDraft,
-            onDelete: controller.deleteSelectedProfile,
-            onReset: controller.resetDraft,
-            onResolve: controller.startResolutionFromDraft,
-            onStart: controller.startSelectedProfile,
-            onPreparePortableExport: controller.selectedPortableProfileEnvelope,
-            onCopyPortableExportText:
-                controller.copyPortableProfileEnvelopeText,
-            onSavePortableExportFile:
-                controller.savePortableProfileEnvelopeToFile,
-            onImportPortableFromFile:
-                controller.importPortableProfileEnvelopeFromFile,
-            onPreviewPortableImport: controller.previewPortableProfileEnvelope,
-            onConfirmPortableImport: controller.confirmPortableProfileImport,
-            onBrowseManagedProviders: () async {
-              controller.showProviderWorkflow();
-            },
-          )
-        : ProviderConfigEditorPanel(
-            supportedProviders: controller.supportedProviderCatalog,
-            providerDescriptors: controller.providerDescriptors,
-            selectedManagedProviderId: controller.selectedManagedProviderId,
-            draft: controller.managedProviderDraft,
-            busy: busy,
-            onDraftChanged: controller.updateManagedProviderDraft,
-            onSave: controller.saveManagedProviderDraft,
-            onDelete: controller.deleteSelectedManagedProvider,
-            onReset: controller.resetManagedProviderDraft,
-            onApplyToProfileDraft: controller.useManagedProviderForDraft,
-            onChooseProviderFamily: () async {
-              controller.openProviderFamilyPicker();
-            },
-            onOpenPresetBootstrap: () async {
-              controller.openPresetPicker();
-            },
-          );
+    final library = ManagedProvidersLibrarySurface(
+      managedProviders: controller.managedProviders,
+      selectedManagedProviderId: controller.selectedManagedProviderId,
+      onSelectManagedProvider: controller.selectManagedProvider,
+      onCreateManagedProvider: controller.startManagedProviderCreation,
+    );
+    final editor = ProviderConfigEditorPanel(
+      supportedProviders: controller.supportedProviderCatalog,
+      providerDescriptors: controller.providerDescriptors,
+      selectedManagedProviderId: controller.selectedManagedProviderId,
+      draft: controller.managedProviderDraft,
+      busy: busy,
+      onDraftChanged: controller.updateManagedProviderDraft,
+      onSave: controller.saveManagedProviderDraft,
+      onDelete: controller.deleteSelectedManagedProvider,
+      onReset: controller.resetManagedProviderDraft,
+      onApplyToProfileDraft: controller.useManagedProviderForDraft,
+      onChooseProviderFamily: () async {
+        controller.openProviderFamilyPicker();
+      },
+      onOpenPresetBootstrap: () async {
+        controller.openPresetPicker();
+      },
+    );
 
     return Card(
       child: Padding(
@@ -1479,48 +1337,36 @@ class _ProfilesWorkbenchSurface extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
                 _WorkbenchRouteHeader(
-                  title: t.commonProfiles,
-                  detail: profileWorkflow
-                      ? t.desktopSectionProfilesSubtitle
-                      : t.desktopSectionProvidersSubtitle,
+                  title: t.commonProviders,
+                  detail: t.desktopSectionProvidersSubtitle,
                   trailing: Wrap(
                     spacing: 10,
                     runSpacing: 10,
                     children: <Widget>[
-                      ChoiceChip(
-                        key: const ValueKey<String>('desktop-section-profile'),
-                        avatar: const Icon(Icons.fact_check_outlined, size: 18),
-                        label: Text(t.commonProfiles),
-                        selected:
-                            controller.activeSection ==
-                            DesktopShellSection.profileWorkflow,
-                        onSelected: (_) => controller.showProfileWorkflow(),
+                      FilledButton.tonal(
+                        key: const ValueKey<String>(
+                          'desktop-open-preset-bootstrap-button',
+                        ),
+                        onPressed: controller.openPresetPicker,
+                        child: Text(t.commonNewFromPreset),
                       ),
-                      ChoiceChip(
-                        key: const ValueKey<String>('desktop-section-provider'),
-                        avatar: const Icon(Icons.tune_outlined, size: 18),
-                        label: Text(t.commonProviderRecords),
-                        selected:
-                            controller.activeSection ==
-                            DesktopShellSection.providerWorkflow,
-                        onSelected: (_) => controller.showProviderWorkflow(),
+                      OutlinedButton(
+                        key: const ValueKey<String>(
+                          'desktop-open-managed-provider-library-button',
+                        ),
+                        onPressed: controller.openManagedProviderPicker,
+                        child: Text(t.commonProviderRecords),
+                      ),
+                      OutlinedButton(
+                        key: const ValueKey<String>(
+                          'desktop-open-provider-family-chooser-button',
+                        ),
+                        onPressed: controller.openProviderFamilyPicker,
+                        child: Text(t.commonProviderFamilies),
                       ),
                     ],
                   ),
                 ),
-                if (!lowHeightWorkbench) ...<Widget>[
-                  const SizedBox(height: 16),
-                  _WorkflowQuickActions(
-                    controller: controller,
-                    onOpenSavedProfiles: controller.openSavedProfilePicker,
-                    onOpenManagedProvidersForProfile:
-                        controller.openManagedProviderPickerForProfile,
-                    onOpenManagedProvidersForProvider:
-                        controller.openManagedProviderPicker,
-                    onOpenPresetBootstrap: controller.openPresetPicker,
-                    onOpenProviderFamilies: controller.openProviderFamilyPicker,
-                  ),
-                ],
                 const SizedBox(height: 16),
                 Expanded(
                   child: LayoutBuilder(
@@ -2060,53 +1906,6 @@ class _WorkbenchRouteHeader extends StatelessWidget {
         const SizedBox(width: 16),
         Flexible(child: trailing!),
       ],
-    );
-  }
-}
-
-class _WorkbenchStatCard extends StatelessWidget {
-  const _WorkbenchStatCard({
-    required this.title,
-    required this.value,
-    required this.detail,
-  });
-
-  final String title;
-  final String value;
-  final String detail;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return SizedBox(
-      width: 240,
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: shellSurfaceDecoration(
-          context,
-          style: ShellSurfaceStyle.highlight,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              title,
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(detail, style: theme.textTheme.bodySmall),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -2788,7 +2587,7 @@ class _PlatformTunnelPanel extends StatelessWidget {
     };
 
     return Card(
-      color: const Color(0xFFE6EDF7),
+      color: context.shellVisuals.tone(ShellSemanticTone.info).container,
       child: Padding(
         padding: EdgeInsets.all(compact ? 12 : 18),
         child: Column(
@@ -2849,9 +2648,10 @@ class _CompactPlatformTunnelCard extends StatelessWidget {
 
     return Container(
       padding: EdgeInsets.all(compact ? 12 : 14),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(18),
+      decoration: shellSurfaceDecoration(
+        context,
+        style: ShellSurfaceStyle.highlight,
+        tone: ShellSemanticTone.info,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2866,19 +2666,9 @@ class _CompactPlatformTunnelCard extends StatelessWidget {
                   ),
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF1D6),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  copy.unavailableLowercase,
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
+              ShellToneBadge(
+                label: copy.unavailableLowercase,
+                tone: ShellSemanticTone.attention,
               ),
             ],
           ),
@@ -2923,15 +2713,13 @@ class _PlatformTunnelCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final copy = context.shellText;
-    final statusColor = capability.available
-        ? const Color(0xFFDEF2E1)
-        : const Color(0xFFFFF1D6);
 
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(18),
+      decoration: shellSurfaceDecoration(
+        context,
+        style: ShellSurfaceStyle.highlight,
+        tone: ShellSemanticTone.info,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2946,21 +2734,13 @@ class _PlatformTunnelCard extends StatelessWidget {
                   ),
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: statusColor,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  capability.available
-                      ? copy.availableLowercase
-                      : copy.unavailableLowercase,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
+              ShellToneBadge(
+                label: capability.available
+                    ? copy.availableLowercase
+                    : copy.unavailableLowercase,
+                tone: capability.available
+                    ? ShellSemanticTone.ready
+                    : ShellSemanticTone.attention,
               ),
             ],
           ),
@@ -3245,6 +3025,10 @@ class _ResolutionCard extends StatelessWidget {
     final containerColor = selected
         ? theme.colorScheme.primary.withValues(alpha: 0.08)
         : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45);
+    final dangerPalette = context.shellVisuals.tone(ShellSemanticTone.danger);
+    final challengePalette = context.shellVisuals.tone(
+      ShellSemanticTone.attention,
+    );
 
     return Material(
       color: containerColor,
@@ -3324,7 +3108,7 @@ class _ResolutionCard extends StatelessWidget {
                     message: resolution.failure!.message ?? copy.unknownValue,
                   ),
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: const Color(0xFF7A1F16),
+                    color: dangerPalette.onContainer,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -3333,9 +3117,11 @@ class _ResolutionCard extends StatelessWidget {
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFF1D6),
-                    borderRadius: BorderRadius.circular(14),
+                  decoration: shellSurfaceDecoration(
+                    context,
+                    style: ShellSurfaceStyle.highlight,
+                    tone: ShellSemanticTone.attention,
+                    borderRadius: const BorderRadius.all(Radius.circular(14)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -3343,11 +3129,17 @@ class _ResolutionCard extends StatelessWidget {
                       Text(
                         copy.challengeKind(challenge!.kind),
                         style: theme.textTheme.titleSmall?.copyWith(
+                          color: challengePalette.onContainer,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(challenge!.prompt ?? challenge!.stage),
+                      Text(
+                        challenge!.prompt ?? challenge!.stage,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: challengePalette.onContainer,
+                        ),
+                      ),
                       if ((challenge!.openUrl ?? '').isNotEmpty) ...<Widget>[
                         const SizedBox(height: 8),
                         SelectableText(
@@ -3463,6 +3255,10 @@ class _SessionCard extends StatelessWidget {
     final containerColor = selected
         ? theme.colorScheme.primary.withValues(alpha: 0.08)
         : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45);
+    final dangerPalette = context.shellVisuals.tone(ShellSemanticTone.danger);
+    final challengePalette = context.shellVisuals.tone(
+      ShellSemanticTone.attention,
+    );
 
     return Material(
       color: containerColor,
@@ -3509,7 +3305,7 @@ class _SessionCard extends StatelessWidget {
                     message: session.failure!.message ?? copy.unknownValue,
                   ),
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: const Color(0xFF7A1F16),
+                    color: dangerPalette.onContainer,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -3518,9 +3314,11 @@ class _SessionCard extends StatelessWidget {
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFF1D6),
-                    borderRadius: BorderRadius.circular(14),
+                  decoration: shellSurfaceDecoration(
+                    context,
+                    style: ShellSurfaceStyle.highlight,
+                    tone: ShellSemanticTone.attention,
+                    borderRadius: const BorderRadius.all(Radius.circular(14)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -3528,11 +3326,17 @@ class _SessionCard extends StatelessWidget {
                       Text(
                         copy.challengeKind(challenge!.kind),
                         style: theme.textTheme.titleSmall?.copyWith(
+                          color: challengePalette.onContainer,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(challenge!.prompt ?? challenge!.stage),
+                      Text(
+                        challenge!.prompt ?? challenge!.stage,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: challengePalette.onContainer,
+                        ),
+                      ),
                       const SizedBox(height: 10),
                       Wrap(
                         spacing: 10,
@@ -3739,10 +3543,11 @@ int _workbenchIndex(DesktopWorkbenchRoute route) {
   return switch (route) {
     DesktopWorkbenchRoute.home => 0,
     DesktopWorkbenchRoute.profiles => 1,
-    DesktopWorkbenchRoute.routing => 2,
-    DesktopWorkbenchRoute.activity => 3,
-    DesktopWorkbenchRoute.diagnostics => 4,
-    DesktopWorkbenchRoute.settings => 5,
+    DesktopWorkbenchRoute.providers => 2,
+    DesktopWorkbenchRoute.routing => 3,
+    DesktopWorkbenchRoute.activity => 4,
+    DesktopWorkbenchRoute.diagnostics => 5,
+    DesktopWorkbenchRoute.settings => 6,
   };
 }
 
@@ -3761,6 +3566,275 @@ String _workflowAssuranceSummary(
           ? copy.desktopWorkflowAssuranceReadyLive
           : copy.desktopWorkflowAssuranceReadyIdle,
   };
+}
+
+HomeWorkflowEmptyStateData _desktopHomeEmptyStateData(
+  BuildContext context,
+  DesktopShellController controller,
+) {
+  return HomeWorkflowEmptyStateData(
+    title: context.shellText.homeNoSavedProfilesYet,
+    message: context.shellText.homeNoSavedProfilesMessage,
+    actions: <HomeWorkflowAction>[
+      HomeWorkflowAction(
+        label: t.commonSavedProfiles,
+        onPressed: controller.showProfiles,
+      ),
+      HomeWorkflowAction(
+        label: t.commonRouting,
+        style: HomeWorkflowActionStyle.tonal,
+        onPressed: controller.showRouting,
+      ),
+    ],
+  );
+}
+
+HomeWorkflowProfileSummaryData _desktopHomeProfileSummaryData(
+  BuildContext context,
+  ProfileRecord profile,
+) {
+  final copy = context.shellText;
+  return HomeWorkflowProfileSummaryData(
+    eyebrow: copy.currentProfile,
+    title: profile.name.isEmpty ? profile.id : profile.name,
+    subtitle: '${profile.spec.provider} -> ${profile.spec.peerAddress}',
+    caption: copy.listeningOn(profile.spec.listenAddress),
+  );
+}
+
+HomeWorkflowPrimaryActionData _desktopHomePrimaryActionData(
+  BuildContext context,
+  DesktopShellController controller,
+) {
+  final copy = context.shellText;
+  final selectedProfile = controller.selectedSavedProfile;
+  final challenge = _desktopHomePrimaryChallenge(controller);
+  if (challenge != null) {
+    return HomeWorkflowPrimaryActionData(
+      tone: ShellSemanticTone.attention,
+      eyebrow: copy.providerStepTone,
+      title: copy.finishProviderValidation,
+      subtitle: copy.desktopSupportReadyLiveDetail,
+      leadingIcon: Icons.travel_explore_rounded,
+      primaryAction: HomeWorkflowAction(
+        label: copy.openActivity,
+        icon: Icons.view_list_rounded,
+        onPressed: controller.showActivityRoute,
+      ),
+      annotation: copy.challengeKind(challenge.kind),
+      secondaryActions: <HomeWorkflowAction>[
+        HomeWorkflowAction(
+          label: copy.iveCompletedIt,
+          style: HomeWorkflowActionStyle.outlined,
+          onPressed: controller.busy
+              ? null
+              : () => unawaited(controller.continueChallenge(challenge.id)),
+        ),
+        HomeWorkflowAction(
+          label: copy.cancelChallenge,
+          style: HomeWorkflowActionStyle.text,
+          onPressed: controller.busy
+              ? null
+              : () => unawaited(controller.cancelChallenge(challenge.id)),
+        ),
+      ],
+    );
+  }
+  if (controller.hasLiveWork) {
+    return HomeWorkflowPrimaryActionData(
+      tone: ShellSemanticTone.ready,
+      eyebrow: copy.connectionLiveTone,
+      title: t.commonLiveWork,
+      subtitle: copy.desktopResolutionsSessionsCompact(
+        controller.resolutions.length,
+        controller.sessions.length,
+      ),
+      leadingIcon: Icons.shield_rounded,
+      primaryAction: HomeWorkflowAction(
+        label: copy.openActivity,
+        icon: Icons.view_list_rounded,
+        onPressed: controller.showActivityRoute,
+      ),
+      secondaryActions: <HomeWorkflowAction>[
+        HomeWorkflowAction(
+          label: copy.openDiagnostics,
+          style: HomeWorkflowActionStyle.outlined,
+          onPressed: controller.showDiagnosticsRoute,
+        ),
+      ],
+    );
+  }
+  if (selectedProfile == null) {
+    return HomeWorkflowPrimaryActionData(
+      tone: ShellSemanticTone.neutral,
+      eyebrow: copy.setupNeededTone,
+      title: copy.profileRequired,
+      subtitle: copy.chooseOrFinishProfileBeforeStartingVpn,
+      leadingIcon: Icons.folder_open_rounded,
+      primaryAction: HomeWorkflowAction(
+        label: copy.continueInProfiles,
+        key: const ValueKey<String>('desktop-open-profile-library-button'),
+        icon: Icons.arrow_forward_rounded,
+        onPressed: controller.showProfiles,
+      ),
+      secondaryActions: <HomeWorkflowAction>[
+        HomeWorkflowAction(
+          label: t.commonRouting,
+          style: HomeWorkflowActionStyle.tonal,
+          onPressed: controller.showRouting,
+        ),
+      ],
+    );
+  }
+  return HomeWorkflowPrimaryActionData(
+    tone: ShellSemanticTone.info,
+    eyebrow: copy.mainActionTone,
+    title: copy.startOnThisDevice,
+    subtitle:
+        '${selectedProfile.name.isEmpty ? selectedProfile.id : selectedProfile.name} · ${selectedProfile.spec.provider}',
+    leadingIcon: Icons.power_rounded,
+    primaryAction: HomeWorkflowAction(
+      key: const ValueKey<String>('desktop-home-start-selected-profile'),
+      label: copy.startOnThisDevice,
+      icon: Icons.power_settings_new_rounded,
+      onPressed: controller.status == ShellStatus.ready && !controller.busy
+          ? () => unawaited(controller.startSelectedProfile())
+          : null,
+    ),
+    secondaryActions: <HomeWorkflowAction>[
+      HomeWorkflowAction(
+        key: const ValueKey<String>('desktop-open-profile-library-button'),
+        label: t.commonProfiles,
+        style: HomeWorkflowActionStyle.tonal,
+        onPressed: controller.showProfiles,
+      ),
+      HomeWorkflowAction(
+        label: t.commonRouting,
+        style: HomeWorkflowActionStyle.outlined,
+        onPressed: controller.showRouting,
+      ),
+    ],
+  );
+}
+
+HomeWorkflowModeSectionData _desktopHomeModeSectionData(
+  BuildContext context,
+  DesktopShellController controller,
+) {
+  return HomeWorkflowModeSectionData(
+    title: context.shellText.currentMode,
+    summary: _desktopHomeModeSummary(context, controller),
+    detail: _desktopHomeModeDetail(context, controller),
+  );
+}
+
+HomeWorkflowSupportSectionData _desktopHomeSupportSectionData(
+  BuildContext context,
+  DesktopShellController controller,
+) {
+  final latestResult = _desktopLatestPlatformTunnelResult(controller);
+  final liveSummary = latestResult == null
+      ? context.shellText.noStartupRequestYetShort
+      : _platformTunnelResultSummary(context, latestResult);
+  return HomeWorkflowSupportSectionData(
+    title: context.shellText.needDeeperDetail,
+    summary: context.shellText.resolutionsSessionsSummary(
+      resolutions: controller.resolutions.length,
+      sessions: controller.sessions.length,
+      liveSummary: liveSummary,
+    ),
+    actions: <HomeWorkflowAction>[
+      HomeWorkflowAction(
+        label: context.shellText.openActivity,
+        style: HomeWorkflowActionStyle.tonal,
+        onPressed: controller.hasLiveWork ? controller.showActivityRoute : null,
+      ),
+      HomeWorkflowAction(
+        label: context.shellText.openDiagnostics,
+        style: HomeWorkflowActionStyle.outlined,
+        onPressed: controller.showDiagnosticsRoute,
+      ),
+    ],
+  );
+}
+
+ChallengeRecord? _desktopHomePrimaryChallenge(
+  DesktopShellController controller,
+) {
+  for (final resolution in controller.resolutions) {
+    if (resolution.state != ResolutionState.challengeRequired) {
+      continue;
+    }
+    final challenge = controller.activeChallengeForResolution(resolution);
+    if (challenge != null) {
+      return challenge;
+    }
+  }
+  for (final session in controller.sessions) {
+    if (session.state != SessionState.challengeRequired) {
+      continue;
+    }
+    final challenge = controller.activeChallengeFor(session);
+    if (challenge != null) {
+      return challenge;
+    }
+  }
+  return null;
+}
+
+PlatformTunnelStartResult? _desktopLatestPlatformTunnelResult(
+  DesktopShellController controller,
+) {
+  for (final capability in controller.platformTunnels) {
+    final result = controller.platformTunnelResultFor(capability.mode);
+    if (result != null) {
+      return result;
+    }
+  }
+  return null;
+}
+
+String _desktopHomeModeSummary(
+  BuildContext context,
+  DesktopShellController controller,
+) {
+  final copy = context.shellText;
+  if (controller.platformTunnels.isEmpty) {
+    return copy.desktopNoPlatformTunnelModesReported;
+  }
+  final readyCount = controller.platformTunnels
+      .where((PlatformTunnelCapability capability) => capability.available)
+      .length;
+  if (readyCount > 0) {
+    return copy.desktopTunnelModesReadySummary(
+      readyCount,
+      controller.platformTunnels.length,
+    );
+  }
+  if (controller.platformTunnels.length == 1) {
+    return _compactPlatformTunnelCapabilitySummary(
+      context,
+      controller.platformTunnels.single,
+    );
+  }
+  return copy.desktopTypedHostTunnelSummary;
+}
+
+String? _desktopHomeModeDetail(
+  BuildContext context,
+  DesktopShellController controller,
+) {
+  final latestResult = _desktopLatestPlatformTunnelResult(controller);
+  if (latestResult != null) {
+    return _platformTunnelResultSummary(context, latestResult);
+  }
+  for (final capability in controller.platformTunnels) {
+    final message = capability.message.trim();
+    if (message.isNotEmpty) {
+      return message;
+    }
+  }
+  return null;
 }
 
 String _routineConnectionDetail({required ShellText copy, String? message}) {

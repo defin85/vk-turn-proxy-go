@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_shell_core/shell_visuals.dart';
+import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_models.dart';
 import 'package:mobile_gui_shell/src/control/profile_draft.dart';
@@ -61,6 +63,92 @@ const ProviderDescriptor _unsupportedProviderSettingsDescriptor =
 
 void main() {
   testWidgets(
+    'mobile profile editor uses shared shell badges for provider semantics',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 2200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final baseDraft = ProfileDraft.defaults();
+      final draft = baseDraft.copyWith(
+        spec: baseDraft.spec.copyWith(
+          provider: 'wb-stream',
+          link: 'https://wb.example.test/invite/abc',
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: SizedBox(
+                width: 900,
+                child: ProfileEditorPanel(
+                  profiles: const <ProfileRecord>[],
+                  providerDescriptors: const <ProviderDescriptor>[
+                    _providerWithSettingsDescriptor,
+                  ],
+                  availableProviderConfigs: const <ProviderConfigRecord>[],
+                  selectedProfileId: 'profile-1',
+                  draft: draft,
+                  busy: false,
+                  onSelectProfile: (_) {},
+                  onDraftChanged: (_) {},
+                  onApplyProviderConfig: (_) {},
+                  onSave: () async {},
+                  onDelete: () async {},
+                  onReset: () {},
+                  onResolve: () async {},
+                  onStart: () async {},
+                  onPreparePortableExport: () => null,
+                  onCopyPortableExportText: (_) async {},
+                  onSharePortableExportText: (_) async {},
+                  onSharePortableExportFile: (_) async {},
+                  onImportPortableFromFile: () async => null,
+                  onPreviewPortableImport: (_) => null,
+                  onConfirmPortableImport: (_) async {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Provider details'));
+      await tester.pumpAndSettle();
+
+      final copy = tester.element(find.byType(MaterialApp)).shellText;
+      final labels = tester
+          .widgetList<ShellToneBadge>(find.byType(ShellToneBadge))
+          .map((ShellToneBadge badge) => badge.label)
+          .toList(growable: false);
+
+      expect(
+        labels,
+        contains(
+          copy.tagInput(_providerWithSettingsDescriptor.inputKind.value),
+        ),
+      );
+      expect(
+        labels,
+        contains(
+          copy.tagAuth(_providerWithSettingsDescriptor.authPosture.label),
+        ),
+      );
+      expect(
+        labels,
+        contains(
+          copy.tagBrowser(_providerWithSettingsDescriptor.browserPolicy.label),
+        ),
+      );
+      expect(
+        labels,
+        contains(copy.tagFamily(ArtifactFamily.genericTurn.label)),
+      );
+    },
+  );
+
+  testWidgets(
     'mobile profile editor footer stays commit-only for saved profiles',
     (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1400, 1000);
@@ -110,6 +198,10 @@ void main() {
       );
       expect(
         find.byKey(const ValueKey<String>('profile-editor-save-action')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('profile-editor-name-field')),
         findsOneWidget,
       );
       expect(find.text('Portable transfer'), findsNothing);

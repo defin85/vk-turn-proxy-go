@@ -7,6 +7,7 @@ ANDROID_GUI_BUILD_METADATA="${ROOT_DIR}/dist/build/android-gui-build-metadata.js
 GUI_ROOT="${ROOT_DIR}/mobile/gui_shell"
 ANDROID_ROOT="${GUI_ROOT}/android"
 VERSION_FILE="${GUI_ROOT}/.flutter-version"
+DEFAULT_ANDROID_SDK_ROOT="${HOME}/.local/share/android-sdk"
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -26,11 +27,7 @@ if [[ ! -f "${VERSION_MANIFEST}" ]]; then
   exit 1
 fi
 
-if [[ -z "${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}" ]]; then
-  echo "ANDROID_SDK_ROOT or ANDROID_HOME must point to a Linux Android SDK" >&2
-  exit 1
-fi
-ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME}}"
+ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-${DEFAULT_ANDROID_SDK_ROOT}}}"
 if [[ ! -d "${ANDROID_SDK_ROOT}" ]]; then
   echo "Android SDK root not found: ${ANDROID_SDK_ROOT}" >&2
   exit 1

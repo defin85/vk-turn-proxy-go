@@ -149,7 +149,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('VK Calls'), findsOneWidget);
-    expect(find.textContaining('external browser'), findsOneWidget);
+    expect(
+      find.textContaining('requires an external browser when challenge'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('generic-turn draft renders static-secret descriptor details', (

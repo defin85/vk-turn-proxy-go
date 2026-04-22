@@ -6,6 +6,7 @@ VERSION_MANIFEST="${ROOT_DIR}/version.json"
 ANDROID_HOST_BUILD_METADATA="${ROOT_DIR}/dist/build/android-embedded-host-build-metadata.json"
 ANDROID_API_LEVEL="${ANDROID_API_LEVEL:-21}"
 ANDROID_DEV_WIREGUARD_PROFILE_DEFAULT="${HOME}/.local/state/vk-turn-proxy-go/wg/phone1.conf"
+DEFAULT_ANDROID_SDK_ROOT="${HOME}/.local/share/android-sdk"
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -26,9 +27,9 @@ fi
 if [[ -n "${ANDROID_NDK_HOME:-}" && -d "${ANDROID_NDK_HOME}" ]]; then
   NDK_ROOT="${ANDROID_NDK_HOME}"
 else
-  SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+  SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-${DEFAULT_ANDROID_SDK_ROOT}}}"
   if [[ -z "${SDK_ROOT}" || ! -d "${SDK_ROOT}" ]]; then
-    echo "ANDROID_SDK_ROOT or ANDROID_HOME must point to a Linux Android SDK" >&2
+    echo "ANDROID_SDK_ROOT or ANDROID_HOME must point to a Linux Android SDK (default: ${DEFAULT_ANDROID_SDK_ROOT})" >&2
     exit 1
   fi
   NDK_ROOT="${SDK_ROOT}/ndk/28.2.13676358"

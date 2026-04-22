@@ -192,10 +192,31 @@ void main() {
     final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
     final theme = app.theme!;
     final visuals = theme.extension<ShellVisualTheme>();
+    final copy = tester.element(find.byType(MaterialApp)).shellText;
 
     expect(theme.colorScheme.primary, const Color(0xFF214B66));
     expect(visuals, isNotNull);
     expect(find.byType(ShellToneBadge), findsWidgets);
+    expect(find.text('Current profile'), findsOneWidget);
+    expect(find.text('Current mode'), findsOneWidget);
+    expect(find.text('Need deeper detail?'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('desktop-open-profile-library-button')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('desktop-open-diagnostics-button')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tunnel detail'));
+    await tester.pumpAndSettle();
+
+    final labels = tester
+        .widgetList<ShellToneBadge>(find.byType(ShellToneBadge))
+        .map((ShellToneBadge badge) => badge.label)
+        .toList(growable: false);
+    expect(labels, contains(copy.unavailableLowercase));
   });
 
   testWidgets(
@@ -500,13 +521,6 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(
-        find.byKey(
-          const ValueKey<String>('desktop-open-profile-library-button'),
-        ),
-      );
-      await tester.pumpAndSettle();
-
       expect(controller.activeWorkbenchRoute, DesktopWorkbenchRoute.profiles);
       expect(controller.draft.name, 'Keep context');
 
@@ -770,10 +784,17 @@ void main() {
       find.byKey(const ValueKey<String>('desktop-section-profiles')),
     );
     await tester.pumpAndSettle();
+    expect(
+      find.byKey(
+        const ValueKey<String>('desktop-open-preset-bootstrap-button'),
+      ),
+      findsNothing,
+    );
     await tester.tap(
       find.byKey(const ValueKey<String>('desktop-section-provider')),
     );
     await tester.pumpAndSettle();
+    expect(controller.activeWorkbenchRoute, DesktopWorkbenchRoute.providers);
 
     await tester.ensureVisible(
       find.byKey(
@@ -830,6 +851,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(controller.activeWorkbenchRoute, DesktopWorkbenchRoute.providers);
     await tester.ensureVisible(
       find.byKey(
         const ValueKey<String>('desktop-open-preset-bootstrap-button'),
@@ -889,6 +911,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      expect(controller.activeWorkbenchRoute, DesktopWorkbenchRoute.providers);
       expect(
         controller.workspaceSurface,
         DesktopWorkspaceSurface.providerConfig,
@@ -977,6 +1000,7 @@ void main() {
 
       expect(controller.providerConfigs, isEmpty);
       expect(controller.activeSection, DesktopShellSection.providerWorkflow);
+      expect(controller.activeWorkbenchRoute, DesktopWorkbenchRoute.providers);
 
       controller.dispose();
       await tester.pumpWidget(const SizedBox.shrink());
@@ -1277,6 +1301,19 @@ void main() {
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
       await tester.pumpAndSettle();
 
+      expect(controller.activeWorkbenchRoute, DesktopWorkbenchRoute.providers);
+      expect(
+        find.byKey(
+          const ValueKey<String>('desktop-open-preset-bootstrap-button'),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.digit4);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+
       expect(controller.activeWorkbenchRoute, DesktopWorkbenchRoute.routing);
 
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
@@ -1465,11 +1502,17 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.tap(
+        find.byKey(const ValueKey<String>('desktop-navigation-drawer-button')),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
         find.byKey(const ValueKey<String>('desktop-section-provider')),
       );
       await tester.pumpAndSettle();
 
       expect(controller.activeSection, DesktopShellSection.providerWorkflow);
+      expect(controller.activeWorkbenchRoute, DesktopWorkbenchRoute.providers);
       expect(
         find.byKey(const ValueKey<String>('desktop-section-drawer')),
         findsNothing,
@@ -1553,6 +1596,7 @@ void main() {
         find.byKey(const ValueKey<String>('desktop-section-provider')),
       );
       await tester.pumpAndSettle();
+      expect(controller.activeWorkbenchRoute, DesktopWorkbenchRoute.providers);
       await tester.ensureVisible(find.byType(TextField).first);
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).first, 'Resize Record');
@@ -1566,6 +1610,7 @@ void main() {
         findsOneWidget,
       );
       expect(controller.activeSection, DesktopShellSection.providerWorkflow);
+      expect(controller.activeWorkbenchRoute, DesktopWorkbenchRoute.providers);
       expect(controller.managedProviderDraft.name, 'Resize Record');
 
       tester.view.physicalSize = const Size(1040, 1200);
@@ -1576,6 +1621,7 @@ void main() {
         findsOneWidget,
       );
       expect(controller.activeSection, DesktopShellSection.providerWorkflow);
+      expect(controller.activeWorkbenchRoute, DesktopWorkbenchRoute.providers);
       expect(controller.managedProviderDraft.name, 'Resize Record');
 
       controller.dispose();

@@ -36,4 +36,20 @@ void main() {
 
     expect(find.text('Productive split canvas'), findsOneWidget);
   });
+
+  testWidgets('design reference mode matches the checked-in golden', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1680, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(const DesktopShellDesignReferencesApp());
+    await tester.pumpAndSettle();
+
+    await expectLater(
+      find.byType(DesktopShellDesignReferencesApp),
+      matchesGoldenFile('goldens/design_reference_page.png'),
+    );
+  });
 }
