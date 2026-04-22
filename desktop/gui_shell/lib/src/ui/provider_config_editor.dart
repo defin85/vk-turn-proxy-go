@@ -93,6 +93,8 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
     final blockedBySchemaSupport =
         descriptor?.providerSettingsSupportError != null &&
         widget.draft.providerSettings.isNotEmpty;
+    final unsupportedSelectedFamily =
+        widget.draft.provider.trim().isNotEmpty && supportedProvider == null;
     final hostAvailability = supportedProvider?.availabilityFor(
       widget.providerDescriptors,
     );
@@ -244,6 +246,13 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
                           provider: supportedProvider,
                           availability: hostAvailability,
                         ),
+                        if (unsupportedSelectedFamily) ...<Widget>[
+                          const SizedBox(height: 12),
+                          _unavailableCard(
+                            theme,
+                            copy.selectedManagedProviderFamilyNotInSupportedCatalog,
+                          ),
+                        ],
                         const SizedBox(height: 16),
                         if (supportedProvider != null)
                           _selectedFamilyCard(
@@ -572,14 +581,17 @@ class _ProviderConfigEditorPanelState extends State<ProviderConfigEditorPanel> {
 
   SupportedProviderDefinition? _selectedSupportedProvider() {
     final providerId = widget.draft.provider.trim().toLowerCase();
+    if (providerId.isEmpty) {
+      return widget.supportedProviders.isEmpty
+          ? null
+          : widget.supportedProviders.first;
+    }
     for (final provider in widget.supportedProviders) {
       if (provider.id.trim().toLowerCase() == providerId) {
         return provider;
       }
     }
-    return widget.supportedProviders.isEmpty
-        ? null
-        : widget.supportedProviders.first;
+    return null;
   }
 
   ProviderDescriptor? _selectedDescriptor() {

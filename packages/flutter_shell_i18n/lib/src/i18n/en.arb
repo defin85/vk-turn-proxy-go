@@ -14,6 +14,7 @@
   "commonSupport": "Support",
   "commonDiagnostics": "Diagnostics",
   "commonLiveWork": "Live work",
+  "commonSettings": "Settings",
   "commonReconnect": "Reconnect",
   "commonRefresh": "Refresh",
   "commonWorkflows": "Workflows",

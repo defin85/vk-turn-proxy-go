@@ -21,6 +21,15 @@ enum DesktopWorkspaceSurface { profile, providerConfig, provider }
 
 enum DesktopShellSection { profileWorkflow, providerWorkflow }
 
+enum DesktopWorkbenchRoute {
+  home,
+  profiles,
+  routing,
+  activity,
+  diagnostics,
+  settings,
+}
+
 enum DesktopCanvasRoute {
   profileEditor,
   savedProfilePicker,
@@ -112,6 +121,7 @@ class DesktopShellController extends ChangeNotifier {
   ProfileDraft draft = ProfileDraft.defaults();
   ManagedProviderDraft managedProviderDraft = ManagedProviderDraft.defaults();
   DesktopShellSection activeSection = DesktopShellSection.profileWorkflow;
+  DesktopWorkbenchRoute activeWorkbenchRoute = DesktopWorkbenchRoute.home;
   DesktopCanvasRoute activeCanvasRoute = DesktopCanvasRoute.profileEditor;
   DesktopInspectorPane activeInspectorPane = DesktopInspectorPane.diagnostics;
   bool isInspectorOpen = false;
@@ -256,14 +266,49 @@ class DesktopShellController extends ChangeNotifier {
   ProviderDescriptor? get activeProviderConfigDescriptor =>
       activeManagedProviderDescriptor;
 
+  bool get showsSupportRoute =>
+      activeWorkbenchRoute == DesktopWorkbenchRoute.activity ||
+      activeWorkbenchRoute == DesktopWorkbenchRoute.diagnostics;
+
+  void showHome() {
+    _showWorkbenchRoute(DesktopWorkbenchRoute.home);
+  }
+
+  void showProfiles() {
+    _showEditorRouteForSection(activeSection);
+    _showWorkbenchRoute(DesktopWorkbenchRoute.profiles);
+  }
+
+  void showRouting() {
+    _showWorkbenchRoute(DesktopWorkbenchRoute.routing);
+  }
+
+  void showActivityRoute() {
+    _showWorkbenchRoute(
+      DesktopWorkbenchRoute.activity,
+      closeInspectorIfOpen: true,
+    );
+  }
+
+  void showDiagnosticsRoute() {
+    _showWorkbenchRoute(
+      DesktopWorkbenchRoute.diagnostics,
+      closeInspectorIfOpen: true,
+    );
+  }
+
+  void showSettings() {
+    _showWorkbenchRoute(DesktopWorkbenchRoute.settings);
+  }
+
   void showProfileWorkflow() {
     _showEditorRouteForSection(DesktopShellSection.profileWorkflow);
-    _notifyWorkflow();
+    _showWorkbenchRoute(DesktopWorkbenchRoute.profiles);
   }
 
   void showProviderWorkflow() {
     _showEditorRouteForSection(DesktopShellSection.providerWorkflow);
-    _notifyWorkflow();
+    _showWorkbenchRoute(DesktopWorkbenchRoute.profiles);
   }
 
   void openSavedProfilePicker() {
@@ -435,7 +480,7 @@ class DesktopShellController extends ChangeNotifier {
       );
 
       if (!_restoredState && selectedProfileId == null && profiles.isNotEmpty) {
-        selectProfile(profiles.first.id);
+        selectProfile(profiles.first.id, showWorkbench: false);
         return;
       } else if (selectedProfileId != null &&
           !profiles.any(
@@ -480,9 +525,12 @@ class DesktopShellController extends ChangeNotifier {
     }
   }
 
-  void selectProfile(String profileId) {
+  void selectProfile(String profileId, {bool showWorkbench = true}) {
     _restoredState = true;
-    _showEditorRouteForSection(DesktopShellSection.profileWorkflow);
+    if (showWorkbench) {
+      _showEditorRouteForSection(DesktopShellSection.profileWorkflow);
+      activeWorkbenchRoute = DesktopWorkbenchRoute.profiles;
+    }
     selectedProfileId = profileId;
     final selected = profiles.firstWhere(
       (ProfileRecord profile) => profile.id == profileId,
@@ -513,6 +561,7 @@ class DesktopShellController extends ChangeNotifier {
   void updateDraft(ProfileDraft nextDraft) {
     _restoredState = true;
     _showEditorRouteForSection(DesktopShellSection.profileWorkflow);
+    activeWorkbenchRoute = DesktopWorkbenchRoute.profiles;
     draft = _normalizeDraft(nextDraft);
     materializeDefaults = RuntimeDefaults.fromProfileSpec(draft.spec);
     _scheduleStatePersist();
@@ -522,6 +571,7 @@ class DesktopShellController extends ChangeNotifier {
   void useCustomProviderForDraft() {
     _restoredState = true;
     _showEditorRouteForSection(DesktopShellSection.profileWorkflow);
+    activeWorkbenchRoute = DesktopWorkbenchRoute.profiles;
     draft = _normalizeDraft(draft.asCustomProvider());
     selectedManagedProviderId = null;
     materializeDefaults = RuntimeDefaults.fromProfileSpec(draft.spec);
@@ -548,6 +598,7 @@ class DesktopShellController extends ChangeNotifier {
   void resetDraft() {
     _restoredState = true;
     _showEditorRouteForSection(DesktopShellSection.profileWorkflow);
+    activeWorkbenchRoute = DesktopWorkbenchRoute.profiles;
     selectedProfileId = null;
     draft = _defaultDraft();
     materializeDefaults = RuntimeDefaults.fromProfileSpec(draft.spec);
@@ -557,6 +608,7 @@ class DesktopShellController extends ChangeNotifier {
 
   void selectManagedProvider(String providerId) {
     _showEditorRouteForSection(DesktopShellSection.providerWorkflow);
+    activeWorkbenchRoute = DesktopWorkbenchRoute.profiles;
     selectedManagedProviderId = providerId;
     final selected =
         managedProviderById(providerId) ??
@@ -573,6 +625,7 @@ class DesktopShellController extends ChangeNotifier {
 
   void updateManagedProviderDraft(ManagedProviderDraft nextDraft) {
     _showEditorRouteForSection(DesktopShellSection.providerWorkflow);
+    activeWorkbenchRoute = DesktopWorkbenchRoute.profiles;
     managedProviderDraft = _normalizeManagedProviderDraft(nextDraft);
     _notifyWorkflow();
   }
@@ -588,6 +641,7 @@ class DesktopShellController extends ChangeNotifier {
     ProviderPreset? preset,
   }) {
     _showEditorRouteForSection(DesktopShellSection.providerWorkflow);
+    activeWorkbenchRoute = DesktopWorkbenchRoute.profiles;
     selectedManagedProviderId = null;
     managedProviderDraft = preset == null
         ? _defaultManagedProviderDraft(preferredProvider: preferredProvider)
@@ -603,6 +657,7 @@ class DesktopShellController extends ChangeNotifier {
   void startManagedProviderCreation() {
     selectedManagedProviderId = null;
     managedProviderDraft = _defaultManagedProviderDraft();
+    activeWorkbenchRoute = DesktopWorkbenchRoute.profiles;
     _openCanvasRoute(
       DesktopCanvasRoute.providerFamilyPicker,
       returnTarget: DesktopCanvasRoute.managedProviderEditor,
@@ -820,6 +875,7 @@ class DesktopShellController extends ChangeNotifier {
               savedProfile.name.isEmpty ? savedProfile.id : savedProfile.name,
             );
       _showEditorRouteForSection(DesktopShellSection.profileWorkflow);
+      activeWorkbenchRoute = DesktopWorkbenchRoute.profiles;
       await refresh();
       selectProfile(savedProfile.id);
     });
@@ -851,6 +907,7 @@ class DesktopShellController extends ChangeNotifier {
       selectedManagedProviderId = null;
       managedProviderDraft = _defaultManagedProviderDraft();
       _showEditorRouteForSection(DesktopShellSection.providerWorkflow);
+      activeWorkbenchRoute = DesktopWorkbenchRoute.profiles;
       _scheduleStatePersist();
     });
   }
@@ -880,6 +937,7 @@ class DesktopShellController extends ChangeNotifier {
       return;
     }
     _showEditorRouteForSection(DesktopShellSection.profileWorkflow);
+    activeWorkbenchRoute = DesktopWorkbenchRoute.profiles;
     draft = _normalizeDraft(draft.applyManagedProvider(provider));
     selectedManagedProviderId = managedProviderId;
     materializeDefaults = RuntimeDefaults.fromProfileSpec(draft.spec);
@@ -1717,11 +1775,12 @@ class DesktopShellController extends ChangeNotifier {
   ManagedProviderDraft _normalizeManagedProviderDraft(
     ManagedProviderDraft candidate,
   ) {
-    final supported =
-        supportedProviderDefinitionFor(candidate.provider) ??
-        (supportedProviderCatalog.isEmpty
-            ? null
-            : supportedProviderCatalog.first);
+    final rawProvider = candidate.provider.trim();
+    final supported = rawProvider.isEmpty
+        ? (supportedProviderCatalog.isEmpty
+              ? null
+              : supportedProviderCatalog.first)
+        : supportedProviderDefinitionFor(rawProvider);
     if (supported == null) {
       return candidate;
     }
@@ -1855,6 +1914,19 @@ class DesktopShellController extends ChangeNotifier {
     activeSection = section;
     activeCanvasRoute = _editorRouteForSection(section);
     _canvasRouteReturnTarget = null;
+  }
+
+  void _showWorkbenchRoute(
+    DesktopWorkbenchRoute route, {
+    bool closeInspectorIfOpen = false,
+  }) {
+    activeWorkbenchRoute = route;
+    if (closeInspectorIfOpen && isInspectorOpen) {
+      isInspectorOpen = false;
+      _notify();
+      return;
+    }
+    _notifyWorkflow();
   }
 
   void _openCanvasRoute(

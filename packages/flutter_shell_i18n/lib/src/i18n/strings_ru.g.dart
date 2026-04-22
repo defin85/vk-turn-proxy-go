@@ -90,6 +90,8 @@ class TranslationsRu extends Translations
   @override
   String get commonLiveWork => 'Текущая работа';
   @override
+  String get commonSettings => 'Настройки';
+  @override
   String get commonReconnect => 'Переподключить';
   @override
   String get commonRefresh => 'Обновить';
@@ -2179,6 +2181,7 @@ extension on TranslationsRu {
           'commonSupport' => 'Поддержка',
           'commonDiagnostics' => 'Диагностика',
           'commonLiveWork' => 'Текущая работа',
+          'commonSettings' => 'Настройки',
           'commonReconnect' => 'Переподключить',
           'commonRefresh' => 'Обновить',
           'commonWorkflows' => 'Рабочие процессы',
@@ -3096,10 +3099,10 @@ extension on TranslationsRu {
                 'Семейство провайдера: ${familyTitle}',
           'shellTextAppOwnedManagedRecord' => 'Управляемая запись приложения',
           'shellTextSelectedFamily' => 'Выбранное семейство',
-          'shellTextMobileOpenBrowser' => 'Открыть браузер',
           _ => null,
         } ??
         switch (path) {
+          'shellTextMobileOpenBrowser' => 'Открыть браузер',
           'shellTextMobileContinueInApp' => 'Продолжить в приложении',
           'shellTextChallengeContinuationCancelled' =>
             ({required Object challengeId}) =>

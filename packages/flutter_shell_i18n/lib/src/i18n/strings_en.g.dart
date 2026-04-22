@@ -100,6 +100,9 @@ class Translations with BaseTranslations<AppLocale, Translations> {
   /// en: 'Live work'
   String get commonLiveWork => 'Live work';
 
+  /// en: 'Settings'
+  String get commonSettings => 'Settings';
+
   /// en: 'Reconnect'
   String get commonReconnect => 'Reconnect';
 
@@ -2866,6 +2869,7 @@ extension on Translations {
           'commonSupport' => 'Support',
           'commonDiagnostics' => 'Diagnostics',
           'commonLiveWork' => 'Live work',
+          'commonSettings' => 'Settings',
           'commonReconnect' => 'Reconnect',
           'commonRefresh' => 'Refresh',
           'commonWorkflows' => 'Workflows',
@@ -3759,10 +3763,10 @@ extension on Translations {
                 'Provider family: ${familyTitle}',
           'shellTextAppOwnedManagedRecord' => 'App-owned managed record',
           'shellTextSelectedFamily' => 'Selected family',
-          'shellTextMobileOpenBrowser' => 'Open browser',
           _ => null,
         } ??
         switch (path) {
+          'shellTextMobileOpenBrowser' => 'Open browser',
           'shellTextMobileContinueInApp' => 'Continue in app',
           'shellTextChallengeContinuationCancelled' =>
             ({required Object challengeId}) =>

@@ -273,17 +273,14 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
                   ),
                   const SizedBox(height: 8),
                   Text(copy.providerLabel(envelope.profile.spec.provider)),
-                  Text(copy.sourceModeLabel(envelope.providerBinding.mode.value)),
+                  Text(
+                    copy.sourceModeLabel(envelope.providerBinding.mode.value),
+                  ),
                   if (envelope.providerBinding.isManaged)
-                    Text(
-                      copy.managedProviderSnapshot(snapshotName),
-                    ),
+                    Text(copy.managedProviderSnapshot(snapshotName)),
                   const SizedBox(height: 12),
                   if (envelope.isSecretBearing)
-                    _warningBanner(
-                      context,
-                      copy.portableImportSecretWarning,
-                    ),
+                    _warningBanner(context, copy.portableImportSecretWarning),
                   if (!envelope.isSecretBearing)
                     Text(
                       copy.portableImportCreatesFreshIdsDesktop,
@@ -404,6 +401,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
         builder: (BuildContext context, BoxConstraints constraints) {
           final stackHeader = constraints.maxWidth < 960;
           final twoPaneWorkspace = constraints.maxWidth >= 1020;
+          final lowHeightWorkbench = constraints.maxHeight < 220;
           final headerActions = Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -441,6 +439,46 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
               ),
             ],
           );
+          if (lowHeightWorkbench) {
+            return Padding(
+              padding: const EdgeInsets.all(16),
+              child: ListView(
+                primary: false,
+                children: <Widget>[
+                  Text(
+                    copy.desktopProfileWorkspaceTitle,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    profileScopeLabel,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  headerActions,
+                  const SizedBox(height: 12),
+                  ..._primaryWorkspaceChildren(
+                    theme,
+                    descriptor,
+                    managedMode,
+                    selectedManagedProvider,
+                    selectedManagedDescriptor,
+                    twoPaneLayout: false,
+                  ),
+                  ..._secondaryWorkspaceChildren(
+                    theme,
+                    descriptor,
+                    managedMode,
+                    selectedManagedProviderId,
+                  ),
+                ],
+              ),
+            );
+          }
           return Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -932,7 +970,10 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     );
   }
 
-  String _providerLinkLabel(BuildContext context, ProviderDescriptor? descriptor) {
+  String _providerLinkLabel(
+    BuildContext context,
+    ProviderDescriptor? descriptor,
+  ) {
     if (descriptor == null) {
       return context.shellText.providerInput;
     }
