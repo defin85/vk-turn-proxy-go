@@ -965,6 +965,10 @@ void main() {
         controller.activeCanvasRoute,
         DesktopCanvasRoute.managedProviderEditor,
       );
+      expect(
+        find.byKey(const ValueKey<String>('managed-provider-workflow-body')),
+        findsOneWidget,
+      );
 
       await tester.ensureVisible(find.byType(TextField).first);
       await tester.pumpAndSettle();

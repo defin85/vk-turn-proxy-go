@@ -3966,6 +3966,16 @@ void main() {
         find.byKey(const ValueKey<String>('managed-provider-save-button')),
         findsOneWidget,
       );
+      expect(
+        find.byKey(const ValueKey<String>('managed-provider-workflow-body')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(
+          const ValueKey<String>('managed-provider-selected-family-card'),
+        ),
+        findsOneWidget,
+      );
       expect(find.text('Provider type'), findsOneWidget);
       expect(
         find.byKey(const ValueKey<String>('providers-back-button')),
