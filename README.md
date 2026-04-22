@@ -314,7 +314,7 @@ Current repository-owned host responsibilities stay split by OS family:
 Current repo-owned hosts still fail closed by default for those modes with `stage=capability_check` and `missing_prerequisite=host_implementation` until a platform-specific host wires a real implementation.
 Current support claims are now:
 - `android_vpn_service`: supported on the documented packaged Android target
-- `windows_wintun`: supported on the documented packaged Windows target through the bundled host-owned Wintun lifecycle
+- `windows_wintun`: supported on the documented packaged Windows target through the bundled host-owned Wintun lifecycle when the strict local WireGuard materializer prerequisite is present
 - `linux_tun`, `apple_network_extension`: still fail closed until those packaged hosts ship their adapter path
 
 Desktop and mobile shells render that typed capability report in-app instead of guessing from OS heuristics.

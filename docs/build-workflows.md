@@ -135,22 +135,17 @@ The script fails closed if:
 - `dist\go\windows-amd64\clientd.exe` is missing
 - `desktop\gui_shell\pubspec.yaml` does not match the canonical version in `version.json`
 
-For the validated Windows desktop `WireGuard` PoC that keeps system VPN in the
-external `WireGuard for Windows` client and uses the desktop shell only as the
-local transport ingress, follow `docs/windows-desktop-wg-poc.md`.
-That workflow also includes the repo-owned sidecar launch helper
-`scripts/run-windows-gui-shell.ps1` and the packaged-session helper
-`scripts/windows-desktop-generic-turn.ps1`. The sidecar helper keeps ownership
-of the bundled `clientd.exe` and stops it after `RelayDock.exe` exits.
-When the operator must keep the host machine out of the desktop VPN path, the
-same runbook now also documents the verified VMware-backed Windows execution
-cell using `scripts/sync-windows-vm-lab.sh` and the guest-side
-`run-vm-lab-shell.ps1` launcher.
-That VM contour now also ships the guest-side
-`assert-vm-lab-host.ps1` smoke so the bundled `clientd.exe` can prove
-`windows_wintun available=true` before the GUI or VPN step, plus the
-guest-side `smoke-windows-wintun.ps1` helper for the full repo-owned
-`ready=true` Windows smoke.
+For the verified repo-owned Windows `windows_wintun` ready path, follow
+`docs/windows-desktop-wg-poc.md`.
+That runbook covers the VMware-backed execution cell, the guest sync helper
+`scripts/sync-windows-vm-lab.sh`, the guest launcher
+`run-vm-lab-shell.ps1`, the guest host preflight
+`assert-vm-lab-host.ps1`, and the packaged-host `ready=true` smoke
+`smoke-windows-wintun.ps1`.
+The bundled host reports `windows_wintun available=true` only when the
+documented strict local WireGuard materializer prerequisite is present, so the
+runbook keeps that prerequisite explicit instead of implying a generic Windows
+support bit.
 
 For the packaged Windows desktop workflow that starts from a real VK invite in
 the GUI, moves through typed resolution and browser continuation when needed,

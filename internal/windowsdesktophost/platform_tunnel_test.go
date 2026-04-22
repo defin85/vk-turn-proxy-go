@@ -140,6 +140,49 @@ func TestWindowsWintunControllerCapabilityCheckFailureStaysFailClosed(t *testing
 	}
 }
 
+func TestMaterializerUnavailableWindowsWintunCapabilityStaysFailClosed(t *testing.T) {
+	t.Parallel()
+
+	capability := materializerUnavailableWindowsWintunCapability(
+		clientcontrol.BuildIdentity{Target: "windows/amd64"},
+		errors.New(`Windows WireGuard profile C:\Users\codex\.local\state\vk-turn-proxy-go\wg\desktop1-windows.conf does not exist`),
+	)
+	if capability.Available {
+		t.Fatal("capability.Available = true, want false")
+	}
+	if capability.MissingPrerequisite != clientcontrol.PlatformTunnelPrerequisiteHostImplementation {
+		t.Fatalf(
+			"capability.MissingPrerequisite = %q, want %q",
+			capability.MissingPrerequisite,
+			clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+		)
+	}
+
+	controller := newWindowsWintunController(capability, nil)
+	result, err := controller.Start(
+		context.Background(),
+		clientcontrol.PlatformTunnelStartRequest{
+			Mode: clientcontrol.PlatformTunnelModeWindowsWintun,
+		},
+	)
+	if err != nil {
+		t.Fatalf("Start() error = %v, want nil typed capability_check result", err)
+	}
+	if result.Stage != clientcontrol.PlatformTunnelStartupStageCapabilityCheck {
+		t.Fatalf("Start().Stage = %q, want %q", result.Stage, clientcontrol.PlatformTunnelStartupStageCapabilityCheck)
+	}
+	if result.MissingPrerequisite != clientcontrol.PlatformTunnelPrerequisiteHostImplementation {
+		t.Fatalf(
+			"Start().MissingPrerequisite = %q, want %q",
+			result.MissingPrerequisite,
+			clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+		)
+	}
+	if !strings.Contains(strings.ToLower(result.Message), "wireguard profile") {
+		t.Fatalf("Start().Message = %q, want WireGuard profile detail", result.Message)
+	}
+}
+
 func TestWindowsWintunControllerDriverFailureStopsBeforeCleanup(t *testing.T) {
 	t.Parallel()
 

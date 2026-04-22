@@ -14,8 +14,8 @@ The workflow keeps the current boundary explicit:
 2. resolve the live VK invite through the GUI and typed resolution resource
 3. complete browser continuation if the provider requires it
 4. start the same-device desktop session from the resolved handoff
-5. enable the external `WireGuard for Windows` path over that ready desktop
-   transport session
+5. enable the explicit external `WireGuard for Windows` compatibility path over
+   that ready desktop transport session
 
 ## Scope
 
@@ -45,7 +45,7 @@ This workflow does not claim:
   `E:\Projects\vk-turn-proxy-go\dist\windows-gui`
 - local Windows browser support for the provider challenge when VK requires it
 - the official `WireGuard for Windows` client
-- the validated `desktop1-windows.conf` profile from
+- the validated `desktop1-windows.conf` profile format from
   `docs/windows-desktop-wg-poc.md`
 - the VPS `wg-quick@wgvktp0.service` and `vk-turn-tunnel-wg.service` already
   running
@@ -137,7 +137,7 @@ The host then:
 Wait until the session reaches `ready` in the desktop shell before enabling the
 external `WireGuard` tunnel.
 
-## Step 6: Enable the external WireGuard tunnel
+## Step 6: Enable the external compatibility WireGuard tunnel
 
 Once the desktop session is `ready`:
 

@@ -53,31 +53,38 @@ func newWindowsWintunLifecycle(logger *slog.Logger) WindowsWintunLifecycle {
 	return &windowsWintunLifecycle{logger: logger}
 }
 
-func currentWindowsWintunCapability(build clientcontrol.BuildIdentity) clientcontrol.PlatformTunnelCapability {
+func currentWindowsWintunCapability(
+	build clientcontrol.BuildIdentity,
+	materializerErr error,
+) clientcontrol.PlatformTunnelCapability {
 	capability := supportedWindowsWintunCapability("packaged Windows host owns windows_wintun startup")
 	if elevated, err := isProcessElevated(); err != nil {
-		capability.Available = false
-		capability.SatisfiedPrerequisites = nil
-		capability.MissingPrerequisite = clientcontrol.PlatformTunnelPrerequisiteDriver
-		capability.Message = fmt.Sprintf("windows_wintun prerequisite check failed: %v", err)
-		return capability
+		return unavailableWindowsWintunCapability(
+			build,
+			clientcontrol.PlatformTunnelPrerequisiteDriver,
+			fmt.Sprintf("windows_wintun prerequisite check failed: %v", err),
+		)
 	} else if !elevated {
-		capability.Available = false
-		capability.SatisfiedPrerequisites = nil
-		capability.MissingPrerequisite = clientcontrol.PlatformTunnelPrerequisiteDriver
-		capability.Message = "windows_wintun requires an elevated desktop host"
-		return capability
+		return unavailableWindowsWintunCapability(
+			build,
+			clientcontrol.PlatformTunnelPrerequisiteDriver,
+			"windows_wintun requires an elevated desktop host",
+		)
 	}
 	if _, err := findWintunDLL(); err != nil {
-		capability.Available = false
-		capability.SatisfiedPrerequisites = nil
-		capability.MissingPrerequisite = clientcontrol.PlatformTunnelPrerequisiteDriver
-		capability.Message = fmt.Sprintf(
-			"The %s host is missing the packaged Wintun DLL required for mode %s: %v",
-			firstNonEmpty(strings.TrimSpace(build.Target), "windows/amd64"),
-			clientcontrol.PlatformTunnelModeWindowsWintun,
-			err,
+		return unavailableWindowsWintunCapability(
+			build,
+			clientcontrol.PlatformTunnelPrerequisiteDriver,
+			fmt.Sprintf(
+				"The %s host is missing the packaged Wintun DLL required for mode %s: %v",
+				firstNonEmpty(strings.TrimSpace(build.Target), "windows/amd64"),
+				clientcontrol.PlatformTunnelModeWindowsWintun,
+				err,
+			),
 		)
+	}
+	if materializerErr != nil {
+		return materializerUnavailableWindowsWintunCapability(build, materializerErr)
 	}
 	return capability
 }

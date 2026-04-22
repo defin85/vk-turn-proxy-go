@@ -1,7 +1,7 @@
 # wireguard-turn-carrier Specification
 
 ## Purpose
-TBD - created by archiving change add-23-turn-datagram-wireguard-carrier. Update Purpose after archive.
+Define the strict TURN-backed `turn_datagram + wireguard_native` carrier contract, including host-owned execution leases, secret boundaries, and evidence requirements for support claims.
 ## Requirements
 ### Requirement: Strict WireGuard startup uses a host-owned execution lease
 
@@ -83,4 +83,3 @@ claims support for the strict `turn_datagram + wireguard_native` path.
   `turn_datagram` path
 - **AND** the repository does not treat external WireGuard compatibility
   workflows or the current overlay runtime as equivalent proof
-

@@ -21,7 +21,7 @@ It points to the smallest set of files needed to understand the repo, choose the
 
 ## Scenario runbooks
 
-- `docs/windows-desktop-wg-poc.md`: validated Windows desktop `WireGuard` over transport operator flow
+- `docs/windows-desktop-wg-poc.md`: verified repo-owned Windows `windows_wintun` ready-path VM smoke
 - `docs/windows-desktop-live-vk-workflow.md`: real VK invite preflight into the packaged Windows desktop flow
 - `docs/android-wg-phone-poc.md`: validated Android physical-device workflow with the packaged mobile shell
 

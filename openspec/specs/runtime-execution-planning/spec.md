@@ -1,7 +1,7 @@
 # runtime-execution-planning Specification
 
 ## Purpose
-TBD - created by archiving change add-22-runtime-execution-planning. Update Purpose after archive.
+Define the typed runtime execution-plan matrix for same-device startup across access methods, carrier families, engine families, host adapters, and explicit remote endpoint ownership.
 ## Requirements
 ### Requirement: Host-owned same-device execution uses typed runtime execution plans
 
@@ -86,4 +86,3 @@ The system SHALL keep remote endpoint ownership explicit per carrier family inst
 - **THEN** the TURN-backed plan continues to name the documented TURN server family
 - **AND** the non-TURN plan requires its own documented remote endpoint family
 - **AND** the host does not imply that the current TURN server already satisfies that non-TURN role
-

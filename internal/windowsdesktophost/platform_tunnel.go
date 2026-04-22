@@ -118,6 +118,40 @@ func supportedWindowsWintunCapability(message string) clientcontrol.PlatformTunn
 	}
 }
 
+func unavailableWindowsWintunCapability(
+	build clientcontrol.BuildIdentity,
+	prerequisite clientcontrol.PlatformTunnelPrerequisite,
+	message string,
+) clientcontrol.PlatformTunnelCapability {
+	capability := defaultWindowsWintunCapability(build)
+	if strings.TrimSpace(string(prerequisite)) == "" {
+		prerequisite = clientcontrol.PlatformTunnelPrerequisiteHostImplementation
+	}
+	capability.MissingPrerequisite = prerequisite
+	capability.Message = strings.TrimSpace(message)
+	return capability
+}
+
+func materializerUnavailableWindowsWintunCapability(
+	build clientcontrol.BuildIdentity,
+	cause error,
+) clientcontrol.PlatformTunnelCapability {
+	message := "The packaged strict WireGuard materializer is not ready for windows_wintun."
+	if cause != nil {
+		message = fmt.Sprintf(
+			"The %s host cannot advertise mode %s until the packaged strict WireGuard materializer is ready: %v",
+			firstNonEmpty(strings.TrimSpace(build.Target), "windows/amd64"),
+			clientcontrol.PlatformTunnelModeWindowsWintun,
+			cause,
+		)
+	}
+	return unavailableWindowsWintunCapability(
+		build,
+		clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+		message,
+	)
+}
+
 func supportStateForCapability(available bool) clientcontrol.RuntimeExecutionPlanSupportState {
 	if available {
 		return clientcontrol.RuntimeExecutionPlanSupportStateSupported

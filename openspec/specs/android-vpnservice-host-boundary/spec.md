@@ -1,7 +1,7 @@
 # android-vpnservice-host-boundary Specification
 
 ## Purpose
-TBD - created by archiving change add-26-android-vpnservice-host-boundary. Update Purpose after archive.
+Define the packaged Android `VpnService` ownership boundary across Flutter UI, Kotlin/Android VPN primitives, and the embedded Go host orchestrator.
 ## Requirements
 ### Requirement: Packaged Android VPN delivery keeps Flutter, Kotlin, and Go ownership separate
 
@@ -68,4 +68,3 @@ contracts.
   from Android `VpnService`
 - **AND** the shared boundary does not require Android `VpnService` types to be
   present in Flutter or Go code
-

@@ -1,7 +1,7 @@
 # vk-authenticated-call-workflow Specification
 
 ## Purpose
-TBD - created by archiving change add-37-vk-calls-authenticated-owned-browser-flow. Update Purpose after archive.
+Define the authenticated `calls.vk.com` hosted-call workflow contract for approved owned-browser surfaces and provider-owned VK call creation.
 ## Requirements
 ### Requirement: Authenticated `calls.vk.com` start is an additive VK session input
 
@@ -83,4 +83,3 @@ provider-owned browser UI for the authenticated `calls.vk.com` flow.
 - **THEN** the operator completes those steps inside the approved VK browser UI
 - **AND** the product does not create or mutate VK calls through undocumented
   out-of-band API calls outside that UI
-

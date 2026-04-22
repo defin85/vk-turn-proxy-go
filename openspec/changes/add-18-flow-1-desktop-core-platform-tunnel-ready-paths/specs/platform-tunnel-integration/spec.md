@@ -26,17 +26,17 @@ The system SHALL support the first concrete desktop platform tunnel ready path f
 #### Scenario: Packaged Windows host reaches ready state
 
 - **GIVEN** a Windows desktop package that includes the documented `windows_wintun` implementation and packaged host
-- **AND** the target machine satisfies the documented driver and privilege prerequisites
+- **AND** the target machine satisfies the documented driver, privilege, and strict carrier materialization prerequisites
 - **WHEN** the operator starts system tunnel mode for `windows_wintun`
 - **THEN** startup returns `ready=true` for `windows_wintun`
 - **AND** the host reports readiness only after driver validation, route preparation, host bring-up, and runtime attach succeed
 
 #### Scenario: Wintun prerequisite is missing
 
-- **GIVEN** a packaged Windows host that cannot satisfy a documented `windows_wintun` prerequisite such as driver availability or required privilege
+- **GIVEN** a packaged Windows host that cannot satisfy a documented `windows_wintun` prerequisite such as driver availability, required privilege, or strict carrier materialization input
 - **WHEN** the operator starts system tunnel mode for `windows_wintun`
 - **THEN** startup returns `ready=false`
-- **AND** it reports `capability_check` or `driver_acquire` as the failing stage
+- **AND** it reports `capability_check` or `driver_check` as the failing stage
 - **AND** it reports the missing prerequisite explicitly
 
 ### Requirement: Desktop ready-path startup protects underlay control traffic and cleans up on failure

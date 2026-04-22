@@ -15,15 +15,27 @@ func NewClientControlHost(logger *slog.Logger) *clientcontrol.Host {
 		logger = slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	}
 	build := currentBuildIdentity()
-	materializer := defaultWindowsWireGuardTurnMaterializer()
-	controller := newWindowsWintunController(currentWindowsWintunCapability(build), newWindowsWintunLifecycle(logger))
+	materializer, materializerErr := defaultWindowsWireGuardTurnMaterializer()
+	if materializerErr != nil {
+		logger.Warn(
+			"windows_wintun strict carrier materializer unavailable; reporting fail-closed capability",
+			"error",
+			materializerErr,
+		)
+	}
+	controller := newWindowsWintunController(
+		currentWindowsWintunCapability(build, materializerErr),
+		newWindowsWintunLifecycle(logger),
+	)
 	opts := []clientcontrol.Option{
 		clientcontrol.WithLogger(logger),
 		clientcontrol.WithBuildIdentity(build),
-		clientcontrol.WithWireGuardTurnMaterializer(materializer),
 		clientcontrol.WithPlatformTunnelCapabilities([]clientcontrol.PlatformTunnelCapability{controller.Capability()}),
 		clientcontrol.WithPlatformTunnelStarter(controller.Start),
 		clientcontrol.WithPlatformTunnelStopper(controller.Stop),
+	}
+	if materializer != nil {
+		opts = append(opts, clientcontrol.WithWireGuardTurnMaterializer(materializer))
 	}
 	host := clientcontrol.New(opts...)
 	controller.setWireGuardTurnLeaseProvider(

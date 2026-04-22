@@ -14,16 +14,15 @@ import (
 
 const windowsWireGuardProfileEnv = "VKTP_WINDOWS_WIREGUARD_PROFILE"
 
-func defaultWindowsWireGuardTurnMaterializer() clientcontrol.WireGuardTurnMaterializer {
+func defaultWindowsWireGuardTurnMaterializer() (clientcontrol.WireGuardTurnMaterializer, error) {
+	if _, _, err := loadWindowsWireGuardProfile(); err != nil {
+		return nil, err
+	}
 	return func(
 		_ context.Context,
 		req clientcontrol.WireGuardTurnMaterializeRequest,
 	) (*clientcontrol.WireGuardTurnExecutionLease, error) {
-		profilePath, err := detectWindowsWireGuardProfilePath()
-		if err != nil {
-			return nil, err
-		}
-		profile, err := wireguardprofile.Load(profilePath)
+		_, profile, err := loadWindowsWireGuardProfile()
 		if err != nil {
 			return nil, err
 		}
@@ -65,7 +64,19 @@ func defaultWindowsWireGuardTurnMaterializer() clientcontrol.WireGuardTurnMateri
 			MTU:                  profile.MTU,
 			ExpiresAt:            expiresAt,
 		}, nil
+	}, nil
+}
+
+func loadWindowsWireGuardProfile() (string, *wireguardprofile.Profile, error) {
+	profilePath, err := detectWindowsWireGuardProfilePath()
+	if err != nil {
+		return "", nil, err
 	}
+	profile, err := wireguardprofile.Load(profilePath)
+	if err != nil {
+		return "", nil, err
+	}
+	return profilePath, profile, nil
 }
 
 func detectWindowsWireGuardProfilePath() (string, error) {

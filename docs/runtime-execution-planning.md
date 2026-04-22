@@ -33,7 +33,7 @@ It remains distinct from packaged system-tunnel work.
 Current support claims are:
 
 - `android_vpn_service`: supported on the documented packaged Android target
-- `windows_wintun`: supported on the documented packaged Windows target through the bundled host-owned Wintun lifecycle
+- `windows_wintun`: supported on the documented packaged Windows target through the bundled host-owned Wintun lifecycle when the strict local WireGuard materializer prerequisite is present
 - `linux_tun`, `apple_network_extension`: still unavailable until those packaged hosts ship the adapter path
 
 Hosts must keep every adapter-specific claim honest.

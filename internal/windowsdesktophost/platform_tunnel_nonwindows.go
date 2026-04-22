@@ -12,6 +12,9 @@ func newWindowsWintunLifecycle(*slog.Logger) WindowsWintunLifecycle {
 	return nil
 }
 
-func currentWindowsWintunCapability(build clientcontrol.BuildIdentity) clientcontrol.PlatformTunnelCapability {
+func currentWindowsWintunCapability(
+	build clientcontrol.BuildIdentity,
+	_ error,
+) clientcontrol.PlatformTunnelCapability {
 	return defaultWindowsWintunCapability(build)
 }
