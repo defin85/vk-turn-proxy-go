@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_shell_core/portable_profile_transfer.dart';
+import 'package:flutter_shell_core/shell_visuals.dart';
 import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_models.dart';
 import 'package:mobile_gui_shell/src/control/mobile_host_bridge.dart';
@@ -1843,6 +1844,7 @@ class _SupportContextStrip extends StatelessWidget {
         ? selectedProfile!.name
         : selectedProfile?.id ?? '—';
     final hostTone = _hostIndicatorTone(context, controller);
+    final hostPalette = context.shellVisuals.tone(hostTone.$2);
     final hostDetail =
         controller.hostStatusMessage ??
         controller.hostConnection?.description ??
@@ -1852,8 +1854,8 @@ class _SupportContextStrip extends StatelessWidget {
       runSpacing: 10,
       children: <Widget>[
         _SupportContextBadge(
-          icon: hostTone.$4,
-          accentColor: hostTone.$3,
+          icon: hostTone.$3,
+          accentColor: hostPalette.accent,
           label: hostTone.$1,
           value: hostDetail,
         ),
@@ -4522,6 +4524,7 @@ class _HostStatusIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tone = _hostIndicatorTone(context, controller);
+    final palette = context.shellVisuals.tone(tone.$2);
     final connectionState = controller.hostConnection?.state;
     final isReady =
         !controller.requiresLocalStateReset &&
@@ -4534,17 +4537,17 @@ class _HostStatusIndicator extends StatelessWidget {
         connectionState == MobileHostLifecycleState.unavailable;
     final borderRadius = BorderRadius.circular(14);
     final containerColor = Color.alphaBlend(
-      tone.$3.withValues(
+      palette.accent.withValues(
         alpha: isBlocked
             ? 0.08
             : isReady
             ? 0.04
             : 0.06,
       ),
-      theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.82),
+      context.shellVisuals.highlightSurface,
     );
     final borderColor = Color.alphaBlend(
-      tone.$3.withValues(
+      palette.border.withValues(
         alpha: isBlocked
             ? 0.22
             : isReady
@@ -4554,7 +4557,7 @@ class _HostStatusIndicator extends StatelessWidget {
       theme.colorScheme.outlineVariant.withValues(alpha: 0.92),
     );
     final iconColor = Color.alphaBlend(
-      tone.$3.withValues(
+      palette.accent.withValues(
         alpha: isBlocked
             ? 0.78
             : isReady
@@ -4602,13 +4605,13 @@ class _HostStatusIndicator extends StatelessWidget {
                     clipBehavior: Clip.none,
                     alignment: Alignment.center,
                     children: <Widget>[
-                      Icon(tone.$4, color: iconColor, size: 18),
+                      Icon(tone.$3, color: iconColor, size: 18),
                       Positioned(
                         top: 7,
                         right: 7,
                         child: DecoratedBox(
                           decoration: BoxDecoration(
-                            color: tone.$3,
+                            color: palette.accent,
                             shape: BoxShape.circle,
                             border: Border.all(
                               color: theme.colorScheme.surface,
@@ -4645,6 +4648,7 @@ class _HostStatusDialog extends StatelessWidget {
     final connection = controller.hostConnection;
     final hostInfo = connection?.info;
     final tone = _hostIndicatorTone(context, controller);
+    final palette = context.shellVisuals.tone(tone.$2);
 
     return SingleChildScrollView(
       key: const ValueKey<String>('host-status-dialog'),
@@ -4658,12 +4662,12 @@ class _HostStatusDialog extends StatelessWidget {
             children: <Widget>[
               DecoratedBox(
                 decoration: BoxDecoration(
-                  color: tone.$2,
+                  color: palette.container,
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(12),
-                  child: Icon(tone.$4, color: tone.$3, size: 22),
+                  child: Icon(tone.$3, color: palette.accent, size: 22),
                 ),
               ),
               const SizedBox(width: 12),
@@ -4772,10 +4776,11 @@ class _HostBanner extends StatelessWidget {
     final theme = Theme.of(context);
     final connection = controller.hostConnection;
     final hostInfo = connection?.info;
-    final color = _hostStatusColor(connection);
+    final tone = _hostIndicatorTone(context, controller);
+    final palette = context.shellVisuals.tone(tone.$2);
 
     return Card(
-      color: color,
+      color: palette.container,
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: Column(
@@ -5876,30 +5881,16 @@ class _SessionStateChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (Color background, Color foreground) = switch (state) {
-      SessionState.ready => (const Color(0xFFDEF2E1), const Color(0xFF285B38)),
-      SessionState.challengeRequired => (
-        const Color(0xFFFFF1D6),
-        const Color(0xFF7E5514),
-      ),
-      SessionState.failed => (const Color(0xFFFFE0DF), const Color(0xFF7A1F16)),
-      SessionState.stopped => (
-        const Color(0xFFE1E6EC),
-        const Color(0xFF334A5E),
-      ),
-      _ => (const Color(0xFFE6EDF7), const Color(0xFF245070)),
+    final tone = switch (state) {
+      SessionState.ready => ShellSemanticTone.ready,
+      SessionState.challengeRequired => ShellSemanticTone.attention,
+      SessionState.failed => ShellSemanticTone.danger,
+      SessionState.stopped => ShellSemanticTone.neutral,
+      _ => ShellSemanticTone.info,
     };
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        context.shellText.sessionStateLabel(state.value),
-        style: TextStyle(color: foreground, fontWeight: FontWeight.w700),
-      ),
+    return ShellToneBadge(
+      label: context.shellText.sessionStateLabel(state.value),
+      tone: tone,
     );
   }
 }
@@ -5911,34 +5902,17 @@ class _ResolutionStateChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (Color background, Color foreground) = switch (state) {
-      ResolutionState.resolved => (
-        const Color(0xFFDEF2E1),
-        const Color(0xFF285B38),
-      ),
-      ResolutionState.challengeRequired => (
-        const Color(0xFFFFF1D6),
-        const Color(0xFF7E5514),
-      ),
+    final tone = switch (state) {
+      ResolutionState.resolved => ShellSemanticTone.ready,
+      ResolutionState.challengeRequired => ShellSemanticTone.attention,
       ResolutionState.failed ||
       ResolutionState.cancelled ||
-      ResolutionState.expired => (
-        const Color(0xFFFFE0DF),
-        const Color(0xFF7A1F16),
-      ),
-      _ => (const Color(0xFFE6EDF7), const Color(0xFF245070)),
+      ResolutionState.expired => ShellSemanticTone.danger,
+      _ => ShellSemanticTone.info,
     };
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        context.shellText.resolutionStateLabel(state.value),
-        style: TextStyle(color: foreground, fontWeight: FontWeight.w700),
-      ),
+    return ShellToneBadge(
+      label: context.shellText.resolutionStateLabel(state.value),
+      tone: tone,
     );
   }
 }
@@ -5950,14 +5924,7 @@ class _Tag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.65),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(label),
-    );
+    return ShellToneBadge(label: label);
   }
 }
 
@@ -6057,72 +6024,34 @@ class _NoticeBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: const Color(0xFFFDF6C7),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: <Widget>[
-            const Icon(Icons.info_outline),
-            const SizedBox(width: 12),
-            Expanded(child: Text(message)),
-          ],
-        ),
-      ),
-    );
+    return ShellNoticeBanner(message: message);
   }
 }
 
-(String, Color, Color, IconData) _hostIndicatorTone(
+(String, ShellSemanticTone, IconData) _hostIndicatorTone(
   BuildContext context,
   MobileShellController controller,
 ) {
   final connection = controller.hostConnection;
   final copy = context.shellText;
   if (controller.requiresLocalStateReset) {
-    return (
-      copy.resetNeeded,
-      const Color(0xFFFFE3E0),
-      const Color(0xFFB3261E),
-      Icons.error_rounded,
-    );
+    return (copy.resetNeeded, ShellSemanticTone.danger, Icons.error_rounded);
   }
   return switch (connection?.state) {
     MobileHostLifecycleState.ready
         when controller.status == ShellStatus.ready =>
-      (
-        copy.hostReady,
-        const Color(0xFFE2F4E8),
-        const Color(0xFF1E6A3B),
-        Icons.check_circle_rounded,
-      ),
+      (copy.hostReady, ShellSemanticTone.ready, Icons.check_circle_rounded),
     MobileHostLifecycleState.incompatible => (
       copy.hostIncompatible,
-      const Color(0xFFFFE3E0),
-      const Color(0xFFB3261E),
+      ShellSemanticTone.danger,
       Icons.sync_problem_rounded,
     ),
     MobileHostLifecycleState.failed || MobileHostLifecycleState.unavailable => (
       copy.hostBlocked,
-      const Color(0xFFFFE3E0),
-      const Color(0xFFB3261E),
+      ShellSemanticTone.danger,
       Icons.error_rounded,
     ),
-    _ => (
-      copy.connecting,
-      const Color(0xFFE5ECF6),
-      const Color(0xFF35516D),
-      Icons.sync_rounded,
-    ),
-  };
-}
-
-Color _hostStatusColor(MobileHostConnectionResult? connection) {
-  return switch (connection?.state) {
-    MobileHostLifecycleState.ready => const Color(0xFFDEF2E1),
-    MobileHostLifecycleState.incompatible => const Color(0xFFFFE5CC),
-    MobileHostLifecycleState.failed => const Color(0xFFFFE0DF),
-    _ => const Color(0xFFE5ECF6),
+    _ => (copy.connecting, ShellSemanticTone.info, Icons.sync_rounded),
   };
 }
 

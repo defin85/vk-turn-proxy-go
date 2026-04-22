@@ -20,7 +20,8 @@ desktop shell work, not as a general Flutter desktop guideline.
 ## Product Rules
 
 - fail-closed host and tunnel states must stay explicit
-- diagnostics and live work are secondary surfaces, not top-level destinations
+- diagnostics and live work stay secondary by default; if exposed as explicit
+  support routes, they must not reclaim the routine main workflow
 - common path should dominate: choose context, edit, resolve/start
 - routine ready state should stay compact
 - blocked or incompatible state must remain reachable without hidden navigation

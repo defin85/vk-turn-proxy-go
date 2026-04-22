@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter_shell_core/portable_profile_transfer.dart';
 import 'package:flutter_shell_core/provider_settings_form.dart';
+import 'package:flutter_shell_core/shell_visuals.dart';
 import 'package:gui_shell/src/control/control_plane_models.dart';
 import 'package:gui_shell/src/control/profile_draft.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -616,9 +617,10 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     return Container(
       key: const ValueKey<String>('profile-provider-descriptor-card'),
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE6EDF7),
-        borderRadius: BorderRadius.circular(18),
+      decoration: shellSurfaceDecoration(
+        context,
+        style: ShellSurfaceStyle.highlight,
+        tone: ShellSemanticTone.info,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -807,12 +809,7 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   }) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.22,
-        ),
-        borderRadius: BorderRadius.circular(18),
-      ),
+      decoration: shellSurfaceDecoration(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -901,11 +898,10 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   }) {
     return Container(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.35,
-        ),
-        borderRadius: BorderRadius.circular(16),
+      decoration: shellSurfaceDecoration(
+        context,
+        style: ShellSurfaceStyle.highlight,
+        borderRadius: const BorderRadius.all(Radius.circular(16)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1009,26 +1005,25 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   }
 
   Widget _workflowTag(String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(label),
-    );
+    return ShellToneBadge(label: label);
   }
 
   Widget _warningBanner(BuildContext context, String message) {
     final theme = Theme.of(context);
+    final palette = context.shellVisuals.tone(ShellSemanticTone.danger);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFE2DE),
-        borderRadius: BorderRadius.circular(14),
+      decoration: shellSurfaceDecoration(
+        context,
+        style: ShellSurfaceStyle.highlight,
+        tone: ShellSemanticTone.danger,
+        borderRadius: const BorderRadius.all(Radius.circular(14)),
       ),
-      child: Text(message, style: theme.textTheme.bodySmall),
+      child: Text(
+        message,
+        style: theme.textTheme.bodySmall?.copyWith(color: palette.onContainer),
+      ),
     );
   }
 
@@ -1097,9 +1092,11 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
         title: context.shellText.desktopProfileProviderSettings,
         child: Container(
           padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: const Color(0xFFFFE2DE),
-            borderRadius: BorderRadius.circular(14),
+          decoration: shellSurfaceDecoration(
+            context,
+            style: ShellSurfaceStyle.highlight,
+            tone: ShellSemanticTone.danger,
+            borderRadius: const BorderRadius.all(Radius.circular(14)),
           ),
           child: Text(
             context.shellText.desktopProviderSettingsSupportError(

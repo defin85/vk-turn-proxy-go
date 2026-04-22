@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_shell_core/flutter_shell_core.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -8,6 +9,24 @@ void main() {
     expect(ProfileDraft.defaults().spec.listenAddress, '127.0.0.1:9001');
     expect(BuildIdentityEnvironment.revision, 'dev');
     expect(BuildIdentityEnvironment.dirty, isTrue);
+  });
+
+  test('shared shell visuals keep the approved mobile reference palette', () {
+    final theme = buildRelayDockShellTheme();
+    final visuals = theme.extension<ShellVisualTheme>();
+
+    expect(theme.colorScheme.primary, const Color(0xFF214B66));
+    expect(theme.colorScheme.secondary, const Color(0xFFB36A37));
+    expect(theme.scaffoldBackgroundColor, const Color(0xFFEEE7DA));
+    expect(visuals, isNotNull);
+    expect(
+      visuals!.tone(ShellSemanticTone.ready).container,
+      const Color(0xFFE2F4E8),
+    );
+    expect(
+      visuals.tone(ShellSemanticTone.danger).accent,
+      const Color(0xFFB3261E),
+    );
   });
 
   test('profile draft round-trips through profile records', () {

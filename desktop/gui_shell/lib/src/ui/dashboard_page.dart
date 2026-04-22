@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_shell_core/shell_visuals.dart';
 import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:gui_shell/src/control/control_plane_models.dart';
 import 'package:gui_shell/src/control/desktop_host_supervisor.dart';
@@ -480,11 +481,12 @@ class _DesktopShellBar extends StatelessWidget {
           ShellStatus.blocked => t.desktopStatusWaitingDetail,
         };
     final tone = switch (connection?.state) {
-      HostLifecycleState.ready => const Color(0xFFF7FAF6),
-      HostLifecycleState.incompatible => const Color(0xFFFFF7E6),
-      HostLifecycleState.failed => const Color(0xFFFFF0EC),
-      _ => const Color(0xFFF4F7FA),
+      HostLifecycleState.ready => ShellSemanticTone.ready,
+      HostLifecycleState.incompatible => ShellSemanticTone.attention,
+      HostLifecycleState.failed => ShellSemanticTone.danger,
+      _ => ShellSemanticTone.info,
     };
+    final tonePalette = context.shellVisuals.tone(tone);
     final shouldShowNotice =
         controller.notice != null &&
         !(routineReadyChrome && controller.notice == connection?.message);
@@ -561,7 +563,7 @@ class _DesktopShellBar extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         Card(
-          color: tone,
+          color: tonePalette.container,
           child: Padding(
             padding: EdgeInsets.fromLTRB(
               routineReadyChrome ? 14 : 18,
@@ -645,6 +647,7 @@ class _CompactReadyShellBarSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final copy = context.shellText;
+    final readyTone = context.shellVisuals.tone(ShellSemanticTone.ready);
     final detail = _routineConnectionDetail(
       copy: copy,
       message: controller.hostConnection?.message,
@@ -657,8 +660,8 @@ class _CompactReadyShellBarSummary extends StatelessWidget {
             Container(
               width: 10,
               height: 10,
-              decoration: const BoxDecoration(
-                color: Color(0xFF255D6D),
+              decoration: BoxDecoration(
+                color: readyTone.accent,
                 shape: BoxShape.circle,
               ),
             ),
@@ -993,7 +996,6 @@ class _WorkflowQuickActions extends StatelessWidget {
     required this.onOpenManagedProvidersForProvider,
     required this.onOpenPresetBootstrap,
     required this.onOpenProviderFamilies,
-    this.dense = false,
   });
 
   final DesktopShellController controller;
@@ -1002,7 +1004,6 @@ class _WorkflowQuickActions extends StatelessWidget {
   final VoidCallback onOpenManagedProvidersForProvider;
   final VoidCallback onOpenPresetBootstrap;
   final VoidCallback onOpenProviderFamilies;
-  final bool dense;
 
   @override
   Widget build(BuildContext context) {
@@ -1015,7 +1016,7 @@ class _WorkflowQuickActions extends StatelessWidget {
                 'desktop-open-profile-library-button',
               ),
               onPressed: onOpenSavedProfiles,
-              child: Text(dense ? t.commonProfiles : t.commonSavedProfiles),
+              child: Text(t.commonSavedProfiles),
             ),
             OutlinedButton(
               key: const ValueKey<String>(
@@ -1057,10 +1058,6 @@ class _WorkflowQuickActions extends StatelessWidget {
               child: Text(t.commonProviderFamilies),
             ),
           ];
-
-    if (dense) {
-      return Wrap(spacing: 8, runSpacing: 8, children: actions);
-    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2085,11 +2082,9 @@ class _WorkbenchStatCard extends StatelessWidget {
       width: 240,
       child: Container(
         padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerHighest.withValues(
-            alpha: 0.38,
-          ),
-          borderRadius: BorderRadius.circular(18),
+        decoration: shellSurfaceDecoration(
+          context,
+          style: ShellSurfaceStyle.highlight,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2131,12 +2126,7 @@ class _WorkbenchSummaryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(
-          context,
-        ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.32),
-        borderRadius: BorderRadius.circular(18),
-      ),
+      decoration: shellSurfaceDecoration(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -2272,16 +2262,17 @@ class _FocusedAssurancePane extends StatelessWidget {
       ShellStatus.blocked => t.desktopStatusBlockedTitle,
     };
     final tone = switch (controller.hostConnection?.state) {
-      HostLifecycleState.ready => const Color(0xFFF2F7EF),
-      HostLifecycleState.incompatible => const Color(0xFFFFF6E3),
-      HostLifecycleState.failed => const Color(0xFFFFEEE9),
-      _ => const Color(0xFFF2F4F8),
+      HostLifecycleState.ready => ShellSemanticTone.ready,
+      HostLifecycleState.incompatible => ShellSemanticTone.attention,
+      HostLifecycleState.failed => ShellSemanticTone.danger,
+      _ => ShellSemanticTone.info,
     };
+    final tonePalette = context.shellVisuals.tone(tone);
     final showPinnedSummary =
         controller.status != ShellStatus.ready || controller.hasLiveWork;
 
     return Card(
-      color: tone,
+      color: tonePalette.container,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
         child: LayoutBuilder(
@@ -2308,7 +2299,7 @@ class _FocusedAssurancePane extends StatelessWidget {
               runSpacing: 8,
               alignment: stacked ? WrapAlignment.start : WrapAlignment.end,
               children: <Widget>[
-                _AssuranceChip(label: stateLabel),
+                _AssuranceChip(label: stateLabel, tone: tone),
                 _AssuranceChip(
                   label: readyTunnelModes > 0
                       ? copy.desktopTunnelModesReadySummary(
@@ -2316,6 +2307,9 @@ class _FocusedAssurancePane extends StatelessWidget {
                           tunnelModes,
                         )
                       : copy.desktopPlatformTunnelSummary,
+                  tone: readyTunnelModes > 0
+                      ? ShellSemanticTone.ready
+                      : ShellSemanticTone.neutral,
                 ),
                 if (controller.hasLiveWork)
                   _AssuranceChip(
@@ -2323,9 +2317,13 @@ class _FocusedAssurancePane extends StatelessWidget {
                       controller.resolutions.length,
                       controller.sessions.length,
                     ),
+                    tone: ShellSemanticTone.info,
                   ),
                 if (controller.hostConnection?.isReady != true)
-                  _AssuranceChip(label: copy.desktopSupportContextPinned),
+                  _AssuranceChip(
+                    label: copy.desktopSupportContextPinned,
+                    tone: ShellSemanticTone.attention,
+                  ),
               ],
             );
             return Column(
@@ -2393,11 +2391,22 @@ class _PinnedSupportSummary extends StatelessWidget {
             ? copy.desktopSupportReadyLiveDetail
             : copy.desktopSupportReadyIdleDetail,
     };
+    final tone = switch (controller.status) {
+      ShellStatus.blocked => ShellSemanticTone.danger,
+      ShellStatus.booting => ShellSemanticTone.info,
+      ShellStatus.ready =>
+        controller.hasLiveWork
+            ? ShellSemanticTone.info
+            : ShellSemanticTone.neutral,
+    };
+    final palette = context.shellVisuals.tone(tone);
     return Container(
       padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.74),
-        borderRadius: BorderRadius.circular(16),
+      decoration: shellSurfaceDecoration(
+        context,
+        style: ShellSurfaceStyle.highlight,
+        tone: tone,
+        borderRadius: const BorderRadius.all(Radius.circular(16)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2407,6 +2416,7 @@ class _PinnedSupportSummary extends StatelessWidget {
                 ? Icons.stream_outlined
                 : Icons.warning_amber_rounded,
             size: 18,
+            color: palette.accent,
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -2436,26 +2446,17 @@ class _PinnedSupportSummary extends StatelessWidget {
 }
 
 class _AssuranceChip extends StatelessWidget {
-  const _AssuranceChip({required this.label});
+  const _AssuranceChip({
+    required this.label,
+    this.tone = ShellSemanticTone.neutral,
+  });
 
   final String label;
+  final ShellSemanticTone tone;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.74),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: theme.textTheme.labelMedium?.copyWith(
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
+    return ShellToneBadge(label: label, tone: tone);
   }
 }
 
@@ -3675,30 +3676,16 @@ class _SessionStateChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (Color background, Color foreground) = switch (state) {
-      SessionState.ready => (const Color(0xFFDEF2E1), const Color(0xFF285B38)),
-      SessionState.challengeRequired => (
-        const Color(0xFFFFF1D6),
-        const Color(0xFF7E5514),
-      ),
-      SessionState.failed => (const Color(0xFFFFE0DF), const Color(0xFF7A1F16)),
-      SessionState.stopped => (
-        const Color(0xFFE1E6EC),
-        const Color(0xFF334A5E),
-      ),
-      _ => (const Color(0xFFE6EDF7), const Color(0xFF245070)),
+    final tone = switch (state) {
+      SessionState.ready => ShellSemanticTone.ready,
+      SessionState.challengeRequired => ShellSemanticTone.attention,
+      SessionState.failed => ShellSemanticTone.danger,
+      SessionState.stopped => ShellSemanticTone.neutral,
+      _ => ShellSemanticTone.info,
     };
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        context.shellText.sessionStateLabel(state.value),
-        style: TextStyle(color: foreground, fontWeight: FontWeight.w700),
-      ),
+    return ShellToneBadge(
+      label: context.shellText.sessionStateLabel(state.value),
+      tone: tone,
     );
   }
 }
@@ -3710,34 +3697,17 @@ class _ResolutionStateChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (Color background, Color foreground) = switch (state) {
-      ResolutionState.resolved => (
-        const Color(0xFFDEF2E1),
-        const Color(0xFF285B38),
-      ),
-      ResolutionState.challengeRequired => (
-        const Color(0xFFFFF1D6),
-        const Color(0xFF7E5514),
-      ),
+    final tone = switch (state) {
+      ResolutionState.resolved => ShellSemanticTone.ready,
+      ResolutionState.challengeRequired => ShellSemanticTone.attention,
       ResolutionState.failed ||
       ResolutionState.cancelled ||
-      ResolutionState.expired => (
-        const Color(0xFFFFE0DF),
-        const Color(0xFF7A1F16),
-      ),
-      _ => (const Color(0xFFE6EDF7), const Color(0xFF245070)),
+      ResolutionState.expired => ShellSemanticTone.danger,
+      _ => ShellSemanticTone.info,
     };
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        context.shellText.resolutionStateLabel(state.value),
-        style: TextStyle(color: foreground, fontWeight: FontWeight.w700),
-      ),
+    return ShellToneBadge(
+      label: context.shellText.resolutionStateLabel(state.value),
+      tone: tone,
     );
   }
 }
@@ -3749,14 +3719,7 @@ class _Tag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.65),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(label),
-    );
+    return ShellToneBadge(label: label);
   }
 }
 
@@ -3768,34 +3731,8 @@ class _NoticeBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: const Color(0xFFFDF6C7),
-      child: Padding(
-        padding: EdgeInsets.all(compact ? 10 : 14),
-        child: Row(
-          children: <Widget>[
-            Icon(Icons.info_outline, size: compact ? 18 : 24),
-            SizedBox(width: compact ? 10 : 12),
-            Expanded(
-              child: Text(
-                message,
-                style: compact
-                    ? Theme.of(context).textTheme.bodySmall
-                    : Theme.of(context).textTheme.bodyMedium,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    return ShellNoticeBanner(message: message, compact: compact);
   }
-}
-
-int _sectionIndex(DesktopShellSection section) {
-  return switch (section) {
-    DesktopShellSection.profileWorkflow => 0,
-    DesktopShellSection.providerWorkflow => 1,
-  };
 }
 
 int _workbenchIndex(DesktopWorkbenchRoute route) {

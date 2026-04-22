@@ -5,7 +5,9 @@
 - profile workflow
 - managed-provider workflow
 
-These are primary. Diagnostics and live work are secondary.
+These are primary. Diagnostics and live work stay support-oriented and
+secondary by default, even when the shell exposes them through explicit
+routes or inspectors.
 
 ## Shell hierarchy
 

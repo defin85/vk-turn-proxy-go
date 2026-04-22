@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_shell_core/shell_visuals.dart';
 import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gui_shell/src/app.dart';
@@ -166,6 +167,35 @@ void main() {
     );
     expect(find.text('Workflow'), findsNothing);
     expect(find.byTooltip('Сменить язык'), findsOneWidget);
+  });
+
+  testWidgets('desktop shell consumes the shared RelayDock visual contract', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final controller = DesktopShellController(
+      api: _FakeControlPlaneApi(),
+      supervisor: const _FakeHostSupervisor(),
+      stateStore: const _InMemoryShellStateStore(),
+      appBuild: _testGuiBuild,
+    );
+    await controller.initialize();
+    await pumpDesktopShellTestApp(
+      tester,
+      controller: controller,
+      locale: AppLocale.en,
+    );
+
+    final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    final theme = app.theme!;
+    final visuals = theme.extension<ShellVisualTheme>();
+
+    expect(theme.colorScheme.primary, const Color(0xFF214B66));
+    expect(visuals, isNotNull);
+    expect(find.byType(ShellToneBadge), findsWidgets);
   });
 
   testWidgets(

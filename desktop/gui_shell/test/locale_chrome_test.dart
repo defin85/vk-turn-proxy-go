@@ -285,8 +285,26 @@ void main() {
       locale: AppLocale.ru,
     );
 
-    expect(find.text('Диагностика'), findsOneWidget);
-    expect(find.text('Профили'), findsWidgets);
+    final diagnosticsButton = find.byKey(
+      const ValueKey<String>('desktop-open-diagnostics-button'),
+    );
+    final profilesSection = find.byKey(
+      const ValueKey<String>('desktop-section-profiles'),
+    );
+
+    expect(diagnosticsButton, findsOneWidget);
+    expect(
+      find.descendant(
+        of: diagnosticsButton,
+        matching: find.text('Диагностика'),
+      ),
+      findsOneWidget,
+    );
+    expect(profilesSection, findsOneWidget);
+    expect(
+      find.descendant(of: profilesSection, matching: find.text('Профили')),
+      findsOneWidget,
+    );
     expect(find.byTooltip('Сменить язык'), findsOneWidget);
   });
 }
