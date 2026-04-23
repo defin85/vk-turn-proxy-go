@@ -127,13 +127,15 @@ void main() {
     );
 
     await tester.scrollUntilVisible(
-      find.text('Runtime defaults'),
+      find.text('Advanced runtime controls'),
       300,
       scrollable: _profileWorkspaceScrollable(),
     );
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Advanced runtime controls'));
+    await tester.pumpAndSettle();
 
-    expect(find.text('Runtime defaults'), findsOneWidget);
+    expect(find.text('Advanced runtime controls'), findsOneWidget);
     expect(
       find.byKey(const ValueKey<String>('profile-start-action')),
       findsOneWidget,
@@ -142,13 +144,15 @@ void main() {
     expect(find.text('Peer address'), findsOneWidget);
 
     await tester.scrollUntilVisible(
-      find.text('VK Calls'),
+      find.text('Provider details'),
       300,
       scrollable: _profileWorkspaceScrollable(),
     );
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Provider details'));
+    await tester.pumpAndSettle();
 
-    expect(find.text('VK Calls'), findsOneWidget);
+    expect(find.text('VK Calls'), findsWidgets);
     expect(
       find.textContaining('requires an external browser when challenge'),
       findsOneWidget,
@@ -198,22 +202,26 @@ void main() {
     );
 
     await tester.scrollUntilVisible(
-      find.text('Runtime defaults'),
+      find.text('Advanced runtime controls'),
       300,
       scrollable: _profileWorkspaceScrollable(),
     );
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Advanced runtime controls'));
+    await tester.pumpAndSettle();
 
-    expect(find.text('Runtime defaults'), findsOneWidget);
+    expect(find.text('Advanced runtime controls'), findsOneWidget);
 
     await tester.scrollUntilVisible(
-      find.text('Generic TURN'),
+      find.text('Provider details'),
       300,
       scrollable: _profileWorkspaceScrollable(),
     );
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Provider details'));
+    await tester.pumpAndSettle();
 
-    expect(find.text('Generic TURN'), findsOneWidget);
+    expect(find.text('Generic TURN'), findsWidgets);
     expect(find.textContaining('static secret input'), findsOneWidget);
   });
 
@@ -266,13 +274,15 @@ void main() {
     );
 
     await tester.scrollUntilVisible(
-      find.text('Profile provider settings'),
+      find.text('Provider settings'),
       300,
       scrollable: _profileWorkspaceScrollable(),
     );
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Provider settings'));
+    await tester.pumpAndSettle();
 
-    expect(find.text('Profile provider settings'), findsOneWidget);
+    expect(find.text('Provider settings'), findsOneWidget);
     expect(find.text('Region'), findsOneWidget);
     expect(find.text('Device PIN'), findsOneWidget);
   });
@@ -322,7 +332,7 @@ void main() {
     );
 
     await tester.scrollUntilVisible(
-      find.textContaining('cannot render the provider settings schema'),
+      find.text('Provider settings'),
       300,
       scrollable: _profileWorkspaceScrollable(),
     );
@@ -330,6 +340,87 @@ void main() {
 
     expect(
       find.textContaining('cannot render the provider settings schema'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('secondary profile actions live in the overflow menu', (
+    WidgetTester tester,
+  ) async {
+    final baseDraft = ProfileDraft.defaults();
+    final draft = baseDraft.copyWith(
+      name: 'alpha',
+      spec: baseDraft.spec.copyWith(
+        provider: 'vk',
+        link: 'https://vk.com/call/join/test',
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 900,
+            height: 1200,
+            child: ProfileEditorPanel(
+              providerDescriptors: _providerDescriptors,
+              availableProviderConfigs: const <ProviderConfigRecord>[],
+              selectedProfileId: 'profile-1',
+              draft: draft,
+              busy: false,
+              onDraftChanged: (_) {},
+              onApplyProviderConfig: (_) {},
+              onSave: () async {},
+              onDelete: () async {},
+              onReset: () {},
+              onResolve: () async {},
+              onStart: () async {},
+              onPreparePortableExport: () => null,
+              onCopyPortableExportText: (_) async {},
+              onSavePortableExportFile: (_) async {},
+              onImportPortableFromFile: () async => null,
+              onPreviewPortableImport: (_) => null,
+              onConfirmPortableImport: (_) async {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey<String>('profile-portable-export-action')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('profile-reset-action')),
+      findsNothing,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('profile-editor-more-actions-button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('profile-reset-action')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('profile-portable-export-action')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('profile-portable-import-file-action')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(
+        const ValueKey<String>('profile-portable-import-paste-action'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('profile-delete-action')),
       findsOneWidget,
     );
   });

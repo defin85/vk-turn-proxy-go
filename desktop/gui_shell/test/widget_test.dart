@@ -135,6 +135,82 @@ const ProviderDescriptor _supportedProviderWithUnsupportedSettingsDescriptor =
       ),
     );
 
+Future<void> _openProfileMoreActions(WidgetTester tester) async {
+  final finder = find.byKey(
+    const ValueKey<String>('profile-editor-more-actions-button'),
+  );
+  await tester.ensureVisible(finder);
+  await tester.tap(finder);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _selectProfileMoreAction(
+  WidgetTester tester,
+  String actionKey,
+) async {
+  await _openProfileMoreActions(tester);
+  await tester.tap(find.byKey(ValueKey<String>(actionKey)).last);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _openProviderMoreActions(WidgetTester tester) async {
+  final finder = find.byKey(
+    const ValueKey<String>('managed-provider-more-actions-button'),
+  );
+  await tester.ensureVisible(finder);
+  await tester.tap(finder);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _selectProviderMoreAction(
+  WidgetTester tester,
+  String actionKey,
+) async {
+  await _openProviderMoreActions(tester);
+  await tester.tap(find.byKey(ValueKey<String>(actionKey)).last);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _openProfileFromLibrary(
+  WidgetTester tester,
+  String profileId,
+) async {
+  final finder = find.byKey(
+    ValueKey<String>('profile-library-item-$profileId'),
+  );
+  await tester.ensureVisible(finder);
+  await tester.tap(finder);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _createDraftFromProfileLibrary(WidgetTester tester) async {
+  final finder = find.byKey(
+    const ValueKey<String>('profile-create-draft-button'),
+  );
+  await tester.ensureVisible(finder);
+  await tester.tap(finder);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _createManagedProviderFromLibrary(
+  WidgetTester tester, {
+  String providerId = 'vk',
+}) async {
+  final createFinder = find.byKey(
+    const ValueKey<String>('managed-provider-create-button'),
+  );
+  await tester.ensureVisible(createFinder);
+  await tester.tap(createFinder);
+  await tester.pumpAndSettle();
+
+  final providerFinder = find.byKey(
+    ValueKey<String>('supported-provider-card-$providerId'),
+  );
+  await tester.ensureVisible(providerFinder);
+  await tester.tap(providerFinder);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('desktop shell test helper pins translated chrome labels', (
     WidgetTester tester,
@@ -248,8 +324,21 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(controller.activeWorkbenchRoute, DesktopWorkbenchRoute.profiles);
-      expect(find.text('Сохраненные профили'), findsWidgets);
+      expect(
+        find.byKey(
+          const ValueKey<String>('saved-profiles-library-surface-desktop'),
+        ),
+        findsOneWidget,
+      );
+      await _openProfileFromLibrary(tester, 'profile-1');
+      expect(find.text('Настройки профиля'), findsWidgets);
+      expect(find.text('VK Calls'), findsWidgets);
+      expect(find.text('Прямой ввод'), findsWidgets);
 
+      await tester.ensureVisible(
+        find.byKey(const ValueKey<String>('profile-start-action')),
+      );
+      await tester.pumpAndSettle();
       await tester.tap(
         find.byKey(const ValueKey<String>('profile-start-action')),
       );
@@ -496,6 +585,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(controller.activeWorkbenchRoute, DesktopWorkbenchRoute.profiles);
+    expect(controller.activeCanvasRoute, DesktopCanvasRoute.savedProfilePicker);
     expect(
       find.byKey(
         const ValueKey<String>('saved-profiles-library-surface-desktop'),
@@ -503,22 +593,41 @@ void main() {
       findsOneWidget,
     );
     expect(
+      find.byKey(const ValueKey<String>('desktop-canvas-route-back-button')),
+      findsNothing,
+    );
+    expect(
       find.byKey(const ValueKey<String>('profile-library-item-profile-2')),
       findsOneWidget,
     );
-    await tester.ensureVisible(
-      find.byKey(const ValueKey<String>('profile-library-item-profile-2')),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(
-      find.byKey(const ValueKey<String>('profile-library-item-profile-2')),
-    );
-    await tester.pumpAndSettle();
+    await _openProfileFromLibrary(tester, 'profile-2');
 
     expect(controller.selectedProfileId, 'profile-2');
     expect(controller.draft.name, 'beta');
     expect(controller.activeCanvasRoute, DesktopCanvasRoute.profileEditor);
+    expect(
+      find.byKey(
+        const ValueKey<String>('saved-profiles-library-surface-desktop'),
+      ),
+      findsNothing,
+    );
+
+    await _selectProfileMoreAction(
+      tester,
+      'desktop-open-saved-profile-picker-button',
+    );
+
+    expect(controller.activeCanvasRoute, DesktopCanvasRoute.savedProfilePicker);
+    expect(
+      find.byKey(
+        const ValueKey<String>('saved-profiles-library-surface-desktop'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('desktop-canvas-route-back-button')),
+      findsOneWidget,
+    );
 
     controller.dispose();
     await tester.pumpWidget(const SizedBox.shrink());
@@ -610,6 +719,11 @@ void main() {
       find.byKey(const ValueKey<String>('desktop-section-profiles')),
     );
     await tester.pumpAndSettle();
+    await _openProfileFromLibrary(tester, 'profile-1');
+    await tester.ensureVisible(
+      find.byKey(const ValueKey<String>('profile-start-action')),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(
       find.byKey(const ValueKey<String>('profile-start-action')),
     );
@@ -683,11 +797,18 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final startButton = tester.widget<FilledButton>(
+      expect(
         find.byKey(const ValueKey<String>('profile-start-action')),
+        findsNothing,
       );
-      expect(startButton.onPressed, isNull);
-      expect(find.byTooltip('Save profile first'), findsOneWidget);
+      final resolveButton = tester.widget<FilledButton>(
+        find.byKey(const ValueKey<String>('profile-resolve-action')),
+      );
+      expect(resolveButton.onPressed, isNotNull);
+      expect(
+        find.byKey(const ValueKey<String>('profile-save-action')),
+        findsOneWidget,
+      );
 
       controller.dispose();
       await tester.pumpWidget(const SizedBox.shrink());
@@ -810,7 +931,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       find.byKey(
-        const ValueKey<String>('desktop-open-preset-bootstrap-button'),
+        const ValueKey<String>('managed-provider-more-actions-button'),
       ),
       findsNothing,
     );
@@ -819,19 +940,10 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(controller.activeWorkbenchRoute, DesktopWorkbenchRoute.providers);
-
-    await tester.ensureVisible(
-      find.byKey(
-        const ValueKey<String>('desktop-open-preset-bootstrap-button'),
-      ),
+    await _selectProviderMoreAction(
+      tester,
+      'desktop-open-preset-bootstrap-button',
     );
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(
-        const ValueKey<String>('desktop-open-preset-bootstrap-button'),
-      ),
-    );
-    await tester.pumpAndSettle();
 
     expect(
       find.textContaining(
@@ -876,18 +988,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(controller.activeWorkbenchRoute, DesktopWorkbenchRoute.providers);
-    await tester.ensureVisible(
-      find.byKey(
-        const ValueKey<String>('desktop-open-preset-bootstrap-button'),
-      ),
+    await _selectProviderMoreAction(
+      tester,
+      'desktop-open-preset-bootstrap-button',
     );
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(
-        const ValueKey<String>('desktop-open-preset-bootstrap-button'),
-      ),
-    );
-    await tester.pumpAndSettle();
 
     final wbPresetButton = find.byKey(
       const ValueKey<String>('preset-use-generic-turn-default'),
@@ -937,53 +1041,18 @@ void main() {
 
       expect(controller.activeWorkbenchRoute, DesktopWorkbenchRoute.providers);
       expect(
-        controller.workspaceSurface,
-        DesktopWorkspaceSurface.providerConfig,
-      );
-      expect(find.text('New provider record'), findsOneWidget);
-
-      await tester.tap(
-        find.byKey(
-          const ValueKey<String>(
-            'desktop-open-managed-provider-library-button',
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(
         controller.activeCanvasRoute,
         DesktopCanvasRoute.managedProviderPicker,
       );
       expect(
+        find.byKey(const ValueKey<String>('desktop-canvas-route-back-button')),
+        findsNothing,
+      );
+      expect(
         find.byKey(const ValueKey<String>('managed-provider-create-button')),
         findsOneWidget,
       );
-
-      await tester.tap(
-        find.byKey(const ValueKey<String>('managed-provider-create-button')),
-      );
-      await tester.pumpAndSettle();
-
-      expect(
-        controller.activeCanvasRoute,
-        DesktopCanvasRoute.providerFamilyPicker,
-      );
-
-      expect(
-        find.byKey(const ValueKey<String>('supported-provider-card-vk')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(
-          const ValueKey<String>('supported-provider-card-generic-turn'),
-        ),
-        findsOneWidget,
-      );
-      await tester.tap(
-        find.byKey(const ValueKey<String>('supported-provider-card-vk')),
-      );
-      await tester.pumpAndSettle();
+      await _createManagedProviderFromLibrary(tester);
 
       expect(
         controller.activeCanvasRoute,
@@ -1021,10 +1090,7 @@ void main() {
       expect(controller.providerConfigs, hasLength(1));
       expect(controller.providerConfigs.single.name, 'WB Central Updated');
 
-      await tester.tap(
-        find.byKey(const ValueKey<String>('managed-provider-delete-action')),
-      );
-      await tester.pumpAndSettle();
+      await _selectProviderMoreAction(tester, 'managed-provider-delete-action');
 
       expect(controller.providerConfigs, isEmpty);
       expect(controller.activeSection, DesktopShellSection.providerWorkflow);
@@ -1320,7 +1386,9 @@ void main() {
 
       expect(controller.activeWorkbenchRoute, DesktopWorkbenchRoute.profiles);
       expect(
-        find.byKey(const ValueKey<String>('desktop-section-provider')),
+        find.byKey(
+          const ValueKey<String>('saved-profiles-library-surface-desktop'),
+        ),
         findsOneWidget,
       );
 
@@ -1332,7 +1400,7 @@ void main() {
       expect(controller.activeWorkbenchRoute, DesktopWorkbenchRoute.providers);
       expect(
         find.byKey(
-          const ValueKey<String>('desktop-open-preset-bootstrap-button'),
+          const ValueKey<String>('managed-provider-more-actions-button'),
         ),
         findsOneWidget,
       );
@@ -1550,18 +1618,10 @@ void main() {
         findsNothing,
       );
 
-      await tester.ensureVisible(
-        find.byKey(
-          const ValueKey<String>('desktop-open-preset-bootstrap-button'),
-        ),
+      await _selectProviderMoreAction(
+        tester,
+        'desktop-open-preset-bootstrap-button',
       );
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(
-          const ValueKey<String>('desktop-open-preset-bootstrap-button'),
-        ),
-      );
-      await tester.pumpAndSettle();
 
       expect(controller.activeCanvasRoute, DesktopCanvasRoute.presetPicker);
       expect(
@@ -1629,8 +1689,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(controller.activeWorkbenchRoute, DesktopWorkbenchRoute.providers);
-      await tester.ensureVisible(find.byType(TextField).first);
-      await tester.pumpAndSettle();
+      await _createManagedProviderFromLibrary(tester);
       await tester.enterText(find.byType(TextField).first, 'Resize Record');
       await tester.pumpAndSettle();
 
@@ -1685,6 +1744,7 @@ void main() {
         find.byKey(const ValueKey<String>('desktop-section-profiles')),
       );
       await tester.pumpAndSettle();
+      await _openProfileFromLibrary(tester, 'profile-1');
 
       final profileNameField = find.byType(TextField).first;
 
@@ -1776,6 +1836,7 @@ void main() {
         find.byKey(const ValueKey<String>('desktop-section-profiles')),
       );
       await tester.pumpAndSettle();
+      await _createDraftFromProfileLibrary(tester);
 
       await tester.ensureVisible(
         find.widgetWithText(ChoiceChip, 'Saved record'),
@@ -1784,10 +1845,6 @@ void main() {
 
       expect(find.widgetWithText(ChoiceChip, 'Saved record'), findsOneWidget);
       expect(find.widgetWithText(ChoiceChip, 'Direct input'), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey<String>('profile-provider-descriptor-card')),
-        findsOneWidget,
-      );
 
       await tester.tap(find.widgetWithText(ChoiceChip, 'Saved record'));
       await tester.pumpAndSettle();
@@ -1798,18 +1855,10 @@ void main() {
         'provider-config-1',
       );
       expect(
-        find.byKey(const ValueKey<String>('profile-provider-descriptor-card')),
-        findsNothing,
-      );
-      expect(
         find.byKey(const ValueKey<String>('profile-provider-record-field')),
         findsOneWidget,
       );
-      expect(
-        find.byKey(const ValueKey<String>('profile-managed-provider-family')),
-        findsOneWidget,
-      );
-      expect(find.text('VK Calls'), findsOneWidget);
+      expect(find.text('VK Europe'), findsWidgets);
 
       await tester.ensureVisible(
         find.widgetWithText(ChoiceChip, 'Direct input'),
@@ -1820,10 +1869,9 @@ void main() {
 
       expect(controller.draft.providerBinding.isManaged, isFalse);
       expect(
-        find.byKey(const ValueKey<String>('profile-provider-descriptor-card')),
-        findsOneWidget,
+        find.byKey(const ValueKey<String>('profile-provider-record-field')),
+        findsNothing,
       );
-      expect(find.text('VK Calls'), findsWidgets);
 
       controller.dispose();
       await tester.pumpWidget(const SizedBox.shrink());

@@ -196,7 +196,8 @@ ThemeData buildRelayDockShellTheme() {
     inputDecorationTheme: const InputDecorationTheme(
       filled: true,
       fillColor: cardColor,
-      contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      // Outline floating labels in M3 need the default top headroom.
+      contentPadding: EdgeInsets.fromLTRB(14, 20, 14, 12),
       border: inputBorder,
       enabledBorder: inputBorder,
       disabledBorder: inputBorder,

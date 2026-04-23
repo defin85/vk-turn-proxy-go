@@ -953,7 +953,7 @@ class _ExpandedNavigationPad extends StatelessWidget {
               key: const ValueKey<String>('desktop-section-profiles'),
               icon: Icons.fact_check_outlined,
               title: t.commonProfiles,
-              subtitle: t.desktopSectionProfilesSubtitle,
+              subtitle: t.commonSavedProfiles,
               selected:
                   controller.activeWorkbenchRoute ==
                   DesktopWorkbenchRoute.profiles,
@@ -964,7 +964,7 @@ class _ExpandedNavigationPad extends StatelessWidget {
               key: const ValueKey<String>('desktop-section-provider'),
               icon: Icons.tune_outlined,
               title: t.commonProviders,
-              subtitle: t.desktopSectionProvidersSubtitle,
+              subtitle: t.commonProviderRecords,
               selected:
                   controller.activeWorkbenchRoute ==
                   DesktopWorkbenchRoute.providers,
@@ -975,7 +975,6 @@ class _ExpandedNavigationPad extends StatelessWidget {
               key: const ValueKey<String>('desktop-section-routing'),
               icon: Icons.route_outlined,
               title: t.commonRouting,
-              subtitle: context.shellText.desktopPlatformTunnelSummary,
               selected:
                   controller.activeWorkbenchRoute ==
                   DesktopWorkbenchRoute.routing,
@@ -993,7 +992,6 @@ class _ExpandedNavigationPad extends StatelessWidget {
               key: const ValueKey<String>('desktop-section-activity'),
               icon: Icons.stream_outlined,
               title: t.commonLiveWork,
-              subtitle: context.shellText.desktopInspectorActivitySubtitle,
               selected:
                   controller.activeWorkbenchRoute ==
                   DesktopWorkbenchRoute.activity,
@@ -1004,7 +1002,6 @@ class _ExpandedNavigationPad extends StatelessWidget {
               key: const ValueKey<String>('desktop-section-diagnostics'),
               icon: Icons.medical_services_outlined,
               title: t.commonDiagnostics,
-              subtitle: context.shellText.desktopInspectorDiagnosticsSubtitle,
               selected:
                   controller.activeWorkbenchRoute ==
                   DesktopWorkbenchRoute.diagnostics,
@@ -1015,7 +1012,6 @@ class _ExpandedNavigationPad extends StatelessWidget {
               key: const ValueKey<String>('desktop-section-settings'),
               icon: Icons.settings_outlined,
               title: t.commonSettings,
-              subtitle: t.localeSwitchTooltip,
               selected:
                   controller.activeWorkbenchRoute ==
                   DesktopWorkbenchRoute.settings,
@@ -1125,7 +1121,9 @@ class _ProfilesWorkbenchSurface extends StatelessWidget {
         return _CanvasRouteFrame(
           title: context.shellText.desktopSavedProfilesLibraryTitle,
           detail: context.shellText.desktopSavedProfilesRouteDetail,
-          onBack: controller.returnFromCanvasRoute,
+          onBack: controller.canReturnFromCanvasRoute
+              ? controller.returnFromCanvasRoute
+              : null,
           child: SavedProfilesLibrarySurface(
             profiles: controller.profiles,
             selectedProfileId: controller.selectedProfileId,
@@ -1154,14 +1152,7 @@ class _ProfilesWorkbenchSurface extends StatelessWidget {
         break;
     }
 
-    final library = SavedProfilesLibrarySurface(
-      profiles: controller.profiles,
-      selectedProfileId: controller.selectedProfileId,
-      busy: busy,
-      onSelectProfile: controller.selectProfile,
-      onCreateDraft: controller.resetDraft,
-    );
-    final editor = ProfileEditorPanel(
+    return ProfileEditorPanel(
       providerDescriptors: controller.providerDescriptors,
       managedProviders: controller.managedProviders,
       initialManagedProviderId:
@@ -1184,61 +1175,12 @@ class _ProfilesWorkbenchSurface extends StatelessWidget {
           controller.importPortableProfileEnvelopeFromFile,
       onPreviewPortableImport: controller.previewPortableProfileEnvelope,
       onConfirmPortableImport: controller.confirmPortableProfileImport,
+      onOpenSavedProfiles: () async {
+        controller.openSavedProfilePicker();
+      },
       onBrowseManagedProviders: () async {
         controller.openManagedProviderPickerForProfile();
       },
-    );
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: LayoutBuilder(
-          builder: (BuildContext context, BoxConstraints shellConstraints) {
-            final lowHeightWorkbench = shellConstraints.maxHeight < 440;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                _WorkbenchRouteHeader(
-                  title: t.commonProfiles,
-                  detail: t.desktopSectionProfilesSubtitle,
-                ),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: LayoutBuilder(
-                    builder:
-                        (BuildContext context, BoxConstraints constraints) {
-                          final stacked = constraints.maxWidth < 1280;
-                          final lowHeightEditor = constraints.maxHeight < 260;
-                          if (stacked &&
-                              (lowHeightWorkbench || lowHeightEditor)) {
-                            return editor;
-                          }
-                          if (stacked) {
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: <Widget>[
-                                Expanded(flex: 3, child: library),
-                                const SizedBox(height: 12),
-                                Expanded(flex: 4, child: editor),
-                              ],
-                            );
-                          }
-                          return Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: <Widget>[
-                              SizedBox(width: 360, child: library),
-                              const SizedBox(width: 12),
-                              Expanded(child: editor),
-                            ],
-                          );
-                        },
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
     );
   }
 }
@@ -1257,12 +1199,19 @@ class _ProvidersWorkbenchSurface extends StatelessWidget {
         return _CanvasRouteFrame(
           title: context.shellText.desktopProviderRecordsLibraryTitle,
           detail: context.shellText.desktopProviderRecordsRouteDetail,
-          onBack: controller.returnFromCanvasRoute,
+          onBack: controller.canReturnFromCanvasRoute
+              ? controller.returnFromCanvasRoute
+              : null,
           child: ManagedProvidersLibrarySurface(
             managedProviders: controller.managedProviders,
             selectedManagedProviderId: controller.selectedManagedProviderId,
             onSelectManagedProvider: controller.selectManagedProvider,
             onCreateManagedProvider: controller.startManagedProviderCreation,
+            onOpenPresetBootstrap: () {
+              controller.openPresetPicker(
+                returnTarget: DesktopCanvasRoute.managedProviderPicker,
+              );
+            },
           ),
         );
       case DesktopCanvasRoute.presetPicker:
@@ -1304,13 +1253,7 @@ class _ProvidersWorkbenchSurface extends StatelessWidget {
         break;
     }
 
-    final library = ManagedProvidersLibrarySurface(
-      managedProviders: controller.managedProviders,
-      selectedManagedProviderId: controller.selectedManagedProviderId,
-      onSelectManagedProvider: controller.selectManagedProvider,
-      onCreateManagedProvider: controller.startManagedProviderCreation,
-    );
-    final editor = ProviderConfigEditorPanel(
+    return ProviderConfigEditorPanel(
       supportedProviders: controller.supportedProviderCatalog,
       providerDescriptors: controller.providerDescriptors,
       selectedManagedProviderId: controller.selectedManagedProviderId,
@@ -1327,85 +1270,9 @@ class _ProvidersWorkbenchSurface extends StatelessWidget {
       onOpenPresetBootstrap: () async {
         controller.openPresetPicker();
       },
-    );
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: LayoutBuilder(
-          builder: (BuildContext context, BoxConstraints shellConstraints) {
-            final lowHeightWorkbench = shellConstraints.maxHeight < 440;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                _WorkbenchRouteHeader(
-                  title: t.commonProviders,
-                  detail: t.desktopSectionProvidersSubtitle,
-                  trailing: Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: <Widget>[
-                      FilledButton.tonal(
-                        key: const ValueKey<String>(
-                          'desktop-open-preset-bootstrap-button',
-                        ),
-                        onPressed: controller.openPresetPicker,
-                        child: Text(t.commonNewFromPreset),
-                      ),
-                      OutlinedButton(
-                        key: const ValueKey<String>(
-                          'desktop-open-managed-provider-library-button',
-                        ),
-                        onPressed: controller.openManagedProviderPicker,
-                        child: Text(t.commonProviderRecords),
-                      ),
-                      OutlinedButton(
-                        key: const ValueKey<String>(
-                          'desktop-open-provider-family-chooser-button',
-                        ),
-                        onPressed: controller.openProviderFamilyPicker,
-                        child: Text(t.commonProviderFamilies),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: LayoutBuilder(
-                    builder:
-                        (BuildContext context, BoxConstraints constraints) {
-                          final stacked = constraints.maxWidth < 1280;
-                          final lowHeightEditor = constraints.maxHeight < 260;
-                          if (stacked &&
-                              (lowHeightWorkbench || lowHeightEditor)) {
-                            return editor;
-                          }
-                          if (stacked) {
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: <Widget>[
-                                Expanded(flex: 3, child: library),
-                                const SizedBox(height: 12),
-                                Expanded(flex: 4, child: editor),
-                              ],
-                            );
-                          }
-                          return Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: <Widget>[
-                              SizedBox(width: 360, child: library),
-                              const SizedBox(width: 12),
-                              Expanded(child: editor),
-                            ],
-                          );
-                        },
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
+      onBrowseManagedProviders: () async {
+        controller.openManagedProviderPicker();
+      },
     );
   }
 }
@@ -1598,21 +1465,15 @@ class _WorkbenchSupportRoute extends StatelessWidget {
 }
 
 class _WorkbenchRouteHeader extends StatelessWidget {
-  const _WorkbenchRouteHeader({
-    required this.title,
-    required this.detail,
-    this.trailing,
-  });
+  const _WorkbenchRouteHeader({required this.title, required this.detail});
 
   final String title;
   final String detail;
-  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final stacked = MediaQuery.sizeOf(context).width < 1320;
-    final summary = Column(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Text(
@@ -1628,23 +1489,6 @@ class _WorkbenchRouteHeader extends StatelessWidget {
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
-      ],
-    );
-    if (trailing == null) {
-      return summary;
-    }
-    if (stacked) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[summary, const SizedBox(height: 12), trailing!],
-      );
-    }
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Expanded(child: summary),
-        const SizedBox(width: 16),
-        Flexible(child: trailing!),
       ],
     );
   }
@@ -1694,13 +1538,13 @@ class _CanvasRouteFrame extends StatelessWidget {
   const _CanvasRouteFrame({
     required this.title,
     required this.detail,
-    required this.onBack,
+    this.onBack,
     required this.child,
   });
 
   final String title;
   final String detail;
-  final VoidCallback onBack;
+  final VoidCallback? onBack;
   final Widget child;
 
   @override
@@ -1716,15 +1560,17 @@ class _CanvasRouteFrame extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                IconButton(
-                  key: const ValueKey<String>(
-                    'desktop-canvas-route-back-button',
+                if (onBack != null) ...<Widget>[
+                  IconButton(
+                    key: const ValueKey<String>(
+                      'desktop-canvas-route-back-button',
+                    ),
+                    onPressed: onBack,
+                    icon: const Icon(Icons.arrow_back),
+                    tooltip: context.shellText.back,
                   ),
-                  onPressed: onBack,
-                  icon: const Icon(Icons.arrow_back),
-                  tooltip: context.shellText.back,
-                ),
-                const SizedBox(width: 8),
+                  const SizedBox(width: 8),
+                ],
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1978,14 +1824,14 @@ class _SectionListTile extends StatelessWidget {
     super.key,
     required this.icon,
     required this.title,
-    required this.subtitle,
     required this.selected,
     required this.onTap,
+    this.subtitle,
   });
 
   final IconData icon;
   final String title;
-  final String subtitle;
+  final String? subtitle;
   final bool selected;
   final VoidCallback onTap;
 
@@ -2018,13 +1864,17 @@ class _SectionListTile extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
+                    if (subtitle != null) ...<Widget>[
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),

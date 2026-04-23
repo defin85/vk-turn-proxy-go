@@ -28,6 +28,7 @@ class ProfileEditorPanel extends StatefulWidget {
     required this.onImportPortableFromFile,
     required this.onPreviewPortableImport,
     required this.onConfirmPortableImport,
+    this.onOpenSavedProfiles,
     this.onBrowseManagedProviders,
     List<ManagedProviderRecord>? managedProviders,
     String? initialManagedProviderId,
@@ -56,6 +57,7 @@ class ProfileEditorPanel extends StatefulWidget {
   final void Function({String? managedProviderId})
   onActivateManagedProviderMode;
   final VoidCallback onUseCustomProvider;
+  final Future<void> Function()? onOpenSavedProfiles;
   final Future<void> Function()? onBrowseManagedProviders;
   final Future<void> Function() onSave;
   final Future<void> Function() onDelete;
@@ -87,6 +89,17 @@ void Function({String? managedProviderId}) _legacyManagedProviderActivator(
       onApplyProviderConfig(managedProviderId);
     }
   };
+}
+
+enum _ProfileEditorMenuAction {
+  openSavedProfiles,
+  openManagedProviders,
+  resetDraft,
+  exportPortableProfile,
+  importPortableFromFile,
+  importPortableFromPaste,
+  resolveOnly,
+  deleteProfile,
 }
 
 class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
@@ -334,275 +347,313 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
     final theme = Theme.of(context);
     final copy = context.shellText;
     final descriptor = _selectedDescriptor();
-    final profileScopeLabel = widget.selectedProfileId == null
-        ? copy.desktopUnsavedDraft
-        : copy.desktopSavedProfileWorkspace;
-
-    final headerActions = Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: <Widget>[
-        FilledButton(
-          key: const ValueKey<String>('profile-resolve-action'),
-          onPressed: widget.busy ? null : () => unawaited(widget.onResolve()),
-          child: Text(_nextStepTitle(context, descriptor)),
-        ),
-        Tooltip(
-          message: widget.selectedProfileId == null
-              ? copy.desktopSaveProfileFirst
-              : copy.desktopStartSessionFromSavedProfile,
-          child: FilledButton.tonal(
-            key: const ValueKey<String>('profile-start-action'),
-            onPressed: widget.busy || widget.selectedProfileId == null
-                ? null
-                : () => unawaited(widget.onStart()),
-            child: Text(copy.startSession),
-          ),
-        ),
-        FilledButton.tonal(
-          key: const ValueKey<String>('profile-save-action'),
-          onPressed: widget.busy ? null : () => unawaited(widget.onSave()),
-          child: Text(copy.saveProfile),
-        ),
-        FilledButton.tonalIcon(
-          onPressed: widget.busy ? null : widget.onReset,
-          icon: const Icon(Icons.add),
-          label: Text(copy.freshDraft),
-        ),
-      ],
-    );
-
-    final body = ProfileWorkflowBody(
-      variant: ProfileWorkflowVariant.desktop,
-      providerDescriptors: widget.providerDescriptors,
-      managedProviders: widget.managedProviders,
-      selectedManagedProviderId: widget.selectedManagedProviderId,
-      selectedProfileId: widget.selectedProfileId,
-      draft: widget.draft,
-      busy: widget.busy,
-      onDraftChanged: widget.onDraftChanged,
-      onActivateManagedProviderMode: widget.onActivateManagedProviderMode,
-      onUseCustomProvider: widget.onUseCustomProvider,
-      trailingChildren: <Widget>[
-        _portableTransferCard(theme),
-        _supportActionsCard(theme),
-      ],
-      nameFieldKey: const ValueKey<String>('profile-name-field'),
-    );
+    final hasSavedProfile = widget.selectedProfileId != null;
+    final primaryLabel = hasSavedProfile
+        ? copy.startSession
+        : _nextStepTitle(context, descriptor);
+    final primaryKey = hasSavedProfile
+        ? const ValueKey<String>('profile-start-action')
+        : const ValueKey<String>('profile-resolve-action');
+    final VoidCallback? onPrimaryPressed = widget.busy
+        ? null
+        : () => unawaited(
+            hasSavedProfile ? widget.onStart() : widget.onResolve(),
+          );
 
     return Card(
-      child: LayoutBuilder(
-        builder: (BuildContext context, BoxConstraints constraints) {
-          final stackHeader = constraints.maxWidth < 960;
-          final lowHeightWorkbench = constraints.maxHeight < 220;
-
-          if (lowHeightWorkbench) {
-            return Padding(
-              padding: const EdgeInsets.all(16),
-              child: ListView(
-                primary: false,
-                children: <Widget>[
-                  Text(
-                    copy.desktopProfileWorkspaceTitle,
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    profileScopeLabel,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  headerActions,
-                  const SizedBox(height: 12),
-                  body,
-                ],
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints constraints) {
+            final useDesktopBody = constraints.maxWidth >= 1100;
+            final stackedHeader = constraints.maxWidth < 840;
+            final selectedManagedProvider = _selectedManagedProvider();
+            final headerDescriptor =
+                _descriptorForProviderId(selectedManagedProvider?.provider) ??
+                descriptor;
+            final headerBadges = <Widget>[
+              if (!hasSavedProfile)
+                ShellToneBadge(
+                  label: copy.desktopUnsavedDraft,
+                  tone: ShellSemanticTone.attention,
+                ),
+              ShellToneBadge(
+                label: _headerProviderLabel(headerDescriptor),
+                tone: ShellSemanticTone.info,
               ),
+              ShellToneBadge(
+                label: widget.draft.providerBinding.isManaged
+                    ? copy.savedRecord
+                    : copy.directInput,
+              ),
+              if (widget.draft.providerBinding.isManaged &&
+                  selectedManagedProvider != null)
+                ShellToneBadge(
+                  label: _managedProviderLabel(selectedManagedProvider),
+                  tone: ShellSemanticTone.info,
+                ),
+            ];
+            final body = ProfileWorkflowBody(
+              variant: useDesktopBody
+                  ? ProfileWorkflowVariant.desktop
+                  : ProfileWorkflowVariant.mobile,
+              providerDescriptors: widget.providerDescriptors,
+              managedProviders: widget.managedProviders,
+              selectedManagedProviderId: widget.selectedManagedProviderId,
+              selectedProfileId: widget.selectedProfileId,
+              draft: widget.draft,
+              busy: widget.busy,
+              onDraftChanged: widget.onDraftChanged,
+              onActivateManagedProviderMode:
+                  widget.onActivateManagedProviderMode,
+              onUseCustomProvider: widget.onUseCustomProvider,
+              nameFieldKey: const ValueKey<String>('profile-name-field'),
             );
-          }
-
-          return Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
+            final titleBlock = Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                if (stackHeader)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        copy.desktopProfileWorkspaceTitle,
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        profileScopeLabel,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      headerActions,
-                    ],
-                  )
-                else
+                Text(
+                  copy.desktopProfileSettings,
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Wrap(spacing: 8, runSpacing: 8, children: headerBadges),
+              ],
+            );
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                if (stackedHeader) ...<Widget>[
+                  titleBlock,
+                  const SizedBox(height: 14),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: _buildMoreActionsButton(context, hasSavedProfile),
+                  ),
+                ] else
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            Text(
-                              copy.desktopProfileWorkspaceTitle,
-                              style: theme.textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              profileScopeLabel,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Flexible(child: headerActions),
+                      Expanded(child: titleBlock),
+                      const SizedBox(width: 16),
+                      _buildMoreActionsButton(context, hasSavedProfile),
                     ],
                   ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
+                _actionBar(
+                  hasSavedProfile: hasSavedProfile,
+                  primaryKey: primaryKey,
+                  primaryLabel: primaryLabel,
+                  onPrimaryPressed: onPrimaryPressed,
+                  onSavePressed: widget.busy
+                      ? null
+                      : () => unawaited(widget.onSave()),
+                ),
+                const SizedBox(height: 16),
                 Expanded(
-                  child: ListView(
-                    key: const ValueKey<String>('profile-workspace-scroll'),
-                    primary: true,
-                    children: <Widget>[body],
+                  child: Align(
+                    alignment: Alignment.topLeft,
+                    child: ListView(
+                      key: const ValueKey<String>('profile-workspace-scroll'),
+                      primary: true,
+                      children: <Widget>[
+                        if (useDesktopBody)
+                          body
+                        else
+                          Align(
+                            alignment: Alignment.topCenter,
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 840),
+                              child: body,
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMoreActionsButton(BuildContext context, bool hasSavedProfile) {
+    return PopupMenuButton<_ProfileEditorMenuAction>(
+      key: const ValueKey<String>('profile-editor-more-actions-button'),
+      tooltip: MaterialLocalizations.of(context).showMenuTooltip,
+      onSelected: (_ProfileEditorMenuAction action) {
+        switch (action) {
+          case _ProfileEditorMenuAction.openSavedProfiles:
+            if (widget.onOpenSavedProfiles != null) {
+              unawaited(widget.onOpenSavedProfiles!());
+            }
+            break;
+          case _ProfileEditorMenuAction.openManagedProviders:
+            if (widget.onBrowseManagedProviders != null) {
+              unawaited(widget.onBrowseManagedProviders!());
+            }
+            break;
+          case _ProfileEditorMenuAction.resetDraft:
+            widget.onReset();
+            break;
+          case _ProfileEditorMenuAction.exportPortableProfile:
+            unawaited(_showPortableExportDialog());
+            break;
+          case _ProfileEditorMenuAction.importPortableFromFile:
+            unawaited(_importPortableFromFile());
+            break;
+          case _ProfileEditorMenuAction.importPortableFromPaste:
+            unawaited(_showPortablePasteDialog());
+            break;
+          case _ProfileEditorMenuAction.resolveOnly:
+            unawaited(widget.onResolve());
+            break;
+          case _ProfileEditorMenuAction.deleteProfile:
+            unawaited(widget.onDelete());
+            break;
+        }
+      },
+      itemBuilder: (BuildContext context) {
+        final items = <PopupMenuEntry<_ProfileEditorMenuAction>>[];
+        if (widget.onOpenSavedProfiles != null) {
+          items.add(
+            PopupMenuItem<_ProfileEditorMenuAction>(
+              key: const ValueKey<String>(
+                'desktop-open-saved-profile-picker-button',
+              ),
+              value: _ProfileEditorMenuAction.openSavedProfiles,
+              child: Text(context.shellText.desktopSavedProfilesLibraryTitle),
             ),
           );
-        },
-      ),
+        }
+        if (widget.onBrowseManagedProviders != null) {
+          items.add(
+            PopupMenuItem<_ProfileEditorMenuAction>(
+              key: const ValueKey<String>(
+                'desktop-open-managed-provider-library-for-profile-button',
+              ),
+              value: _ProfileEditorMenuAction.openManagedProviders,
+              child: Text(context.shellText.desktopManagedRecordsTitle),
+            ),
+          );
+        }
+        items.add(
+          PopupMenuItem<_ProfileEditorMenuAction>(
+            key: const ValueKey<String>('profile-reset-action'),
+            value: _ProfileEditorMenuAction.resetDraft,
+            child: Text(context.shellText.freshDraft),
+          ),
+        );
+        items.add(
+          PopupMenuItem<_ProfileEditorMenuAction>(
+            key: const ValueKey<String>('profile-portable-import-file-action'),
+            value: _ProfileEditorMenuAction.importPortableFromFile,
+            child: Text(context.shellText.importFromFile),
+          ),
+        );
+        items.add(
+          PopupMenuItem<_ProfileEditorMenuAction>(
+            key: const ValueKey<String>('profile-portable-import-paste-action'),
+            value: _ProfileEditorMenuAction.importPortableFromPaste,
+            child: Text(context.shellText.pasteEnvelope),
+          ),
+        );
+        if (hasSavedProfile) {
+          items.add(
+            PopupMenuItem<_ProfileEditorMenuAction>(
+              key: const ValueKey<String>('profile-portable-export-action'),
+              value: _ProfileEditorMenuAction.exportPortableProfile,
+              child: Text(context.shellText.exportSavedProfile),
+            ),
+          );
+          items.add(
+            PopupMenuItem<_ProfileEditorMenuAction>(
+              key: const ValueKey<String>('profile-resolve-menu-action'),
+              value: _ProfileEditorMenuAction.resolveOnly,
+              child: Text(_nextStepTitle(context, _selectedDescriptor())),
+            ),
+          );
+          items.add(
+            PopupMenuItem<_ProfileEditorMenuAction>(
+              key: const ValueKey<String>('profile-delete-action'),
+              value: _ProfileEditorMenuAction.deleteProfile,
+              child: Text(context.shellText.delete),
+            ),
+          );
+        }
+        return items;
+      },
+      icon: const Icon(Icons.more_horiz),
     );
   }
 
-  Widget _supportActionsCard(ThemeData theme) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: shellSurfaceDecoration(
-        context,
-        style: ShellSurfaceStyle.highlight,
-        borderRadius: const BorderRadius.all(Radius.circular(16)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            context.shellText.desktopProfileMaintenance,
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w700,
+  Widget _actionBar({
+    required bool hasSavedProfile,
+    required Key primaryKey,
+    required String primaryLabel,
+    required VoidCallback? onPrimaryPressed,
+    required VoidCallback? onSavePressed,
+  }) {
+    final theme = Theme.of(context);
+    final copy = context.shellText;
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final wideToolbar = constraints.maxWidth >= 820;
+        final primaryButton = FilledButton.icon(
+          key: primaryKey,
+          onPressed: onPrimaryPressed,
+          icon: Icon(
+            hasSavedProfile ? Icons.play_arrow_rounded : Icons.sync_rounded,
+          ),
+          label: Text(primaryLabel),
+        );
+        final saveButton = FilledButton.tonalIcon(
+          key: const ValueKey<String>('profile-save-action'),
+          onPressed: onSavePressed,
+          icon: const Icon(Icons.save_outlined),
+          label: Text(copy.saveProfile),
+        );
+        if (wideToolbar) {
+          return Align(
+            alignment: Alignment.centerRight,
+            child: Wrap(
+              alignment: WrapAlignment.end,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 10,
+              runSpacing: 10,
+              children: <Widget>[saveButton, primaryButton],
             ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            context.shellText.desktopProfileMaintenanceSubtitle,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+          );
+        }
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest.withValues(
+              alpha: 0.12,
             ),
+            borderRadius: BorderRadius.circular(18),
           ),
-          const SizedBox(height: 8),
-          ExpansionTile(
-            tilePadding: EdgeInsets.zero,
-            childrenPadding: const EdgeInsets.only(top: 8),
-            title: Text(context.shellText.desktopShowMaintenanceActions),
-            subtitle: Text(context.shellText.desktopDeleteSavedProfileHint),
-            children: <Widget>[
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: <Widget>[
-                  OutlinedButton(
-                    key: const ValueKey<String>('profile-delete-action'),
-                    onPressed: widget.busy || widget.selectedProfileId == null
-                        ? null
-                        : () => unawaited(widget.onDelete()),
-                    child: Text(context.shellText.delete),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _portableTransferCard(ThemeData theme) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: shellSurfaceDecoration(
-        context,
-        style: ShellSurfaceStyle.highlight,
-        borderRadius: const BorderRadius.all(Radius.circular(16)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            context.shellText.mobilePortableTransfer,
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            context.shellText.desktopPortableTransferSubtitle,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: <Widget>[
-              FilledButton.tonal(
-                key: const ValueKey<String>('profile-portable-export-action'),
-                onPressed: widget.busy || widget.selectedProfileId == null
-                    ? null
-                    : () => unawaited(_showPortableExportDialog()),
-                child: Text(context.shellText.exportSavedProfile),
-              ),
-              OutlinedButton(
-                key: const ValueKey<String>(
-                  'profile-portable-import-file-action',
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: <Widget>[
+                Expanded(child: primaryButton),
+                const SizedBox(width: 12),
+                IconButton.filledTonal(
+                  key: const ValueKey<String>('profile-save-action'),
+                  tooltip: copy.saveProfile,
+                  onPressed: onSavePressed,
+                  icon: const Icon(Icons.save_outlined),
                 ),
-                onPressed: widget.busy
-                    ? null
-                    : () => unawaited(_importPortableFromFile()),
-                child: Text(context.shellText.importFromFile),
-              ),
-              OutlinedButton(
-                key: const ValueKey<String>(
-                  'profile-portable-import-paste-action',
-                ),
-                onPressed: widget.busy
-                    ? null
-                    : () => unawaited(_showPortablePasteDialog()),
-                child: Text(context.shellText.pasteEnvelope),
-              ),
-            ],
+              ],
+            ),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -634,12 +685,55 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   }
 
   ProviderDescriptor? _selectedDescriptor() {
-    final providerId = widget.draft.spec.provider.trim().toLowerCase();
+    return _descriptorForProviderId(widget.draft.spec.provider);
+  }
+
+  ProviderDescriptor? _descriptorForProviderId(String? providerId) {
+    final normalizedProviderId = providerId?.trim().toLowerCase() ?? '';
+    if (normalizedProviderId.isEmpty) {
+      return null;
+    }
     for (final descriptor in widget.providerDescriptors) {
-      if (descriptor.id.trim().toLowerCase() == providerId) {
+      if (descriptor.id.trim().toLowerCase() == normalizedProviderId) {
         return descriptor;
       }
     }
     return null;
+  }
+
+  ManagedProviderRecord? _selectedManagedProvider() {
+    final managedProviderId =
+        widget.selectedManagedProviderId ??
+        widget.draft.providerBinding.managedProviderId;
+    if (managedProviderId == null) {
+      return null;
+    }
+    for (final managedProvider in widget.managedProviders) {
+      if (managedProvider.id == managedProviderId) {
+        return managedProvider;
+      }
+    }
+    return null;
+  }
+
+  String _headerProviderLabel(ProviderDescriptor? descriptor) {
+    final displayName = descriptor?.displayName.trim() ?? '';
+    if (displayName.isNotEmpty) {
+      return displayName;
+    }
+    final providerId = widget.draft.spec.provider.trim();
+    if (providerId.isNotEmpty) {
+      return providerId;
+    }
+    return context.shellText.notSet;
+  }
+
+  String _managedProviderLabel(ManagedProviderRecord record) {
+    final displayName = record.name.trim();
+    if (displayName.isNotEmpty) {
+      return displayName;
+    }
+    final recordId = record.id.trim();
+    return recordId.isEmpty ? context.shellText.notSet : recordId;
   }
 }

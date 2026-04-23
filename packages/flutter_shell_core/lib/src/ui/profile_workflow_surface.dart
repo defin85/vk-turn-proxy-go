@@ -200,7 +200,7 @@ class _ProfileWorkflowBodyState extends State<ProfileWorkflowBody> {
         ? const <Widget>[]
         : <Widget>[settingsCard];
     final primaryChildren = <Widget>[
-      _field(
+      _desktopField(
         key: widget.nameFieldKey,
         controller: _nameController,
         label: context.shellText.profileName,
@@ -225,22 +225,21 @@ class _ProfileWorkflowBodyState extends State<ProfileWorkflowBody> {
       _desktopSecondarySectionCard(
         theme,
         title: context.shellText.desktopChangeSource,
-        subtitle: context.shellText.desktopChangeSourceSubtitle,
         child: _desktopProviderModeCard(
           theme,
           managedMode,
           selectedManagedProviderId: selectedManagedProviderId,
         ),
       ),
-      _desktopSecondarySectionCard(
-        theme,
-        title: context.shellText.desktopBrowserHandling,
-        subtitle: context.shellText.desktopBrowserHandlingSubtitle,
-        child: Text(
-          _desktopProviderFlowSummary(context, descriptor),
-          style: theme.textTheme.bodySmall,
+      if (_showsDesktopBrowserHandling(descriptor))
+        _desktopSecondarySectionCard(
+          theme,
+          title: context.shellText.desktopBrowserHandling,
+          child: Text(
+            _desktopProviderFlowSummary(context, descriptor),
+            style: theme.textTheme.bodySmall,
+          ),
         ),
-      ),
       if (!managedMode && descriptor != null)
         _providerDescriptorCard(theme, descriptor),
       ...widget.trailingChildren,
@@ -402,8 +401,7 @@ class _ProfileWorkflowBodyState extends State<ProfileWorkflowBody> {
           ? selectedManagedProvider.id
           : selectedManagedProvider.name;
       providerFields.add(
-        _readOnlyField(
-          context: context,
+        _desktopMetadataField(
           key: const ValueKey<String>('profile-provider-record-field'),
           label: context.shellText.desktopProviderRecord,
           value: recordName,
@@ -435,7 +433,7 @@ class _ProfileWorkflowBodyState extends State<ProfileWorkflowBody> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         providerSummary,
-        _field(
+        _desktopField(
           key: widget.providerFieldKey,
           controller: _linkController,
           label: _providerLinkLabel(context, descriptor),
@@ -458,7 +456,7 @@ class _ProfileWorkflowBodyState extends State<ProfileWorkflowBody> {
           ),
         ),
         const SizedBox(height: 8),
-        ..._runtimeDefaultsFields(context),
+        ..._runtimeDefaultsFields(context, desktop: true),
       ],
     );
   }
@@ -490,7 +488,7 @@ class _ProfileWorkflowBodyState extends State<ProfileWorkflowBody> {
   Widget _desktopSecondarySectionCard(
     ThemeData theme, {
     required String title,
-    required String subtitle,
+    String? subtitle,
     required Widget child,
   }) {
     return Container(
@@ -509,13 +507,15 @@ class _ProfileWorkflowBodyState extends State<ProfileWorkflowBody> {
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            subtitle,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+          if (subtitle != null && subtitle.trim().isNotEmpty) ...<Widget>[
+            const SizedBox(height: 6),
+            Text(
+              subtitle,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
-          ),
+          ],
           const SizedBox(height: 8),
           child,
         ],
@@ -745,14 +745,18 @@ class _ProfileWorkflowBodyState extends State<ProfileWorkflowBody> {
     required bool managedMode,
   }) {
     if (managedMode) {
-      return _readOnlyField(
-        context: context,
+      final familyValue = _providerFamilyValue(descriptor);
+      final displayName = descriptor?.displayName.trim() ?? '';
+      return _desktopMetadataField(
         key: const ValueKey<String>('profile-managed-provider-family'),
         label: context.shellText.providerFamily,
-        value: _providerFamilyValue(descriptor),
+        value: displayName.isNotEmpty ? displayName : familyValue,
+        detail: displayName.isNotEmpty && displayName != familyValue
+            ? familyValue
+            : null,
       );
     }
-    return _field(
+    return _desktopField(
       key: widget.providerFieldKey,
       controller: _providerController,
       label: context.shellText.providerFamily,
@@ -882,108 +886,208 @@ class _ProfileWorkflowBodyState extends State<ProfileWorkflowBody> {
     );
   }
 
-  List<Widget> _runtimeDefaultsFields(BuildContext context) {
+  List<Widget> _runtimeDefaultsFields(
+    BuildContext context, {
+    bool desktop = false,
+  }) {
     return <Widget>[
       Row(
         children: <Widget>[
           Expanded(
-            child: _field(
-              controller: _listenController,
-              label: context.shellText.localUdpListen,
-              onChanged: (String value) => _pushDraft(
-                spec: widget.draft.spec.copyWith(listenAddress: value.trim()),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _field(
-              controller: _peerController,
-              label: context.shellText.peerAddress,
-              onChanged: (String value) => _pushDraft(
-                spec: widget.draft.spec.copyWith(peerAddress: value.trim()),
-              ),
-            ),
-          ),
-        ],
-      ),
-      Row(
-        children: <Widget>[
-          Expanded(
-            child: _field(
-              controller: _connectionsController,
-              label: context.shellText.connections,
-              onChanged: (String value) => _pushDraft(
-                spec: widget.draft.spec.copyWith(
-                  connections: int.tryParse(value.trim()) ?? 1,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: DropdownButtonFormField<TransportMode>(
-              initialValue: widget.draft.spec.mode,
-              decoration: InputDecoration(
-                labelText: context.shellText.turnMode,
-              ),
-              items: TransportMode.values
-                  .map(
-                    (TransportMode mode) => DropdownMenuItem<TransportMode>(
-                      value: mode,
-                      child: Text(mode.value),
+            child: desktop
+                ? _desktopField(
+                    controller: _listenController,
+                    label: context.shellText.localUdpListen,
+                    onChanged: (String value) => _pushDraft(
+                      spec: widget.draft.spec.copyWith(
+                        listenAddress: value.trim(),
+                      ),
                     ),
                   )
-                  .toList(growable: false),
-              onChanged: widget.busy
-                  ? null
-                  : (TransportMode? mode) {
-                      if (mode == null) {
-                        return;
-                      }
-                      _pushDraft(spec: widget.draft.spec.copyWith(mode: mode));
-                    },
-            ),
+                : _field(
+                    controller: _listenController,
+                    label: context.shellText.localUdpListen,
+                    onChanged: (String value) => _pushDraft(
+                      spec: widget.draft.spec.copyWith(
+                        listenAddress: value.trim(),
+                      ),
+                    ),
+                  ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: desktop
+                ? _desktopField(
+                    controller: _peerController,
+                    label: context.shellText.peerAddress,
+                    onChanged: (String value) => _pushDraft(
+                      spec: widget.draft.spec.copyWith(
+                        peerAddress: value.trim(),
+                      ),
+                    ),
+                  )
+                : _field(
+                    controller: _peerController,
+                    label: context.shellText.peerAddress,
+                    onChanged: (String value) => _pushDraft(
+                      spec: widget.draft.spec.copyWith(
+                        peerAddress: value.trim(),
+                      ),
+                    ),
+                  ),
           ),
         ],
       ),
       Row(
         children: <Widget>[
           Expanded(
-            child: _field(
-              controller: _turnServerController,
-              label: context.shellText.turnOverride,
-              onChanged: (String value) => _pushDraft(
-                spec: widget.draft.spec.copyWith(turnServer: value.trim()),
-              ),
-            ),
+            child: desktop
+                ? _desktopField(
+                    controller: _connectionsController,
+                    label: context.shellText.connections,
+                    onChanged: (String value) => _pushDraft(
+                      spec: widget.draft.spec.copyWith(
+                        connections: int.tryParse(value.trim()) ?? 1,
+                      ),
+                    ),
+                  )
+                : _field(
+                    controller: _connectionsController,
+                    label: context.shellText.connections,
+                    onChanged: (String value) => _pushDraft(
+                      spec: widget.draft.spec.copyWith(
+                        connections: int.tryParse(value.trim()) ?? 1,
+                      ),
+                    ),
+                  ),
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: _field(
-              controller: _turnPortController,
-              label: context.shellText.turnPort,
-              onChanged: (String value) => _pushDraft(
-                spec: widget.draft.spec.copyWith(turnPort: value.trim()),
-              ),
-            ),
+            child: desktop
+                ? _desktopDropdownField<TransportMode>(
+                    label: context.shellText.turnMode,
+                    initialValue: widget.draft.spec.mode,
+                    items: TransportMode.values
+                        .map(
+                          (TransportMode mode) =>
+                              DropdownMenuItem<TransportMode>(
+                                value: mode,
+                                child: Text(mode.value),
+                              ),
+                        )
+                        .toList(growable: false),
+                    onChanged: widget.busy
+                        ? null
+                        : (TransportMode? mode) {
+                            if (mode == null) {
+                              return;
+                            }
+                            _pushDraft(
+                              spec: widget.draft.spec.copyWith(mode: mode),
+                            );
+                          },
+                  )
+                : DropdownButtonFormField<TransportMode>(
+                    initialValue: widget.draft.spec.mode,
+                    decoration: InputDecoration(
+                      labelText: context.shellText.turnMode,
+                    ),
+                    items: TransportMode.values
+                        .map(
+                          (TransportMode mode) =>
+                              DropdownMenuItem<TransportMode>(
+                                value: mode,
+                                child: Text(mode.value),
+                              ),
+                        )
+                        .toList(growable: false),
+                    onChanged: widget.busy
+                        ? null
+                        : (TransportMode? mode) {
+                            if (mode == null) {
+                              return;
+                            }
+                            _pushDraft(
+                              spec: widget.draft.spec.copyWith(mode: mode),
+                            );
+                          },
+                  ),
           ),
         ],
       ),
-      _field(
-        controller: _bindInterfaceController,
-        label: context.shellText.bindInterface,
-        onChanged: (String value) => _pushDraft(
-          spec: widget.draft.spec.copyWith(bindInterface: value.trim()),
-        ),
+      Row(
+        children: <Widget>[
+          Expanded(
+            child: desktop
+                ? _desktopField(
+                    controller: _turnServerController,
+                    label: context.shellText.turnOverride,
+                    onChanged: (String value) => _pushDraft(
+                      spec: widget.draft.spec.copyWith(
+                        turnServer: value.trim(),
+                      ),
+                    ),
+                  )
+                : _field(
+                    controller: _turnServerController,
+                    label: context.shellText.turnOverride,
+                    onChanged: (String value) => _pushDraft(
+                      spec: widget.draft.spec.copyWith(
+                        turnServer: value.trim(),
+                      ),
+                    ),
+                  ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: desktop
+                ? _desktopField(
+                    controller: _turnPortController,
+                    label: context.shellText.turnPort,
+                    onChanged: (String value) => _pushDraft(
+                      spec: widget.draft.spec.copyWith(turnPort: value.trim()),
+                    ),
+                  )
+                : _field(
+                    controller: _turnPortController,
+                    label: context.shellText.turnPort,
+                    onChanged: (String value) => _pushDraft(
+                      spec: widget.draft.spec.copyWith(turnPort: value.trim()),
+                    ),
+                  ),
+          ),
+        ],
       ),
-      _field(
-        controller: _logLevelController,
-        label: context.shellText.logLevel,
-        onChanged: (String value) => _pushDraft(
-          spec: widget.draft.spec.copyWith(logLevel: value.trim()),
-        ),
-      ),
+      desktop
+          ? _desktopField(
+              controller: _bindInterfaceController,
+              label: context.shellText.bindInterface,
+              onChanged: (String value) => _pushDraft(
+                spec: widget.draft.spec.copyWith(bindInterface: value.trim()),
+              ),
+            )
+          : _field(
+              controller: _bindInterfaceController,
+              label: context.shellText.bindInterface,
+              onChanged: (String value) => _pushDraft(
+                spec: widget.draft.spec.copyWith(bindInterface: value.trim()),
+              ),
+            ),
+      desktop
+          ? _desktopField(
+              controller: _logLevelController,
+              label: context.shellText.logLevel,
+              onChanged: (String value) => _pushDraft(
+                spec: widget.draft.spec.copyWith(logLevel: value.trim()),
+              ),
+            )
+          : _field(
+              controller: _logLevelController,
+              label: context.shellText.logLevel,
+              onChanged: (String value) => _pushDraft(
+                spec: widget.draft.spec.copyWith(logLevel: value.trim()),
+              ),
+            ),
       SwitchListTile(
         contentPadding: EdgeInsets.zero,
         value: widget.draft.spec.useDtls,
@@ -995,6 +1099,82 @@ class _ProfileWorkflowBodyState extends State<ProfileWorkflowBody> {
         title: Text(context.shellText.dtlsEnabled),
       ),
     ];
+  }
+
+  Widget _desktopField({
+    Key? key,
+    required TextEditingController controller,
+    required String label,
+    required ValueChanged<String> onChanged,
+    int maxLines = 1,
+    bool obscureText = false,
+    TextInputType? keyboardType,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          _desktopFieldCaption(label),
+          const SizedBox(height: 6),
+          TextField(
+            key: key,
+            controller: controller,
+            maxLines: maxLines,
+            obscureText: obscureText,
+            keyboardType: keyboardType,
+            enabled: !widget.busy,
+            decoration: const InputDecoration(
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 12,
+              ),
+            ),
+            onChanged: onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _desktopDropdownField<T>({
+    required String label,
+    required T? initialValue,
+    required List<DropdownMenuItem<T>> items,
+    required ValueChanged<T?>? onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          _desktopFieldCaption(label),
+          const SizedBox(height: 6),
+          DropdownButtonFormField<T>(
+            initialValue: initialValue,
+            decoration: const InputDecoration(
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 12,
+              ),
+            ),
+            items: items,
+            onChanged: onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _desktopFieldCaption(String label) {
+    final theme = Theme.of(context);
+    return Text(
+      label,
+      style: theme.textTheme.labelMedium?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
+        fontWeight: FontWeight.w600,
+      ),
+    );
   }
 
   Widget _field({
@@ -1046,6 +1226,58 @@ class _ProfileWorkflowBodyState extends State<ProfileWorkflowBody> {
     );
   }
 
+  Widget _desktopMetadataField({
+    Key? key,
+    required String label,
+    required String value,
+    String? detail,
+  }) {
+    final theme = Theme.of(context);
+    final displayValue = value.trim().isEmpty
+        ? context.shellText.notSet
+        : value.trim();
+    final displayDetail = detail?.trim();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        key: key,
+        padding: const EdgeInsets.all(14),
+        decoration: shellSurfaceDecoration(
+          context,
+          style: ShellSurfaceStyle.highlight,
+          borderRadius: const BorderRadius.all(Radius.circular(14)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              displayValue,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            if (displayDetail != null && displayDetail.isNotEmpty) ...<Widget>[
+              const SizedBox(height: 4),
+              Text(
+                displayDetail,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   String _providerFlowMessage(
     BuildContext context,
     ProviderDescriptor? descriptor,
@@ -1073,6 +1305,11 @@ class _ProfileWorkflowBodyState extends State<ProfileWorkflowBody> {
     ProviderDescriptor? descriptor,
   ) {
     return '${_providerFlowMessage(context, descriptor)} ${_providerFlowContinuation(context, descriptor)}';
+  }
+
+  bool _showsDesktopBrowserHandling(ProviderDescriptor? descriptor) {
+    return descriptor?.browserPolicy != ProviderBrowserPolicy.notRequired ||
+        descriptor?.mayRequireBrowserContinuation == true;
   }
 
   String _providerLinkLabel(

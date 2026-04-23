@@ -3,6 +3,8 @@ import 'package:flutter_shell_core/workflow_library_surface.dart' as workflow;
 import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:gui_shell/src/control/control_plane_models.dart';
 
+enum _ManagedProviderLibraryMenuAction { openPresetBootstrap }
+
 class SavedProfilesLibrarySurface extends StatelessWidget {
   const SavedProfilesLibrarySurface({
     super.key,
@@ -64,12 +66,14 @@ class ManagedProvidersLibrarySurface extends StatelessWidget {
     required this.selectedManagedProviderId,
     required this.onSelectManagedProvider,
     this.onCreateManagedProvider,
+    this.onOpenPresetBootstrap,
   });
 
   final List<ManagedProviderRecord> managedProviders;
   final String? selectedManagedProviderId;
   final ValueChanged<String> onSelectManagedProvider;
   final VoidCallback? onCreateManagedProvider;
+  final VoidCallback? onOpenPresetBootstrap;
 
   @override
   Widget build(BuildContext context) {
@@ -84,12 +88,49 @@ class ManagedProvidersLibrarySurface extends StatelessWidget {
         title: copy.desktopProviderRecordsLibraryTitle,
         subtitle: copy.desktopProviderRecordsLibrarySubtitle,
       ),
-      headerAction: onCreateManagedProvider == null
+      headerAction:
+          onCreateManagedProvider == null && onOpenPresetBootstrap == null
           ? null
-          : FilledButton.tonal(
-              key: const ValueKey<String>('managed-provider-create-button'),
-              onPressed: onCreateManagedProvider,
-              child: Text(copy.desktopNewRecord),
+          : Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: <Widget>[
+                if (onOpenPresetBootstrap != null)
+                  PopupMenuButton<_ManagedProviderLibraryMenuAction>(
+                    key: const ValueKey<String>(
+                      'managed-provider-more-actions-button',
+                    ),
+                    tooltip: MaterialLocalizations.of(context).showMenuTooltip,
+                    onSelected: (_ManagedProviderLibraryMenuAction action) {
+                      switch (action) {
+                        case _ManagedProviderLibraryMenuAction
+                            .openPresetBootstrap:
+                          onOpenPresetBootstrap!();
+                      }
+                    },
+                    itemBuilder: (BuildContext context) =>
+                        <PopupMenuEntry<_ManagedProviderLibraryMenuAction>>[
+                          PopupMenuItem<_ManagedProviderLibraryMenuAction>(
+                            key: const ValueKey<String>(
+                              'desktop-open-preset-bootstrap-button',
+                            ),
+                            value: _ManagedProviderLibraryMenuAction
+                                .openPresetBootstrap,
+                            child: Text(t.commonNewFromPreset),
+                          ),
+                        ],
+                    icon: const Icon(Icons.more_horiz),
+                  ),
+                if (onCreateManagedProvider != null)
+                  FilledButton.tonal(
+                    key: const ValueKey<String>(
+                      'managed-provider-create-button',
+                    ),
+                    onPressed: onCreateManagedProvider,
+                    child: Text(copy.desktopNewRecord),
+                  ),
+              ],
             ),
       hint: workflow.WorkflowHintData(
         icon: Icons.tune_outlined,
