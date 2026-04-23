@@ -479,6 +479,12 @@ void main() {
 
     expect(controller.activeWorkbenchRoute, DesktopWorkbenchRoute.profiles);
     expect(
+      find.byKey(
+        const ValueKey<String>('saved-profiles-library-surface-desktop'),
+      ),
+      findsOneWidget,
+    );
+    expect(
       find.byKey(const ValueKey<String>('profile-library-item-profile-2')),
       findsOneWidget,
     );

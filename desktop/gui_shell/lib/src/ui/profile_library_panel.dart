@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_shell_core/workflow_library_surface.dart' as workflow;
 import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:gui_shell/src/control/control_plane_models.dart';
 
@@ -22,48 +23,36 @@ class SavedProfilesLibrarySurface extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final copy = context.shellText;
-    return ListView(
-      key: const ValueKey<String>('saved-profile-library-scroll'),
-      primary: false,
-      padding: const EdgeInsets.all(20),
-      children: <Widget>[
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: _LibrarySectionHeader(
-                title: copy.desktopSavedProfilesLibraryTitle,
-                subtitle: copy.desktopSavedProfilesLibrarySubtitle,
-              ),
-            ),
-            FilledButton.tonal(
-              key: const ValueKey<String>('profile-create-draft-button'),
-              onPressed: busy ? null : onCreateDraft,
-              child: Text(t.commonNewDraft),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        _LibraryHintCard(
-          icon: Icons.fact_check_outlined,
-          title: copy.desktopReturnPathExplicitTitle,
-          message: copy.desktopReturnPathExplicitMessage,
-        ),
-        const SizedBox(height: 14),
-        if (profiles.isEmpty)
-          _EmptyCard(message: copy.desktopNoSavedProfilesYetShort)
-        else
-          ...profiles.map(
-            (ProfileRecord profile) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _ProfileCard(
-                theme: theme,
-                profile: profile,
-                selected: selectedProfileId == profile.id,
-                onTap: () => onSelectProfile(profile.id),
-              ),
-            ),
-          ),
-      ],
+    return workflow.SavedProfilesLibrarySurface(
+      variant: workflow.WorkflowLibrarySurfaceVariant.desktop,
+      scrollKey: const ValueKey<String>('saved-profile-library-scroll'),
+      profiles: profiles,
+      activeProfileId: selectedProfileId,
+      header: workflow.WorkflowSectionHeaderData(
+        title: copy.desktopSavedProfilesLibraryTitle,
+        subtitle: copy.desktopSavedProfilesLibrarySubtitle,
+      ),
+      headerAction: FilledButton.tonal(
+        key: const ValueKey<String>('profile-create-draft-button'),
+        onPressed: busy ? null : onCreateDraft,
+        child: Text(t.commonNewDraft),
+      ),
+      hint: workflow.WorkflowHintData(
+        icon: Icons.fact_check_outlined,
+        title: copy.desktopReturnPathExplicitTitle,
+        message: copy.desktopReturnPathExplicitMessage,
+      ),
+      emptyState: workflow.WorkflowEmptyStateData(
+        message: copy.desktopNoSavedProfilesYetShort,
+      ),
+      itemBuilder: (BuildContext context, ProfileRecord profile, bool active) {
+        return _ProfileCard(
+          theme: theme,
+          profile: profile,
+          selected: active,
+          onTap: () => onSelectProfile(profile.id),
+        );
+      },
     );
   }
 }
@@ -86,49 +75,39 @@ class ManagedProvidersLibrarySurface extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final copy = context.shellText;
-    return ListView(
-      key: const ValueKey<String>('managed-provider-library-scroll'),
-      primary: false,
-      padding: const EdgeInsets.all(20),
-      children: <Widget>[
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: _LibrarySectionHeader(
-                title: copy.desktopProviderRecordsLibraryTitle,
-                subtitle: copy.desktopProviderRecordsLibrarySubtitle,
-              ),
+    return workflow.ManagedProvidersLibrarySurface(
+      variant: workflow.WorkflowLibrarySurfaceVariant.desktop,
+      scrollKey: const ValueKey<String>('managed-provider-library-scroll'),
+      managedProviders: managedProviders,
+      activeManagedProviderId: selectedManagedProviderId,
+      header: workflow.WorkflowSectionHeaderData(
+        title: copy.desktopProviderRecordsLibraryTitle,
+        subtitle: copy.desktopProviderRecordsLibrarySubtitle,
+      ),
+      headerAction: onCreateManagedProvider == null
+          ? null
+          : FilledButton.tonal(
+              key: const ValueKey<String>('managed-provider-create-button'),
+              onPressed: onCreateManagedProvider,
+              child: Text(copy.desktopNewRecord),
             ),
-            if (onCreateManagedProvider != null)
-              FilledButton.tonal(
-                key: const ValueKey<String>('managed-provider-create-button'),
-                onPressed: onCreateManagedProvider,
-                child: Text(copy.desktopNewRecord),
-              ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        _LibraryHintCard(
-          icon: Icons.tune_outlined,
-          title: copy.desktopRecordsSeparateFromFamiliesTitle,
-          message: copy.desktopRecordsSeparateFromFamiliesMessage,
-        ),
-        const SizedBox(height: 14),
-        if (managedProviders.isEmpty)
-          _EmptyCard(message: copy.desktopNoProviderRecordsYet)
-        else
-          ...managedProviders.map(
-            (ManagedProviderRecord provider) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _ManagedProviderCard(
-                theme: theme,
-                provider: provider,
-                selected: selectedManagedProviderId == provider.id,
-                onTap: () => onSelectManagedProvider(provider.id),
-              ),
-            ),
-          ),
-      ],
+      hint: workflow.WorkflowHintData(
+        icon: Icons.tune_outlined,
+        title: copy.desktopRecordsSeparateFromFamiliesTitle,
+        message: copy.desktopRecordsSeparateFromFamiliesMessage,
+      ),
+      emptyState: workflow.WorkflowEmptyStateData(
+        message: copy.desktopNoProviderRecordsYet,
+      ),
+      itemBuilder:
+          (BuildContext context, ManagedProviderRecord provider, bool active) {
+            return _ManagedProviderCard(
+              theme: theme,
+              provider: provider,
+              selected: active,
+              onTap: () => onSelectManagedProvider(provider.id),
+            );
+          },
     );
   }
 }
@@ -156,12 +135,14 @@ class PresetBootstrapSurface extends StatelessWidget {
       primary: false,
       padding: const EdgeInsets.all(20),
       children: <Widget>[
-        _LibrarySectionHeader(
+        workflow.WorkflowSectionHeader(
+          variant: workflow.WorkflowLibrarySurfaceVariant.desktop,
           title: t.commonNewFromPreset,
           subtitle: copy.desktopNewFromPresetSubtitle,
         ),
         const SizedBox(height: 12),
-        _LibraryHintCard(
+        workflow.WorkflowHintCard(
+          variant: workflow.WorkflowLibrarySurfaceVariant.desktop,
           icon: Icons.auto_awesome_outlined,
           title: copy.desktopPresetBootstrapExplicitTitle,
           message: copy.desktopPresetBootstrapExplicitMessage,
@@ -210,19 +191,24 @@ class SupportedProviderChooserSurface extends StatelessWidget {
       primary: false,
       padding: const EdgeInsets.all(20),
       children: <Widget>[
-        _LibrarySectionHeader(
+        workflow.WorkflowSectionHeader(
+          variant: workflow.WorkflowLibrarySurfaceVariant.desktop,
           title: t.commonProviderFamilies,
           subtitle: copy.desktopProviderFamiliesSubtitle,
         ),
         const SizedBox(height: 12),
-        _LibraryHintCard(
+        workflow.WorkflowHintCard(
+          variant: workflow.WorkflowLibrarySurfaceVariant.desktop,
           icon: Icons.widgets_outlined,
           title: copy.desktopFamiliesReadonlyHereTitle,
           message: copy.desktopFamiliesReadonlyHereMessage,
         ),
         const SizedBox(height: 14),
         if (supportedProviders.isEmpty)
-          _EmptyCard(message: copy.desktopNoShippedProviderFamilies)
+          workflow.WorkflowEmptyStateCard(
+            variant: workflow.WorkflowLibrarySurfaceVariant.desktop,
+            message: copy.desktopNoShippedProviderFamilies,
+          )
         else
           ...supportedProviders.map((SupportedProviderDefinition provider) {
             final availability = provider.availabilityFor(providerDescriptors);
@@ -244,92 +230,6 @@ class SupportedProviderChooserSurface extends StatelessWidget {
             );
           }),
       ],
-    );
-  }
-}
-
-class _LibrarySectionHeader extends StatelessWidget {
-  const _LibrarySectionHeader({
-    required this.title,
-    required this.subtitle,
-  });
-
-  final String title;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text(
-          title,
-          style: theme.textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          subtitle,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _LibraryHintCard extends StatelessWidget {
-  const _LibraryHintCard({
-    required this.icon,
-    required this.title,
-    required this.message,
-  });
-
-  final IconData icon;
-  final String title;
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.28,
-        ),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Icon(icon, size: 18),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  title,
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  message,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -570,7 +470,8 @@ class _SupportedProviderCard extends StatelessWidget {
       final ProviderDescriptor descriptor
           when descriptor.providerSettingsSupportError != null =>
         copy.schemaBlockedInShell,
-      final ProviderDescriptor descriptor when descriptor.settingsSchema == null =>
+      final ProviderDescriptor descriptor
+          when descriptor.settingsSchema == null =>
         copy.noReusableFieldsYet,
       _ => copy.reusableFieldsReady,
     };
@@ -608,17 +509,16 @@ class _SupportedProviderCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 6),
-              Text(
-                provider.description,
-                style: theme.textTheme.bodySmall,
-              ),
+              Text(provider.description, style: theme.textTheme.bodySmall),
               const SizedBox(height: 10),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: <Widget>[
                   _MetaChip(
-                    label: selected ? copy.selectedFamily : copy.desktopShippedByApp,
+                    label: selected
+                        ? copy.selectedFamily
+                        : copy.desktopShippedByApp,
                   ),
                   _MetaChip(label: managedFieldLabel),
                 ],
@@ -634,30 +534,6 @@ class _SupportedProviderCard extends StatelessWidget {
               ],
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _EmptyCard extends StatelessWidget {
-  const _EmptyCard({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Text(
-        message,
-        style: theme.textTheme.bodyMedium?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
         ),
       ),
     );

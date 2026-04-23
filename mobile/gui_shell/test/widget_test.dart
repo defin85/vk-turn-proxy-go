@@ -196,6 +196,12 @@ void main() {
     await tester.tap(find.text('Home').first);
     await tester.pumpAndSettle();
     await _openProfilesTab(tester);
+    expect(
+      find.byKey(
+        const ValueKey<String>('saved-profiles-library-surface-mobile'),
+      ),
+      findsOneWidget,
+    );
     expect(controller.draft.name, 'vk mobile draft');
   });
 
@@ -3758,6 +3764,12 @@ void main() {
       await tester.pumpWidget(MobileShellApp(controller: controller));
       await tester.pumpAndSettle();
       await _openProvidersTab(tester);
+      expect(
+        find.byKey(
+          const ValueKey<String>('managed-providers-library-surface-mobile'),
+        ),
+        findsOneWidget,
+      );
 
       await tester.tap(
         find.byKey(

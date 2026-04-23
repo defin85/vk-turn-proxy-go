@@ -8,5 +8,6 @@ export 'profile_workflow_surface.dart';
 export 'profile_draft.dart';
 export 'provider_settings_form.dart';
 export 'shell_visuals.dart';
+export 'workflow_library_surface.dart';
 
 const String kFlutterShellCorePackage = 'flutter_shell_core';

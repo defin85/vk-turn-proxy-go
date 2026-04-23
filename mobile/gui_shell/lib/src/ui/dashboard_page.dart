@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_shell_core/home_workflow_surface.dart';
 import 'package:flutter_shell_core/portable_profile_transfer.dart';
 import 'package:flutter_shell_core/shell_visuals.dart';
+import 'package:flutter_shell_core/workflow_library_surface.dart' as workflow;
 import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_models.dart';
 import 'package:mobile_gui_shell/src/control/mobile_host_bridge.dart';
@@ -838,68 +839,28 @@ class _ProfilesListSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    if (controller.profiles.isEmpty) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                t.mobileProfilesEmptyTitle,
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                t.mobileProfilesEmptyMessage,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Column(
-          children: <Widget>[
-            for (
-              var index = 0;
-              index < controller.profiles.length;
-              index++
-            ) ...<Widget>[
-              _ProfileListItem(
-                profile: controller.profiles[index],
-                focused:
-                    controller.focusedProfileId ==
-                    controller.profiles[index].id,
-                busy: controller.busy,
-                currentForHome:
-                    controller.selectedProfileId ==
-                    controller.profiles[index].id,
-                onSelect: () =>
-                    controller.focusProfile(controller.profiles[index].id),
-                onEdit: () => onEditProfile(controller.profiles[index]),
-                onCopy: () => onCopyProfile(controller.profiles[index]),
-                onMakeCurrent: () => controller.makeProfileCurrent(
-                  controller.profiles[index].id,
-                ),
-                onExport: () => onExportProfile(controller.profiles[index]),
-                onDelete: () => onDeleteProfile(controller.profiles[index]),
-              ),
-              if (index != controller.profiles.length - 1)
-                const Divider(height: 1),
-            ],
-          ],
-        ),
+    return workflow.SavedProfilesLibrarySurface(
+      variant: workflow.WorkflowLibrarySurfaceVariant.mobile,
+      profiles: controller.profiles,
+      activeProfileId: controller.focusedProfileId,
+      emptyState: workflow.WorkflowEmptyStateData(
+        title: t.mobileProfilesEmptyTitle,
+        message: t.mobileProfilesEmptyMessage,
       ),
+      itemBuilder: (BuildContext context, ProfileRecord profile, bool active) {
+        return _ProfileListItem(
+          profile: profile,
+          focused: active,
+          busy: controller.busy,
+          currentForHome: controller.selectedProfileId == profile.id,
+          onSelect: () => controller.focusProfile(profile.id),
+          onEdit: () => onEditProfile(profile),
+          onCopy: () => onCopyProfile(profile),
+          onMakeCurrent: () => controller.makeProfileCurrent(profile.id),
+          onExport: () => onExportProfile(profile),
+          onDelete: () => onDeleteProfile(profile),
+        );
+      },
     );
   }
 }
@@ -2821,70 +2782,31 @@ class _ProviderRecordsRootSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    if (controller.managedProviders.isEmpty) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                context.shellText.noSavedProvidersYet,
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                context.shellText.noSavedProvidersMessage,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Column(
-          children: <Widget>[
-            for (
-              var index = 0;
-              index < controller.managedProviders.length;
-              index++
-            ) ...<Widget>[
-              _ManagedProviderListItem(
-                provider: controller.managedProviders[index],
-                selected:
-                    controller.selectedManagedProviderId ==
-                    controller.managedProviders[index].id,
-                busy: controller.busy,
-                onSelect: () => controller.focusManagedProvider(
-                  controller.managedProviders[index].id,
-                ),
-                onEdit: () => controller.selectManagedProvider(
-                  controller.managedProviders[index].id,
-                ),
-                onCopy: controller.duplicateSelectedManagedProvider,
-                onUseInProfile: () => controller.useManagedProviderForDraft(
-                  controller.managedProviders[index].id,
-                ),
-                onSaveAsTemplate:
-                    controller.startProviderTemplateDraftFromManagedProvider,
-                onDelete: () =>
-                    unawaited(controller.deleteSelectedManagedProvider()),
-              ),
-              if (index != controller.managedProviders.length - 1)
-                const Divider(height: 1),
-            ],
-          ],
-        ),
+    return workflow.ManagedProvidersLibrarySurface(
+      variant: workflow.WorkflowLibrarySurfaceVariant.mobile,
+      managedProviders: controller.managedProviders,
+      activeManagedProviderId: controller.selectedManagedProviderId,
+      emptyState: workflow.WorkflowEmptyStateData(
+        title: context.shellText.noSavedProvidersYet,
+        message: context.shellText.noSavedProvidersMessage,
       ),
+      itemBuilder:
+          (BuildContext context, ManagedProviderRecord provider, bool active) {
+            return _ManagedProviderListItem(
+              provider: provider,
+              selected: active,
+              busy: controller.busy,
+              onSelect: () => controller.focusManagedProvider(provider.id),
+              onEdit: () => controller.selectManagedProvider(provider.id),
+              onCopy: controller.duplicateSelectedManagedProvider,
+              onUseInProfile: () =>
+                  controller.useManagedProviderForDraft(provider.id),
+              onSaveAsTemplate:
+                  controller.startProviderTemplateDraftFromManagedProvider,
+              onDelete: () =>
+                  unawaited(controller.deleteSelectedManagedProvider()),
+            );
+          },
     );
   }
 }
