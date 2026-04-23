@@ -3123,6 +3123,10 @@ void main() {
     expect(find.text('Current profile'), findsOneWidget);
     expect(find.text('Host ready'), findsOneWidget);
     expect(find.text('Diagnostics'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('support-resolutions-surface-mobile')),
+      findsOneWidget,
+    );
     expect(find.text('Resolutions (0)'), findsOneWidget);
     expect(find.text('Sessions (0)'), findsOneWidget);
     expect(find.widgetWithText(ChoiceChip, 'Activity'), findsOneWidget);
@@ -3132,6 +3136,12 @@ void main() {
     await tester.tap(find.widgetWithText(ChoiceChip, 'Diagnostics'));
     await tester.pumpAndSettle();
 
+    expect(
+      find.byKey(
+        const ValueKey<String>('support-diagnostics-overview-surface-mobile'),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Embedded browser cookies and session'), findsOneWidget);
     expect(find.text('Overview'), findsOneWidget);
     expect(find.text('Mobile host ready'), findsOneWidget);
@@ -3187,6 +3197,10 @@ void main() {
     await tester.tap(find.text('Events (1)'));
     await tester.pumpAndSettle();
 
+    expect(
+      find.byKey(const ValueKey<String>('support-event-stream-surface-mobile')),
+      findsOneWidget,
+    );
     expect(find.text('Event stream', skipOffstage: false), findsOneWidget);
     expect(
       find.textContaining('challenge_updated', skipOffstage: false),

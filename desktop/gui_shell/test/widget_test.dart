@@ -263,6 +263,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      expect(
+        find.byKey(const ValueKey<String>('support-sessions-surface-desktop')),
+        findsOneWidget,
+      );
       expect(find.text('Сессии (1)'), findsOneWidget);
       expect(find.text('Остановить сессию'), findsOneWidget);
 
@@ -271,12 +275,26 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      expect(
+        find.byKey(
+          const ValueKey<String>('support-event-stream-surface-desktop'),
+        ),
+        findsOneWidget,
+      );
       expect(find.text('Инспектор'), findsOneWidget);
       expect(find.text('События'), findsWidgets);
 
       await tester.tap(find.text('Детали туннеля'));
       await tester.pumpAndSettle();
 
+      expect(
+        find.byKey(
+          const ValueKey<String>(
+            'support-diagnostics-overview-surface-desktop',
+          ),
+        ),
+        findsOneWidget,
+      );
       expect(find.text('Платформенные туннельные режимы'), findsOneWidget);
       expect(find.text('Запросить запуск'), findsNothing);
       expect(find.textContaining('Локальный хост'), findsWidgets);

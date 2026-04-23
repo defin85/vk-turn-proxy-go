@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_shell_core/home_workflow_surface.dart';
 import 'package:flutter_shell_core/portable_profile_transfer.dart';
 import 'package:flutter_shell_core/shell_visuals.dart';
+import 'package:flutter_shell_core/support_content_surface.dart' as support;
 import 'package:flutter_shell_core/workflow_library_surface.dart' as workflow;
 import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_models.dart';
@@ -3777,23 +3778,21 @@ class _DiagnosticsPage extends StatelessWidget {
           ],
           Expanded(
             child: switch (surface) {
-              _DiagnosticsSurface.overview => ListView(
-                children: <Widget>[
-                  _HostBanner(controller: controller),
-                  const SizedBox(height: 12),
-                  _SystemTunnelBanner(controller: controller),
-                  if (controller.surfaceNotice != null) ...<Widget>[
-                    const SizedBox(height: 12),
-                    _NoticeBanner(message: controller.surfaceNotice!),
+              _DiagnosticsSurface.overview =>
+                support.SupportDiagnosticsOverviewSurface(
+                  variant: support.SupportContentSurfaceVariant.mobile,
+                  children: <Widget>[
+                    _HostBanner(controller: controller),
+                    _SystemTunnelBanner(controller: controller),
+                    if (controller.surfaceNotice != null)
+                      _NoticeBanner(message: controller.surfaceNotice!),
+                    if (includeEmbeddedBrowserStateCard)
+                      _EmbeddedBrowserStateCard(controller: controller),
                   ],
-                  if (includeEmbeddedBrowserStateCard) ...<Widget>[
-                    const SizedBox(height: 12),
-                    _EmbeddedBrowserStateCard(controller: controller),
-                  ],
-                ],
-              ),
-              _DiagnosticsSurface.events => _EventsPanel(
-                controller: controller,
+                ),
+              _DiagnosticsSurface.events => support.SupportEventStreamSurface(
+                variant: support.SupportContentSurfaceVariant.mobile,
+                events: controller.events,
               ),
             },
           ),
@@ -4284,158 +4283,72 @@ class _ResolutionsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        final compact = constraints.maxHeight < 260;
-        return Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  context.shellText.resolutionsTitle,
-                  style:
-                      (compact
-                              ? theme.textTheme.titleLarge
-                              : theme.textTheme.headlineSmall)
-                          ?.copyWith(fontWeight: FontWeight.w800),
-                ),
-                if (!compact) ...<Widget>[
-                  const SizedBox(height: 8),
-                  Text(
-                    context.shellText.resolutionsSubtitle,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                Expanded(
-                  child: controller.resolutions.isEmpty
-                      ? Center(
-                          child: Text(
-                            context.shellText.noProviderResolutionsYet,
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        )
-                      : ListView.separated(
-                          itemCount: controller.resolutions.length,
-                          separatorBuilder: (_, int index) =>
-                              const SizedBox(height: 14),
-                          itemBuilder: (BuildContext context, int index) {
-                            final resolution = controller.resolutions[index];
-                            final challenge = controller
-                                .activeChallengeForResolution(resolution);
-                            return _ResolutionCard(
-                              resolution: resolution,
-                              challenge: challenge,
-                              busy: controller.busy,
-                              selected:
-                                  controller.selectedResolutionId ==
-                                  resolution.id,
-                              onSelect: () =>
-                                  controller.selectResolution(resolution.id),
-                              onOpenChallenge: challenge == null
-                                  ? null
-                                  : () => onLaunchChallengeSurface(challenge),
-                              openChallengeLabel: openChallengeLabel(challenge),
-                              onContinueChallenge:
-                                  challenge == null ||
-                                      !showsManualChallengeContinue(challenge)
-                                  ? null
-                                  : () => controller.continueChallenge(
-                                      challenge.id,
-                                    ),
-                              onCancelChallenge: challenge == null
-                                  ? null
-                                  : () => controller.cancelChallenge(
-                                      challenge.id,
-                                    ),
-                              onMaterialize:
-                                  resolution.state ==
-                                          ResolutionState.resolved &&
-                                      resolution.supportsAction(
-                                        ArtifactAction.startOnThisDevice,
-                                      )
-                                  ? () => controller.materializeResolution(
-                                      resolution.id,
-                                    )
-                                  : null,
-                              onCopyExport:
-                                  resolution.state ==
-                                          ResolutionState.resolved &&
-                                      resolution.supportsAction(
-                                        ArtifactAction.exportHandoff,
-                                      )
-                                  ? () => controller.copyResolutionExport(
-                                      resolution.id,
-                                    )
-                                  : null,
-                              onShareExport:
-                                  resolution.state ==
-                                          ResolutionState.resolved &&
-                                      resolution.supportsAction(
-                                        ArtifactAction.exportHandoff,
-                                      )
-                                  ? () => controller.shareResolutionExport(
-                                      resolution.id,
-                                    )
-                                  : null,
-                              onOpenRoom:
-                                  resolution.state ==
-                                          ResolutionState.resolved &&
-                                      resolution.supportsAction(
-                                        ArtifactAction.openRoom,
-                                      )
-                                  ? () =>
-                                        controller.openResolutionExternalAction(
-                                          resolution.id,
-                                          ArtifactAction.openRoom,
-                                        )
-                                  : null,
-                              onOpenCamera:
-                                  resolution.state ==
-                                          ResolutionState.resolved &&
-                                      resolution.supportsAction(
-                                        ArtifactAction.openCamera,
-                                      )
-                                  ? () =>
-                                        controller.openResolutionExternalAction(
-                                          resolution.id,
-                                          ArtifactAction.openCamera,
-                                        )
-                                  : null,
-                              onOpenArchive:
-                                  resolution.state ==
-                                          ResolutionState.resolved &&
-                                      resolution.supportsAction(
-                                        ArtifactAction.openArchive,
-                                      )
-                                  ? () =>
-                                        controller.openResolutionExternalAction(
-                                          resolution.id,
-                                          ArtifactAction.openArchive,
-                                        )
-                                  : null,
-                              onCancel: resolution.isTerminal
-                                  ? null
-                                  : () => controller.cancelResolution(
-                                      resolution.id,
-                                    ),
-                            );
-                          },
-                        ),
-                ),
-              ],
-            ),
+    return support.SupportResolutionsSurface(
+      variant: support.SupportContentSurfaceVariant.mobile,
+      resolutions: controller.resolutions,
+      selectedResolutionId: controller.selectedResolutionId,
+      busy: controller.busy,
+      challengeForResolution: controller.activeChallengeForResolution,
+      actionsForResolution:
+          (
+            ResolutionRecord resolution,
+            ChallengeRecord? challenge,
+          ) => support.SupportResolutionActions(
+            onSelect: () => controller.selectResolution(resolution.id),
+            onOpenChallenge: challenge == null
+                ? null
+                : () => onLaunchChallengeSurface(challenge),
+            openChallengeLabel: openChallengeLabel(challenge),
+            onContinueChallenge:
+                challenge == null || !showsManualChallengeContinue(challenge)
+                ? null
+                : () => controller.continueChallenge(challenge.id),
+            onCancelChallenge: challenge == null
+                ? null
+                : () => controller.cancelChallenge(challenge.id),
+            onMaterialize:
+                resolution.state == ResolutionState.resolved &&
+                    resolution.supportsAction(ArtifactAction.startOnThisDevice)
+                ? () => controller.materializeResolution(resolution.id)
+                : null,
+            onCopyExport:
+                resolution.state == ResolutionState.resolved &&
+                    resolution.supportsAction(ArtifactAction.exportHandoff)
+                ? () => controller.copyResolutionExport(resolution.id)
+                : null,
+            onShareExport:
+                resolution.state == ResolutionState.resolved &&
+                    resolution.supportsAction(ArtifactAction.exportHandoff)
+                ? () => controller.shareResolutionExport(resolution.id)
+                : null,
+            onOpenRoom:
+                resolution.state == ResolutionState.resolved &&
+                    resolution.supportsAction(ArtifactAction.openRoom)
+                ? () => controller.openResolutionExternalAction(
+                    resolution.id,
+                    ArtifactAction.openRoom,
+                  )
+                : null,
+            onOpenCamera:
+                resolution.state == ResolutionState.resolved &&
+                    resolution.supportsAction(ArtifactAction.openCamera)
+                ? () => controller.openResolutionExternalAction(
+                    resolution.id,
+                    ArtifactAction.openCamera,
+                  )
+                : null,
+            onOpenArchive:
+                resolution.state == ResolutionState.resolved &&
+                    resolution.supportsAction(ArtifactAction.openArchive)
+                ? () => controller.openResolutionExternalAction(
+                    resolution.id,
+                    ArtifactAction.openArchive,
+                  )
+                : null,
+            onCancel: resolution.isTerminal
+                ? null
+                : () => controller.cancelResolution(resolution.id),
           ),
-        );
-      },
     );
   }
 }
@@ -4595,311 +4508,6 @@ class _PlatformTunnelCard extends StatelessWidget {
   }
 }
 
-class _ResolutionCard extends StatelessWidget {
-  const _ResolutionCard({
-    required this.resolution,
-    required this.challenge,
-    required this.busy,
-    required this.selected,
-    required this.onSelect,
-    required this.onOpenChallenge,
-    required this.openChallengeLabel,
-    required this.onContinueChallenge,
-    required this.onCancelChallenge,
-    required this.onMaterialize,
-    required this.onCopyExport,
-    required this.onShareExport,
-    required this.onOpenRoom,
-    required this.onOpenCamera,
-    required this.onOpenArchive,
-    required this.onCancel,
-  });
-
-  final ResolutionRecord resolution;
-  final ChallengeRecord? challenge;
-  final bool busy;
-  final bool selected;
-  final VoidCallback onSelect;
-  final Future<void> Function()? onOpenChallenge;
-  final String openChallengeLabel;
-  final Future<void> Function()? onContinueChallenge;
-  final Future<void> Function()? onCancelChallenge;
-  final Future<void> Function()? onMaterialize;
-  final Future<void> Function()? onCopyExport;
-  final Future<void> Function()? onShareExport;
-  final Future<void> Function()? onOpenRoom;
-  final Future<void> Function()? onOpenCamera;
-  final Future<void> Function()? onOpenArchive;
-  final Future<void> Function()? onCancel;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final containerColor = selected
-        ? theme.colorScheme.primary.withValues(alpha: 0.08)
-        : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45);
-    final dangerPalette = context.shellVisuals.tone(ShellSemanticTone.danger);
-    final challengePalette = context.shellVisuals.tone(
-      ShellSemanticTone.attention,
-    );
-
-    return Material(
-      color: containerColor,
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: onSelect,
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: Text(
-                      resolution.input.provider,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                  _ResolutionStateChip(state: resolution.state),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                resolution.input.linkRedacted.isEmpty
-                    ? resolution.id
-                    : resolution.input.linkRedacted,
-                style: theme.textTheme.bodyMedium,
-              ),
-              if (resolution.credentials != null) ...<Widget>[
-                const SizedBox(height: 4),
-                Text(
-                  context.shellText.turnCredentialsSummary(
-                    address: resolution.credentials!.address,
-                    username: resolution.credentials!.usernameRedacted,
-                  ),
-                  style: theme.textTheme.bodySmall,
-                ),
-              ],
-              if (resolution.artifact != null) ...<Widget>[
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: <Widget>[
-                    _Tag(label: resolution.artifact!.family.label),
-                    for (final action in resolution.artifact!.actions)
-                      _Tag(
-                        label:
-                            '${action.id.label} · ${context.shellText.actionExecutionOwnerLabel(action.executionOwner.value)}',
-                      ),
-                  ],
-                ),
-              ],
-              if (resolution.export.expiresAt != null) ...<Widget>[
-                const SizedBox(height: 4),
-                Text(
-                  context.shellText.exportExpiry(
-                    timestamp: _formatSessionTimestamp(
-                      resolution.export.expiresAt!,
-                    ),
-                    source: resolution.export.expirySource,
-                  ),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-              if (resolution.failure != null) ...<Widget>[
-                const SizedBox(height: 10),
-                Text(
-                  context.shellText.failureSummary(
-                    stage:
-                        resolution.failure!.stage ??
-                        context.shellText.failureFallback,
-                    message:
-                        resolution.failure!.message ??
-                        context.shellText.unknownValue,
-                  ),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: dangerPalette.onContainer,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-              if (challenge != null) ...<Widget>[
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: shellSurfaceDecoration(
-                    context,
-                    style: ShellSurfaceStyle.highlight,
-                    tone: ShellSemanticTone.attention,
-                    borderRadius: const BorderRadius.all(Radius.circular(14)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        context.shellText.challengeKind(challenge!.kind),
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          color: challengePalette.onContainer,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        challenge!.prompt ?? challenge!.stage,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: challengePalette.onContainer,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: <Widget>[
-                          if (onOpenChallenge != null)
-                            FilledButton.tonal(
-                              onPressed: busy
-                                  ? null
-                                  : () => unawaited(onOpenChallenge!.call()),
-                              child: Text(openChallengeLabel),
-                            ),
-                          if (onContinueChallenge != null)
-                            FilledButton(
-                              onPressed: busy
-                                  ? null
-                                  : () =>
-                                        unawaited(onContinueChallenge!.call()),
-                              child: Text(context.shellText.iveCompletedIt),
-                            ),
-                          if (onCancelChallenge != null)
-                            _ActionOverflowButton(
-                              tooltip: context.shellText.moreChallengeActions,
-                              enabled: !busy,
-                              actions: <_CardActionEntry>[
-                                _CardActionEntry(
-                                  id: 'cancel-challenge',
-                                  label: context.shellText.cancelChallenge,
-                                  onSelected: onCancelChallenge!,
-                                ),
-                              ],
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-              const SizedBox(height: 12),
-              _ActionRow(
-                busy: busy,
-                primaryAction: _primaryAction(context),
-                secondaryActions: _secondaryActions(context),
-                overflowTooltip: context.shellText.moreResolutionActions,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  _CardActionEntry? _primaryAction(BuildContext context) {
-    final actions = <_CardActionEntry>[
-      if (onMaterialize != null)
-        _CardActionEntry(
-          id: 'materialize',
-          label: context.shellText.startOnThisDevice,
-          onSelected: onMaterialize!,
-        ),
-      if (onShareExport != null)
-        _CardActionEntry(
-          id: 'share-export',
-          label: context.shellText.shareHandoff,
-          onSelected: onShareExport!,
-        ),
-      if (onOpenRoom != null)
-        _CardActionEntry(
-          id: 'open-room',
-          label: context.shellText.openRoom,
-          onSelected: onOpenRoom!,
-        ),
-      if (onOpenCamera != null)
-        _CardActionEntry(
-          id: 'open-camera',
-          label: context.shellText.openCamera,
-          onSelected: onOpenCamera!,
-        ),
-      if (onOpenArchive != null)
-        _CardActionEntry(
-          id: 'open-archive',
-          label: context.shellText.openArchive,
-          onSelected: onOpenArchive!,
-        ),
-      if (onCopyExport != null)
-        _CardActionEntry(
-          id: 'copy-export',
-          label: context.shellText.copyHandoff,
-          onSelected: onCopyExport!,
-        ),
-      if (onCancel != null)
-        _CardActionEntry(
-          id: 'cancel-resolution',
-          label: context.shellText.cancelResolution,
-          onSelected: onCancel!,
-        ),
-    ];
-    return actions.isEmpty ? null : actions.first;
-  }
-
-  List<_CardActionEntry> _secondaryActions(BuildContext context) {
-    final primaryId = _primaryAction(context)?.id;
-    return <_CardActionEntry>[
-      if (onCopyExport != null)
-        _CardActionEntry(
-          id: 'copy-export',
-          label: context.shellText.copyHandoff,
-          onSelected: onCopyExport!,
-        ),
-      if (onShareExport != null)
-        _CardActionEntry(
-          id: 'share-export',
-          label: context.shellText.shareHandoff,
-          onSelected: onShareExport!,
-        ),
-      if (onOpenRoom != null)
-        _CardActionEntry(
-          id: 'open-room',
-          label: context.shellText.openRoom,
-          onSelected: onOpenRoom!,
-        ),
-      if (onOpenCamera != null)
-        _CardActionEntry(
-          id: 'open-camera',
-          label: context.shellText.openCamera,
-          onSelected: onOpenCamera!,
-        ),
-      if (onOpenArchive != null)
-        _CardActionEntry(
-          id: 'open-archive',
-          label: context.shellText.openArchive,
-          onSelected: onOpenArchive!,
-        ),
-      if (onCancel != null)
-        _CardActionEntry(
-          id: 'cancel-resolution',
-          label: context.shellText.cancelResolution,
-          onSelected: onCancel!,
-        ),
-    ].where((entry) => entry.id != primaryId).toList(growable: false);
-  }
-}
-
 class _SessionsPanel extends StatelessWidget {
   const _SessionsPanel({
     required this.controller,
@@ -4916,426 +4524,29 @@ class _SessionsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        final compact = constraints.maxHeight < 220;
-        return Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  context.shellText.sessionsTitle,
-                  style:
-                      (compact
-                              ? theme.textTheme.titleLarge
-                              : theme.textTheme.headlineSmall)
-                          ?.copyWith(fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: controller.sessions.isEmpty
-                      ? Center(
-                          child: Text(
-                            context.shellText.noMobileSessionsYet,
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        )
-                      : ListView.separated(
-                          itemCount: controller.sessions.length,
-                          separatorBuilder: (_, int index) =>
-                              const SizedBox(height: 14),
-                          itemBuilder: (BuildContext context, int index) {
-                            final session = controller.sessions[index];
-                            final challenge = controller.activeChallengeFor(
-                              session,
-                            );
-                            return _SessionCard(
-                              session: session,
-                              challenge: challenge,
-                              busy: controller.busy,
-                              selected:
-                                  controller.selectedSessionId == session.id,
-                              onSelect: () =>
-                                  controller.selectSession(session.id),
-                              onStop: () => controller.stopSession(session.id),
-                              onExport: () =>
-                                  controller.exportDiagnostics(session.id),
-                              onOpenChallenge: challenge == null
-                                  ? null
-                                  : () => onLaunchChallengeSurface(challenge),
-                              openChallengeLabel: openChallengeLabel(challenge),
-                              onContinueChallenge:
-                                  challenge == null ||
-                                      !showsManualChallengeContinue(challenge)
-                                  ? null
-                                  : () => controller.continueChallenge(
-                                      challenge.id,
-                                    ),
-                              onCancelChallenge: challenge == null
-                                  ? null
-                                  : () => controller.cancelChallenge(
-                                      challenge.id,
-                                    ),
-                            );
-                          },
-                        ),
-                ),
-              ],
-            ),
+    return support.SupportSessionsSurface(
+      variant: support.SupportContentSurfaceVariant.mobile,
+      sessions: controller.sessions,
+      selectedSessionId: controller.selectedSessionId,
+      busy: controller.busy,
+      challengeForSession: controller.activeChallengeFor,
+      actionsForSession: (SessionRecord session, ChallengeRecord? challenge) =>
+          support.SupportSessionActions(
+            onSelect: () => controller.selectSession(session.id),
+            onStop: () => controller.stopSession(session.id),
+            onExport: () => controller.exportDiagnostics(session.id),
+            onOpenChallenge: challenge == null
+                ? null
+                : () => onLaunchChallengeSurface(challenge),
+            openChallengeLabel: openChallengeLabel(challenge),
+            onContinueChallenge:
+                challenge == null || !showsManualChallengeContinue(challenge)
+                ? null
+                : () => controller.continueChallenge(challenge.id),
+            onCancelChallenge: challenge == null
+                ? null
+                : () => controller.cancelChallenge(challenge.id),
           ),
-        );
-      },
-    );
-  }
-}
-
-class _SessionCard extends StatelessWidget {
-  const _SessionCard({
-    required this.session,
-    required this.challenge,
-    required this.busy,
-    required this.selected,
-    required this.onSelect,
-    required this.onStop,
-    required this.onExport,
-    required this.onOpenChallenge,
-    required this.openChallengeLabel,
-    required this.onContinueChallenge,
-    required this.onCancelChallenge,
-  });
-
-  final SessionRecord session;
-  final ChallengeRecord? challenge;
-  final bool busy;
-  final bool selected;
-  final VoidCallback onSelect;
-  final Future<void> Function() onStop;
-  final Future<void> Function() onExport;
-  final Future<void> Function()? onOpenChallenge;
-  final String openChallengeLabel;
-  final Future<void> Function()? onContinueChallenge;
-  final Future<void> Function()? onCancelChallenge;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final containerColor = selected
-        ? theme.colorScheme.primary.withValues(alpha: 0.08)
-        : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45);
-    final dangerPalette = context.shellVisuals.tone(ShellSemanticTone.danger);
-    final challengePalette = context.shellVisuals.tone(
-      ShellSemanticTone.attention,
-    );
-
-    return Material(
-      color: containerColor,
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: onSelect,
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: Text(
-                      session.profileName?.isNotEmpty == true
-                          ? session.profileName!
-                          : session.id,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                  _SessionStateChip(state: session.state),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '${session.profile.provider} -> ${session.profile.peerAddress}',
-              ),
-              Text(
-                context.shellText.sessionListenConnections(
-                  listen: session.profile.listenAddress,
-                  connections: session.profile.connections,
-                ),
-                style: theme.textTheme.bodySmall,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                context.shellText.sessionUpdated(
-                  timestamp: _formatSessionTimestamp(session.updatedAt),
-                  sessionId: _shortSessionId(session.id),
-                ),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-              if (session.failure != null) ...<Widget>[
-                const SizedBox(height: 10),
-                Text(
-                  context.shellText.failureSummary(
-                    stage:
-                        session.failure!.stage ??
-                        context.shellText.failureFallback,
-                    message:
-                        session.failure!.message ??
-                        context.shellText.unknownValue,
-                  ),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: dangerPalette.onContainer,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-              if (challenge != null) ...<Widget>[
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: shellSurfaceDecoration(
-                    context,
-                    style: ShellSurfaceStyle.highlight,
-                    tone: ShellSemanticTone.attention,
-                    borderRadius: const BorderRadius.all(Radius.circular(14)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        context.shellText.challengeKind(challenge!.kind),
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          color: challengePalette.onContainer,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        challenge!.prompt ?? challenge!.stage,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: challengePalette.onContainer,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: <Widget>[
-                          if (onOpenChallenge != null)
-                            FilledButton.tonal(
-                              onPressed: busy
-                                  ? null
-                                  : () => unawaited(onOpenChallenge!.call()),
-                              child: Text(openChallengeLabel),
-                            ),
-                          if (onContinueChallenge != null)
-                            FilledButton(
-                              onPressed: busy
-                                  ? null
-                                  : () =>
-                                        unawaited(onContinueChallenge!.call()),
-                              child: Text(context.shellText.iveCompletedIt),
-                            ),
-                          if (onCancelChallenge != null)
-                            _ActionOverflowButton(
-                              tooltip: context.shellText.moreChallengeActions,
-                              enabled: !busy,
-                              actions: <_CardActionEntry>[
-                                _CardActionEntry(
-                                  id: 'cancel-challenge',
-                                  label: context.shellText.cancelChallenge,
-                                  onSelected: onCancelChallenge!,
-                                ),
-                              ],
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-              const SizedBox(height: 12),
-              _ActionRow(
-                busy: busy,
-                primaryAction: _primaryAction(context),
-                secondaryActions: _secondaryActions(context),
-                overflowTooltip: context.shellText.moreSessionActions,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  _CardActionEntry _primaryAction(BuildContext context) {
-    if (session.state != SessionState.stopped &&
-        session.state != SessionState.failed) {
-      return _CardActionEntry(
-        id: 'stop-session',
-        label: context.shellText.stopSession,
-        onSelected: onStop,
-      );
-    }
-    return _CardActionEntry(
-      id: 'export-diagnostics',
-      label: context.shellText.exportDiagnostics,
-      onSelected: onExport,
-    );
-  }
-
-  List<_CardActionEntry> _secondaryActions(BuildContext context) {
-    final primaryId = _primaryAction(context).id;
-    return <_CardActionEntry>[
-      _CardActionEntry(
-        id: 'export-diagnostics',
-        label: context.shellText.exportDiagnostics,
-        onSelected: onExport,
-      ),
-      if (session.state != SessionState.stopped &&
-          session.state != SessionState.failed)
-        _CardActionEntry(
-          id: 'stop-session',
-          label: context.shellText.stopSession,
-          onSelected: onStop,
-        ),
-    ].where((entry) => entry.id != primaryId).toList(growable: false);
-  }
-}
-
-class _EventsPanel extends StatelessWidget {
-  const _EventsPanel({required this.controller});
-
-  final MobileShellController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              context.shellText.eventStream,
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              context.shellText.eventStreamSubtitle,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: controller.events.isEmpty
-                  ? Center(
-                      child: Text(
-                        context.shellText.noEventsYet,
-                        style: theme.textTheme.bodyLarge?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    )
-                  : ListView.separated(
-                      itemCount: controller.events.length,
-                      separatorBuilder: (_, int index) =>
-                          const SizedBox(height: 10),
-                      itemBuilder: (BuildContext context, int index) {
-                        final event = controller.events[index];
-                        return Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.surfaceContainerHighest
-                                .withValues(alpha: 0.35),
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              Text(
-                                event.timestamp.toIso8601String(),
-                                style: theme.textTheme.labelSmall,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                event.summary(),
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                event.sessionId.isNotEmpty
-                                    ? event.sessionId
-                                    : (event.resolutionId ?? ''),
-                                style: theme.textTheme.bodySmall,
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SessionStateChip extends StatelessWidget {
-  const _SessionStateChip({required this.state});
-
-  final SessionState state;
-
-  @override
-  Widget build(BuildContext context) {
-    final tone = switch (state) {
-      SessionState.ready => ShellSemanticTone.ready,
-      SessionState.challengeRequired => ShellSemanticTone.attention,
-      SessionState.failed => ShellSemanticTone.danger,
-      SessionState.stopped => ShellSemanticTone.neutral,
-      _ => ShellSemanticTone.info,
-    };
-    return ShellToneBadge(
-      label: context.shellText.sessionStateLabel(state.value),
-      tone: tone,
-    );
-  }
-}
-
-class _ResolutionStateChip extends StatelessWidget {
-  const _ResolutionStateChip({required this.state});
-
-  final ResolutionState state;
-
-  @override
-  Widget build(BuildContext context) {
-    final tone = switch (state) {
-      ResolutionState.resolved => ShellSemanticTone.ready,
-      ResolutionState.challengeRequired => ShellSemanticTone.attention,
-      ResolutionState.failed ||
-      ResolutionState.cancelled ||
-      ResolutionState.expired => ShellSemanticTone.danger,
-      _ => ShellSemanticTone.info,
-    };
-    return ShellToneBadge(
-      label: context.shellText.resolutionStateLabel(state.value),
-      tone: tone,
     );
   }
 }
@@ -5348,49 +4559,6 @@ class _Tag extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ShellToneBadge(label: label);
-  }
-}
-
-class _ActionRow extends StatelessWidget {
-  const _ActionRow({
-    required this.busy,
-    required this.primaryAction,
-    required this.secondaryActions,
-    required this.overflowTooltip,
-  });
-
-  final bool busy;
-  final _CardActionEntry? primaryAction;
-  final List<_CardActionEntry> secondaryActions;
-  final String overflowTooltip;
-
-  @override
-  Widget build(BuildContext context) {
-    if (primaryAction == null && secondaryActions.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Row(
-      children: <Widget>[
-        if (primaryAction != null)
-          Expanded(
-            child: FilledButton(
-              onPressed: busy
-                  ? null
-                  : () => unawaited(primaryAction!.onSelected()),
-              child: Text(primaryAction!.label),
-            ),
-          ),
-        if (primaryAction != null && secondaryActions.isNotEmpty)
-          const SizedBox(width: 12),
-        if (secondaryActions.isNotEmpty)
-          _ActionOverflowButton(
-            tooltip: overflowTooltip,
-            enabled: !busy,
-            actions: secondaryActions,
-          ),
-      ],
-    );
   }
 }
 
@@ -5489,20 +4657,6 @@ String _diagnosticsHostTitle(
     MobileHostLifecycleState.failed => copy.mobileHostBlocked,
     _ => copy.connectingToMobileHost,
   };
-}
-
-String _formatSessionTimestamp(DateTime value) {
-  final local = value.toLocal();
-  return '${local.year}-${_twoDigits(local.month)}-${_twoDigits(local.day)} '
-      '${_twoDigits(local.hour)}:${_twoDigits(local.minute)}:${_twoDigits(local.second)}';
-}
-
-String _shortSessionId(String value) {
-  final trimmed = value.trim();
-  if (trimmed.length <= 12) {
-    return trimmed;
-  }
-  return '${trimmed.substring(0, 12)}...';
 }
 
 String _platformTunnelCapabilitySummary(
@@ -5971,5 +5125,3 @@ bool _sameExecutionPlanForUi(
       left.engineFamily == right.engineFamily &&
       left.hostAdapter == right.hostAdapter;
 }
-
-String _twoDigits(int value) => value.toString().padLeft(2, '0');
