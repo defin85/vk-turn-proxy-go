@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_shell_core/home_workflow_surface.dart';
+import 'package:flutter_shell_core/routing_content_surface.dart' as routing;
 import 'package:flutter_shell_core/shell_visuals.dart';
 import 'package:flutter_shell_core/support_content_surface.dart' as support;
 import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
@@ -1409,83 +1410,10 @@ class _ProvidersWorkbenchSurface extends StatelessWidget {
   }
 }
 
-class _RoutingWorkbenchSurface extends StatefulWidget {
+class _RoutingWorkbenchSurface extends StatelessWidget {
   const _RoutingWorkbenchSurface({required this.controller});
 
   final DesktopShellController controller;
-
-  @override
-  State<_RoutingWorkbenchSurface> createState() =>
-      _RoutingWorkbenchSurfaceState();
-}
-
-class _RoutingWorkbenchSurfaceState extends State<_RoutingWorkbenchSurface> {
-  late final TextEditingController _listenAddressController;
-  late final TextEditingController _peerAddressController;
-  late final TextEditingController _connectionsController;
-  late final TextEditingController _turnServerController;
-  late final TextEditingController _turnPortController;
-  late final TextEditingController _bindInterfaceController;
-
-  DesktopShellController get controller => widget.controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _listenAddressController = TextEditingController();
-    _peerAddressController = TextEditingController();
-    _connectionsController = TextEditingController();
-    _turnServerController = TextEditingController();
-    _turnPortController = TextEditingController();
-    _bindInterfaceController = TextEditingController();
-    _syncFromDraft();
-  }
-
-  @override
-  void didUpdateWidget(covariant _RoutingWorkbenchSurface oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.controller.draft != widget.controller.draft) {
-      _syncFromDraft();
-    }
-  }
-
-  @override
-  void dispose() {
-    _listenAddressController.dispose();
-    _peerAddressController.dispose();
-    _connectionsController.dispose();
-    _turnServerController.dispose();
-    _turnPortController.dispose();
-    _bindInterfaceController.dispose();
-    super.dispose();
-  }
-
-  void _syncFromDraft() {
-    final spec = controller.draft.spec;
-    _setText(_listenAddressController, spec.listenAddress);
-    _setText(_peerAddressController, spec.peerAddress);
-    _setText(_connectionsController, '${spec.connections}');
-    _setText(_turnServerController, spec.turnServer ?? '');
-    _setText(_turnPortController, spec.turnPort ?? '');
-    _setText(_bindInterfaceController, spec.bindInterface ?? '');
-  }
-
-  void _setText(TextEditingController controller, String nextValue) {
-    if (controller.text == nextValue) {
-      return;
-    }
-    controller.value = controller.value.copyWith(
-      text: nextValue,
-      selection: TextSelection.collapsed(offset: nextValue.length),
-      composing: TextRange.empty,
-    );
-  }
-
-  void _updateSpec(ProfileSpec Function(ProfileSpec current) update) {
-    controller.updateDraft(
-      controller.draft.copyWith(spec: update(controller.draft.spec)),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1493,183 +1421,6 @@ class _RoutingWorkbenchSurfaceState extends State<_RoutingWorkbenchSurface> {
     final spec = controller.draft.spec;
     final selectedProfile = controller.selectedSavedProfile;
     final busy = controller.busy || controller.status != ShellStatus.ready;
-
-    final routingForm = Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Theme.of(
-          context,
-        ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.28),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: ListView(
-        primary: false,
-        children: <Widget>[
-          Text(
-            copy.desktopProfileSettings,
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            copy.desktopEditableParametersReady,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 16),
-          _RoutingTextField(
-            key: const ValueKey<String>('desktop-routing-listen-address-field'),
-            controller: _listenAddressController,
-            label: copy.localUdpListen,
-            onChanged: (String value) => _updateSpec(
-              (ProfileSpec current) =>
-                  current.copyWith(listenAddress: value.trim()),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _RoutingTextField(
-            key: const ValueKey<String>('desktop-routing-peer-address-field'),
-            controller: _peerAddressController,
-            label: copy.peerAddress,
-            onChanged: (String value) => _updateSpec(
-              (ProfileSpec current) =>
-                  current.copyWith(peerAddress: value.trim()),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _RoutingTextField(
-            key: const ValueKey<String>('desktop-routing-connections-field'),
-            controller: _connectionsController,
-            label: copy.connections,
-            keyboardType: TextInputType.number,
-            onChanged: (String value) {
-              final parsed = int.tryParse(value.trim());
-              if (parsed == null || parsed < 1) {
-                return;
-              }
-              _updateSpec(
-                (ProfileSpec current) => current.copyWith(connections: parsed),
-              );
-            },
-          ),
-          const SizedBox(height: 16),
-          DropdownButtonFormField<TransportMode>(
-            key: const ValueKey<String>('desktop-routing-mode-field'),
-            initialValue: spec.mode,
-            decoration: InputDecoration(labelText: copy.turnMode),
-            items: TransportMode.values
-                .map(
-                  (TransportMode mode) => DropdownMenuItem<TransportMode>(
-                    value: mode,
-                    child: Text(mode.value),
-                  ),
-                )
-                .toList(growable: false),
-            onChanged: (TransportMode? value) {
-              if (value == null) {
-                return;
-              }
-              _updateSpec(
-                (ProfileSpec current) => current.copyWith(mode: value),
-              );
-            },
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            key: const ValueKey<String>('desktop-routing-log-level-field'),
-            initialValue: spec.logLevel,
-            decoration: InputDecoration(labelText: copy.logLevel),
-            items: const <String>['debug', 'info', 'warn', 'error']
-                .map(
-                  (String level) => DropdownMenuItem<String>(
-                    value: level,
-                    child: Text(level),
-                  ),
-                )
-                .toList(growable: false),
-            onChanged: (String? value) {
-              if (value == null) {
-                return;
-              }
-              _updateSpec(
-                (ProfileSpec current) => current.copyWith(logLevel: value),
-              );
-            },
-          ),
-          const SizedBox(height: 12),
-          SwitchListTile.adaptive(
-            key: const ValueKey<String>('desktop-routing-dtls-switch'),
-            contentPadding: EdgeInsets.zero,
-            title: Text(copy.dtlsEnabled),
-            value: spec.useDtls,
-            onChanged: (bool value) => _updateSpec(
-              (ProfileSpec current) => current.copyWith(useDtls: value),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _RoutingTextField(
-            key: const ValueKey<String>('desktop-routing-turn-server-field'),
-            controller: _turnServerController,
-            label: copy.turnOverride,
-            onChanged: (String value) => _updateSpec(
-              (ProfileSpec current) => current.copyWith(
-                turnServer: value.trim().isEmpty ? null : value.trim(),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _RoutingTextField(
-            key: const ValueKey<String>('desktop-routing-turn-port-field'),
-            controller: _turnPortController,
-            label: copy.turnPort,
-            onChanged: (String value) => _updateSpec(
-              (ProfileSpec current) => current.copyWith(
-                turnPort: value.trim().isEmpty ? null : value.trim(),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _RoutingTextField(
-            key: const ValueKey<String>('desktop-routing-bind-interface-field'),
-            controller: _bindInterfaceController,
-            label: copy.bindInterface,
-            onChanged: (String value) => _updateSpec(
-              (ProfileSpec current) => current.copyWith(
-                bindInterface: value.trim().isEmpty ? null : value.trim(),
-              ),
-            ),
-          ),
-          const SizedBox(height: 18),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: <Widget>[
-              FilledButton(
-                key: const ValueKey<String>('desktop-routing-save-profile'),
-                onPressed: busy
-                    ? null
-                    : () => unawaited(controller.saveDraft()),
-                child: Text(copy.saveProfile),
-              ),
-              FilledButton.tonal(
-                key: const ValueKey<String>('desktop-routing-open-profiles'),
-                onPressed: controller.showProfiles,
-                child: Text(t.commonProfiles),
-              ),
-              OutlinedButton(
-                key: const ValueKey<String>('desktop-routing-start-profile'),
-                onPressed: busy || selectedProfile == null
-                    ? null
-                    : () => unawaited(controller.startSelectedProfile()),
-                child: Text(copy.startOnThisDevice),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
 
     return Card(
       child: Padding(
@@ -1685,40 +1436,28 @@ class _RoutingWorkbenchSurfaceState extends State<_RoutingWorkbenchSurface> {
             ),
             const SizedBox(height: 16),
             Expanded(
-              child: LayoutBuilder(
-                builder: (BuildContext context, BoxConstraints constraints) {
-                  final stacked = constraints.maxWidth < 1320;
-                  if (stacked) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: <Widget>[
-                        Expanded(child: routingForm),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          height: 320,
-                          child: _PlatformTunnelPanel(
-                            controller: controller,
-                            compact: false,
-                          ),
-                        ),
-                      ],
-                    );
-                  }
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      Expanded(child: routingForm),
-                      const SizedBox(width: 12),
-                      SizedBox(
-                        width: 420,
-                        child: _PlatformTunnelPanel(
-                          controller: controller,
-                          compact: false,
-                        ),
-                      ),
-                    ],
+              child: routing.RoutingContentSurface(
+                variant: routing.RoutingContentSurfaceVariant.desktop,
+                spec: spec,
+                selectedProfileName: selectedProfile?.name.isEmpty == true
+                    ? selectedProfile?.id
+                    : selectedProfile?.name,
+                selectedProfileProvider: selectedProfile?.spec.provider,
+                busy: busy,
+                hostReady: controller.hostConnection?.isReady == true,
+                platformTunnels: controller.platformTunnels,
+                platformTunnelResultFor: controller.platformTunnelResultFor,
+                onSpecChanged: (ProfileSpec nextSpec) {
+                  controller.updateDraft(
+                    controller.draft.copyWith(spec: nextSpec),
                   );
                 },
+                onSave: busy ? null : controller.saveDraft,
+                onOpenProfiles: controller.showProfiles,
+                onStartProfile: busy || selectedProfile == null
+                    ? null
+                    : controller.startSelectedProfile,
+                onStartPlatformTunnel: controller.startPlatformTunnel,
               ),
             ),
           ],
@@ -1947,32 +1686,6 @@ class _WorkbenchSummaryCard extends StatelessWidget {
           child,
         ],
       ),
-    );
-  }
-}
-
-class _RoutingTextField extends StatelessWidget {
-  const _RoutingTextField({
-    super.key,
-    required this.controller,
-    required this.label,
-    required this.onChanged,
-    this.keyboardType,
-  });
-
-  final TextEditingController controller;
-  final String label;
-  final ValueChanged<String> onChanged;
-  final TextInputType? keyboardType;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      key: key,
-      controller: controller,
-      keyboardType: keyboardType,
-      onChanged: onChanged,
-      decoration: InputDecoration(labelText: label),
     );
   }
 }

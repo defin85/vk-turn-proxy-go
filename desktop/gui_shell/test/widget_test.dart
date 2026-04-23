@@ -1343,6 +1343,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(controller.activeWorkbenchRoute, DesktopWorkbenchRoute.routing);
+      expect(
+        find.byKey(const ValueKey<String>('routing-content-surface-desktop')),
+        findsOneWidget,
+      );
 
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
       await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);

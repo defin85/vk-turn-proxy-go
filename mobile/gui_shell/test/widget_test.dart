@@ -633,6 +633,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Routing'), findsWidgets);
+      expect(
+        find.byKey(const ValueKey<String>('routing-content-surface-mobile')),
+        findsOneWidget,
+      );
       expect(find.text('Search apps'), findsNothing);
 
       await tester.tap(
@@ -655,7 +659,10 @@ void main() {
         ),
         findsOneWidget,
       );
-      await tester.enterText(find.byType(TextField).first, 'sig');
+      await tester.enterText(
+        find.byKey(const ValueKey<String>('routing-app-search-field')),
+        'sig',
+      );
       await tester.pumpAndSettle();
       expect(find.text('Telegram'), findsNothing);
 

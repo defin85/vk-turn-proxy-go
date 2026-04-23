@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_shell_core/home_workflow_surface.dart';
 import 'package:flutter_shell_core/portable_profile_transfer.dart';
+import 'package:flutter_shell_core/routing_content_surface.dart' as routing;
 import 'package:flutter_shell_core/shell_visuals.dart';
 import 'package:flutter_shell_core/support_content_surface.dart' as support;
 import 'package:flutter_shell_core/workflow_library_surface.dart' as workflow;
@@ -2212,6 +2213,7 @@ class _RoutingPageState extends State<_RoutingPage> {
     final controller = widget.controller;
     final theme = Theme.of(context);
     final copy = context.shellText;
+    final selectedProfile = controller.selectedSavedProfile;
     final mode = controller.activePlatformTunnelMode;
     final preferences = controller.activePlatformModePreferences;
     final routingPolicy = preferences.applicationRoutingPolicy;
@@ -2299,6 +2301,30 @@ class _RoutingPageState extends State<_RoutingPage> {
           _NoticeBanner(message: controller.surfaceNotice!),
         ],
         const SizedBox(height: 16),
+        routing.RoutingContentSurface(
+          variant: routing.RoutingContentSurfaceVariant.mobile,
+          spec: controller.draft.spec,
+          selectedProfileName: selectedProfile?.name.isEmpty == true
+              ? selectedProfile?.id
+              : selectedProfile?.name,
+          selectedProfileProvider: selectedProfile?.spec.provider,
+          busy: controller.busy,
+          hostReady: controller.hostConnection?.isReady == true,
+          platformTunnels: controller.platformTunnels,
+          platformTunnelResultFor: controller.platformTunnelResultFor,
+          onSpecChanged: (ProfileSpec nextSpec) {
+            controller.updateDraft(controller.draft.copyWith(spec: nextSpec));
+          },
+          onSave: controller.busy ? null : controller.saveDraft,
+          onOpenProfiles: widget.onOpenProfiles,
+          onStartProfile:
+              controller.busy || controller.selectedSavedProfile == null
+              ? null
+              : controller.startSelectedProfile,
+          onStartPlatformTunnel: controller.startPlatformTunnel,
+          onStopPlatformTunnel: controller.stopPlatformTunnel,
+        ),
+        const SizedBox(height: 12),
         if (!controller.activeModeSupportsAppRouting || mode == null)
           _RoutingUnavailableCard(onOpenProfiles: widget.onOpenProfiles)
         else ...<Widget>[
@@ -2691,6 +2717,7 @@ class _RoutingFilterToolbar extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         TextField(
+          key: const ValueKey<String>('routing-app-search-field'),
           controller: searchController,
           onChanged: (_) => onSearchChanged(),
           decoration: InputDecoration(
