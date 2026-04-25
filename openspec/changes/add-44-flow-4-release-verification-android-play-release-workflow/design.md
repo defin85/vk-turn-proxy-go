@@ -91,6 +91,12 @@ The operator still owns:
 The docs should make that split explicit so the workflow does not imply that a
 repo-owned shell command can finish publication by itself.
 
+The handoff docs must enumerate Play Console surfaces that can be inferred from
+the checked-in manifest and release package, including Data safety,
+privacy/support contact, content rating, target audience, and sensitive
+permission or declaration surfaces such as VPN service, `QUERY_ALL_PACKAGES`,
+camera, and foreground service use when present.
+
 ### Decision: Release preflight uses a repo-managed Play submission floor
 
 Google Play policy requirements change over time, especially around target API
@@ -100,6 +106,11 @@ below that floor.
 
 That keeps publication blockers visible in the build workflow instead of only
 surfacing them after an upload attempt in Play Console.
+
+The preflight must resolve the effective release `targetSdkVersion` after
+Gradle/Flutter evaluation and compare it with a documented numeric floor. This
+keeps the release gate reviewable instead of hiding the submission floor behind
+the installed Flutter SDK.
 
 ## Risks / Trade-offs
 

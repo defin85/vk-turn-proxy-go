@@ -16,7 +16,10 @@ debug APK workflow.
   Google Play upload under a documented repository output path
 - **AND** that staged upload artifact is an Android App Bundle rather than only
   a debug APK
-- **AND** the workflow also stages build identity metadata with the artifact
+- **AND** the workflow also stages build identity metadata and a SHA-256
+  checksum with the artifact
+- **AND** the metadata records the effective release target SDK and signing mode
+  without writing signing secrets
 
 #### Scenario: Release signing inputs are missing or invalid
 
@@ -40,14 +43,19 @@ repo-owned build scripts complete publication by themselves.
 - **WHEN** the operator follows the documented publication handoff
 - **THEN** the docs enumerate the required manual Google Play surfaces,
   including Play App Signing enrollment, release-track upload, store
-  listing/contact details, and app-content declarations
+  listing/contact details, app-content declarations, and manifest-derived
+  policy surfaces such as Data safety, privacy/support contact, content rating,
+  target audience, VPN service, `QUERY_ALL_PACKAGES`, camera, and foreground
+  service use when present
 - **AND** the docs keep those steps explicit as operator-owned work rather than
   pretending that the repository auto-publishes to Google Play
 
 ### Requirement: Play-target Android release preflight validates current submission prerequisites
 
 The repository SHALL fail closed when the Android release configuration no
-longer satisfies the repo-managed Google Play submission floor.
+longer satisfies the repo-managed Google Play submission floor. The floor SHALL
+be an explicit documented numeric Android API level and SHALL be checked against
+the effective release `targetSdkVersion` after Gradle/Flutter resolution.
 
 #### Scenario: Android target floor is below the supported Play release minimum
 
@@ -55,5 +63,6 @@ longer satisfies the repo-managed Google Play submission floor.
   below the repo-managed Google Play submission floor
 - **WHEN** the operator runs the documented Android Play release entrypoint
 - **THEN** the workflow fails before staging the release artifact
-- **AND** it reports which Android release prerequisite is insufficient instead
-  of waiting for Play Console upload rejection
+- **AND** it reports which Android release prerequisite is insufficient,
+  including the documented floor and the resolved effective release target SDK,
+  instead of waiting for Play Console upload rejection
