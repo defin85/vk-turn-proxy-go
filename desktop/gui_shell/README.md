@@ -188,7 +188,9 @@ When the GUI reconnects to a compatible host, it rehydrates the persisted profil
 The persisted plaintext state keeps the same-device runtime defaults separate
 from secret-bearing provider input links; invite URLs, room/bootstrap tokens,
 and `generic-turn://...` handoff credentials are cleared before the plaintext
-state file is written.
+state file is written. The non-secret canonical VK hosted-call root link
+`https://calls.vk.com/` is retained so a saved authenticated VK profile can be
+restored after a GUI restart without retyping the provider start URL.
 
 ## Portable profile transfer
 

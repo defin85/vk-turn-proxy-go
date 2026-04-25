@@ -305,6 +305,13 @@ void main() {
       find.descendant(of: profilesSection, matching: find.text('Профили')),
       findsOneWidget,
     );
-    expect(find.byTooltip('Сменить язык'), findsOneWidget);
+    expect(find.byTooltip('Сменить язык'), findsNothing);
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('desktop-section-settings')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Сменить язык'), findsWidgets);
   });
 }

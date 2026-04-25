@@ -203,140 +203,217 @@ class _ManagedProviderWorkflowBodyState
     final parametersDetail = supportedProvider == null
         ? copy.desktopChooseProviderFamilyFirst
         : copy.desktopEditReusableParametersFor(supportedProvider.title);
-    final children = <Widget>[
+    final primaryChildren = <Widget>[
       ..._withSpacing(widget.leadingChildren, height: 16),
       if (widget.supportedProviders.isEmpty)
         _unavailableCard(theme, copy.desktopNoShippedProviderFamilies)
       else ...<Widget>[
-        Text(
-          copy.desktopRecordName,
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w700,
+        _desktopPanel(
+          theme,
+          title: copy.desktopRecordName,
+          subtitle: '',
+          child: _desktopField(
+            key: widget.nameFieldKey,
+            controller: _nameController,
+            label: copy.desktopRecordName,
+            onChanged: (String value) => _pushDraft(name: value),
           ),
         ),
-        const SizedBox(height: 6),
-        Text(
-          copy.desktopRecordNameHelp,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
+        _desktopPanel(
+          theme,
+          title: parametersTitle,
+          subtitle: parametersDetail,
+          child: _desktopParametersContent(
+            theme,
+            supportedProvider: supportedProvider,
+            descriptor: descriptor,
           ),
         ),
-        const SizedBox(height: 12),
-        _field(
-          key: widget.nameFieldKey,
-          controller: _nameController,
-          label: copy.desktopRecordName,
-          onChanged: (String value) => _pushDraft(name: value),
+      ],
+      ..._withSpacing(widget.bottomChildren, height: 16),
+    ];
+    final sidebarChildren = <Widget>[
+      if (widget.supportedProviders.isNotEmpty) ...<Widget>[
+        _desktopGroupHeader(
+          theme,
+          title: copy.desktopAttachedFamily,
+          subtitle: copy.desktopAttachedFamilyHelp,
         ),
-        const SizedBox(height: 16),
-        Text(
-          copy.desktopAttachedFamily,
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          copy.desktopAttachedFamilyHelp,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(height: 12),
         _desktopFamilyEntryCard(
           theme,
           provider: supportedProvider,
           availability: hostAvailability,
         ),
-        if (unsupportedSelectedFamily) ...<Widget>[
-          const SizedBox(height: 12),
+        if (unsupportedSelectedFamily)
           _unavailableCard(
             theme,
             copy.selectedManagedProviderFamilyNotInSupportedCatalog,
           ),
-        ],
-        if (supportedProvider != null) ...<Widget>[
-          const SizedBox(height: 16),
+        if (supportedProvider != null)
           _desktopSelectedFamilyCard(
             theme,
             provider: supportedProvider,
             availability: hostAvailability,
             descriptor: descriptor,
           ),
-        ],
+        if (hostAvailability != null && !hostAvailability.isAvailable)
+          _unavailableCard(theme, hostAvailability.message),
         if (descriptor != null) ...<Widget>[
-          const SizedBox(height: 16),
+          _desktopGroupHeader(
+            theme,
+            title: copy.desktopFamilyCharacteristics,
+            subtitle: copy.desktopFamilyCharacteristicsHelp,
+          ),
+          _descriptorSummary(theme, descriptor),
+        ],
+      ],
+    ];
+
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final twoPaneLayout = constraints.maxWidth >= 980;
+        final content = twoPaneLayout
+            ? Align(
+                alignment: Alignment.topLeft,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1160),
+                  child: Row(
+                    key: const ValueKey<String>(
+                      'managed-provider-desktop-two-pane-layout',
+                    ),
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: _withSpacing(primaryChildren, height: 12),
+                        ),
+                      ),
+                      const SizedBox(width: 20),
+                      SizedBox(
+                        width: 280,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: _withSpacing(sidebarChildren, height: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            : Column(
+                key: const ValueKey<String>(
+                  'managed-provider-desktop-stacked-layout',
+                ),
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: _withSpacing(<Widget>[
+                  ...primaryChildren,
+                  ...sidebarChildren,
+                ], height: 12),
+              );
+
+        return ListView(
+          key: const ValueKey<String>('managed-provider-workspace-scroll'),
+          primary: true,
+          children: <Widget>[content],
+        );
+      },
+    );
+  }
+
+  Widget _desktopParametersContent(
+    ThemeData theme, {
+    required SupportedProviderDefinition? supportedProvider,
+    required ProviderDescriptor? descriptor,
+  }) {
+    final copy = context.shellText;
+    if (descriptor?.providerSettingsSupportError != null &&
+        widget.draft.providerSettings.isNotEmpty) {
+      return _inlineMessage(
+        theme,
+        copy.desktopProviderRecordSupportError(
+          providerName: descriptor!.displayName,
+          error: descriptor.providerSettingsSupportError!,
+        ),
+        tone: ShellSemanticTone.danger,
+      );
+    }
+    if (descriptor?.settingsSchema == null) {
+      return _inlineMessage(
+        theme,
+        supportedProvider == null
+            ? copy.desktopChooseProviderFamilyFirst
+            : copy.desktopNoEditableRecordParameters(supportedProvider.title),
+      );
+    }
+    return ProviderSettingsForm(
+      descriptor: descriptor!,
+      values: widget.draft.providerSettings,
+      enabled: !widget.busy,
+      onChanged: (Map<String, dynamic> values) {
+        _pushDraft(providerSettings: values);
+      },
+    );
+  }
+
+  Widget _desktopPanel(
+    ThemeData theme, {
+    required String title,
+    required String subtitle,
+    required Widget child,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: shellSurfaceDecoration(context),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
           Text(
-            copy.desktopFamilyCharacteristics,
+            title,
             style: theme.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            copy.desktopFamilyCharacteristicsHelp,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+          if (subtitle.trim().isNotEmpty) ...<Widget>[
+            const SizedBox(height: 6),
+            Text(
+              subtitle,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
-          ),
+          ],
           const SizedBox(height: 12),
-          _descriptorSummary(theme, descriptor),
+          child,
         ],
-        if (hostAvailability != null &&
-            !hostAvailability.isAvailable) ...<Widget>[
-          const SizedBox(height: 16),
-          _unavailableCard(theme, hostAvailability.message),
-        ],
-        const SizedBox(height: 16),
+      ),
+    );
+  }
+
+  Widget _desktopGroupHeader(
+    ThemeData theme, {
+    required String title,
+    required String subtitle,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
         Text(
-          parametersTitle,
-          style: theme.textTheme.titleMedium?.copyWith(
+          title,
+          style: theme.textTheme.titleSmall?.copyWith(
             fontWeight: FontWeight.w700,
           ),
         ),
-        const SizedBox(height: 6),
-        Text(
-          parametersDetail,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(height: 12),
-        if (descriptor?.providerSettingsSupportError != null &&
-            widget.draft.providerSettings.isNotEmpty)
-          _unavailableCard(
-            theme,
-            copy.desktopProviderRecordSupportError(
-              providerName: descriptor!.displayName,
-              error: descriptor.providerSettingsSupportError!,
+        if (subtitle.trim().isNotEmpty) ...<Widget>[
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
             ),
-          )
-        else if (descriptor?.settingsSchema == null)
-          _infoCard(
-            theme,
-            supportedProvider == null
-                ? copy.desktopChooseProviderFamilyFirst
-                : copy.desktopNoEditableRecordParameters(
-                    supportedProvider.title,
-                  ),
-          )
-        else if (descriptor != null)
-          ProviderSettingsForm(
-            descriptor: descriptor,
-            values: widget.draft.providerSettings,
-            enabled: !widget.busy,
-            onChanged: (Map<String, dynamic> values) {
-              _pushDraft(providerSettings: values);
-            },
           ),
+        ],
       ],
-      ..._withSpacing(widget.bottomChildren, height: 16),
-    ];
-
-    return ListView(
-      key: const ValueKey<String>('managed-provider-workspace-scroll'),
-      primary: true,
-      children: children,
     );
   }
 
@@ -354,6 +431,42 @@ class _ManagedProviderWorkflowBodyState
         enabled: !widget.busy,
         decoration: InputDecoration(labelText: label),
         onChanged: onChanged,
+      ),
+    );
+  }
+
+  Widget _desktopField({
+    Key? key,
+    required TextEditingController controller,
+    required String label,
+    required ValueChanged<String> onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          TextField(
+            key: key,
+            controller: controller,
+            enabled: !widget.busy,
+            decoration: const InputDecoration(
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 12,
+              ),
+            ),
+            onChanged: onChanged,
+          ),
+        ],
       ),
     );
   }
@@ -613,16 +726,25 @@ class _ManagedProviderWorkflowBodyState
     );
   }
 
-  Widget _infoCard(ThemeData theme, String message) {
+  Widget _inlineMessage(
+    ThemeData theme,
+    String message, {
+    ShellSemanticTone tone = ShellSemanticTone.neutral,
+  }) {
+    final palette = context.shellVisuals.tone(tone);
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: shellSurfaceDecoration(
         context,
         style: ShellSurfaceStyle.highlight,
+        tone: tone,
         borderRadius: const BorderRadius.all(Radius.circular(14)),
       ),
-      child: Text(message, style: theme.textTheme.bodyMedium),
+      child: Text(
+        message,
+        style: theme.textTheme.bodyMedium?.copyWith(color: palette.onContainer),
+      ),
     );
   }
 

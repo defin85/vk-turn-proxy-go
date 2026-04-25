@@ -1201,31 +1201,6 @@ class _ProfileWorkflowBodyState extends State<ProfileWorkflowBody> {
     );
   }
 
-  Widget _readOnlyField({
-    required BuildContext context,
-    Key? key,
-    required String label,
-    required String value,
-  }) {
-    final displayValue = value.trim().isEmpty
-        ? context.shellText.notSet
-        : value.trim();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: InputDecorator(
-        key: key,
-        decoration: InputDecoration(
-          labelText: label,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 10,
-          ),
-        ),
-        child: Text(displayValue),
-      ),
-    );
-  }
-
   Widget _desktopMetadataField({
     Key? key,
     required String label,

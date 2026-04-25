@@ -1140,6 +1140,7 @@ void main() {
             info: _readyHostInfo,
           ),
         ]),
+        stateStore: _FakeShellStateStore(),
         clock: () => DateTime.utc(2026, 4, 17, 12, 0),
       );
       addTearDown(controller.dispose);
@@ -1335,6 +1336,140 @@ void main() {
   );
 
   test(
+    'controller starts provider resolution before windows platform tunnel start',
+    () async {
+      final api = _FakeControlPlaneApi(
+        profiles: const <ProfileRecord>[],
+        resolutions: const <ResolutionRecord>[],
+        sessions: const <SessionRecord>[],
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(const <HostConnectionResult>[
+          HostConnectionResult(
+            state: HostLifecycleState.ready,
+            message: 'ready',
+            info: _readyWindowsWintunHostInfo,
+          ),
+        ]),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      controller.updateDraft(
+        controller.draft.copyWith(
+          spec: controller.draft.spec.copyWith(
+            provider: 'vk',
+            link: 'https://vk.com/call/join/fresh',
+          ),
+        ),
+      );
+      await controller.startPlatformTunnel(PlatformTunnelMode.windowsWintun);
+
+      expect(api.startResolutionCalls, hasLength(1));
+      expect(api.startResolutionCalls.single.provider, 'vk');
+      expect(
+        api.startResolutionCalls.single.input.link,
+        'https://vk.com/call/join/fresh',
+      );
+      expect(api.startSessionCalls, 0);
+      expect(api.startPlatformTunnelCalls, hasLength(1));
+      expect(api.startPlatformTunnelCalls.single.resolutionId, 'resolution-1');
+      expect(controller.selectedResolutionId, 'resolution-1');
+    },
+  );
+
+  test(
+    'controller waits for provider challenge started for windows platform tunnel',
+    () async {
+      final api = _FakeControlPlaneApi(
+        profiles: const <ProfileRecord>[],
+        resolutions: const <ResolutionRecord>[],
+        sessions: const <SessionRecord>[],
+        startResolutionState: ResolutionState.challengeRequired,
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(const <HostConnectionResult>[
+          HostConnectionResult(
+            state: HostLifecycleState.ready,
+            message: 'ready',
+            info: _readyWindowsWintunHostInfo,
+          ),
+        ]),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      controller.updateDraft(
+        controller.draft.copyWith(
+          spec: controller.draft.spec.copyWith(
+            provider: 'vk',
+            link: 'https://vk.com/call/join/fresh',
+          ),
+        ),
+      );
+      await controller.startPlatformTunnel(PlatformTunnelMode.windowsWintun);
+
+      expect(api.startResolutionCalls, hasLength(1));
+      expect(api.startPlatformTunnelCalls, isEmpty);
+      expect(
+        controller.notice,
+        const ShellText().resolutionStartedThenCompleteChallengeBeforeStarting(
+          const ShellText().startedResolutionForProviderWithExternalBrowser(
+            'resolution-1',
+            'VK Calls',
+          ),
+          PlatformTunnelMode.windowsWintun.label,
+        ),
+      );
+    },
+  );
+
+  test(
+    'controller continues pending windows platform tunnel after browser challenge',
+    () async {
+      final api = _FakeControlPlaneApi(
+        profiles: const <ProfileRecord>[],
+        resolutions: const <ResolutionRecord>[],
+        sessions: const <SessionRecord>[],
+        startResolutionState: ResolutionState.challengeRequired,
+        continueChallengeResolutionState: ResolutionState.resolved,
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(const <HostConnectionResult>[
+          HostConnectionResult(
+            state: HostLifecycleState.ready,
+            message: 'ready',
+            info: _readyWindowsWintunHostInfo,
+          ),
+        ]),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      controller.updateDraft(
+        controller.draft.copyWith(
+          spec: controller.draft.spec.copyWith(
+            provider: 'vk',
+            link: 'https://vk.com/call/join/fresh',
+          ),
+        ),
+      );
+
+      await controller.startPlatformTunnel(PlatformTunnelMode.windowsWintun);
+      expect(api.startResolutionCalls, hasLength(1));
+      expect(api.startPlatformTunnelCalls, isEmpty);
+
+      await controller.continueChallenge('challenge-1');
+
+      expect(api.startPlatformTunnelCalls, hasLength(1));
+      expect(api.startPlatformTunnelCalls.single.resolutionId, 'resolution-1');
+    },
+  );
+
+  test(
     'controller refuses startup for unavailable desktop platform tunnel modes',
     () async {
       final api = _FakeControlPlaneApi(
@@ -1424,6 +1559,8 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
     List<ResolutionRecord>? resolutions,
     required List<SessionRecord> sessions,
     Map<String, ChallengeRecord>? challenges,
+    ResolutionState startResolutionState = ResolutionState.resolved,
+    ResolutionState? continueChallengeResolutionState,
   }) : _profiles = List<ProfileRecord>.of(profiles),
        _providers = List<ProviderDescriptor>.of(
          providers ?? _providerDescriptors,
@@ -1437,7 +1574,9 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
        _sessions = List<SessionRecord>.of(sessions),
        _challenges = Map<String, ChallengeRecord>.of(
          challenges ?? <String, ChallengeRecord>{},
-       );
+       ),
+       _startResolutionState = startResolutionState,
+       _continueChallengeResolutionState = continueChallengeResolutionState;
 
   final List<ProviderDescriptor> _providers;
   final List<ProviderConfigRecord> _providerConfigs;
@@ -1445,6 +1584,8 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   final List<ResolutionRecord> _resolutions;
   final List<SessionRecord> _sessions;
   final Map<String, ChallengeRecord> _challenges;
+  final ResolutionState _startResolutionState;
+  final ResolutionState? _continueChallengeResolutionState;
   final StreamController<EventRecord> _events =
       StreamController<EventRecord>.broadcast();
   final List<String> challengeRequests = <String>[];
@@ -1487,7 +1628,27 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
     String challengeId, {
     ChallengeContinuationSubmission? browserContinuation,
   }) async {
-    return _challenges[challengeId]!;
+    final challenge = _challenges[challengeId]!.copyWith(
+      status: ChallengeStatus.completed,
+      updatedAt: DateTime.utc(2026, 4, 10, 12, 2),
+    );
+    _challenges[challengeId] = challenge;
+    final nextResolutionState = _continueChallengeResolutionState;
+    if (nextResolutionState != null) {
+      final resolutionId = challenge.resolutionId?.trim() ?? '';
+      final index = _resolutions.indexWhere(
+        (ResolutionRecord resolution) => resolution.id == resolutionId,
+      );
+      if (index >= 0) {
+        _resolutions[index] = _resolutionRecord(
+          id: _resolutions[index].id,
+          provider: _resolutions[index].provider,
+          linkRedacted: _resolutions[index].input.linkRedacted,
+          state: nextResolutionState,
+        );
+      }
+    }
+    return challenge;
   }
 
   @override
@@ -1690,7 +1851,28 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
       id: 'resolution-${startResolutionCalls.length}',
       provider: provider,
       linkRedacted: input.link,
+      state: _startResolutionState,
+      activeChallengeId:
+          _startResolutionState == ResolutionState.challengeRequired
+          ? 'challenge-${startResolutionCalls.length}'
+          : null,
     );
+    if (_startResolutionState == ResolutionState.challengeRequired) {
+      final challengeId = 'challenge-${startResolutionCalls.length}';
+      _challenges[challengeId] = ChallengeRecord(
+        id: challengeId,
+        sessionId: '',
+        resolutionId: resolution.id,
+        provider: provider,
+        stage: 'provider_resolve',
+        kind: 'browser',
+        prompt: 'continue in browser',
+        openUrl: input.link,
+        status: ChallengeStatus.pending,
+        createdAt: DateTime.utc(2026, 4, 10, 12, 1),
+        updatedAt: DateTime.utc(2026, 4, 10, 12, 1),
+      );
+    }
     _resolutions
       ..clear()
       ..add(resolution);

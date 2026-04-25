@@ -138,6 +138,8 @@ class DesktopShellController extends ChangeNotifier {
       <String, ProfileProviderBinding>{};
   final Map<PlatformTunnelMode, PlatformTunnelStartResult>
   _platformTunnelResults = <PlatformTunnelMode, PlatformTunnelStartResult>{};
+  PlatformTunnelMode? _pendingPlatformTunnelStartMode;
+  String? _pendingPlatformTunnelStartResolutionId;
   String? notice;
   bool busy = false;
 
@@ -966,29 +968,10 @@ class DesktopShellController extends ChangeNotifier {
         notice = _copy.selectedProviderNotAdvertisedByConnectedHost;
         return;
       }
-      if (descriptor.inputKind != ProviderInputKind.link) {
-        notice = _copy.providerExpectsLinkEntryOnlyDesktop(
-          providerName: descriptor.displayName,
-          inputKind: descriptor.inputKind.value,
-        );
+      final resolution = await _startResolutionForDraft(draft, descriptor);
+      if (resolution == null) {
         return;
       }
-      final blockReason = _providerSettingsBlockReason(descriptor);
-      if (blockReason != null) {
-        notice = blockReason;
-        return;
-      }
-      final resolution = await api.startResolution(
-        provider: descriptor.id,
-        input: ProviderInputEnvelope(
-          kind: descriptor.inputKind,
-          link: draft.spec.link,
-        ),
-        providerSettings: descriptor.normalizeProviderSettings(
-          draft.spec.providerSettings,
-          applyDefaults: false,
-        ),
-      );
       selectedResolutionId = resolution.id;
       notice = _resolutionStartedNotice(descriptor, resolution.id);
       await refresh();
@@ -1061,6 +1044,20 @@ class DesktopShellController extends ChangeNotifier {
     });
   }
 
+  Future<void> openChallengeInBrowser(ChallengeRecord challenge) async {
+    final url = challenge.openUrl?.trim() ?? '';
+    if (url.isEmpty) {
+      notice = _copy.challengeHasNoBrowserHandoffUrl;
+      _notify();
+      return;
+    }
+    final opened = await _browserLauncher.open(url);
+    notice = opened
+        ? _copy.openedMobileBrowserHandoff(challenge.kind)
+        : _copy.failedToOpenMobileBrowserHandoffUrl;
+    _notify();
+  }
+
   Future<void> stopSession(String sessionId) async {
     await _runMutation(() async {
       await api.stopSession(sessionId);
@@ -1075,6 +1072,7 @@ class DesktopShellController extends ChangeNotifier {
       _challengeCache[challenge.id] = challenge;
       notice = _challengeContinuedNotice(challenge);
       await refresh();
+      await _startPendingPlatformTunnelIfResolutionReady();
     });
   }
 
@@ -1118,27 +1116,47 @@ class DesktopShellController extends ChangeNotifier {
     await _runMutation(() async {
       final capability = _platformTunnelCapabilityFor(mode);
       if (capability == null) {
+        _clearPendingPlatformTunnelStart(mode);
         notice = _copy.desktopNoPlatformTunnelModesReported;
         return;
       }
       if (!capability.available) {
+        _clearPendingPlatformTunnelStart(mode);
         final message = capability.message.trim();
         notice = message.isNotEmpty
             ? message
             : _copy.desktopTypedHostTunnelSummary;
         return;
       }
-      final result = await api.startPlatformTunnel(
+      final requiresResolution = _platformTunnelModeRequiresResolution(mode);
+      final resolutionId = requiresResolution
+          ? await _ensureResolutionForPlatformTunnel(
+              mode,
+              rememberStartupIntent: true,
+            )
+          : _platformTunnelResolutionIdFor(mode);
+      if (requiresResolution && resolutionId == null) {
+        return;
+      }
+      _clearPendingPlatformTunnelStart(mode);
+      await _startPlatformTunnelWithCapability(
         mode: mode,
-        resolutionId: _platformTunnelResolutionIdFor(mode),
-        runtimeDefaults: _platformTunnelRuntimeDefaultsFor(mode),
-        executionPlan: _defaultPlatformTunnelExecutionPlan(capability),
-        underlayRoutePolicy: _defaultPlatformTunnelUnderlayRoutePolicy(
-          capability,
-        ),
+        capability: capability,
+        resolutionId: resolutionId,
       );
-      _platformTunnelResults[mode] = result;
-      notice = _platformTunnelNotice(result);
+    });
+  }
+
+  Future<void> stopPlatformTunnel(PlatformTunnelMode mode) async {
+    await _runMutation(() async {
+      final result = await api.stopPlatformTunnel(mode: mode);
+      _platformTunnelResults.remove(mode);
+      _clearPendingPlatformTunnelStart(mode);
+      final message = result.message.trim();
+      notice = message.isEmpty
+          ? _copy.platformTunnelDisconnected(mode.label)
+          : message;
+      await refresh();
     });
   }
 
@@ -1180,6 +1198,251 @@ class DesktopShellController extends ChangeNotifier {
       }
     }
     return null;
+  }
+
+  ResolutionRecord? _selectedResolutionRecord() {
+    final resolutionId = selectedResolutionId?.trim() ?? '';
+    if (resolutionId.isEmpty) {
+      return null;
+    }
+    return _resolutionById(resolutionId);
+  }
+
+  Future<ResolutionRecord?> _startResolutionForDraft(
+    ProfileDraft sourceDraft,
+    ProviderDescriptor descriptor,
+  ) async {
+    if (descriptor.inputKind != ProviderInputKind.link) {
+      notice = _copy.providerExpectsLinkEntryOnlyDesktop(
+        providerName: descriptor.displayName,
+        inputKind: descriptor.inputKind.value,
+      );
+      return null;
+    }
+    final blockReason = _providerSettingsBlockReason(descriptor);
+    if (blockReason != null) {
+      notice = blockReason;
+      return null;
+    }
+    return api.startResolution(
+      provider: descriptor.id,
+      input: ProviderInputEnvelope(
+        kind: descriptor.inputKind,
+        link: sourceDraft.spec.link,
+      ),
+      providerSettings: descriptor.normalizeProviderSettings(
+        sourceDraft.spec.providerSettings,
+        applyDefaults: false,
+      ),
+    );
+  }
+
+  Future<String?> _ensureResolutionForPlatformTunnel(
+    PlatformTunnelMode mode, {
+    required bool rememberStartupIntent,
+  }) async {
+    final selectedResolution = _selectedResolutionRecord();
+    if (selectedResolution != null) {
+      switch (selectedResolution.state) {
+        case ResolutionState.resolved:
+          return selectedResolution.id;
+        case ResolutionState.challengeRequired:
+          if (rememberStartupIntent) {
+            _rememberPendingPlatformTunnelStart(mode, selectedResolution.id);
+          }
+          notice = _copy.challengeMustCompleteBeforeStarting(mode.label);
+          return null;
+        case ResolutionState.starting:
+          if (rememberStartupIntent) {
+            _rememberPendingPlatformTunnelStart(mode, selectedResolution.id);
+          }
+          notice = _copy.waitForProviderResolutionBeforeStarting(mode.label);
+          return null;
+        case ResolutionState.failed ||
+            ResolutionState.cancelled ||
+            ResolutionState.expired:
+          _clearPendingPlatformTunnelStart(mode);
+          selectedResolutionId = null;
+          break;
+      }
+    }
+
+    final descriptor = descriptorForProvider(draft.spec.provider);
+    if (descriptor == null) {
+      _clearPendingPlatformTunnelStart(mode);
+      notice = _copy.selectedProviderNotAdvertisedByConnectedHost;
+      return null;
+    }
+    final resolution = await _startResolutionForDraft(draft, descriptor);
+    if (resolution == null) {
+      _clearPendingPlatformTunnelStart(mode);
+      return null;
+    }
+    selectedResolutionId = resolution.id;
+    await refresh();
+    final refreshedResolution = _resolutionById(resolution.id) ?? resolution;
+    switch (refreshedResolution.state) {
+      case ResolutionState.resolved:
+        return refreshedResolution.id;
+      case ResolutionState.challengeRequired:
+        if (rememberStartupIntent) {
+          _rememberPendingPlatformTunnelStart(mode, refreshedResolution.id);
+        }
+        notice = _copy.resolutionStartedThenCompleteChallengeBeforeStarting(
+          _resolutionStartedNotice(descriptor, refreshedResolution.id),
+          mode.label,
+        );
+        return null;
+      case ResolutionState.starting:
+        if (rememberStartupIntent) {
+          _rememberPendingPlatformTunnelStart(mode, refreshedResolution.id);
+        }
+        notice = _copy.resolutionStartedThenWaitForFinishBeforeStarting(
+          _resolutionStartedNotice(descriptor, refreshedResolution.id),
+          mode.label,
+        );
+        return null;
+      case ResolutionState.failed ||
+          ResolutionState.cancelled ||
+          ResolutionState.expired:
+        _clearPendingPlatformTunnelStart(mode);
+        notice = _resolutionUnavailableForPlatformTunnelNotice(
+          mode,
+          refreshedResolution,
+        );
+        return null;
+    }
+  }
+
+  Future<void> _startPendingPlatformTunnelIfResolutionReady() async {
+    final mode = _pendingPlatformTunnelStartMode;
+    final resolutionId = _pendingPlatformTunnelStartResolutionId?.trim() ?? '';
+    if (mode == null || resolutionId.isEmpty) {
+      return;
+    }
+    final resolution = _resolutionById(resolutionId);
+    if (resolution == null) {
+      return;
+    }
+    switch (resolution.state) {
+      case ResolutionState.resolved:
+        final capability = _platformTunnelCapabilityFor(mode);
+        if (capability == null) {
+          _clearPendingPlatformTunnelStart(mode);
+          notice = _copy.desktopNoPlatformTunnelModesReported;
+          return;
+        }
+        if (!capability.available) {
+          _clearPendingPlatformTunnelStart(mode);
+          final message = capability.message.trim();
+          notice = message.isNotEmpty
+              ? message
+              : _copy.desktopTypedHostTunnelSummary;
+          return;
+        }
+        _clearPendingPlatformTunnelStart(mode);
+        await _startPlatformTunnelWithCapability(
+          mode: mode,
+          capability: capability,
+          resolutionId: resolution.id,
+        );
+        return;
+      case ResolutionState.failed ||
+          ResolutionState.cancelled ||
+          ResolutionState.expired:
+        _clearPendingPlatformTunnelStart(mode);
+        notice = _resolutionUnavailableForPlatformTunnelNotice(
+          mode,
+          resolution,
+        );
+        return;
+      case ResolutionState.challengeRequired:
+      case ResolutionState.starting:
+        return;
+    }
+  }
+
+  Future<void> _startPlatformTunnelWithCapability({
+    required PlatformTunnelMode mode,
+    required PlatformTunnelCapability capability,
+    required String? resolutionId,
+  }) async {
+    final result = await api.startPlatformTunnel(
+      mode: mode,
+      resolutionId: resolutionId,
+      runtimeDefaults: _platformTunnelRuntimeDefaultsFor(mode),
+      executionPlan: _defaultPlatformTunnelExecutionPlan(capability),
+      underlayRoutePolicy: _defaultPlatformTunnelUnderlayRoutePolicy(
+        capability,
+      ),
+    );
+    _platformTunnelResults[mode] = result;
+    if (result.ready) {
+      await refresh();
+      final sessionId = _resolvePlatformTunnelReadySessionId(
+        sessionId: result.sessionId,
+        resolutionId: resolutionId,
+      );
+      if (sessionId != null) {
+        selectedSessionId = sessionId;
+      }
+    }
+    notice = _platformTunnelNotice(result);
+  }
+
+  void _rememberPendingPlatformTunnelStart(
+    PlatformTunnelMode mode,
+    String resolutionId,
+  ) {
+    final normalized = resolutionId.trim();
+    if (normalized.isEmpty) {
+      return;
+    }
+    _pendingPlatformTunnelStartMode = mode;
+    _pendingPlatformTunnelStartResolutionId = normalized;
+  }
+
+  void _clearPendingPlatformTunnelStart([PlatformTunnelMode? mode]) {
+    if (mode != null && _pendingPlatformTunnelStartMode != mode) {
+      return;
+    }
+    _pendingPlatformTunnelStartMode = null;
+    _pendingPlatformTunnelStartResolutionId = null;
+  }
+
+  String? _resolvePlatformTunnelReadySessionId({
+    required String sessionId,
+    required String? resolutionId,
+  }) {
+    final explicitSessionId = sessionId.trim();
+    if (explicitSessionId.isNotEmpty &&
+        sessions.any(
+          (SessionRecord session) => session.id == explicitSessionId,
+        )) {
+      return explicitSessionId;
+    }
+
+    final normalizedResolutionId = resolutionId?.trim() ?? '';
+    if (normalizedResolutionId.isEmpty) {
+      return null;
+    }
+
+    SessionRecord? fallbackMatch;
+    for (final session in sessions) {
+      if ((session.sourceResolutionId ?? '').trim() != normalizedResolutionId) {
+        continue;
+      }
+      fallbackMatch ??= session;
+      if (!_isTerminalSession(session)) {
+        return session.id;
+      }
+    }
+    return fallbackMatch?.id;
+  }
+
+  bool _isTerminalSession(SessionRecord session) {
+    return session.state == SessionState.stopped ||
+        session.state == SessionState.failed;
   }
 
   PlatformTunnelCapability? _platformTunnelCapabilityFor(
@@ -1611,6 +1874,7 @@ class DesktopShellController extends ChangeNotifier {
 
   void _clearPlatformTunnelResults() {
     _platformTunnelResults.clear();
+    _clearPendingPlatformTunnelStart();
   }
 
   void _relocalizeReadyHostConnection() {
@@ -1652,6 +1916,22 @@ class DesktopShellController extends ChangeNotifier {
       stageLabel: result.stage?.label ?? _copy.unknownStage,
       prerequisiteLabel: result.missingPrerequisite?.label,
       message: result.message,
+    );
+  }
+
+  String _resolutionUnavailableForPlatformTunnelNotice(
+    PlatformTunnelMode mode,
+    ResolutionRecord resolution,
+  ) {
+    final stage = resolution.failure?.stage ?? resolution.state.value;
+    final message =
+        resolution.failure?.message ??
+        _copy.providerDidNotReturnStartableArtifact;
+    return _copy.resolutionUnavailableForPlatformTunnel(
+      modeLabel: mode.label,
+      resolutionId: resolution.id,
+      stage: stage,
+      message: message,
     );
   }
 

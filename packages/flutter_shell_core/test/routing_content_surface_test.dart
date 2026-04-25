@@ -16,7 +16,7 @@ void main() {
         tester,
         child: SizedBox(
           width: 1400,
-          height: 760,
+          height: 860,
           child: RoutingContentSurface(
             variant: RoutingContentSurfaceVariant.desktop,
             spec: initialSpec,
@@ -49,13 +49,79 @@ void main() {
         find.byKey(const ValueKey<String>('routing-content-surface-desktop')),
         findsOneWidget,
       );
+      final copy = tester.element(find.byType(MaterialApp)).shellText;
+      expect(find.text('Routing parameters'), findsOneWidget);
+      expect(find.text('Profile settings'), findsNothing);
+      expect(find.text(copy.saveProfile), findsOneWidget);
+      expect(find.text(copy.openProfiles), findsNothing);
+      expect(find.text(copy.startOnThisDevice), findsNothing);
+      final listenAddressField = tester.widget<TextField>(
+        find.byKey(
+          const ValueKey<String>('desktop-routing-listen-address-field'),
+        ),
+      );
+      expect(listenAddressField.decoration?.labelText, isNull);
+      expect(find.text(copy.localUdpListen), findsOneWidget);
+      expect(find.byType(ExpansionTile), findsNothing);
+      expect(
+        find.byKey(const ValueKey<String>('desktop-routing-mode-field')),
+        findsNothing,
+      );
+      final advancedToggle = find.byKey(
+        const ValueKey<String>('desktop-routing-toggle-advanced'),
+      );
+      final desktopRoutingScrollable = find.byType(Scrollable).first;
+      await tester.scrollUntilVisible(
+        advancedToggle,
+        120,
+        scrollable: desktopRoutingScrollable,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text(copy.mobileAdvancedRuntimeControls), findsOneWidget);
+      expect(find.text(copy.showAdvancedRuntimeControls), findsOneWidget);
+
+      tester.widget<TextButton>(advancedToggle).onPressed!.call();
+      await tester.pumpAndSettle();
+
+      final modeField = tester.widget<DropdownButtonFormField<TransportMode>>(
+        find.byKey(const ValueKey<String>('desktop-routing-mode-field')),
+      );
+      expect(modeField.decoration.labelText, isNull);
+      expect(
+        find.byKey(const ValueKey<String>('desktop-routing-mode-field')),
+        findsOneWidget,
+      );
       expect(
         find.byKey(
           const ValueKey<String>('routing-platform-tunnel-surface-desktop'),
         ),
         findsOneWidget,
       );
+      expect(find.text('windows_wintun'), findsNothing);
+      expect(find.text(copy.showPlatformTunnelDetails), findsOneWidget);
+      expect(find.text(copy.requestStartup), findsOneWidget);
 
+      tester
+          .widget<TextButton>(
+            find.byKey(
+              const ValueKey<String>('routing-platform-tunnel-toggle-desktop'),
+            ),
+          )
+          .onPressed!
+          .call();
+      await tester.pumpAndSettle();
+
+      expect(find.text('windows_wintun'), findsOneWidget);
+      expect(find.text(copy.requestStartup), findsOneWidget);
+
+      await tester.scrollUntilVisible(
+        find.byKey(
+          const ValueKey<String>('desktop-routing-listen-address-field'),
+        ),
+        -120,
+        scrollable: desktopRoutingScrollable,
+      );
+      await tester.pumpAndSettle();
       await tester.enterText(
         find.byKey(
           const ValueKey<String>('desktop-routing-listen-address-field'),

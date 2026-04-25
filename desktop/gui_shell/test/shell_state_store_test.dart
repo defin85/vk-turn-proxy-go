@@ -9,6 +9,14 @@ import 'package:gui_shell/src/control/shell_state_store.dart';
 void main() {
   const providerDescriptors = <ProviderDescriptor>[
     ProviderDescriptor(
+      id: 'vk',
+      displayName: 'VK Calls',
+      inputKind: ProviderInputKind.link,
+      authPosture: ProviderAuthPosture.guestOrAccount,
+      browserPolicy: ProviderBrowserPolicy.externalRequired,
+      challengeModes: <ProviderChallengeMode>[ProviderChallengeMode.browser],
+    ),
+    ProviderDescriptor(
       id: 'wb-stream',
       displayName: 'WB Stream',
       inputKind: ProviderInputKind.link,
@@ -42,7 +50,7 @@ void main() {
   ];
 
   test(
-    'desktop state store redacts provider links from persisted plaintext state',
+    'desktop state store redacts secret provider links but keeps VK root link',
     () async {
       final directory = await Directory.systemTemp.createTemp(
         'desktop-shell-state-',
@@ -53,6 +61,16 @@ void main() {
 
       final state = DesktopShellState(
         profiles: <ProfileRecord>[
+          ProfileRecord(
+            id: 'profile-0',
+            name: 'vk root',
+            spec: const ProfileSpec(
+              provider: 'vk',
+              link: 'https://calls.vk.com/',
+              listenAddress: '127.0.0.1:9001',
+              peerAddress: '127.0.0.1:56000',
+            ),
+          ),
           ProfileRecord(
             id: 'profile-1',
             name: 'vk invite',
@@ -70,6 +88,16 @@ void main() {
           ),
           ProfileRecord(
             id: 'profile-2',
+            name: 'vk room',
+            spec: const ProfileSpec(
+              provider: 'vk',
+              link: 'https://calls.vk.com/rooms/test',
+              listenAddress: '127.0.0.1:9001',
+              peerAddress: '127.0.0.1:56000',
+            ),
+          ),
+          ProfileRecord(
+            id: 'profile-3',
             name: 'handoff',
             spec: const ProfileSpec(
               provider: 'generic-turn',
@@ -129,7 +157,9 @@ void main() {
       await store.save(state.sanitizedForPersistence(providerDescriptors));
 
       final payload = await file.readAsString();
+      expect(payload, contains('https://calls.vk.com/'));
       expect(payload, isNot(contains('https://vk.com/call/join/test-token')));
+      expect(payload, isNot(contains('https://calls.vk.com/rooms/test')));
       expect(
         payload,
         isNot(
@@ -152,12 +182,20 @@ void main() {
           decoded['profile_bindings'] as Map<String, dynamic>;
       final runtimeDefaults =
           decoded['runtime_defaults'] as Map<String, dynamic>;
-      expect((profiles[0] as Map<String, dynamic>)['spec']['link'], '');
+      Map<String, dynamic> profileById(String id) {
+        return profiles.cast<Map<String, dynamic>>().singleWhere(
+          (Map<String, dynamic> profile) => profile['id'] == id,
+        );
+      }
+
+      expect(profileById('profile-0')['spec']['link'], 'https://calls.vk.com/');
+      expect(profileById('profile-1')['spec']['link'], '');
       expect(
-        (profiles[0] as Map<String, dynamic>)['spec']['provider_settings'],
+        profileById('profile-1')['spec']['provider_settings'],
         <String, dynamic>{'region': 'eu-west'},
       );
-      expect((profiles[1] as Map<String, dynamic>)['spec']['link'], '');
+      expect(profileById('profile-2')['spec']['link'], '');
+      expect(profileById('profile-3')['spec']['link'], '');
       expect((decoded['draft'] as Map<String, dynamic>)['spec']['link'], '');
       expect(
         (decoded['draft'] as Map<String, dynamic>)['spec']['provider_settings'],

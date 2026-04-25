@@ -280,3 +280,183 @@ typed translation API.
 - **AND** app packages do not need separate translation copies to prepare for
   that later locale
 
+### Requirement: Shared shell workspace owns cross-shell visual primitives
+
+The system SHALL keep reusable cross-shell visual primitives in the shared
+shell workspace when they do not depend on platform-specific chrome or plugins.
+
+#### Scenario: Desktop and mobile use one shared visual primitive
+
+- **GIVEN** desktop and mobile need the same product token or component
+  treatment such as status tones, action emphasis, or surface styling
+- **WHEN** the repository assigns ownership for that primitive
+- **THEN** it lives in `packages/flutter_shell_core`
+- **AND** both shells consume the same shared definition instead of drifting
+  into parallel copies
+
+#### Scenario: Platform-specific chrome stays app-local
+
+- **GIVEN** a visual wrapper depends on desktop windowing, keyboard affordances,
+  or mobile-native presentation
+- **WHEN** the repository assigns ownership for that wrapper
+- **THEN** the desktop or mobile app package keeps it locally
+- **AND** the shared shell core does not force one platform's layout idioms
+  onto the other
+
+### Requirement: Shared shell core owns a shared profile workflow surface
+
+The system SHALL keep the body-level saved-profile workflow in
+`packages/flutter_shell_core` so desktop and mobile shells reuse one shared
+profile editing surface while keeping shell-owned navigation and platform
+adapters app-local.
+
+#### Scenario: Desktop and mobile consume one shared profile workflow body
+
+- **GIVEN** desktop and mobile both render saved-profile editing, managed
+  versus custom provider mode switching, and portable-profile draft state
+- **WHEN** the repository assigns ownership for that workflow body
+- **THEN** `packages/flutter_shell_core` provides one platform-neutral shared
+  profile workflow surface and its typed data contract
+- **AND** desktop and mobile import the same shared implementation instead of
+  keeping separate profile editor bodies
+
+#### Scenario: App-local wrappers keep shell and platform ownership
+
+- **GIVEN** desktop and mobile expose different navigation, transfer
+  affordances, and shell-owned profile entry flows
+- **WHEN** they embed the shared profile workflow surface
+- **THEN** page navigation, left-pad routing, current-profile targeting, and
+  share, file, QR, or browser adapters remain in app-local code
+- **AND** the shared shell core does not take ownership of platform plugins or
+  shell route state
+
+### Requirement: Shared shell core owns a shared managed-provider workflow surface
+
+The system SHALL keep the body-level reusable managed-provider workflow in
+`packages/flutter_shell_core` so desktop and mobile shells reuse one shared
+managed-provider editing surface while keeping root-level provider navigation
+and non-shared entry semantics app-local.
+
+#### Scenario: Desktop and mobile consume one shared managed-provider editor
+
+- **GIVEN** desktop and mobile both render descriptor-driven reusable provider
+  record editing with save, delete, and apply-to-profile actions
+- **WHEN** the repository assigns ownership for that workflow body
+- **THEN** `packages/flutter_shell_core` provides one platform-neutral shared
+  managed-provider workflow surface and its typed data contract
+- **AND** desktop and mobile import the same shared editor implementation
+
+#### Scenario: Template and preset wrappers stay app-local
+
+- **GIVEN** mobile exposes template-specific provider flows and desktop exposes
+  shell-owned preset and provider-family entry surfaces
+- **WHEN** those apps embed the shared managed-provider workflow surface
+- **THEN** template roots, preset bootstrap, and route wrappers remain
+  app-local
+- **AND** the shared shell core does not treat those app-owned wrappers as part
+  of the mandatory shared editor contract
+
+### Requirement: Shared shell core owns workflow library and frame primitives
+
+The system SHALL keep common workflow library and frame primitives in
+`packages/flutter_shell_core` so desktop and mobile shells reuse the same body-
+level list and section-frame building blocks while keeping shell-owned page
+scaffolds app-local.
+
+#### Scenario: Desktop and mobile consume shared library primitives
+
+- **GIVEN** desktop and mobile both need saved-profile lists, reusable
+  managed-provider lists, and equivalent empty or hint states
+- **WHEN** the repository assigns ownership for those body-level primitives
+- **THEN** `packages/flutter_shell_core` provides the shared list and frame
+  surfaces for those workflows
+- **AND** app packages pass shell-local actions and navigation callbacks into
+  those shared primitives instead of forking the whole surface
+
+#### Scenario: Shell-owned scaffolds remain app-local
+
+- **GIVEN** desktop uses a left pad plus dominant canvas and mobile uses
+  destination pages, rails, and sheets
+- **WHEN** they render shared workflow library and frame primitives
+- **THEN** page headers, toolbars, inspectors, navigation bars, and route
+  wrappers remain app-local
+- **AND** the shared shell core stays body-level and platform-neutral
+
+### Requirement: Shared shell core owns support content surfaces
+
+The system SHALL keep body-level activity and diagnostics content in
+`packages/flutter_shell_core` so desktop inspectors and mobile support
+workflows reuse the same support-content surfaces while keeping support shell
+ownership app-local.
+
+#### Scenario: Desktop and mobile consume one shared support-content layer
+
+- **GIVEN** desktop and mobile both need activity, session, diagnostics
+  overview, and event content for the same local control-plane state
+- **WHEN** the repository assigns ownership for those support bodies
+- **THEN** `packages/flutter_shell_core` provides the shared support-content
+  surfaces and their typed data contract
+- **AND** desktop and mobile embed that shared content instead of keeping
+  separate body implementations
+
+#### Scenario: Support wrappers remain app-local
+
+- **GIVEN** desktop uses inspectors and mobile uses a dedicated support
+  workflow with its own compact and wide wrappers
+- **WHEN** those apps adopt the shared support-content surfaces
+- **THEN** inspector chrome, support toolbars, route wrappers, and
+  mobile-specific embedded-browser controls remain app-local
+- **AND** the shared shell core does not take ownership of support route state
+
+### Requirement: Shared shell core owns a shared routing content surface
+
+The system SHALL keep the body-level routing workflow in
+`packages/flutter_shell_core` so desktop and mobile shells reuse one shared
+routing-content surface while keeping shell-owned wrappers and selectors
+app-local.
+
+#### Scenario: Desktop and mobile consume one shared routing body
+
+- **GIVEN** desktop and mobile both expose routing parameters, mode controls,
+  and platform-tunnel status for the current profile
+- **WHEN** the repository assigns ownership for that routing body
+- **THEN** `packages/flutter_shell_core` provides one platform-neutral shared
+  routing-content surface and its typed data contract
+- **AND** desktop and mobile embed that shared body instead of maintaining
+  separate routing workflow bodies
+
+#### Scenario: Shell-owned selectors and wrappers remain local
+
+- **GIVEN** mobile and desktop still expose some routing controls through
+  shell-local selectors, sheets, or route actions
+- **WHEN** they adopt the shared routing-content surface
+- **THEN** those selectors and wrappers remain app-local
+- **AND** the shared shell core does not take ownership of host supervision,
+  platform tunnel startup policy, or shell navigation state
+
+### Requirement: Shared shell workspace owns platform-neutral workflow bodies
+
+The system SHALL keep reusable workflow-body surfaces in the shared shell
+workspace when those surfaces do not depend on platform navigation chrome,
+plugins, or runtime ownership.
+
+#### Scenario: Desktop and mobile reuse one Home workflow body
+
+- **GIVEN** desktop and mobile both need the same product-facing `Home`
+  workflow body
+- **WHEN** that body only needs typed shell state, copy, and user-intent
+  callbacks
+- **THEN** it lives in `packages/flutter_shell_core`
+- **AND** both shells consume that shared body instead of maintaining parallel
+  app-local compositions
+
+#### Scenario: Platform shell chrome stays app-local around a shared body
+
+- **GIVEN** a workflow surface still needs desktop left-pad routing, inspector
+  ownership, mobile rail or bottom navigation, browser/share adapters, or host
+  supervision
+- **WHEN** the repository assigns ownership for those capabilities
+- **THEN** the desktop or mobile app package keeps that shell chrome locally
+- **AND** the shared shell core stays limited to the platform-neutral body
+  surface rather than forcing one platform's page scaffold onto the other
+

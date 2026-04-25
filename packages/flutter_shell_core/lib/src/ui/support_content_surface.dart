@@ -598,17 +598,34 @@ class _SupportResolutionCard extends StatelessWidget {
   }
 
   Widget _buildDesktopResolutionChallengeActions(BuildContext context) {
+    final hasOpenChallenge = actions.onOpenChallenge != null;
     return Wrap(
       spacing: 10,
       runSpacing: 10,
       children: <Widget>[
-        if (actions.onContinueChallenge != null)
+        if (hasOpenChallenge)
           FilledButton(
             onPressed: busy
                 ? null
-                : () => unawaited(actions.onContinueChallenge!.call()),
-            child: Text(context.shellText.continueAfterBrowserStep),
+                : () => unawaited(actions.onOpenChallenge!.call()),
+            child: Text(
+              actions.openChallengeLabel ?? context.shellText.mobileOpenBrowser,
+            ),
           ),
+        if (actions.onContinueChallenge != null)
+          hasOpenChallenge
+              ? OutlinedButton(
+                  onPressed: busy
+                      ? null
+                      : () => unawaited(actions.onContinueChallenge!.call()),
+                  child: Text(context.shellText.continueAfterBrowserStep),
+                )
+              : FilledButton(
+                  onPressed: busy
+                      ? null
+                      : () => unawaited(actions.onContinueChallenge!.call()),
+                  child: Text(context.shellText.continueAfterBrowserStep),
+                ),
         if (actions.onCancelChallenge != null)
           OutlinedButton(
             onPressed: busy
@@ -962,17 +979,34 @@ class _SupportSessionCard extends StatelessWidget {
   }
 
   Widget _buildDesktopSessionChallengeActions(BuildContext context) {
+    final hasOpenChallenge = actions.onOpenChallenge != null;
     return Wrap(
       spacing: 10,
       runSpacing: 10,
       children: <Widget>[
-        if (actions.onContinueChallenge != null)
+        if (hasOpenChallenge)
           FilledButton.tonal(
             onPressed: busy
                 ? null
-                : () => unawaited(actions.onContinueChallenge!.call()),
-            child: Text(context.shellText.continueInBrowser),
+                : () => unawaited(actions.onOpenChallenge!.call()),
+            child: Text(
+              actions.openChallengeLabel ?? context.shellText.mobileOpenBrowser,
+            ),
           ),
+        if (actions.onContinueChallenge != null)
+          hasOpenChallenge
+              ? OutlinedButton(
+                  onPressed: busy
+                      ? null
+                      : () => unawaited(actions.onContinueChallenge!.call()),
+                  child: Text(context.shellText.continueInBrowser),
+                )
+              : FilledButton.tonal(
+                  onPressed: busy
+                      ? null
+                      : () => unawaited(actions.onContinueChallenge!.call()),
+                  child: Text(context.shellText.continueInBrowser),
+                ),
         if (actions.onCancelChallenge != null)
           OutlinedButton(
             onPressed: busy

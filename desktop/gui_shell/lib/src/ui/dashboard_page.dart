@@ -292,14 +292,6 @@ class _DashboardPageState extends State<DashboardPage> {
                             showNavigationButton: showCompactLayout,
                             showPersistentInspector: !showCompactLayout,
                             onOpenNavigation: _openNavigationDrawer,
-                            onOpenDiagnostics: () => _handleInspectorAction(
-                              pane: DesktopInspectorPane.diagnostics,
-                              compactDrawer: showCompactLayout,
-                            ),
-                            onOpenActivity: () => _handleInspectorAction(
-                              pane: DesktopInspectorPane.activity,
-                              compactDrawer: showCompactLayout,
-                            ),
                           );
                         },
                       ),
@@ -469,16 +461,12 @@ class _DesktopShellBar extends StatelessWidget {
     required this.showNavigationButton,
     required this.showPersistentInspector,
     required this.onOpenNavigation,
-    required this.onOpenDiagnostics,
-    required this.onOpenActivity,
   });
 
   final DesktopShellController controller;
   final bool showNavigationButton;
   final bool showPersistentInspector;
   final VoidCallback onOpenNavigation;
-  final VoidCallback onOpenDiagnostics;
-  final VoidCallback onOpenActivity;
 
   @override
   Widget build(BuildContext context) {
@@ -522,57 +510,22 @@ class _DesktopShellBar extends StatelessWidget {
             icon: const Icon(Icons.menu),
             tooltip: t.commonOpenWorkflowsTooltip,
           ),
-        PopupMenuButton<String>(
-          tooltip: t.localeSwitchTooltip,
-          onSelected: (String value) {
-            unawaited(
-              controller.selectLocaleOverride(value.isEmpty ? null : value),
-            );
-          },
-          itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-            CheckedPopupMenuItem<String>(
-              key: ValueKey<String>(shellLocaleMenuItemKey(null)),
-              value: '',
-              checked: controller.usesSystemLocale,
-              child: Text(t.localeSystemDefault),
-            ),
-            for (final locale in AppLocale.values)
-              CheckedPopupMenuItem<String>(
-                key: ValueKey<String>(shellLocaleMenuItemKey(locale)),
-                value: shellLocaleTag(locale),
-                checked:
-                    !controller.usesSystemLocale &&
-                    controller.activeLocale == locale,
-                child: Text(shellLocaleDisplayName(context, locale)),
-              ),
-          ],
-          child: const Icon(Icons.translate_rounded),
-        ),
-        FilledButton.tonal(
-          key: const ValueKey<String>('desktop-open-diagnostics-button'),
-          onPressed: onOpenDiagnostics,
-          child: Text(t.commonDiagnostics),
-        ),
-        FilledButton.tonal(
-          key: const ValueKey<String>('desktop-open-activity-button'),
-          onPressed: controller.hasLiveWork ? onOpenActivity : null,
-          child: Text(
-            controller.hasLiveWork
-                ? '${t.commonLiveWork} (${controller.resolutions.length + controller.sessions.length})'
-                : t.commonLiveWork,
+        if (controller.status != ShellStatus.ready ||
+            connection?.state != HostLifecycleState.ready)
+          FilledButton.tonalIcon(
+            onPressed: controller.busy
+                ? null
+                : () => unawaited(controller.reconnect()),
+            icon: const Icon(Icons.cable_rounded),
+            label: Text(t.commonReconnect),
           ),
-        ),
-        FilledButton.tonal(
-          onPressed: controller.busy
-              ? null
-              : () => unawaited(controller.reconnect()),
-          child: Text(t.commonReconnect),
-        ),
-        FilledButton(
+        IconButton.filled(
+          key: const ValueKey<String>('desktop-host-refresh-button'),
+          tooltip: t.commonRefresh,
           onPressed: controller.busy || controller.status != ShellStatus.ready
               ? null
               : () => unawaited(controller.refresh()),
-          child: Text(t.commonRefresh),
+          icon: const Icon(Icons.refresh_rounded),
         ),
       ],
     );
@@ -592,7 +545,6 @@ class _DesktopShellBar extends StatelessWidget {
             child: routineReadyChrome
                 ? _CompactReadyShellBarSummary(
                     controller: controller,
-                    hostInfo: hostInfo,
                     actions: actions,
                     stacked: stacked,
                     showPersistentInspector: showPersistentInspector,
@@ -649,14 +601,12 @@ class _DesktopShellBar extends StatelessWidget {
 class _CompactReadyShellBarSummary extends StatelessWidget {
   const _CompactReadyShellBarSummary({
     required this.controller,
-    required this.hostInfo,
     required this.actions,
     required this.stacked,
     required this.showPersistentInspector,
   });
 
   final DesktopShellController controller;
-  final HostInfo? hostInfo;
   final Widget actions;
   final bool stacked;
   final bool showPersistentInspector;
@@ -664,10 +614,9 @@ class _CompactReadyShellBarSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final copy = context.shellText;
     final readyTone = context.shellVisuals.tone(ShellSemanticTone.ready);
     final detail = _routineConnectionDetail(
-      copy: copy,
+      copy: context.shellText,
       message: controller.hostConnection?.message,
     );
     final summary = Column(
@@ -701,20 +650,6 @@ class _CompactReadyShellBarSummary extends StatelessWidget {
                 ),
               ),
             ],
-          ],
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: <Widget>[
-            _Tag(label: copy.guiBuildTag(controller.appBuild.shortLabel)),
-            if (hostInfo != null)
-              _Tag(label: copy.hostBuildTag(hostInfo!.build.shortLabel)),
-            if (hostInfo != null)
-              _Tag(label: copy.contractTag(hostInfo!.contractVersion)),
-            if (controller.hostConnection?.launched == true)
-              _Tag(label: copy.launched),
           ],
         ),
       ],
@@ -989,7 +924,7 @@ class _ExpandedNavigationPad extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             _SectionListTile(
-              key: const ValueKey<String>('desktop-section-activity'),
+              key: const ValueKey<String>('desktop-open-activity-button'),
               icon: Icons.stream_outlined,
               title: t.commonLiveWork,
               selected:
@@ -999,7 +934,7 @@ class _ExpandedNavigationPad extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             _SectionListTile(
-              key: const ValueKey<String>('desktop-section-diagnostics'),
+              key: const ValueKey<String>('desktop-open-diagnostics-button'),
               icon: Icons.medical_services_outlined,
               title: t.commonDiagnostics,
               selected:
@@ -2418,6 +2353,10 @@ class _ResolutionsPanel extends StatelessWidget {
                         ArtifactAction.openArchive,
                       )
                     : null,
+                onOpenChallenge: challenge == null
+                    ? null
+                    : () => controller.openChallengeInBrowser(challenge),
+                openChallengeLabel: context.shellText.mobileOpenBrowser,
                 onContinueChallenge: challenge == null
                     ? null
                     : () => controller.continueChallenge(challenge.id),
@@ -2448,6 +2387,10 @@ class _SessionsPanel extends StatelessWidget {
             onSelect: () => controller.selectSession(session.id),
             onStop: () => controller.stopSession(session.id),
             onExport: () => controller.exportDiagnostics(session.id),
+            onOpenChallenge: challenge == null
+                ? null
+                : () => controller.openChallengeInBrowser(challenge),
+            openChallengeLabel: context.shellText.mobileOpenBrowser,
             onContinueChallenge: challenge == null
                 ? null
                 : () => controller.continueChallenge(challenge.id),
@@ -2568,17 +2511,23 @@ HomeWorkflowPrimaryActionData _desktopHomePrimaryActionData(
   final copy = context.shellText;
   final selectedProfile = controller.selectedSavedProfile;
   final challenge = _desktopHomePrimaryChallenge(controller);
+  final primaryTunnelMode = _desktopHomePrimaryPlatformTunnelMode(controller);
+  final primaryTunnelReady =
+      primaryTunnelMode != null &&
+      controller.platformTunnelResultFor(primaryTunnelMode)?.ready == true;
   if (challenge != null) {
     return HomeWorkflowPrimaryActionData(
       tone: ShellSemanticTone.attention,
       eyebrow: copy.providerStepTone,
       title: copy.finishProviderValidation,
-      subtitle: copy.desktopSupportReadyLiveDetail,
+      subtitle: copy.openRequiredBrowserStepFromHome,
       leadingIcon: Icons.travel_explore_rounded,
       primaryAction: HomeWorkflowAction(
-        label: copy.openActivity,
-        icon: Icons.view_list_rounded,
-        onPressed: controller.showActivityRoute,
+        label: copy.mobileOpenBrowser,
+        icon: Icons.open_in_browser_rounded,
+        onPressed: controller.busy
+            ? null
+            : () => unawaited(controller.openChallengeInBrowser(challenge)),
       ),
       annotation: copy.challengeKind(challenge.kind),
       secondaryActions: <HomeWorkflowAction>[
@@ -2599,22 +2548,30 @@ HomeWorkflowPrimaryActionData _desktopHomePrimaryActionData(
       ],
     );
   }
-  if (controller.hasLiveWork) {
+  if (primaryTunnelReady) {
+    final readyTunnelMode = primaryTunnelMode;
+    final readyTunnelResult = controller.platformTunnelResultFor(
+      readyTunnelMode,
+    )!;
     return HomeWorkflowPrimaryActionData(
       tone: ShellSemanticTone.ready,
       eyebrow: copy.connectionLiveTone,
-      title: t.commonLiveWork,
-      subtitle: copy.desktopResolutionsSessionsCompact(
-        controller.resolutions.length,
-        controller.sessions.length,
-      ),
+      title: copy.vpnIsOn,
+      subtitle: _platformTunnelResultSummary(context, readyTunnelResult),
       leadingIcon: Icons.shield_rounded,
       primaryAction: HomeWorkflowAction(
-        label: copy.openActivity,
-        icon: Icons.view_list_rounded,
-        onPressed: controller.showActivityRoute,
+        label: copy.mobileTurnOffVpn,
+        icon: Icons.power_settings_new_rounded,
+        onPressed: controller.status == ShellStatus.ready && !controller.busy
+            ? () => unawaited(controller.stopPlatformTunnel(readyTunnelMode))
+            : null,
       ),
       secondaryActions: <HomeWorkflowAction>[
+        HomeWorkflowAction(
+          label: copy.openActivity,
+          style: HomeWorkflowActionStyle.tonal,
+          onPressed: controller.showActivityRoute,
+        ),
         HomeWorkflowAction(
           label: copy.openDiagnostics,
           style: HomeWorkflowActionStyle.outlined,
@@ -2640,6 +2597,37 @@ HomeWorkflowPrimaryActionData _desktopHomePrimaryActionData(
         HomeWorkflowAction(
           label: t.commonRouting,
           style: HomeWorkflowActionStyle.tonal,
+          onPressed: controller.showRouting,
+        ),
+      ],
+    );
+  }
+  if (primaryTunnelMode != null) {
+    return HomeWorkflowPrimaryActionData(
+      tone: ShellSemanticTone.info,
+      eyebrow: copy.mainActionTone,
+      title: copy.vpnIsOff,
+      subtitle:
+          '${selectedProfile.name.isEmpty ? selectedProfile.id : selectedProfile.name} · ${selectedProfile.spec.provider}',
+      leadingIcon: Icons.power_rounded,
+      primaryAction: HomeWorkflowAction(
+        key: const ValueKey<String>('desktop-home-turn-on-vpn'),
+        label: copy.mobileTurnOnVpn,
+        icon: Icons.power_settings_new_rounded,
+        onPressed: controller.status == ShellStatus.ready && !controller.busy
+            ? () => unawaited(controller.startPlatformTunnel(primaryTunnelMode))
+            : null,
+      ),
+      secondaryActions: <HomeWorkflowAction>[
+        HomeWorkflowAction(
+          key: const ValueKey<String>('desktop-open-profile-library-button'),
+          label: t.commonProfiles,
+          style: HomeWorkflowActionStyle.tonal,
+          onPressed: controller.showProfiles,
+        ),
+        HomeWorkflowAction(
+          label: t.commonRouting,
+          style: HomeWorkflowActionStyle.outlined,
           onPressed: controller.showRouting,
         ),
       ],
@@ -2674,6 +2662,17 @@ HomeWorkflowPrimaryActionData _desktopHomePrimaryActionData(
       ),
     ],
   );
+}
+
+PlatformTunnelMode? _desktopHomePrimaryPlatformTunnelMode(
+  DesktopShellController controller,
+) {
+  for (final capability in controller.platformTunnels) {
+    if (capability.available) {
+      return capability.mode;
+    }
+  }
+  return null;
 }
 
 HomeWorkflowModeSectionData _desktopHomeModeSectionData(

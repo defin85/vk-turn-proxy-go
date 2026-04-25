@@ -102,6 +102,8 @@ enum _ProfileEditorMenuAction {
   deleteProfile,
 }
 
+const double _kProfileDesktopBodyBreakpoint = 960;
+
 class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
   Future<void> _showPortableExportDialog() async {
     final envelope = widget.onPreparePortableExport();
@@ -365,7 +367,8 @@ class _ProfileEditorPanelState extends State<ProfileEditorPanel> {
         padding: const EdgeInsets.all(16),
         child: LayoutBuilder(
           builder: (BuildContext context, BoxConstraints constraints) {
-            final useDesktopBody = constraints.maxWidth >= 1100;
+            final useDesktopBody =
+                constraints.maxWidth >= _kProfileDesktopBodyBreakpoint;
             final stackedHeader = constraints.maxWidth < 840;
             final selectedManagedProvider = _selectedManagedProvider();
             final headerDescriptor =

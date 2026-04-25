@@ -287,6 +287,74 @@ void main() {
     expect(find.text('Device PIN'), findsOneWidget);
   });
 
+  testWidgets('desktop lane uses desktop workflow before the old 1100 cutoff', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final baseDraft = ProfileDraft.defaults();
+    final draft = baseDraft.copyWith(
+      name: 'alpha',
+      providerBinding: const ProfileProviderBinding(
+        mode: ProfileProviderMode.managed,
+        managedProviderId: 'provider-1',
+      ),
+      spec: baseDraft.spec.copyWith(
+        provider: 'vk',
+        link: 'https://vk.com/call/join/test',
+      ),
+    );
+    final timestamp = DateTime(2026);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 1080,
+            height: 900,
+            child: ProfileEditorPanel(
+              providerDescriptors: _providerDescriptors,
+              managedProviders: <ManagedProviderRecord>[
+                ManagedProviderRecord(
+                  id: 'provider-1',
+                  provider: 'vk',
+                  name: 'Test1',
+                  providerSettings: const <String, dynamic>{},
+                  createdAt: timestamp,
+                  updatedAt: timestamp,
+                ),
+              ],
+              initialManagedProviderId: 'provider-1',
+              selectedProfileId: 'profile-1',
+              draft: draft,
+              busy: false,
+              onDraftChanged: (_) {},
+              onActivateManagedProviderMode: ({String? managedProviderId}) {},
+              onUseCustomProvider: () {},
+              onSave: () async {},
+              onDelete: () async {},
+              onReset: () {},
+              onResolve: () async {},
+              onStart: () async {},
+              onPreparePortableExport: () => null,
+              onCopyPortableExportText: (_) async {},
+              onSavePortableExportFile: (_) async {},
+              onImportPortableFromFile: () async => null,
+              onPreviewPortableImport: (_) => null,
+              onConfirmPortableImport: (_) async {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Runtime defaults'), findsOneWidget);
+    expect(find.text('Provider mode'), findsNothing);
+    expect(find.text('Advanced runtime controls'), findsNothing);
+  });
+
   testWidgets('unsupported provider settings schema renders blocking warning', (
     WidgetTester tester,
   ) async {

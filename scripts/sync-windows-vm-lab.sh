@@ -52,7 +52,8 @@ cat > "${TMP_DIR}/run-vm-lab-shell.ps1" <<'EOF'
 param(
     [string]$BundleRoot = 'C:\Users\codex\vk-turn-lab\bundle\windows-gui',
     [string]$ListenAddress = '127.0.0.1:7777',
-    [int]$StartupTimeoutSeconds = 15
+    [int]$StartupTimeoutSeconds = 15,
+    [string]$WireGuardProfilePath = 'C:\Users\codex\.local\state\vk-turn-proxy-go\wg\desktop1-windows.conf'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -63,6 +64,15 @@ $wintunPath = Join-Path $BundleRoot 'wintun.dll'
 $guiPath = if (Test-Path $relayDockPath) { $relayDockPath } else { throw "bundled RelayDock.exe not found under $BundleRoot" }
 if (-not (Test-Path $clientdPath)) { throw "bundled clientd.exe not found under $BundleRoot" }
 if (-not (Test-Path $wintunPath)) { throw "bundled wintun.dll not found under $BundleRoot" }
+if (Test-Path $WireGuardProfilePath) {
+    $env:VKTP_WINDOWS_WIREGUARD_PROFILE = $WireGuardProfilePath
+}
+
+function Test-IsAdmin {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
 
 function Wait-HostReady {
     param([string]$HostUrl, [int]$TimeoutSeconds)
@@ -78,6 +88,12 @@ function Wait-HostReady {
     throw "clientd did not become ready on $HostUrl within ${TimeoutSeconds}s"
 }
 
+if (-not (Test-IsAdmin)) {
+    throw "RelayDock VM lab launcher requires an elevated PowerShell session for windows_wintun"
+}
+
+Stop-Process -Name RelayDock,clientd -Force -ErrorAction SilentlyContinue
+
 $hostUrl = "http://$ListenAddress"
 $clientdProcess = $null
 try {
@@ -86,6 +102,9 @@ try {
     $guiProcess = Start-Process -FilePath $guiPath -WorkingDirectory $BundleRoot -PassThru
     Write-Host "clientd pid=$($clientdProcess.Id) ready on $ListenAddress"
     Write-Host "gui pid=$($guiProcess.Id) started from $guiPath"
+    if (-not [string]::IsNullOrWhiteSpace($env:VKTP_WINDOWS_WIREGUARD_PROFILE)) {
+        Write-Host "wireguard profile override=$env:VKTP_WINDOWS_WIREGUARD_PROFILE"
+    }
     Wait-Process -Id $guiProcess.Id -ErrorAction Stop
 }
 finally {
@@ -97,6 +116,67 @@ finally {
         }
     }
 }
+EOF
+
+log "generate guest-side public desktop launcher"
+cat > "${TMP_DIR}/start-relaydock-vm-lab.ps1" <<'EOF'
+param(
+    [string]$BundleRoot = 'C:\Users\codex\vk-turn-lab\bundle\windows-gui',
+    [string]$ListenAddress = '127.0.0.1:7777',
+    [int]$StartupTimeoutSeconds = 20,
+    [string]$WireGuardProfilePath = ''
+)
+
+$ErrorActionPreference = 'Stop'
+
+function Test-IsAdmin {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Quote-Arg {
+    param([string]$Value)
+    return '"' + ($Value -replace '"', '\"') + '"'
+}
+
+if ([string]::IsNullOrWhiteSpace($WireGuardProfilePath)) {
+    $currentUserProfile = $env:USERPROFILE
+    if ([string]::IsNullOrWhiteSpace($currentUserProfile)) {
+        $currentUserProfile = 'C:\Users\codex'
+    }
+    $WireGuardProfilePath = Join-Path $currentUserProfile '.local\state\vk-turn-proxy-go\wg\desktop1-windows.conf'
+}
+
+$labRunner = 'C:\Users\codex\vk-turn-lab\scripts\run-vm-lab-shell.ps1'
+if (-not (Test-Path $labRunner)) {
+    throw "RelayDock VM lab runner not found: $labRunner"
+}
+
+if (-not (Test-IsAdmin)) {
+    $arguments = @(
+        '-NoProfile',
+        '-ExecutionPolicy', 'Bypass',
+        '-File', (Quote-Arg $PSCommandPath),
+        '-BundleRoot', (Quote-Arg $BundleRoot),
+        '-ListenAddress', (Quote-Arg $ListenAddress),
+        '-StartupTimeoutSeconds', $StartupTimeoutSeconds,
+        '-WireGuardProfilePath', (Quote-Arg $WireGuardProfilePath)
+    ) -join ' '
+    Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -Verb RunAs
+    exit
+}
+
+& $labRunner `
+    -BundleRoot $BundleRoot `
+    -ListenAddress $ListenAddress `
+    -StartupTimeoutSeconds $StartupTimeoutSeconds `
+    -WireGuardProfilePath $WireGuardProfilePath
+EOF
+
+cat > "${TMP_DIR}/RelayDock-VM-Lab.cmd" <<'EOF'
+@echo off
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\Public\RelayDockLab\start-relaydock-vm-lab.ps1"
 EOF
 
 log "generate guest-side host smoke"
@@ -144,6 +224,9 @@ if (-not $SkipAdminCheck -and -not (Test-IsAdmin)) {
 }
 if ($RequireWireGuardProfile -and -not (Test-Path $WireGuardProfilePath)) {
     throw "validated WireGuard profile not found: $WireGuardProfilePath"
+}
+if (Test-Path $WireGuardProfilePath) {
+    $env:VKTP_WINDOWS_WIREGUARD_PROFILE = $WireGuardProfilePath
 }
 
 $hostUrl = "http://$ListenAddress"
@@ -200,13 +283,15 @@ EOF
 
 log "ensure guest lab directories"
 ssh "${SSH_OPTS[@]}" "${VM_USER}@${VM_HOST}" \
-  "powershell -NoProfile -Command \"New-Item -ItemType Directory -Force -Path '${VM_LAB_ROOT}','${VM_LAB_ROOT}\\bundle','${VM_LAB_ROOT}\\artifacts','${VM_LAB_ROOT}\\scripts','${VM_HOME_DIR}\\.local\\state\\vk-turn-proxy-go\\wg' | Out-Null\""
+  "powershell -NoProfile -Command \"New-Item -ItemType Directory -Force -Path '${VM_LAB_ROOT}','${VM_LAB_ROOT}\\bundle','${VM_LAB_ROOT}\\artifacts','${VM_LAB_ROOT}\\scripts','${VM_HOME_DIR}\\.local\\state\\vk-turn-proxy-go\\wg','C:\\Users\\Public\\RelayDockLab','C:\\Users\\Public\\Desktop' | Out-Null\""
 
 log "upload bundle and helper archives"
 scp -O "${SSH_OPTS[@]}" "${TMP_DIR}/windows-gui-bundle.tgz" "${VM_USER}@${VM_HOST}:vk-turn-lab/windows-gui-bundle.tgz"
 scp -O "${SSH_OPTS[@]}" "${TMP_DIR}/windows-helpers.tgz" "${VM_USER}@${VM_HOST}:vk-turn-lab/windows-helpers.tgz"
 scp -O "${SSH_OPTS[@]}" "${TMP_DIR}/run-vm-lab-shell.ps1" "${VM_USER}@${VM_HOST}:vk-turn-lab/run-vm-lab-shell.ps1"
 scp -O "${SSH_OPTS[@]}" "${TMP_DIR}/assert-vm-lab-host.ps1" "${VM_USER}@${VM_HOST}:vk-turn-lab/assert-vm-lab-host.ps1"
+scp -O "${SSH_OPTS[@]}" "${TMP_DIR}/start-relaydock-vm-lab.ps1" "${VM_USER}@${VM_HOST}:vk-turn-lab/start-relaydock-vm-lab.ps1"
+scp -O "${SSH_OPTS[@]}" "${TMP_DIR}/RelayDock-VM-Lab.cmd" "${VM_USER}@${VM_HOST}:vk-turn-lab/RelayDock-VM-Lab.cmd"
 
 if [[ -f "${LOCAL_WIREGUARD_PROFILE}" ]]; then
   log "upload validated WireGuard profile"
@@ -217,7 +302,7 @@ fi
 
 log "extract guest artifacts"
 ssh "${SSH_OPTS[@]}" "${VM_USER}@${VM_HOST}" \
-  "powershell -NoProfile -Command \"Remove-Item '${VM_LAB_ROOT}\\bundle\\windows-gui' -Recurse -Force -ErrorAction SilentlyContinue; tar -xf '${VM_LAB_ROOT}\\windows-gui-bundle.tgz' -C '${VM_LAB_ROOT}\\bundle'; tar -xf '${VM_LAB_ROOT}\\windows-helpers.tgz' -C '${VM_LAB_ROOT}\\scripts'; Copy-Item '${VM_LAB_ROOT}\\run-vm-lab-shell.ps1' '${VM_LAB_ROOT}\\scripts\\run-vm-lab-shell.ps1' -Force; Copy-Item '${VM_LAB_ROOT}\\assert-vm-lab-host.ps1' '${VM_LAB_ROOT}\\scripts\\assert-vm-lab-host.ps1' -Force; if (Test-Path '${VM_LAB_ROOT}\\desktop1-windows.conf') { Copy-Item '${VM_LAB_ROOT}\\desktop1-windows.conf' '${VM_PROFILE_DEST}' -Force }\""
+  "powershell -NoProfile -Command \"Remove-Item '${VM_LAB_ROOT}\\bundle\\windows-gui' -Recurse -Force -ErrorAction SilentlyContinue; tar -xf '${VM_LAB_ROOT}\\windows-gui-bundle.tgz' -C '${VM_LAB_ROOT}\\bundle'; tar -xf '${VM_LAB_ROOT}\\windows-helpers.tgz' -C '${VM_LAB_ROOT}\\scripts'; Copy-Item '${VM_LAB_ROOT}\\run-vm-lab-shell.ps1' '${VM_LAB_ROOT}\\scripts\\run-vm-lab-shell.ps1' -Force; Copy-Item '${VM_LAB_ROOT}\\assert-vm-lab-host.ps1' '${VM_LAB_ROOT}\\scripts\\assert-vm-lab-host.ps1' -Force; Copy-Item '${VM_LAB_ROOT}\\start-relaydock-vm-lab.ps1' 'C:\\Users\\Public\\RelayDockLab\\start-relaydock-vm-lab.ps1' -Force; Copy-Item '${VM_LAB_ROOT}\\RelayDock-VM-Lab.cmd' 'C:\\Users\\Public\\Desktop\\RelayDock-VM-Lab.cmd' -Force; if (Test-Path '${VM_LAB_ROOT}\\desktop1-windows.conf') { Copy-Item '${VM_LAB_ROOT}\\desktop1-windows.conf' '${VM_PROFILE_DEST}' -Force }\""
 
 log "guest lab sync complete"
 echo "VM host: ${VM_HOST}"

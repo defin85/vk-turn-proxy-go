@@ -55,11 +55,14 @@ class _RoutingContentSurfaceState extends State<RoutingContentSurface> {
   late final TextEditingController _turnPortController;
   late final TextEditingController _bindInterfaceController;
 
+  late bool _advancedExpanded;
+
   bool get _desktop => widget.variant == RoutingContentSurfaceVariant.desktop;
 
   @override
   void initState() {
     super.initState();
+    _advancedExpanded = _hasAdvancedOverridesFor(widget.spec);
     _listenAddressController = TextEditingController();
     _peerAddressController = TextEditingController();
     _connectionsController = TextEditingController();
@@ -74,6 +77,10 @@ class _RoutingContentSurfaceState extends State<RoutingContentSurface> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.spec != widget.spec) {
       _syncFromSpec();
+      if (!_hasAdvancedOverridesFor(oldWidget.spec) &&
+          _hasAdvancedOverridesFor(widget.spec)) {
+        _advancedExpanded = true;
+      }
     }
   }
 
@@ -131,8 +138,8 @@ class _RoutingContentSurfaceState extends State<RoutingContentSurface> {
         final stacked = constraints.maxWidth < 1320;
         final specCard = _RoutingSpecCard(
           variant: widget.variant,
-          title: context.shellText.desktopProfileSettings,
-          subtitle: context.shellText.desktopEditableParametersReady,
+          title: context.shellText.desktopRoutingParameters,
+          subtitle: context.shellText.desktopRoutingParametersSubtitle,
           child: _buildSpecForm(context),
         );
         final tunnelPanel = _RoutingPlatformTunnelPanel(
@@ -150,7 +157,7 @@ class _RoutingContentSurfaceState extends State<RoutingContentSurface> {
             children: <Widget>[
               Expanded(child: specCard),
               const SizedBox(height: 12),
-              SizedBox(height: 320, child: tunnelPanel),
+              tunnelPanel,
             ],
           );
         }
@@ -159,7 +166,10 @@ class _RoutingContentSurfaceState extends State<RoutingContentSurface> {
           children: <Widget>[
             Expanded(child: specCard),
             const SizedBox(width: 12),
-            SizedBox(width: 420, child: tunnelPanel),
+            SizedBox(
+              width: 420,
+              child: Align(alignment: Alignment.topCenter, child: tunnelPanel),
+            ),
           ],
         );
       },
@@ -208,7 +218,14 @@ class _RoutingContentSurfaceState extends State<RoutingContentSurface> {
 
   Widget _buildSpecForm(BuildContext context) {
     final copy = context.shellText;
-    final fields = <Widget>[
+    final saveAction = FilledButton(
+      key: _actionKey('save-profile'),
+      onPressed: widget.busy || widget.onSave == null
+          ? null
+          : () => unawaited(widget.onSave!.call()),
+      child: Text(copy.saveProfile),
+    );
+    final primaryFields = <Widget>[
       _RoutingTextField(
         key: _fieldKey('listen-address'),
         controller: _listenAddressController,
@@ -243,11 +260,14 @@ class _RoutingContentSurfaceState extends State<RoutingContentSurface> {
           );
         },
       ),
-      _formSpacing(height: 16),
+    ];
+    final advancedFields = <Widget>[
       DropdownButtonFormField<TransportMode>(
         key: _fieldKey('mode'),
         initialValue: widget.spec.mode,
-        decoration: InputDecoration(labelText: copy.turnMode),
+        decoration: const InputDecoration(
+          contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        ),
         items: TransportMode.values
             .map(
               (TransportMode mode) => DropdownMenuItem<TransportMode>(
@@ -262,12 +282,14 @@ class _RoutingContentSurfaceState extends State<RoutingContentSurface> {
           }
           _updateSpec((ProfileSpec current) => current.copyWith(mode: value));
         },
-      ),
+      ).withRoutingLabel(context, copy.turnMode),
       _formSpacing(),
       DropdownButtonFormField<String>(
         key: _fieldKey('log-level'),
         initialValue: widget.spec.logLevel,
-        decoration: InputDecoration(labelText: copy.logLevel),
+        decoration: const InputDecoration(
+          contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        ),
         items: const <String>['debug', 'info', 'warn', 'error']
             .map(
               (String level) =>
@@ -282,7 +304,7 @@ class _RoutingContentSurfaceState extends State<RoutingContentSurface> {
             (ProfileSpec current) => current.copyWith(logLevel: value),
           );
         },
-      ),
+      ).withRoutingLabel(context, copy.logLevel),
       _formSpacing(),
       SwitchListTile.adaptive(
         key: _fieldKey('dtls-switch'),
@@ -326,40 +348,108 @@ class _RoutingContentSurfaceState extends State<RoutingContentSurface> {
           ),
         ),
       ),
-      _formSpacing(height: 18),
-      Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        children: <Widget>[
-          FilledButton(
-            key: _actionKey('save-profile'),
-            onPressed: widget.busy || widget.onSave == null
-                ? null
-                : () => unawaited(widget.onSave!.call()),
-            child: Text(copy.saveProfile),
-          ),
-          FilledButton.tonal(
-            key: _actionKey('open-profiles'),
-            onPressed: widget.onOpenProfiles,
-            child: Text(copy.openProfiles),
-          ),
-          OutlinedButton(
-            key: _actionKey('start-profile'),
-            onPressed: widget.busy || widget.onStartProfile == null
-                ? null
-                : () => unawaited(widget.onStartProfile!.call()),
-            child: Text(copy.startOnThisDevice),
-          ),
-        ],
-      ),
+    ];
+    final fields = <Widget>[
+      ...primaryFields,
+      _formSpacing(height: 16),
+      _buildAdvancedSection(context, advancedFields),
     ];
     if (_desktop) {
-      return ListView(primary: false, children: fields);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Flexible(
+            fit: FlexFit.loose,
+            child: ListView(
+              primary: false,
+              shrinkWrap: true,
+              padding: const EdgeInsets.only(top: 6),
+              children: fields,
+            ),
+          ),
+          const SizedBox(height: 14),
+          saveAction,
+        ],
+      );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: fields,
+      children: <Widget>[...fields, _formSpacing(height: 18), saveAction],
     );
+  }
+
+  Widget _buildAdvancedSection(BuildContext context, List<Widget> children) {
+    final theme = Theme.of(context);
+    final buttonLabel = _advancedExpanded
+        ? context.shellText.hideAdvancedRuntimeControls
+        : context.shellText.showAdvancedRuntimeControls;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: _desktop ? 0.18 : 0.22,
+        ),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      context.shellText.mobileAdvancedRuntimeControls,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      context.shellText.mobileAdvancedRuntimeControlsSubtitle,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              TextButton.icon(
+                key: _actionKey('toggle-advanced'),
+                onPressed: () {
+                  setState(() {
+                    _advancedExpanded = !_advancedExpanded;
+                  });
+                },
+                icon: Icon(
+                  _advancedExpanded
+                      ? Icons.keyboard_arrow_up
+                      : Icons.keyboard_arrow_down,
+                ),
+                label: Text(buttonLabel),
+              ),
+            ],
+          ),
+          if (_advancedExpanded) ...<Widget>[
+            const SizedBox(height: 14),
+            ...children,
+          ],
+        ],
+      ),
+    );
+  }
+
+  bool _hasAdvancedOverridesFor(ProfileSpec spec) {
+    return spec.mode != TransportMode.auto ||
+        spec.logLevel != 'info' ||
+        !spec.useDtls ||
+        (spec.turnServer?.trim().isNotEmpty ?? false) ||
+        (spec.turnPort?.trim().isNotEmpty ?? false) ||
+        (spec.bindInterface?.trim().isNotEmpty ?? false);
   }
 
   Widget _formSpacing({double height = 12}) {
@@ -448,7 +538,7 @@ class _RoutingSpecCard extends StatelessWidget {
   }
 }
 
-class _RoutingPlatformTunnelPanel extends StatelessWidget {
+class _RoutingPlatformTunnelPanel extends StatefulWidget {
   const _RoutingPlatformTunnelPanel({
     required this.variant,
     required this.hostReady,
@@ -468,52 +558,167 @@ class _RoutingPlatformTunnelPanel extends StatelessWidget {
   final Future<void> Function(PlatformTunnelMode mode) onStartPlatformTunnel;
   final Future<void> Function(PlatformTunnelMode mode)? onStopPlatformTunnel;
 
-  bool get _desktop => variant == RoutingContentSurfaceVariant.desktop;
+  @override
+  State<_RoutingPlatformTunnelPanel> createState() =>
+      _RoutingPlatformTunnelPanelState();
+}
+
+class _RoutingPlatformTunnelPanelState
+    extends State<_RoutingPlatformTunnelPanel> {
+  late bool _detailsExpanded;
+
+  bool get _desktop => widget.variant == RoutingContentSurfaceVariant.desktop;
+
+  @override
+  void initState() {
+    super.initState();
+    _detailsExpanded = _latestResult()?.ready == true;
+  }
+
+  @override
+  void didUpdateWidget(covariant _RoutingPlatformTunnelPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final previousReady = _latestResultFor(oldWidget)?.ready == true;
+    final nextReady = _latestResult()?.ready == true;
+    if (!previousReady && nextReady) {
+      _detailsExpanded = true;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final card = Card(
-      color: context.shellVisuals.tone(ShellSemanticTone.info).container,
-      child: Padding(
-        padding: EdgeInsets.all(_desktop ? 18 : 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              context.shellText.desktopPlatformTunnelModes,
-              style:
-                  (_desktop
-                          ? theme.textTheme.titleLarge
-                          : theme.textTheme.titleMedium)
-                      ?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              _headerSummary(context),
-              style:
-                  (_desktop
-                          ? theme.textTheme.bodyMedium
-                          : theme.textTheme.bodySmall)
-                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
+    final latestResult = _latestResult();
+    final summaryTone = _summaryTone(latestResult);
+    final buttonLabel = _detailsExpanded
+        ? context.shellText.hidePlatformTunnelDetails
+        : context.shellText.showPlatformTunnelDetails;
+    final headerAction = _detailsExpanded
+        ? null
+        : _headerAction(context, latestResult);
+    final card = Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(_desktop ? 18 : 16),
+      decoration: shellSurfaceDecoration(
+        context,
+        style: ShellSurfaceStyle.muted,
+        tone: summaryTone,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      context.shellText.desktopPlatformTunnelModes,
+                      style:
+                          (_desktop
+                                  ? theme.textTheme.titleMedium
+                                  : theme.textTheme.titleSmall)
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _compactSummary(context, latestResult),
+                      maxLines: _desktop ? 1 : 2,
+                      overflow: TextOverflow.ellipsis,
+                      style:
+                          (_desktop
+                                  ? theme.textTheme.bodyMedium
+                                  : theme.textTheme.bodySmall)
+                              ?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: <Widget>[
+                  ShellToneBadge(
+                    label: _statusBadgeLabel(context, latestResult),
+                    tone: summaryTone,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                  ),
+                  if (headerAction != null) ...<Widget>[
+                    const SizedBox(height: 8),
+                    headerAction,
+                  ],
+                  const SizedBox(height: 6),
+                  TextButton.icon(
+                    key: ValueKey<String>(
+                      'routing-platform-tunnel-toggle-${widget.variant.name}',
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _detailsExpanded = !_detailsExpanded;
+                      });
+                    },
+                    icon: Icon(
+                      _detailsExpanded
+                          ? Icons.keyboard_arrow_up
+                          : Icons.keyboard_arrow_down,
+                    ),
+                    label: Text(buttonLabel),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          if (_detailsExpanded) ...<Widget>[
             const SizedBox(height: 14),
-            if (_desktop)
-              Expanded(child: _buildBody(context))
-            else
-              _buildBody(context),
+            _buildBody(context),
           ],
-        ),
+        ],
       ),
     );
     return KeyedSubtree(
-      key: ValueKey<String>('routing-platform-tunnel-surface-${variant.name}'),
+      key: ValueKey<String>(
+        'routing-platform-tunnel-surface-${widget.variant.name}',
+      ),
       child: card,
     );
   }
 
+  Widget? _headerAction(
+    BuildContext context,
+    PlatformTunnelStartResult? latestResult,
+  ) {
+    final readyResult = latestResult?.ready == true ? latestResult : null;
+    if (readyResult != null && widget.onStopPlatformTunnel != null) {
+      return OutlinedButton.icon(
+        onPressed: widget.busy || !widget.hostReady
+            ? null
+            : () => unawaited(widget.onStopPlatformTunnel!(readyResult.mode)),
+        icon: const Icon(Icons.power_settings_new_rounded),
+        label: Text(context.shellText.disconnectVpn),
+      );
+    }
+    final capability = _primaryAvailableCapability();
+    if (capability == null) {
+      return null;
+    }
+    return FilledButton.tonalIcon(
+      onPressed: widget.busy || !widget.hostReady
+          ? null
+          : () => unawaited(widget.onStartPlatformTunnel(capability.mode)),
+      icon: const Icon(Icons.power_settings_new_rounded),
+      label: Text(context.shellText.requestStartup),
+    );
+  }
+
   Widget _buildBody(BuildContext context) {
-    if (platformTunnels.isEmpty) {
+    if (widget.platformTunnels.isEmpty) {
       return Text(
         _desktop
             ? context.shellText.desktopNoPlatformTunnelModesReported
@@ -522,20 +727,20 @@ class _RoutingPlatformTunnelPanel extends StatelessWidget {
       );
     }
 
-    final cards = platformTunnels
+    final cards = widget.platformTunnels
         .map((PlatformTunnelCapability capability) {
           return Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: _RoutingPlatformTunnelCard(
-              variant: variant,
+              variant: widget.variant,
               capability: capability,
-              result: platformTunnelResultFor(capability.mode),
-              busy: busy,
-              hostReady: hostReady,
-              onStart: () => onStartPlatformTunnel(capability.mode),
-              onStop: onStopPlatformTunnel == null
+              result: widget.platformTunnelResultFor(capability.mode),
+              busy: widget.busy,
+              hostReady: widget.hostReady,
+              onStart: () => widget.onStartPlatformTunnel(capability.mode),
+              onStop: widget.onStopPlatformTunnel == null
                   ? null
-                  : () => onStopPlatformTunnel!(capability.mode),
+                  : () => widget.onStopPlatformTunnel!(capability.mode),
             ),
           );
         })
@@ -555,42 +760,85 @@ class _RoutingPlatformTunnelPanel extends StatelessWidget {
     );
   }
 
-  String _headerSummary(BuildContext context) {
-    if (platformTunnels.isEmpty) {
-      return _desktop
-          ? context.shellText.desktopNoPlatformTunnelModesReported
-          : context.shellText.noPlatformTunnelModesReported;
-    }
-    final latestResult = _latestResult();
-    if (latestResult != null) {
-      return _platformTunnelResultSummary(context, latestResult);
-    }
-    for (final capability in platformTunnels) {
-      final message = capability.message.trim();
-      if (message.isNotEmpty) {
-        return message;
-      }
-    }
-    if (platformTunnels.any(
-      (PlatformTunnelCapability capability) => capability.available,
-    )) {
-      return _desktop
-          ? context.shellText.desktopUseDiagnosticsForReportedModes
-          : context.shellText.mobileHostModeAvailable;
-    }
-    return _desktop
-        ? context.shellText.desktopTypedHostTunnelSummary
-        : context.shellText.mobileHostModeUnavailable;
+  PlatformTunnelStartResult? _latestResult() {
+    return _latestResultFor(widget);
   }
 
-  PlatformTunnelStartResult? _latestResult() {
-    for (final capability in platformTunnels) {
-      final result = platformTunnelResultFor(capability.mode);
+  PlatformTunnelCapability? _primaryAvailableCapability() {
+    for (final capability in widget.platformTunnels) {
+      final result = widget.platformTunnelResultFor(capability.mode);
+      if (capability.available && result?.ready != true) {
+        return capability;
+      }
+    }
+    return null;
+  }
+
+  PlatformTunnelStartResult? _latestResultFor(
+    _RoutingPlatformTunnelPanel source,
+  ) {
+    for (final capability in source.platformTunnels) {
+      final result = source.platformTunnelResultFor(capability.mode);
       if (result != null) {
         return result;
       }
     }
     return null;
+  }
+
+  ShellSemanticTone _summaryTone(PlatformTunnelStartResult? latestResult) {
+    if (latestResult?.ready == true ||
+        widget.platformTunnels.any(
+          (PlatformTunnelCapability capability) => capability.available,
+        )) {
+      return ShellSemanticTone.ready;
+    }
+    return ShellSemanticTone.attention;
+  }
+
+  String _statusBadgeLabel(
+    BuildContext context,
+    PlatformTunnelStartResult? latestResult,
+  ) {
+    if (latestResult?.ready == true) {
+      return context.shellText.sessionStateLabel('ready');
+    }
+    if (widget.platformTunnels.any(
+      (PlatformTunnelCapability capability) => capability.available,
+    )) {
+      return context.shellText.availableLowercase;
+    }
+    return context.shellText.unavailableLowercase;
+  }
+
+  String _compactSummary(
+    BuildContext context,
+    PlatformTunnelStartResult? latestResult,
+  ) {
+    if (widget.platformTunnels.isEmpty) {
+      return _desktop
+          ? context.shellText.desktopNoPlatformTunnelModesReported
+          : context.shellText.noPlatformTunnelModesReported;
+    }
+    if (latestResult != null) {
+      return _platformTunnelResultSummary(context, latestResult);
+    }
+    if (widget.platformTunnels.length == 1) {
+      final capability = widget.platformTunnels.single;
+      if (_desktop) {
+        return context.shellText.desktopCompactPlatformTunnelCapabilitySummary(
+          modeLabel: capability.mode.label,
+          available: capability.available,
+          missingPrerequisite: capability.missingPrerequisite?.label,
+        );
+      }
+      return '${capability.mode.label} · ${capability.available ? context.shellText.availableLowercase : context.shellText.unavailableLowercase}';
+    }
+
+    final availableCount = widget.platformTunnels
+        .where((PlatformTunnelCapability capability) => capability.available)
+        .length;
+    return '$availableCount/${widget.platformTunnels.length} ${context.shellText.availableLowercase}';
   }
 }
 
@@ -705,13 +953,14 @@ class _RoutingPlatformTunnelCard extends StatelessWidget {
 
 class _RoutingTextField extends StatelessWidget {
   const _RoutingTextField({
-    super.key,
+    Key? key,
     required this.controller,
     required this.label,
     required this.onChanged,
     this.keyboardType,
-  });
+  }) : fieldKey = key;
 
+  final Key? fieldKey;
   final TextEditingController controller;
   final String label;
   final ValueChanged<String> onChanged;
@@ -720,11 +969,33 @@ class _RoutingTextField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return TextField(
-      key: key,
+      key: fieldKey,
       controller: controller,
       keyboardType: keyboardType,
       onChanged: onChanged,
-      decoration: InputDecoration(labelText: label),
+      decoration: const InputDecoration(
+        contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      ),
+    ).withRoutingLabel(context, label);
+  }
+}
+
+extension _RoutingLabeledControl on Widget {
+  Widget withRoutingLabel(BuildContext context, String label) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          label,
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 6),
+        this,
+      ],
     );
   }
 }

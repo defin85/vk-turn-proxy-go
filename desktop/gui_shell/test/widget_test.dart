@@ -60,6 +60,52 @@ const HostInfo _readyHostInfo = HostInfo(
   ],
 );
 
+const RuntimeExecutionPlan _windowsWintunExecutionPlan = RuntimeExecutionPlan(
+  accessMethod: RuntimeAccessMethod.turnCredentials,
+  carrierFamily: RuntimeCarrierFamily.turnDatagram,
+  engineFamily: RuntimeEngineFamily.wireguardNative,
+  hostAdapter: RuntimeHostAdapter.windowsWintun,
+);
+
+const HostInfo _readyWindowsWintunHostInfo = HostInfo(
+  contractVersion: '1',
+  build: _testHostBuild,
+  capabilities: <Capability>[
+    Capability.desktopSidecar,
+    Capability.platformTunnels,
+    Capability.profiles,
+    Capability.providerConfigs,
+    Capability.providerRuntimeArtifacts,
+    Capability.runtimeExecutionPlanning,
+    Capability.sessions,
+    Capability.challenges,
+    Capability.diagnostics,
+    Capability.eventStream,
+  ],
+  platformTunnels: <PlatformTunnelCapability>[
+    PlatformTunnelCapability(
+      mode: PlatformTunnelMode.windowsWintun,
+      available: true,
+      satisfiedPrerequisites: <PlatformTunnelPrerequisite>[
+        PlatformTunnelPrerequisite.driver,
+        PlatformTunnelPrerequisite.routeExclusion,
+        PlatformTunnelPrerequisite.dnsBypass,
+      ],
+      supportedUnderlayRoutePolicies: <PlatformTunnelUnderlayRoutePolicy>[
+        PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork,
+      ],
+      executionPlans: <RuntimeExecutionPlanDescriptor>[
+        RuntimeExecutionPlanDescriptor(
+          plan: _windowsWintunExecutionPlan,
+          supportState: RuntimeExecutionPlanSupportState.supported,
+          remoteEndpointFamily: RuntimeRemoteEndpointFamily.turnServer,
+          isDefault: true,
+        ),
+      ],
+    ),
+  ],
+);
+
 const List<ProviderDescriptor> _providerDescriptors = <ProviderDescriptor>[
   ProviderDescriptor(
     id: 'vk',
@@ -242,7 +288,57 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Workflow'), findsNothing);
-    expect(find.byTooltip('Сменить язык'), findsOneWidget);
+    expect(find.byTooltip('Сменить язык'), findsNothing);
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('desktop-section-settings')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Сменить язык'), findsWidgets);
+  });
+
+  testWidgets('desktop home starts windows vpn from the primary action', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final api = _FakeControlPlaneApi(
+      startPlatformTunnelResult: const PlatformTunnelStartResult(
+        mode: PlatformTunnelMode.windowsWintun,
+        ready: true,
+        sessionId: 'platform-session-1',
+      ),
+    );
+    final controller = DesktopShellController(
+      api: api,
+      supervisor: const _FakeHostSupervisor(
+        result: HostConnectionResult(
+          state: HostLifecycleState.ready,
+          message: 'Connected to local host 127.0.0.1:7777',
+          info: _readyWindowsWintunHostInfo,
+        ),
+      ),
+      stateStore: const _InMemoryShellStateStore(),
+      appBuild: _testGuiBuild,
+    );
+
+    await controller.initialize();
+    await pumpDesktopShellTestApp(tester, controller: controller);
+
+    expect(find.text('Turn on VPN'), findsOneWidget);
+    await tester.tap(find.text('Turn on VPN'));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(api.startedPlatformTunnels, <PlatformTunnelMode>[
+      PlatformTunnelMode.windowsWintun,
+    ]);
+    expect(api.startedProfileIDs, isEmpty);
+    expect(controller.selectedSessionId, 'platform-session-1');
+    expect(find.text('Turn off VPN'), findsOneWidget);
   });
 
   testWidgets('desktop shell consumes the shared RelayDock visual contract', (
@@ -272,7 +368,7 @@ void main() {
 
     expect(theme.colorScheme.primary, const Color(0xFF214B66));
     expect(visuals, isNotNull);
-    expect(find.byType(ShellToneBadge), findsWidgets);
+    expect(find.byType(ShellToneBadge), findsNothing);
     expect(find.text('Current profile'), findsOneWidget);
     expect(find.text('Current mode'), findsOneWidget);
     expect(find.text('Need deeper detail?'), findsOneWidget);
@@ -345,7 +441,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
 
-      expect(find.text('Текущая работа (1)'), findsOneWidget);
+      expect(find.text('Текущая работа'), findsWidgets);
 
       await tester.tap(
         find.byKey(const ValueKey<String>('desktop-open-activity-button')),
@@ -359,19 +455,10 @@ void main() {
       expect(find.text('Сессии (1)'), findsOneWidget);
       expect(find.text('Остановить сессию'), findsOneWidget);
 
-      await tester.tap(
-        find.byKey(const ValueKey<String>('desktop-open-diagnostics-button')),
-      );
+      controller.showDiagnosticsRoute();
       await tester.pumpAndSettle();
 
-      expect(
-        find.byKey(
-          const ValueKey<String>('support-event-stream-surface-desktop'),
-        ),
-        findsOneWidget,
-      );
-      expect(find.text('Инспектор'), findsOneWidget);
-      expect(find.text('События'), findsWidgets);
+      expect(find.text('Диагностика'), findsWidgets);
 
       await tester.tap(find.text('Детали туннеля'));
       await tester.pumpAndSettle();
@@ -657,9 +744,11 @@ void main() {
       expect(controller.activeWorkbenchRoute, DesktopWorkbenchRoute.profiles);
       expect(controller.draft.name, 'Keep context');
 
-      await tester.tap(
-        find.byKey(const ValueKey<String>('desktop-open-diagnostics-button')),
-      );
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyD);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
       await tester.pumpAndSettle();
 
       expect(controller.isInspectorOpen, isTrue);
@@ -700,9 +789,9 @@ void main() {
 
     expect(find.text('Local host ready'), findsWidgets);
     expect(controller.selectedProfileId, 'profile-1');
-    expect(find.text('GUI 0.1.0+1 @gui123456789'), findsOneWidget);
-    expect(find.text('Host 0.1.0+1 @deadbeefcafe'), findsOneWidget);
-    expect(find.text('Contract 1'), findsOneWidget);
+    expect(find.text('GUI 0.1.0+1 @gui123456789'), findsNothing);
+    expect(find.text('Host 0.1.0+1 @deadbeefcafe'), findsNothing);
+    expect(find.text('Contract 1'), findsNothing);
     expect(find.text('Overview'), findsWidgets);
     expect(
       find.byKey(const ValueKey<String>('desktop-open-diagnostics-button')),
@@ -714,6 +803,20 @@ void main() {
       find.byKey(const ValueKey<String>('profile-library-item-profile-1')),
       findsNothing,
     );
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('desktop-section-settings')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('GUI 0.1.0+1 @gui123456789'), findsOneWidget);
+    expect(find.text('Host 0.1.0+1 @deadbeefcafe'), findsOneWidget);
+    expect(find.text('Contract 1'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('desktop-section-home')),
+    );
+    await tester.pumpAndSettle();
 
     await tester.tap(
       find.byKey(const ValueKey<String>('desktop-section-profiles')),
@@ -732,7 +835,7 @@ void main() {
 
     expect(api.startedProfileIDs, <String>['profile-1']);
     expect(find.textContaining('Started session'), findsOneWidget);
-    expect(find.text('Live work (1)'), findsOneWidget);
+    expect(find.text('Live work'), findsWidgets);
 
     await tester.tap(
       find.byKey(const ValueKey<String>('desktop-open-activity-button')),
@@ -740,7 +843,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.byKey(const ValueKey<String>('desktop-inspector-surface')),
+      find.byKey(const ValueKey<String>('support-sessions-surface-desktop')),
       findsOneWidget,
     );
     expect(find.text('Sessions (1)'), findsOneWidget);
@@ -870,7 +973,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Live work (1)'), findsOneWidget);
+    expect(find.text('Live work'), findsWidgets);
     await tester.tap(
       find.byKey(const ValueKey<String>('desktop-open-activity-button')),
     );
@@ -1464,9 +1567,18 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(
-        find.byKey(const ValueKey<String>('desktop-open-diagnostics-button')),
-      );
+      tester
+          .widget<Focus>(
+            find.byKey(const ValueKey<String>('desktop-active-workflow-focus')),
+          )
+          .focusNode
+          ?.requestFocus();
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyD);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
       await tester.pumpAndSettle();
 
       expect(controller.isInspectorOpen, isTrue);
@@ -1533,9 +1645,7 @@ void main() {
         isTrue,
       );
 
-      await tester.tap(
-        find.byKey(const ValueKey<String>('desktop-open-diagnostics-button')),
-      );
+      controller.openInspector(pane: DesktopInspectorPane.diagnostics);
       await tester.pumpAndSettle();
 
       expect(
@@ -1564,7 +1674,7 @@ void main() {
   );
 
   testWidgets(
-    'desktop shell uses compact drawer navigation and overlay inspector',
+    'desktop shell uses compact drawer navigation and support routes',
     (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1080, 1200);
       tester.view.devicePixelRatio = 1.0;
@@ -1634,25 +1744,23 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(
-        find.byKey(const ValueKey<String>('desktop-open-diagnostics-button')),
-      );
+      controller.showDiagnosticsRoute();
       await tester.pumpAndSettle();
 
       expect(
-        find.byKey(const ValueKey<String>('desktop-inspector-surface')),
+        controller.activeWorkbenchRoute,
+        DesktopWorkbenchRoute.diagnostics,
+      );
+      expect(
+        find.byKey(
+          const ValueKey<String>('support-event-stream-surface-desktop'),
+        ),
         findsOneWidget,
       );
 
-      await tester.tap(
-        find.byKey(const ValueKey<String>('desktop-inspector-close-button')),
-      );
+      controller.showProviders();
       await tester.pumpAndSettle();
 
-      expect(
-        find.byKey(const ValueKey<String>('desktop-inspector-surface')),
-        findsNothing,
-      );
       expect(controller.activeSection, DesktopShellSection.providerWorkflow);
 
       controller.dispose();
@@ -1896,44 +2004,59 @@ class _InMemoryShellStateStore implements DesktopShellStateStore {
 
 class _FakeControlPlaneApi implements ControlPlaneApi {
   _FakeControlPlaneApi({
-    this.resolutionsList = const <ResolutionRecord>[],
+    List<ResolutionRecord> resolutionsList = const <ResolutionRecord>[],
     List<ProviderDescriptor>? providers,
     List<ProviderConfigRecord>? providerConfigs,
+    List<ProfileRecord>? profiles,
+    this.startPlatformTunnelResult = const PlatformTunnelStartResult(
+      mode: PlatformTunnelMode.windowsWintun,
+      ready: false,
+      stage: PlatformTunnelStartupStage.capabilityCheck,
+      missingPrerequisite: PlatformTunnelPrerequisite.hostImplementation,
+      message: 'desktop sidecar does not implement system tunnel startup yet',
+    ),
   }) : _providers = List<ProviderDescriptor>.of(
          providers ?? _providerDescriptors,
        ),
        _providerConfigs = List<ProviderConfigRecord>.of(
          providerConfigs ?? const <ProviderConfigRecord>[],
+       ),
+       _resolutions = List<ResolutionRecord>.of(resolutionsList),
+       _profiles = List<ProfileRecord>.of(
+         profiles ??
+             <ProfileRecord>[
+               ProfileRecord(
+                 id: 'profile-1',
+                 name: 'alpha',
+                 spec: const ProfileSpec(
+                   provider: 'vk',
+                   link: 'https://vk.com/call/join/test',
+                   listenAddress: '127.0.0.1:9001',
+                   peerAddress: '127.0.0.1:56000',
+                 ),
+               ),
+               ProfileRecord(
+                 id: 'profile-2',
+                 name: 'beta',
+                 spec: const ProfileSpec(
+                   provider: 'generic-turn',
+                   link:
+                       'generic-turn://turn-user:turn-pass@turn.example.test:3478',
+                   listenAddress: '127.0.0.1:9002',
+                   peerAddress: '10.0.0.2:6000',
+                 ),
+               ),
+             ],
        );
 
-  final List<ResolutionRecord> resolutionsList;
   final List<ProviderDescriptor> _providers;
   final List<ProviderConfigRecord> _providerConfigs;
   final List<String> startedProfileIDs = <String>[];
   final List<PlatformTunnelMode> startedPlatformTunnels =
       <PlatformTunnelMode>[];
-  final List<ProfileRecord> _profiles = <ProfileRecord>[
-    ProfileRecord(
-      id: 'profile-1',
-      name: 'alpha',
-      spec: const ProfileSpec(
-        provider: 'vk',
-        link: 'https://vk.com/call/join/test',
-        listenAddress: '127.0.0.1:9001',
-        peerAddress: '127.0.0.1:56000',
-      ),
-    ),
-    ProfileRecord(
-      id: 'profile-2',
-      name: 'beta',
-      spec: const ProfileSpec(
-        provider: 'generic-turn',
-        link: 'generic-turn://turn-user:turn-pass@turn.example.test:3478',
-        listenAddress: '127.0.0.1:9002',
-        peerAddress: '10.0.0.2:6000',
-      ),
-    ),
-  ];
+  final PlatformTunnelStartResult startPlatformTunnelResult;
+  final List<ResolutionRecord> _resolutions;
+  final List<ProfileRecord> _profiles;
   final StreamController<EventRecord> _events =
       StreamController<EventRecord>.broadcast();
   List<SessionRecord> _sessions = const <SessionRecord>[];
@@ -2038,13 +2161,22 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
     List<String> disallowedPackages = const <String>[],
   }) async {
     startedPlatformTunnels.add(mode);
-    return const PlatformTunnelStartResult(
-      mode: PlatformTunnelMode.windowsWintun,
-      ready: false,
-      stage: PlatformTunnelStartupStage.capabilityCheck,
-      missingPrerequisite: PlatformTunnelPrerequisite.hostImplementation,
-      message: 'desktop sidecar does not implement system tunnel startup yet',
-    );
+    if (startPlatformTunnelResult.ready) {
+      final now = DateTime(2026, 4, 5, 17, 1);
+      final session = SessionRecord(
+        id: startPlatformTunnelResult.sessionId.isEmpty
+            ? 'platform-session-1'
+            : startPlatformTunnelResult.sessionId,
+        sourceResolutionId: resolutionId,
+        profileName: 'windows wintun',
+        profile: _profiles.first.spec,
+        state: SessionState.ready,
+        startedAt: now,
+        updatedAt: now,
+      );
+      _sessions = <SessionRecord>[session];
+    }
+    return startPlatformTunnelResult;
   }
 
   @override
@@ -2079,7 +2211,7 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   Future<List<ProfileRecord>> profiles() async => _profiles;
 
   @override
-  Future<List<ResolutionRecord>> resolutions() async => resolutionsList;
+  Future<List<ResolutionRecord>> resolutions() async => _resolutions;
 
   @override
   Future<ResolutionRecord> startResolution({
@@ -2087,7 +2219,7 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
     required ProviderInputEnvelope input,
     Map<String, dynamic> providerSettings = const <String, dynamic>{},
   }) async {
-    return ResolutionRecord(
+    final resolution = ResolutionRecord(
       id: 'resolution-1',
       provider: provider,
       input: ResolutionInput(
@@ -2118,6 +2250,10 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
       startedAt: DateTime.utc(2026, 4, 10, 12, 0),
       updatedAt: DateTime.utc(2026, 4, 10, 12, 1),
     );
+    _resolutions
+      ..clear()
+      ..add(resolution);
+    return resolution;
   }
 
   @override

@@ -120,6 +120,9 @@ The guest sync and launcher stay fail-closed:
 - they do not fall back to legacy `gui_shell.exe`
 - they stage `desktop1-windows.conf` into the guest only as packaged-host
   materializer input, not as proof of an external compatibility workflow
+- the lab launcher and smoke set `VKTP_WINDOWS_WIREGUARD_PROFILE` to the staged
+  profile path so the packaged host uses the same materializer input even when
+  the GUI is started from a different Windows user profile
 
 ## Local WireGuard materializer profile
 

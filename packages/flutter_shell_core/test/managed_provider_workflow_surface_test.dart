@@ -77,6 +77,10 @@ void main() {
   testWidgets('shared managed provider workflow renders the desktop variant', (
     WidgetTester tester,
   ) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
     await pumpShellCoreLocalizedTestApp(
       tester,
       child: SizedBox(
@@ -107,6 +111,12 @@ void main() {
     );
     expect(
       find.byKey(const ValueKey<String>('shared-desktop-provider-name')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(
+        const ValueKey<String>('managed-provider-desktop-two-pane-layout'),
+      ),
       findsOneWidget,
     );
     expect(

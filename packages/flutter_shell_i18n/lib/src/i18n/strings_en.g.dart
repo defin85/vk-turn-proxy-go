@@ -1495,6 +1495,12 @@ class Translations with BaseTranslations<AppLocale, Translations> {
   String get shellTextMobileAdvancedRuntimeControlsSubtitle =>
       'Transport overrides, local bind, and logging';
 
+  /// en: 'Show settings'
+  String get shellTextShowAdvancedRuntimeControls => 'Show settings';
+
+  /// en: 'Hide settings'
+  String get shellTextHideAdvancedRuntimeControls => 'Hide settings';
+
   /// en: 'Export the selected saved profile through an explicit envelope, or preview an import before creating local records.'
   String get shellTextMobilePortableTransferSubtitle =>
       'Export the selected saved profile through an explicit envelope, or preview an import before creating local records.';
@@ -1954,6 +1960,12 @@ class Translations with BaseTranslations<AppLocale, Translations> {
   /// en: 'Tunnel detail'
   String get shellTextDesktopTunnelDetail => 'Tunnel detail';
 
+  /// en: 'Show details'
+  String get shellTextShowPlatformTunnelDetails => 'Show details';
+
+  /// en: 'Hide details'
+  String get shellTextHidePlatformTunnelDetails => 'Hide details';
+
   /// en: 'Platform tunnel modes'
   String get shellTextDesktopPlatformTunnelModes => 'Platform tunnel modes';
 
@@ -2100,6 +2112,13 @@ class Translations with BaseTranslations<AppLocale, Translations> {
   /// en: 'Choose the VPN profile and app scope.'
   String get shellTextRoutingSubtitle =>
       'Choose the VPN profile and app scope.';
+
+  /// en: 'Routing parameters'
+  String get shellTextDesktopRoutingParameters => 'Routing parameters';
+
+  /// en: 'Profile addresses and launch overrides applied before the tunnel starts.'
+  String get shellTextDesktopRoutingParametersSubtitle =>
+      'Profile addresses and launch overrides applied before the tunnel starts.';
 
   /// en: 'Routing profile'
   String get shellTextRoutingProfile => 'Routing profile';
@@ -3523,6 +3542,8 @@ extension on Translations {
             'Advanced runtime controls',
           'shellTextMobileAdvancedRuntimeControlsSubtitle' =>
             'Transport overrides, local bind, and logging',
+          'shellTextShowAdvancedRuntimeControls' => 'Show settings',
+          'shellTextHideAdvancedRuntimeControls' => 'Hide settings',
           'shellTextMobilePortableTransferSubtitle' =>
             'Export the selected saved profile through an explicit envelope, or preview an import before creating local records.',
           'shellTextMobileProviderSettingsSupportError' =>
@@ -3723,6 +3744,8 @@ extension on Translations {
           'shellTextDesktopInspectorActivitySubtitle' =>
             'Live resolutions and sessions stay available on demand without reclaiming the full shell.',
           'shellTextDesktopTunnelDetail' => 'Tunnel detail',
+          'shellTextShowPlatformTunnelDetails' => 'Show details',
+          'shellTextHidePlatformTunnelDetails' => 'Hide details',
           'shellTextDesktopPlatformTunnelModes' => 'Platform tunnel modes',
           'shellTextDesktopFailClosedCompactUntilStartup' =>
             'Fail-closed platform tunnel checks stay collapsed until you explicitly test startup.',
@@ -3757,15 +3780,15 @@ extension on Translations {
           'shellTextDesktopWorkflowAssuranceReadyIdle' =>
             'The local host is ready. Routine support stays compact so the active workflow keeps visual priority.',
           'shellTextContinueAfterBrowserStep' => 'Continue after browser step',
+          _ => null,
+        } ??
+        switch (path) {
           'shellTextContinueInBrowser' => 'Continue in browser',
           'shellTextProviderFamilyLabel' =>
             ({required Object familyTitle}) =>
                 'Provider family: ${familyTitle}',
           'shellTextAppOwnedManagedRecord' => 'App-owned managed record',
           'shellTextSelectedFamily' => 'Selected family',
-          _ => null,
-        } ??
-        switch (path) {
           'shellTextMobileOpenBrowser' => 'Open browser',
           'shellTextMobileContinueInApp' => 'Continue in app',
           'shellTextChallengeContinuationCancelled' =>
@@ -3790,6 +3813,9 @@ extension on Translations {
             'Activity, failures, logs, and diagnostics stay explicit but secondary to the main VPN workflow.',
           'shellTextRoutingTitle' => 'Routing',
           'shellTextRoutingSubtitle' => 'Choose the VPN profile and app scope.',
+          'shellTextDesktopRoutingParameters' => 'Routing parameters',
+          'shellTextDesktopRoutingParametersSubtitle' =>
+            'Profile addresses and launch overrides applied before the tunnel starts.',
           'shellTextRoutingProfile' => 'Routing profile',
           'shellTextRoutingProfileStandard' => 'Standard',
           'shellTextRoutingProfileDevelopmentWifi' => 'Development Wi-Fi',

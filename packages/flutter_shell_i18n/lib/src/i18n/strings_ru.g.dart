@@ -1151,6 +1151,10 @@ class TranslationsRu extends Translations
   String get shellTextMobileAdvancedRuntimeControlsSubtitle =>
       'Переопределения транспорта, локальная привязка и логирование';
   @override
+  String get shellTextShowAdvancedRuntimeControls => 'Показать настройки';
+  @override
+  String get shellTextHideAdvancedRuntimeControls => 'Скрыть настройки';
+  @override
   String get shellTextMobilePortableTransferSubtitle =>
       'Экспортируйте выбранный сохраненный профиль через явный конверт или просмотрите импорт до создания локальных записей.';
   @override
@@ -1496,6 +1500,10 @@ class TranslationsRu extends Translations
   @override
   String get shellTextDesktopTunnelDetail => 'Детали туннеля';
   @override
+  String get shellTextShowPlatformTunnelDetails => 'Показать детали';
+  @override
+  String get shellTextHidePlatformTunnelDetails => 'Скрыть детали';
+  @override
   String get shellTextDesktopPlatformTunnelModes =>
       'Платформенные туннельные режимы';
   @override
@@ -1604,6 +1612,11 @@ class TranslationsRu extends Translations
   @override
   String get shellTextRoutingSubtitle =>
       'Выберите профиль VPN и охват приложений.';
+  @override
+  String get shellTextDesktopRoutingParameters => 'Параметры маршрутизации';
+  @override
+  String get shellTextDesktopRoutingParametersSubtitle =>
+      'Адреса и переопределения запуска профиля, которые применяются перед стартом туннеля.';
   @override
   String get shellTextRoutingProfile => 'Профиль маршрутизации';
   @override
@@ -2850,6 +2863,8 @@ extension on TranslationsRu {
             'Расширенные настройки рантайма',
           'shellTextMobileAdvancedRuntimeControlsSubtitle' =>
             'Переопределения транспорта, локальная привязка и логирование',
+          'shellTextShowAdvancedRuntimeControls' => 'Показать настройки',
+          'shellTextHideAdvancedRuntimeControls' => 'Скрыть настройки',
           'shellTextMobilePortableTransferSubtitle' =>
             'Экспортируйте выбранный сохраненный профиль через явный конверт или просмотрите импорт до создания локальных записей.',
           'shellTextMobileProviderSettingsSupportError' =>
@@ -3057,6 +3072,8 @@ extension on TranslationsRu {
           'shellTextDesktopInspectorActivitySubtitle' =>
             'Текущие резолюции и сессии остаются доступными по запросу, не перехватывая всю оболочку.',
           'shellTextDesktopTunnelDetail' => 'Детали туннеля',
+          'shellTextShowPlatformTunnelDetails' => 'Показать детали',
+          'shellTextHidePlatformTunnelDetails' => 'Скрыть детали',
           'shellTextDesktopPlatformTunnelModes' =>
             'Платформенные туннельные режимы',
           'shellTextDesktopFailClosedCompactUntilStartup' =>
@@ -3093,15 +3110,15 @@ extension on TranslationsRu {
             'Локальный хост готов. Рутинная поддержка остается компактной, чтобы активный рабочий процесс сохранял визуальный приоритет.',
           'shellTextContinueAfterBrowserStep' =>
             'Продолжить после шага в браузере',
+          _ => null,
+        } ??
+        switch (path) {
           'shellTextContinueInBrowser' => 'Продолжить в браузере',
           'shellTextProviderFamilyLabel' =>
             ({required Object familyTitle}) =>
                 'Семейство провайдера: ${familyTitle}',
           'shellTextAppOwnedManagedRecord' => 'Управляемая запись приложения',
           'shellTextSelectedFamily' => 'Выбранное семейство',
-          _ => null,
-        } ??
-        switch (path) {
           'shellTextMobileOpenBrowser' => 'Открыть браузер',
           'shellTextMobileContinueInApp' => 'Продолжить в приложении',
           'shellTextChallengeContinuationCancelled' =>
@@ -3127,6 +3144,9 @@ extension on TranslationsRu {
           'shellTextRoutingTitle' => 'Маршрутизация',
           'shellTextRoutingSubtitle' =>
             'Выберите профиль VPN и охват приложений.',
+          'shellTextDesktopRoutingParameters' => 'Параметры маршрутизации',
+          'shellTextDesktopRoutingParametersSubtitle' =>
+            'Адреса и переопределения запуска профиля, которые применяются перед стартом туннеля.',
           'shellTextRoutingProfile' => 'Профиль маршрутизации',
           'shellTextRoutingProfileStandard' => 'Стандартный',
           'shellTextRoutingProfileDevelopmentWifi' => 'Development Wi-Fi',

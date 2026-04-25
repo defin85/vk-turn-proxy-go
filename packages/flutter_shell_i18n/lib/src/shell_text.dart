@@ -651,6 +651,10 @@ class ShellText {
       t.shellTextMobileAdvancedRuntimeControls;
   String get mobileAdvancedRuntimeControlsSubtitle =>
       t.shellTextMobileAdvancedRuntimeControlsSubtitle;
+  String get showAdvancedRuntimeControls =>
+      t.shellTextShowAdvancedRuntimeControls;
+  String get hideAdvancedRuntimeControls =>
+      t.shellTextHideAdvancedRuntimeControls;
   String get mobilePortableTransferSubtitle =>
       t.shellTextMobilePortableTransferSubtitle;
   String mobileProviderSettingsSupportError({
@@ -884,6 +888,8 @@ class ShellText {
   String get desktopInspectorActivitySubtitle =>
       t.shellTextDesktopInspectorActivitySubtitle;
   String get desktopTunnelDetail => t.shellTextDesktopTunnelDetail;
+  String get showPlatformTunnelDetails => t.shellTextShowPlatformTunnelDetails;
+  String get hidePlatformTunnelDetails => t.shellTextHidePlatformTunnelDetails;
   String get desktopPlatformTunnelModes =>
       t.shellTextDesktopPlatformTunnelModes;
   String get desktopFailClosedCompactUntilStartup =>
@@ -1039,6 +1045,9 @@ class ShellText {
   String get supportSubtitle => t.shellTextSupportSubtitle;
   String get routingTitle => t.shellTextRoutingTitle;
   String get routingSubtitle => t.shellTextRoutingSubtitle;
+  String get desktopRoutingParameters => t.shellTextDesktopRoutingParameters;
+  String get desktopRoutingParametersSubtitle =>
+      t.shellTextDesktopRoutingParametersSubtitle;
   String get routingProfile => t.shellTextRoutingProfile;
   String get routingProfileStandard => t.shellTextRoutingProfileStandard;
   String get routingProfileDevelopmentWifi =>

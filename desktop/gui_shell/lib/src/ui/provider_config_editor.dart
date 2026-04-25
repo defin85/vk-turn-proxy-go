@@ -54,12 +54,12 @@ class ProviderConfigEditorPanel extends StatelessWidget {
     final editorTitle = selectedSavedProvider
         ? copy.desktopProviderRecord
         : copy.desktopNewProviderRecord;
-    final editorDetail = selectedSavedProvider
-        ? copy.desktopEditReusableProviderRecord
-        : copy.desktopCreateReusableProviderRecord;
     final blockedBySchemaSupport =
         descriptor?.providerSettingsSupportError != null &&
         draft.providerSettings.isNotEmpty;
+    final hostAvailability = supportedProvider?.availabilityFor(
+      providerDescriptors,
+    );
     final primaryActionKey = supportedProvider == null
         ? const ValueKey<String>('desktop-open-provider-family-chooser-button')
         : const ValueKey<String>('managed-provider-save-action');
@@ -78,19 +78,32 @@ class ProviderConfigEditorPanel extends StatelessWidget {
         child: LayoutBuilder(
           builder: (BuildContext context, BoxConstraints constraints) {
             final stackedHeader = constraints.maxWidth < 960;
-            final headerActions = Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: <Widget>[
-                FilledButton.tonalIcon(
-                  key: const ValueKey<String>('managed-provider-reset-action'),
-                  onPressed: busy ? null : onReset,
-                  icon: const Icon(Icons.tune),
-                  label: Text(copy.desktopNewRecord),
+            final providerLabel =
+                supportedProvider?.title ?? draft.provider.trim();
+            final headerBadges = <Widget>[
+              ShellToneBadge(
+                label: selectedSavedProvider
+                    ? copy.savedRecord
+                    : copy.desktopNewRecord,
+                tone: selectedSavedProvider
+                    ? ShellSemanticTone.info
+                    : ShellSemanticTone.attention,
+              ),
+              if (providerLabel.isNotEmpty)
+                ShellToneBadge(
+                  label: providerLabel,
+                  tone: ShellSemanticTone.info,
                 ),
-                _buildMoreActionsButton(context, selectedSavedProvider),
-              ],
-            );
+              if (hostAvailability != null)
+                ShellToneBadge(
+                  label: hostAvailability.isAvailable
+                      ? copy.desktopHostOverlayAvailable
+                      : copy.desktopHostOverlayUnavailable,
+                  tone: hostAvailability.isAvailable
+                      ? ShellSemanticTone.info
+                      : ShellSemanticTone.danger,
+                ),
+            ];
             final titleBlock = Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
@@ -100,13 +113,8 @@ class ProviderConfigEditorPanel extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  editorDetail,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
+                const SizedBox(height: 8),
+                Wrap(spacing: 8, runSpacing: 8, children: headerBadges),
               ],
             );
 
@@ -116,36 +124,24 @@ class ProviderConfigEditorPanel extends StatelessWidget {
                 if (stackedHeader) ...<Widget>[
                   titleBlock,
                   const SizedBox(height: 14),
-                  headerActions,
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: _buildMoreActionsButton(
+                      context,
+                      selectedSavedProvider,
+                    ),
+                  ),
                 ] else
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       Expanded(child: titleBlock),
                       const SizedBox(width: 16),
-                      Flexible(child: headerActions),
+                      _buildMoreActionsButton(context, selectedSavedProvider),
                     ],
                   ),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.topLeft,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 920),
-                      child: ManagedProviderWorkflowBody(
-                        variant: ManagedProviderWorkflowVariant.desktop,
-                        supportedProviders: supportedProviders,
-                        providerDescriptors: providerDescriptors,
-                        selectedManagedProviderId: selectedManagedProviderId,
-                        draft: draft,
-                        busy: busy,
-                        onDraftChanged: onDraftChanged,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _footerActionBar(
+                const SizedBox(height: 14),
+                _actionBar(
                   context,
                   primaryKey: primaryActionKey,
                   primaryLabel: primaryActionLabel,
@@ -153,6 +149,21 @@ class ProviderConfigEditorPanel extends StatelessWidget {
                   onApplyPressed: busy || selectedManagedProviderId == null
                       ? null
                       : () => onApplyToProfileDraft(selectedManagedProviderId!),
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.topLeft,
+                    child: ManagedProviderWorkflowBody(
+                      variant: ManagedProviderWorkflowVariant.desktop,
+                      supportedProviders: supportedProviders,
+                      providerDescriptors: providerDescriptors,
+                      selectedManagedProviderId: selectedManagedProviderId,
+                      draft: draft,
+                      busy: busy,
+                      onDraftChanged: onDraftChanged,
+                    ),
+                  ),
                 ),
               ],
             );
@@ -251,7 +262,7 @@ class ProviderConfigEditorPanel extends StatelessWidget {
     );
   }
 
-  Widget _footerActionBar(
+  Widget _actionBar(
     BuildContext context, {
     required Key primaryKey,
     required String primaryLabel,
@@ -259,45 +270,56 @@ class ProviderConfigEditorPanel extends StatelessWidget {
     required VoidCallback? onApplyPressed,
   }) {
     final theme = Theme.of(context);
-    final primaryButton = FilledButton(
+    final primaryButton = FilledButton.icon(
       key: primaryKey,
       onPressed: onPrimaryPressed,
-      child: Text(primaryLabel),
+      icon: Icon(
+        primaryKey == const ValueKey<String>('managed-provider-save-action')
+            ? Icons.save_outlined
+            : Icons.account_tree_outlined,
+      ),
+      label: Text(primaryLabel),
     );
-    final applyButton = FilledButton.tonal(
+    final applyButton = FilledButton.tonalIcon(
       key: const ValueKey<String>('managed-provider-apply-action'),
       onPressed: onApplyPressed,
-      child: Text(context.shellText.desktopUseInProfileDraft),
+      icon: const Icon(Icons.assignment_returned_outlined),
+      label: Text(context.shellText.desktopUseInProfileDraft),
     );
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.16,
-        ),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: LayoutBuilder(
-        builder: (BuildContext context, BoxConstraints constraints) {
-          if (constraints.maxWidth < 640) {
-            return Column(
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        if (constraints.maxWidth >= 760) {
+          return Align(
+            alignment: Alignment.centerRight,
+            child: Wrap(
+              alignment: WrapAlignment.end,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 10,
+              runSpacing: 10,
+              children: <Widget>[applyButton, primaryButton],
+            ),
+          );
+        }
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest.withValues(
+              alpha: 0.12,
+            ),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
                 primaryButton,
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 applyButton,
               ],
-            );
-          }
-          return Row(
-            children: <Widget>[
-              Expanded(child: primaryButton),
-              const SizedBox(width: 12),
-              applyButton,
-            ],
-          );
-        },
-      ),
+            ),
+          ),
+        );
+      },
     );
   }
 

@@ -6,6 +6,9 @@ import 'package:gui_shell/src/control/profile_draft.dart';
 
 typedef StateFileProvider = Future<File> Function();
 
+const _vkProviderId = 'vk';
+const _persistedVkAuthenticatedRootLink = 'https://calls.vk.com/';
+
 class DesktopShellState {
   DesktopShellState({
     required this.profiles,
@@ -192,7 +195,45 @@ ProfileSpec _sanitizeProfileSpec(
   final sanitizedProviderSettings =
       descriptor?.profileRetainedProviderSettings(spec.providerSettings) ??
       const <String, dynamic>{};
-  return spec.copyWith(link: '', providerSettings: sanitizedProviderSettings);
+  return spec.copyWith(
+    link: _persistableProfileLink(spec, descriptor),
+    providerSettings: sanitizedProviderSettings,
+  );
+}
+
+String _persistableProfileLink(
+  ProfileSpec spec,
+  ProviderDescriptor? descriptor,
+) {
+  final providerId = (descriptor?.id ?? spec.provider).trim().toLowerCase();
+  if (providerId != _vkProviderId) {
+    return '';
+  }
+  return _canonicalVkAuthenticatedRootLink(spec.link) ?? '';
+}
+
+String? _canonicalVkAuthenticatedRootLink(String link) {
+  final trimmed = link.trim();
+  if (trimmed.isEmpty) {
+    return null;
+  }
+  final normalized = switch (trimmed.toLowerCase()) {
+    'calls.vk.com/' => _persistedVkAuthenticatedRootLink,
+    _ => trimmed,
+  };
+  final uri = Uri.tryParse(normalized);
+  if (uri == null) {
+    return null;
+  }
+  if (uri.scheme.toLowerCase() != 'https' ||
+      uri.host.toLowerCase() != 'calls.vk.com' ||
+      uri.hasPort ||
+      uri.hasQuery ||
+      uri.hasFragment ||
+      (uri.path.isNotEmpty && uri.path != '/')) {
+    return null;
+  }
+  return _persistedVkAuthenticatedRootLink;
 }
 
 Future<File> defaultDesktopShellStateFile() async {

@@ -36,6 +36,7 @@ Rules:
 - Use `mcp__dart_mobile__` for `mobile/gui_shell` and `mcp__dart_desktop__` for `desktop/gui_shell`. Keep `mcp__dart__` only as a backward-compatible single-target fallback.
 - `launch_app.root` must be a plain filesystem path such as `/home/egor/code/vk-turn-proxy-go/mobile/gui_shell`.
 - Do not pass `file://...` URIs to `launch_app.root`.
+- Always launch agent-operated Dart MCP app sessions with a driver-extension entrypoint. Use `target="test_driver/driver_main.dart"` for the normal desktop and mobile shells so `flutter_driver` health checks, screenshots, taps, and text automation are available.
 - Each Dart MCP namespace currently supports one active Dart Tooling Daemon connection at a time.
 - With dedicated namespaces, one Codex session can keep separate desktop and mobile DTD connections. Use a fresh session only when replacing an already connected target inside the same namespace.
 - Do not switch to `adb`-driven install/logcat/forward/input work unless the user explicitly agrees to that fallback in the current thread.
@@ -61,14 +62,14 @@ tablet's ADB interface so Linux `adb` can open the USB node without a manual
 permission fix. See `DEBUG.md` for the exact verified rule and workstation
 notes.
 
-Use the default `mobile/gui_shell/lib/main.dart` entrypoint only when the task specifically needs production-entrypoint parity instead of the driver-enabled agent loop.
+Do not omit the driver-extension target unless the user explicitly asks for a production-entrypoint parity run and accepts that Flutter Driver screenshots/taps will be unavailable for that run.
 
 Verified desktop Linux launch path:
 1. `dart pub get`
 2. `go run ./cmd/clientd -listen 127.0.0.1:7777`
-3. `mcp__dart_desktop__.launch_app(device="linux", root="/home/egor/code/vk-turn-proxy-go/desktop/gui_shell")`
+3. `mcp__dart_desktop__.launch_app(device="linux", root="/home/egor/code/vk-turn-proxy-go/desktop/gui_shell", target="test_driver/driver_main.dart")`
 4. `mcp__dart_desktop__.connect_dart_tooling_daemon(uri="<returned dtd uri>")`
-5. Use `mcp__dart_desktop__.hot_reload` from that desktop namespace
+5. Use `mcp__dart_desktop__.hot_reload` and `mcp__dart_desktop__.flutter_driver(command="screenshot")` from that desktop namespace
 
 The authoritative verified notes for this workflow live in `DEBUG.md`.
 

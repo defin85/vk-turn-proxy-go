@@ -7,6 +7,7 @@ Verified UI development loops for this repository. Only techniques that were exe
 - Use `mcp__dart_mobile__` for `mobile/gui_shell` and `mcp__dart_desktop__` for `desktop/gui_shell`. Keep `mcp__dart__` only as a backward-compatible single-target fallback.
 - `launch_app.root` must be a plain filesystem path like `/home/egor/code/vk-turn-proxy-go/mobile/gui_shell`.
 - Do not pass `file://...` URIs to `launch_app.root`; that fails before launch.
+- Agent-operated Dart MCP app launches must use a driver-extension entrypoint. Use `target="test_driver/driver_main.dart"` for the normal desktop and mobile shells so `flutter_driver` health checks, screenshots, taps, and text automation are available from the start.
 - Each Dart MCP namespace can hold only one active Dart Tooling Daemon connection.
 - With dedicated namespaces, one Codex session can keep a desktop DTD on `mcp__dart_desktop__` and a mobile DTD on `mcp__dart_mobile__`. Use a fresh Codex session only when you need to replace an existing DTD inside the same namespace.
 - Treat `adb` as an explicit fallback path. Do not drop to `adb`-driven install/logcat/forward/input work unless the user has agreed to that switch in the current thread.
@@ -53,7 +54,7 @@ Verified implication:
   this workstation/device combination. For post-VPN inspection, prefer the
   documented USB passthrough path instead of wireless debugging.
 
-Use the default `mobile/gui_shell/lib/main.dart` entrypoint only when the task specifically needs production-entrypoint parity rather than driver-enabled inspection.
+Do not omit the driver-extension target unless the user explicitly asks for a production-entrypoint parity run and accepts that Flutter Driver screenshots/taps will be unavailable for that run.
 
 ### Mobile GUI shell via Dart MCP over USB from WSL
 
@@ -131,12 +132,14 @@ Verified on `2026-04-16` against Linux desktop target under WSLg.
 1. Start the local control plane first:
    `go run ./cmd/clientd -listen 127.0.0.1:7777`
 2. Launch with Dart MCP:
-   `mcp__dart_desktop__.launch_app(device="linux", root="/home/egor/code/vk-turn-proxy-go/desktop/gui_shell")`
+   `mcp__dart_desktop__.launch_app(device="linux", root="/home/egor/code/vk-turn-proxy-go/desktop/gui_shell", target="test_driver/driver_main.dart")`
 3. Connect to the returned DTD URI with `mcp__dart_desktop__.connect_dart_tooling_daemon`.
+4. Use `mcp__dart_desktop__.flutter_driver(command="screenshot")` and other driver commands for live screenshots and taps.
 
 Verified evidence:
 - `clientd` reached `listening` on `127.0.0.1:7777`.
 - `launch_app` built and started the Linux desktop shell and returned a live DTD URI and PID.
+- The driver-extension target returned `flutter_driver` health `ok` and supported live screenshots.
 - The dedicated desktop namespace keeps its own DTD connection separate from the mobile namespace.
 
 Local workstation prerequisite:

@@ -271,6 +271,9 @@ if (-not $SkipAdminCheck -and -not (Test-IsAdmin)) {
 if ($RequireWireGuardProfile -and -not (Test-Path $WireGuardProfilePath)) {
     throw "validated WireGuard profile not found: $WireGuardProfilePath"
 }
+if (Test-Path $WireGuardProfilePath) {
+    $env:VKTP_WINDOWS_WIREGUARD_PROFILE = $WireGuardProfilePath
+}
 
 $script:BaseHostUrl = "http://$HostListenAddress"
 $clientdProcess = $null

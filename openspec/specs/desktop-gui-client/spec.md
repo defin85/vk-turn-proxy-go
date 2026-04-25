@@ -217,46 +217,34 @@ provider record or a custom provider path.
 
 ### Requirement: Desktop GUI shell presents a workflow-first workspace
 
-The system SHALL present the desktop GUI shell as a left-pad workspace where
-large desktop widths keep a compact persistent navigation pad on the left,
-narrower desktop widths expose the same workflow and task-entry commands
-through a compact drawer or equivalent trigger, and one main canvas owns the
-active task surface.
+The system SHALL present the desktop GUI shell as a stable VPN workbench with
+one dominant task canvas, persistent left navigation on ordinary desktop
+widths, and support-oriented live-work surfaces that do not compete equally
+with the active route.
 
-#### Scenario: Shell opens into one active canvas route in routine ready state
+#### Scenario: Shell opens into one active desktop task route
 
-- **GIVEN** the desktop GUI shell opens with no active resolutions or sessions
+- **GIVEN** the desktop GUI shell opens with no blocking host error
 - **WHEN** the operator lands on the main screen
-- **THEN** the shell shows a compact left pad plus one dominant main-canvas
-  task route
-- **AND** the shell does not stack multiple explanatory context cards or
-  route-restating action cards beside or above the active canvas route
+- **THEN** the shell shows a stable desktop navigation region plus one dominant
+  task canvas
+- **AND** the shell may embed a shared product workflow body inside the active
+  route when that body is platform-neutral
+- **AND** the shell does not treat multiple peer dashboard regions as equal
+  primary work surfaces by default
+- **AND** the shell does not stack route-restating action cards beside or above
+  the active canvas route
 - **AND** the shell does not present a second persistent peer region that
   competes with the active canvas route for substantive operator attention
-- **AND** empty diagnostics and live-work surfaces do not occupy a persistent
-  dominant region
+- **AND** diagnostics and live-work surfaces stay secondary to the active route
 
-#### Scenario: Operator switches task entry from the left pad
+#### Scenario: Narrow desktop widths preserve the same destination model
 
-- **GIVEN** the operator is inside the desktop shell
-- **WHEN** the operator uses the left pad to switch workflows or open a task
-  entry surface
-- **THEN** the main canvas changes to the requested route
-- **AND** the left pad remains a stable navigation surface instead of becoming
-  a second detail pane
-- **AND** routine task-entry commands do not require a separate persistent
-  explanatory card above the active route
-
-#### Scenario: Narrow desktop widths collapse the left pad without changing the active task
-
-- **GIVEN** the desktop GUI shell is running in a narrower desktop-width window
-- **WHEN** the operator opens workflow navigation or task-entry commands
-- **THEN** the shell exposes the same workflow and task-entry actions through a
-  compact drawer or equivalent trigger
-- **AND** opening or closing that compact navigation surface does not discard
-  the active canvas route, draft state, or active selection
-- **AND** the shell does not restore a separate persistent summary pane beside
-  the active canvas as a fallback for the collapsed left pad
+- **GIVEN** the desktop shell is running at a narrower desktop width
+- **WHEN** the left navigation collapses into a compact surface
+- **THEN** the shell preserves the same destination model and active route
+- **AND** it does not fall back to a mobile-style stacked dashboard as the
+  primary desktop pattern
 
 ### Requirement: Desktop GUI shell consolidates operational state
 
@@ -577,4 +565,236 @@ families.
 - **AND** the published desktop app does not keep example or placeholder
   bundle identifiers such as `com.example.guiShell` or legacy shell output
   names such as `gui_shell.app`
+
+### Requirement: Desktop GUI system tunnel support remains explicit, host-driven, and target-specific
+
+The system SHALL keep desktop GUI system tunnel support explicit and host-driven instead of implying it from package installation, OS heuristics, or one other desktop target's delivery status.
+Installing the desktop app SHALL NOT silently claim desktop-wide system traffic capture support, but the GUI MAY offer the documented system tunnel workflow for the packaged target and mode that the bundled host explicitly reports as supported.
+
+#### Scenario: Desktop package still lacks a supported platform tunnel mode
+
+- **GIVEN** a desktop package whose connected host does not report a supported platform tunnel mode for that packaged target
+- **WHEN** the operator inspects platform support in the desktop GUI shell
+- **THEN** the GUI reports that repo-owned system tunnel support is not yet available for that target
+- **AND** it does not silently redefine the external `WireGuard for Windows` compatibility workflow or some other target's support claim as the same capability
+
+#### Scenario: Packaged Windows host reports a supported `windows_wintun` mode
+
+- **GIVEN** a production Windows desktop package whose bundled host reports `windows_wintun` as a supported platform tunnel mode
+- **WHEN** the operator inspects platform support in the desktop GUI shell
+- **THEN** the GUI offers the documented Windows system tunnel workflow for that mode
+- **AND** it uses the typed startup result instead of guessing support from OS heuristics, package presence, or manual route instructions alone
+
+### Requirement: Desktop GUI remains a typed consumer of packaged desktop tunnel startup
+
+The system SHALL keep the desktop GUI shell as a typed consumer of packaged-host
+desktop tunnel startup rather than the owner of native desktop tunnel
+primitives.
+
+#### Scenario: Desktop GUI renders system-tunnel workflow without owning native tunnel APIs
+
+- **GIVEN** a production desktop package whose bundled host reports one
+  documented system-tunnel mode
+- **WHEN** the operator inspects or starts that mode from the desktop GUI
+- **THEN** the UI renders capability, execution-plan choice, and typed startup
+  result state from the packaged host
+- **AND** it does not implement its own direct driver, route, or privileged
+  helper lifecycle
+
+### Requirement: Desktop GUI keeps tunnel UX adapter-driven rather than OS-API-driven
+
+The system SHALL keep system-tunnel UX in the desktop shell tied to
+host-reported mode metadata and typed startup results instead of one OS
+adapter's API naming.
+
+#### Scenario: Future desktop system-tunnel mode reuses the shell role
+
+- **GIVEN** a future packaged desktop host that reports a different native
+  system-tunnel adapter from the first shipped desktop mode
+- **WHEN** the desktop GUI renders that later mode
+- **THEN** the shell keeps the same typed consumer role for capability,
+  execution-plan, and startup state
+- **AND** it does not require a second UI architecture just because the native
+  adapter is different
+
+### Requirement: Desktop GUI shell uses explicit workbench destinations
+
+The system SHALL organize the desktop VPN shell around explicit workbench
+destinations rather than one large mixed dashboard.
+
+#### Scenario: Operator navigates across the desktop shell
+
+- **GIVEN** the operator is using the desktop shell on a routine workflow
+- **WHEN** they move between the primary destinations
+- **THEN** the shell offers explicit workbench routes such as home, profiles,
+  routing, support-oriented activity or diagnostics, and settings
+- **AND** each route owns the main task canvas when selected
+
+#### Scenario: Operator switches routes without losing current context
+
+- **GIVEN** the operator has a current selection, draft, or active session
+  context
+- **WHEN** they switch between desktop workbench destinations
+- **THEN** the shell preserves that relevant context when appropriate
+- **AND** returning to the previous route does not require rebuilding the
+  workflow from scratch
+
+### Requirement: Desktop home acts as an overview and command surface
+
+The system SHALL keep desktop home concise and operational instead of using it
+as the default location for all editing and support content, and SHALL render
+platform-neutral shared Home workflow bodies without promoting duplicate
+desktop-only chrome to a competing first read.
+
+#### Scenario: Operator opens desktop home in routine ready state
+
+- **GIVEN** the local host is ready and the desktop shell is in routine use
+- **WHEN** the operator opens home
+- **THEN** the shell shows compact overview information such as current mode,
+  selected profile or active summary, and quick entry actions
+- **AND** home does not expand into the full profile editor, routing editor,
+  or raw diagnostics feed by default
+
+#### Scenario: Home exposes support drill-down without becoming a diagnostics page
+
+- **GIVEN** the shell has live sessions, recent resolutions, or typed host
+  failures
+- **WHEN** the operator views home
+- **THEN** the shell exposes compact support entry points into activity or
+  diagnostics
+- **AND** the home route remains an overview rather than a full support work
+  surface
+
+#### Scenario: Desktop Home uses the shared product workflow body
+
+- **GIVEN** the desktop shell renders the routine `Home` canvas in a ready
+  state
+- **WHEN** the product-facing `Home` body is available as a platform-neutral
+  shared surface
+- **THEN** the desktop canvas reuses that shared body instead of maintaining a
+  separate desktop-only overview composition
+- **AND** desktop task-entry or support affordances remain available through
+  the left pad, drawer, or inspector model
+- **AND** desktop-local `Home` chrome does not restate those same actions as a
+  competing parallel first read
+
+### Requirement: Desktop GUI shell provides dense profile and routing surfaces
+
+The system SHALL provide dedicated desktop-first work surfaces for profile and
+routing management rather than relying on stretched phone-oriented layouts.
+
+#### Scenario: Operator manages profiles on desktop
+
+- **GIVEN** the operator needs to browse, select, edit, or create profiles on
+  desktop
+- **WHEN** they open the profile work surface
+- **THEN** the shell presents a dense desktop workflow such as list-detail,
+  table-detail, or an equivalent workbench composition
+- **AND** profile management does not depend on scrolling through a home
+  overview route
+
+#### Scenario: Operator manages routing on desktop
+
+- **GIVEN** the operator needs to inspect or edit routing behavior on desktop
+- **WHEN** they open the routing work surface
+- **THEN** the shell presents routing through a dedicated desktop page or
+  workbench region
+- **AND** routing does not remain hidden behind incidental support controls or
+  a stretched mobile-derived editor
+
+### Requirement: Desktop GUI shell keeps live runtime detail in a secondary live-work surface
+
+The system SHALL keep logs, live connections, and similar runtime detail in a
+secondary live-work surface such as a bottom ribbon or clearly subordinate
+support pane.
+
+#### Scenario: Operator inspects live runtime detail
+
+- **GIVEN** the desktop shell exposes logs, live connections, or traffic
+  detail
+- **WHEN** the operator opens that live-work surface
+- **THEN** the shell presents it in a lower ribbon, expandable lower panel, or
+  explicitly secondary pane
+- **AND** that live-work surface does not replace the main task canvas by
+  default
+
+#### Scenario: Live runtime detail remains quickly reachable
+
+- **GIVEN** the operator is working on profiles, routing, or another desktop
+  route
+- **WHEN** they need logs or live connections
+- **THEN** the shell can open that live-work surface without discarding the
+  active route
+- **AND** closing or collapsing that live-work surface restores focus to the
+  active route
+
+### Requirement: Desktop GUI shell uses the mobile shell as its visual reference
+
+The system SHALL render the desktop shell in the same product visual family as
+the approved mobile shell while preserving desktop-first structure and
+interaction.
+
+#### Scenario: Routine desktop ready state matches the product visual family
+
+- **GIVEN** the mobile shell is the approved visual reference for the current
+  product direction
+- **WHEN** the desktop shell renders its primary workbench surfaces
+- **THEN** it uses the same product color semantics, surface hierarchy, and
+  action-emphasis grammar
+- **AND** it does not regress to a separate generic desktop-only brand
+- **AND** it keeps desktop-sized density and navigation instead of imitating a
+  phone layout
+
+### Requirement: Desktop status and support surfaces stay visually recognizable across shells
+
+The system SHALL keep blocked, ready, active-runtime, and support-oriented
+desktop treatments visually consistent with the mobile shell's semantic state
+language.
+
+#### Scenario: Desktop surfaces a blocked or attention state
+
+- **GIVEN** the desktop shell needs to show blocked host state, runtime
+  attention, or support context
+- **WHEN** it renders that state
+- **THEN** the state uses the same semantic tone and status-treatment family as
+  the mobile shell
+- **AND** the treatment remains explicit without turning the desktop workbench
+  into a stretched mobile screen
+
+### Requirement: Desktop GUI shell gives Profiles and Providers distinct top-level workspaces
+
+The system SHALL expose saved profiles and reusable provider records as
+separate top-level desktop workspaces instead of mixing them through an
+in-canvas section switcher inside one workbench route.
+
+#### Scenario: Operator enters Profiles from the left pad
+
+- **GIVEN** the desktop GUI shell is in its routine task-entry state
+- **WHEN** the operator opens the `Profiles` workspace from the left pad or its
+  compact-drawer equivalent
+- **THEN** the main canvas focuses saved profiles and profile-editing work
+- **AND** reusable provider-record browsing, preset bootstrap, and
+  provider-family selection do not appear as equal-weight section switches
+  inside that `Profiles` route
+
+#### Scenario: Operator enters Providers from the left pad
+
+- **GIVEN** the desktop GUI shell is in its routine task-entry state
+- **WHEN** the operator opens the `Providers` workspace from the left pad or
+  its compact-drawer equivalent
+- **THEN** the main canvas focuses reusable managed-provider records, presets,
+  and provider-family workflows
+- **AND** saved-profile-specific editing or library actions do not appear as
+  equal-weight section switches inside that `Providers` route
+
+#### Scenario: Switching between Profiles and Providers keeps shell-owned workflow context
+
+- **GIVEN** the operator has existing draft or selection state in the desktop
+  `Profiles` workspace and in the desktop `Providers` workspace
+- **WHEN** they switch between those two workspaces through the left pad or its
+  compact-drawer equivalent
+- **THEN** the shell restores the relevant workspace route without requiring an
+  in-canvas section chip as the primary way to reach the other workspace
+- **AND** switching does not discard the active draft or current selection of
+  the workspace being left
 
