@@ -273,6 +273,41 @@ comparison is needed, the previous mirror workflow remains available:
 make build-gui-android-windows-mirror
 ```
 
+## Android Play release from WSL
+
+Google Play publication uses a separate release lane from the debug APK
+workflow above. The release lane stages a signed Android App Bundle and keeps
+debug-only workstation assets out of the store-target package.
+
+Source the operator-owned upload-key environment, then run:
+
+```bash
+source ~/.local/state/vk-turn-proxy-go/android-play-upload-key/relaydock-upload-20260426.env
+make build-gui-android-play-release
+```
+
+That workflow stages:
+- `dist/mobile/android-play-release/app-release.aab`
+- `dist/mobile/android-play-release/app-release.aab.sha256`
+- `dist/mobile/android-play-release/build-metadata.json`
+
+The workflow fails closed when release signing inputs are missing, when the
+effective release `targetSdkVersion` is below the documented Play floor, or when
+the staged AAB contains debug-only assets such as
+`base/assets/wireguard/phone1.conf`. It also runs a pinned `bundletool-all`
+local delivery verifier, which builds device-targeted APK splits from the AAB
+and checks the delivered native libraries, forbidden release assets, and JNI
+bridge callback method names.
+
+To re-run only the local delivery check against an existing staged AAB:
+
+```bash
+make verify-gui-android-play-release-local-delivery
+```
+
+Follow `docs/android-play-release.md` for the full signing contract, local
+verification path, and operator-owned Google Play Console handoff.
+
 ## Native Android GUI build
 
 When the mirror already exists at `E:\Projects\vk-turn-proxy-go`, run the Windows-native build script directly:

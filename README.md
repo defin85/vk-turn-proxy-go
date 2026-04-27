@@ -284,13 +284,26 @@ Native packaging can still override the default Android embedded-host path when 
 If the native bridge resolver itself fails, the app stays in a blocked state and surfaces that bootstrap error instead of crashing before the first screen.
 Android release/default packaging keeps cleartext HTTP limited to the documented local host bridge path.
 Android `debug` and `profile` variants keep broader cleartext enabled so explicit development HTTP bridge overrides still work.
-The repo-owned Android packaging workflow now stages a packaged debug APK under `dist/mobile/android-gui-shell/`:
+The repo-owned Android debug packaging workflow stages a packaged debug APK under `dist/mobile/android-gui-shell/`:
 
 ```bash
 bash ./scripts/build-android-gui-from-wsl.sh
 ```
 
 That workflow rebuilds the Android embedded host, writes Windows-native `local.properties` inside the mirror, builds the APK through the pinned Windows Flutter SDK, and syncs the staged artifact back into the canonical WSL checkout.
+
+Google Play publication uses a separate signed App Bundle lane:
+
+```bash
+source ~/.local/state/vk-turn-proxy-go/android-play-upload-key/relaydock-upload-20260426.env
+make build-gui-android-play-release
+```
+
+That lane stages `dist/mobile/android-play-release/app-release.aab` plus a
+SHA-256 checksum and build metadata, then uses a pinned `bundletool-all` jar to
+verify Play-style delivered splits before handoff. It does not reuse the
+debug-key ownership proof APK. See `docs/android-play-release.md` for the Play
+Console handoff.
 
 For a repo-owned smoke that proves the packaged-host shared-library path reaches control-plane `ready` without an external `clientd` or `VKTP_MOBILE_HOST_URL`:
 

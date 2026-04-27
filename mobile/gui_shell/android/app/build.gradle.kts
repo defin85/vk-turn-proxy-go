@@ -1,4 +1,5 @@
 import org.gradle.api.tasks.Exec
+import org.gradle.api.GradleException
 import java.util.Locale
 
 plugins {
@@ -49,6 +50,45 @@ val buildAndroidEmbeddedHost =
         null
     }
 
+val releaseSigningInputs =
+    mapOf(
+        "VKTP_ANDROID_UPLOAD_KEYSTORE" to
+            (System.getenv("VKTP_ANDROID_UPLOAD_KEYSTORE") ?: "").trim(),
+        "VKTP_ANDROID_UPLOAD_KEY_ALIAS" to
+            (System.getenv("VKTP_ANDROID_UPLOAD_KEY_ALIAS") ?: "").trim(),
+        "VKTP_ANDROID_UPLOAD_STORE_PASSWORD" to
+            (System.getenv("VKTP_ANDROID_UPLOAD_STORE_PASSWORD") ?: ""),
+        "VKTP_ANDROID_UPLOAD_KEY_PASSWORD" to
+            (System.getenv("VKTP_ANDROID_UPLOAD_KEY_PASSWORD") ?: ""),
+    )
+val releaseSigningConfigured =
+    releaseSigningInputs.values.all { it.isNotEmpty() }
+val requestedReleasePackaging =
+    gradle.startParameter.taskNames.any { requestedTask ->
+        val taskName = requestedTask.substringAfterLast(":").lowercase(Locale.ROOT)
+        taskName in setOf("assemblerelease", "bundlerelease", "packagerelease")
+    }
+
+if (requestedReleasePackaging) {
+    val missingSigningInputs =
+        releaseSigningInputs
+            .filterValues { it.isEmpty() }
+            .keys
+            .sorted()
+    if (missingSigningInputs.isNotEmpty()) {
+        throw GradleException(
+            "Android release signing inputs are required: " +
+                missingSigningInputs.joinToString(", "),
+        )
+    }
+    val uploadKeystore = file(releaseSigningInputs.getValue("VKTP_ANDROID_UPLOAD_KEYSTORE"))
+    if (!uploadKeystore.isFile) {
+        throw GradleException(
+            "Android release keystore not found: " + uploadKeystore.absolutePath,
+        )
+    }
+}
+
 android {
     namespace = "com.defin85.relaydock"
     compileSdk = flutter.compileSdkVersion
@@ -91,11 +131,26 @@ android {
         }
     }
 
+    signingConfigs {
+        if (releaseSigningConfigured) {
+            create("upload") {
+                storeFile = file(releaseSigningInputs.getValue("VKTP_ANDROID_UPLOAD_KEYSTORE"))
+                storePassword = releaseSigningInputs.getValue("VKTP_ANDROID_UPLOAD_STORE_PASSWORD")
+                keyAlias = releaseSigningInputs.getValue("VKTP_ANDROID_UPLOAD_KEY_ALIAS")
+                keyPassword = releaseSigningInputs.getValue("VKTP_ANDROID_UPLOAD_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            if (releaseSigningConfigured) {
+                signingConfig = signingConfigs.getByName("upload")
+            }
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }
@@ -111,5 +166,16 @@ dependencies {
 buildAndroidEmbeddedHost?.let { task ->
     tasks.named("preBuild") {
         dependsOn(task)
+    }
+}
+
+tasks.register("printReleaseTargetSdkVersion") {
+    group = "help"
+    description = "Prints the resolved release targetSdkVersion for release preflight."
+    doLast {
+        val resolvedTargetSdk =
+            android.defaultConfig.targetSdk
+                ?: throw GradleException("Android targetSdkVersion is not configured.")
+        println(resolvedTargetSdk)
     }
 }

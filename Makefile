@@ -3,7 +3,7 @@
 ACT_WORKFLOW ?= .github/workflows/ci.yml
 ACT_JOB ?= test
 
-.PHONY: ci codex-onboard codex-onboard-workflow verify-docs build-go build-gui-windows build-gui-android build-gui-android-windows-mirror smoke-android-embedded-host smoke-android-vpn-service wg-e2e-check wg-e2e wg-live-vk-check wg-live-vk-run wg-live-vk-start wg-live-vk-continue wg-live-vk-cleanup android-phone-check android-phone-status android-phone-start android-phone-stop android-phone-diagnostics sync-version-assets check-version-assets sync-publish-identity check-publish-identity ci-act ci-act-dry ci-act-verbose deps-act
+.PHONY: ci codex-onboard codex-onboard-workflow verify-docs build-go build-gui-windows build-gui-android build-gui-android-play-release verify-gui-android-play-release-local-delivery build-gui-android-windows-mirror smoke-android-embedded-host smoke-android-vpn-service wg-e2e-check wg-e2e wg-live-vk-check wg-live-vk-run wg-live-vk-start wg-live-vk-continue wg-live-vk-cleanup android-phone-check android-phone-status android-phone-start android-phone-stop android-phone-diagnostics sync-version-assets check-version-assets sync-publish-identity check-publish-identity ci-act ci-act-dry ci-act-verbose deps-act
 
 ci:
 	python3 ./scripts/verify-agent-docs.py
@@ -29,6 +29,12 @@ build-gui-windows:
 
 build-gui-android:
 	bash ./scripts/build-android-gui-linux.sh
+
+build-gui-android-play-release:
+	bash ./scripts/build-android-play-release-linux.sh
+
+verify-gui-android-play-release-local-delivery:
+	bash ./scripts/verify-android-play-release-local-delivery.sh
 
 build-gui-android-windows-mirror:
 	bash ./scripts/build-android-gui-from-wsl.sh

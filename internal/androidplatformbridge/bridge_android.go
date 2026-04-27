@@ -37,6 +37,14 @@ static void vktp_clear_exception(JNIEnv* env) {
 	}
 }
 
+static jmethodID vktp_get_method_id(JNIEnv* env, jclass clazz, const char* name, const char* signature) {
+	jmethodID method_id = (*env)->GetMethodID(env, clazz, name, signature);
+	if (method_id == NULL) {
+		vktp_clear_exception(env);
+	}
+	return method_id;
+}
+
 static void vktp_clear_registered_bridge(JNIEnv* env) {
 	if (env == NULL) {
 		return;
@@ -127,16 +135,15 @@ void vktp_register_platform_tunnel_bridge(void *env_ptr, void *bridge_ptr) {
 		return;
 	}
 
-	vktp_mid_is_permission_granted = (*env)->GetMethodID(env, vktp_bridge_class, "isAndroidVpnPermissionGranted", "()Z");
-	vktp_mid_validate_route_policy = (*env)->GetMethodID(env, vktp_bridge_class, "validateAndroidVpnRoutePolicy", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;");
-	vktp_mid_bringup_host = (*env)->GetMethodID(env, vktp_bridge_class, "bringupAndroidVpnHost", "(Ljava/lang/String;)Ljava/lang/String;");
-	vktp_mid_protect_socket = (*env)->GetMethodID(env, vktp_bridge_class, "protectAndroidVpnSocket", "(I)Ljava/lang/String;");
-	vktp_mid_duplicate_tun_fd = (*env)->GetMethodID(env, vktp_bridge_class, "duplicateAndroidVpnTunFd", "()I");
-	vktp_mid_cleanup_host = (*env)->GetMethodID(env, vktp_bridge_class, "cleanupAndroidVpnHost", "()Ljava/lang/String;");
+	vktp_mid_is_permission_granted = vktp_get_method_id(env, vktp_bridge_class, "isAndroidVpnPermissionGranted", "()Z");
+	vktp_mid_validate_route_policy = vktp_get_method_id(env, vktp_bridge_class, "validateAndroidVpnRoutePolicy", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;");
+	vktp_mid_bringup_host = vktp_get_method_id(env, vktp_bridge_class, "bringupAndroidVpnHost", "(Ljava/lang/String;)Ljava/lang/String;");
+	vktp_mid_protect_socket = vktp_get_method_id(env, vktp_bridge_class, "protectAndroidVpnSocket", "(I)Ljava/lang/String;");
+	vktp_mid_duplicate_tun_fd = vktp_get_method_id(env, vktp_bridge_class, "duplicateAndroidVpnTunFd", "()I");
+	vktp_mid_cleanup_host = vktp_get_method_id(env, vktp_bridge_class, "cleanupAndroidVpnHost", "()Ljava/lang/String;");
 	if (vktp_mid_is_permission_granted == NULL || vktp_mid_validate_route_policy == NULL ||
 		vktp_mid_bringup_host == NULL || vktp_mid_protect_socket == NULL ||
 		vktp_mid_duplicate_tun_fd == NULL || vktp_mid_cleanup_host == NULL) {
-		vktp_clear_exception(env);
 		vktp_clear_registered_bridge(env);
 	}
 }
