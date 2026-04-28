@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter_shell_core/portable_profile_transfer.dart';
 import 'package:flutter/foundation.dart';
@@ -14,6 +15,7 @@ import 'package:gui_shell/src/control/profile_draft.dart';
 import 'package:gui_shell/src/control/shell_state_store.dart';
 
 typedef DirectoryProvider = Future<Directory> Function();
+typedef VPNTransportProfileContentPicker = Future<String?> Function();
 
 enum ShellStatus { booting, ready, blocked }
 
@@ -73,6 +75,21 @@ class DesktopBrowserLauncher implements BrowserLauncher {
   }
 }
 
+Future<String?> _pickVPNTransportProfileContents() async {
+  final file = await openFile(
+    acceptedTypeGroups: const <XTypeGroup>[
+      XTypeGroup(
+        label: 'WireGuard VPN transport profile',
+        extensions: <String>['conf'],
+      ),
+    ],
+  );
+  if (file == null) {
+    return null;
+  }
+  return file.readAsString();
+}
+
 class DesktopShellController extends ChangeNotifier {
   DesktopShellController({
     required this.api,
@@ -82,6 +99,7 @@ class DesktopShellController extends ChangeNotifier {
     BrowserLauncher? browserLauncher,
     DesktopHandoffAdapter? handoffAdapter,
     DesktopPortableProfileTransferAdapter? portableProfileTransferAdapter,
+    VPNTransportProfileContentPicker? transportProfileContentPicker,
     DateTime Function()? clock,
     BuildIdentity? appBuild,
   }) : _diagnosticsDirectoryProvider =
@@ -92,6 +110,8 @@ class DesktopShellController extends ChangeNotifier {
        _portableProfileTransferAdapter =
            portableProfileTransferAdapter ??
            const SystemDesktopPortableProfileTransferAdapter(),
+       _transportProfileContentPicker =
+           transportProfileContentPicker ?? _pickVPNTransportProfileContents,
        _stateStore = stateStore ?? FileDesktopShellStateStore(),
        _clock = clock ?? DateTime.now,
        appBuild = appBuild ?? AppBuildIdentity.current;
@@ -102,6 +122,7 @@ class DesktopShellController extends ChangeNotifier {
   final BrowserLauncher _browserLauncher;
   final DesktopHandoffAdapter _handoffAdapter;
   final DesktopPortableProfileTransferAdapter _portableProfileTransferAdapter;
+  final VPNTransportProfileContentPicker _transportProfileContentPicker;
   final DesktopShellStateStore _stateStore;
   final DateTime Function() _clock;
   final BuildIdentity appBuild;
@@ -119,6 +140,8 @@ class DesktopShellController extends ChangeNotifier {
   List<ResolutionRecord> resolutions = const <ResolutionRecord>[];
   List<SessionRecord> sessions = const <SessionRecord>[];
   List<EventRecord> events = const <EventRecord>[];
+  List<TransportProfileStatus> transportProfiles =
+      const <TransportProfileStatus>[];
   ProfileDraft draft = ProfileDraft.defaults();
   ManagedProviderDraft managedProviderDraft = ManagedProviderDraft.defaults();
   DesktopShellSection activeSection = DesktopShellSection.profileWorkflow;
@@ -164,6 +187,15 @@ class DesktopShellController extends ChangeNotifier {
       hostConnection?.info?.platformTunnels ??
       const <PlatformTunnelCapability>[];
 
+  bool get hostSupportsTransportProfileStore {
+    final info = hostConnection?.info;
+    if (info == null) {
+      return false;
+    }
+    return info.capabilities.contains(Capability.vpnTransportProfileStore) &&
+        info.transportProfileStore != null;
+  }
+
   bool get systemTunnelSupported =>
       platformTunnels.any((PlatformTunnelCapability capability) {
         return capability.available;
@@ -171,6 +203,101 @@ class DesktopShellController extends ChangeNotifier {
 
   PlatformTunnelStartResult? platformTunnelResultFor(PlatformTunnelMode mode) {
     return _platformTunnelResults[mode];
+  }
+
+  bool platformTunnelModeRequiresVPNTransportProfile(PlatformTunnelMode mode) {
+    return _transportProfilePrerequisiteForMode(mode) != null;
+  }
+
+  bool canConfigureVPNTransportProfileForMode(PlatformTunnelMode mode) {
+    return hostSupportsTransportProfileStore &&
+        platformTunnelModeRequiresVPNTransportProfile(mode) &&
+        _transportProfileImportAdapterForMode(mode) != null;
+  }
+
+  bool activeVPNTransportProfileConfiguredForMode(PlatformTunnelMode mode) {
+    return vpnTransportProfileStatusForMode(mode) != null;
+  }
+
+  String? vpnTransportProfileStatusSummaryForMode(PlatformTunnelMode mode) {
+    final prerequisite = _transportProfilePrerequisiteForMode(mode);
+    if (prerequisite == null) {
+      return null;
+    }
+    final profile = vpnTransportProfileStatusForMode(mode);
+    if (profile == null) {
+      return _copy.vpnTransportProfileStatusNotConfigured;
+    }
+    final kindLabel = _transportProfileKindLabel(profile.kind);
+    if (profile.validation.state == TransportProfileValidationState.invalid) {
+      return _copy.vpnTransportProfileStatusInvalid(kindLabel);
+    }
+    if (profile.compatibility.state ==
+            TransportProfileCompatibilityState.incompatible ||
+        prerequisite.state == TransportProfileCompatibilityState.incompatible) {
+      return _copy.vpnTransportProfileStatusIncompatible(kindLabel);
+    }
+    return _copy.vpnTransportProfileStatusConfigured(kindLabel);
+  }
+
+  String? vpnTransportProfileImportAdapterLabelForMode(
+    PlatformTunnelMode mode,
+  ) {
+    final adapter = _transportProfileImportAdapterForMode(mode);
+    if (adapter == null) {
+      return null;
+    }
+    final capability = hostConnection?.info?.transportProfileStore;
+    if (capability != null) {
+      for (final descriptor in capability.importAdapters) {
+        if (descriptor.id == adapter) {
+          final label = descriptor.displayName.trim();
+          if (label.isNotEmpty) {
+            return label;
+          }
+        }
+      }
+    }
+    return adapter.value;
+  }
+
+  TransportProfileStatus? vpnTransportProfileStatusForMode(
+    PlatformTunnelMode mode,
+  ) {
+    final prerequisite = _transportProfilePrerequisiteForMode(mode);
+    final profileId =
+        prerequisite?.selectedProfile?.profileId.trim().isNotEmpty == true
+        ? prerequisite!.selectedProfile!.profileId.trim()
+        : prerequisite?.defaultProfile?.profileId.trim();
+    if (profileId != null && profileId.isNotEmpty) {
+      return _transportProfileById(profileId);
+    }
+    final requiredKinds = prerequisite?.requiredKinds;
+    if (requiredKinds == null || requiredKinds.isEmpty) {
+      return null;
+    }
+    for (final profile in transportProfiles) {
+      if (requiredKinds.contains(profile.kind)) {
+        return profile;
+      }
+    }
+    return null;
+  }
+
+  String? platformTunnelStartPreparationBlockReason(PlatformTunnelMode mode) {
+    final executionPlan = _defaultPlatformTunnelExecutionPlan(
+      _platformTunnelCapabilityFor(mode),
+    );
+    if (executionPlan == null) {
+      final transportProfileBlockReason = _transportProfileBlockReasonForMode(
+        mode,
+      );
+      if (transportProfileBlockReason != null) {
+        return transportProfileBlockReason;
+      }
+      return null;
+    }
+    return _transportProfileBlockReasonForMode(mode, plan: executionPlan);
   }
 
   List<ProviderPreset> get presetCatalog => kProviderPresetCatalog;
@@ -434,6 +561,7 @@ class DesktopShellController extends ChangeNotifier {
       await _stopRuntimeMonitoring();
       _challengeCache.clear();
       providerDescriptors = const <ProviderDescriptor>[];
+      transportProfiles = const <TransportProfileStatus>[];
       resolutions = const <ResolutionRecord>[];
       sessions = const <SessionRecord>[];
       selectedResolutionId = null;
@@ -472,6 +600,9 @@ class DesktopShellController extends ChangeNotifier {
     }
     try {
       final nextProviders = await api.providers();
+      final nextTransportProfiles = hostSupportsTransportProfileStore
+          ? await api.transportProfiles()
+          : const <TransportProfileStatus>[];
       final nextProfiles = await api.profiles();
       final nextResolutions = await api.resolutions();
       final nextSessions = await api.sessions();
@@ -482,6 +613,7 @@ class DesktopShellController extends ChangeNotifier {
 
       providerDescriptors = nextProviders;
       managedProviders = _overlayManagedProviders(managedProviders);
+      transportProfiles = nextTransportProfiles;
       profiles = nextProfiles;
       resolutions = nextResolutions;
       sessions = nextSessions;
@@ -1112,6 +1244,53 @@ class DesktopShellController extends ChangeNotifier {
     });
   }
 
+  Future<void> importVPNTransportProfileForMode(PlatformTunnelMode mode) async {
+    await _runMutation(() async {
+      final material = await _transportProfileContentPicker();
+      if (material == null) {
+        return;
+      }
+      final descriptor = _transportProfileExecutionPlanDescriptorForMode(mode);
+      final prerequisite = descriptor?.transportProfile;
+      final adapter =
+          _transportProfileImportAdapterForMode(mode) ??
+          TransportProfileImportAdapter.wireGuardConf;
+      final kind =
+          prerequisite?.missingKind ??
+          _firstTransportProfileKind(prerequisite?.requiredKinds) ??
+          _profileKindForImportAdapter(adapter) ??
+          TransportProfileKind.wireGuardNativeV1;
+      final existing = vpnTransportProfileStatusForMode(mode);
+      await api.importTransportProfile(
+        TransportProfileImportRequest(
+          adapter: adapter,
+          kind: kind,
+          displayName: _transportProfileKindLabel(kind),
+          material: material,
+          replaceProfileId: existing?.id ?? '',
+          defaultFor: descriptor?.plan,
+        ),
+      );
+      await _refreshHostInfo();
+      await refresh();
+      notice = _copy.vpnTransportProfileConfigured;
+    });
+  }
+
+  Future<void> forgetVPNTransportProfileForMode(PlatformTunnelMode mode) async {
+    await _runMutation(() async {
+      final profile = vpnTransportProfileStatusForMode(mode);
+      if (profile == null) {
+        notice = _copy.vpnTransportProfileRequiredBeforeStarting;
+        return;
+      }
+      await api.forgetTransportProfile(profile.id);
+      await _refreshHostInfo();
+      await refresh();
+      notice = _copy.vpnTransportProfileCleared;
+    });
+  }
+
   Future<void> startPlatformTunnel(PlatformTunnelMode mode) async {
     await _runMutation(() async {
       final capability = _platformTunnelCapabilityFor(mode);
@@ -1126,6 +1305,14 @@ class DesktopShellController extends ChangeNotifier {
         notice = message.isNotEmpty
             ? message
             : _copy.desktopTypedHostTunnelSummary;
+        return;
+      }
+      final preparationBlockReason = platformTunnelStartPreparationBlockReason(
+        mode,
+      );
+      if (preparationBlockReason != null) {
+        _clearPendingPlatformTunnelStart(mode);
+        notice = preparationBlockReason;
         return;
       }
       final requiresResolution = _platformTunnelModeRequiresResolution(mode);
@@ -1340,6 +1527,13 @@ class DesktopShellController extends ChangeNotifier {
               : _copy.desktopTypedHostTunnelSummary;
           return;
         }
+        final preparationBlockReason =
+            platformTunnelStartPreparationBlockReason(mode);
+        if (preparationBlockReason != null) {
+          _clearPendingPlatformTunnelStart(mode);
+          notice = preparationBlockReason;
+          return;
+        }
         _clearPendingPlatformTunnelStart(mode);
         await _startPlatformTunnelWithCapability(
           mode: mode,
@@ -1367,11 +1561,15 @@ class DesktopShellController extends ChangeNotifier {
     required PlatformTunnelCapability capability,
     required String? resolutionId,
   }) async {
+    final executionPlan = _defaultPlatformTunnelExecutionPlan(capability);
     final result = await api.startPlatformTunnel(
       mode: mode,
       resolutionId: resolutionId,
       runtimeDefaults: _platformTunnelRuntimeDefaultsFor(mode),
-      executionPlan: _defaultPlatformTunnelExecutionPlan(capability),
+      executionPlan: executionPlan,
+      transportProfile: executionPlan == null
+          ? null
+          : _transportProfileReferenceForPlan(mode, executionPlan),
       underlayRoutePolicy: _defaultPlatformTunnelUnderlayRoutePolicy(
         capability,
       ),
@@ -1477,15 +1675,165 @@ class DesktopShellController extends ChangeNotifier {
     if (capability == null) {
       return null;
     }
+    final descriptor = _defaultPlatformTunnelExecutionPlanDescriptor(
+      capability,
+    );
+    return descriptor?.plan;
+  }
+
+  RuntimeExecutionPlanDescriptor? _defaultPlatformTunnelExecutionPlanDescriptor(
+    PlatformTunnelCapability? capability,
+  ) {
+    if (capability == null) {
+      return null;
+    }
     for (final descriptor in capability.executionPlans) {
       if (descriptor.isDefault) {
-        return descriptor.plan;
+        return descriptor;
       }
     }
     if (capability.executionPlans.length == 1) {
-      return capability.executionPlans.first.plan;
+      return capability.executionPlans.first;
     }
     return null;
+  }
+
+  RuntimeExecutionPlanDescriptor?
+  _transportProfileExecutionPlanDescriptorForMode(
+    PlatformTunnelMode mode, {
+    RuntimeExecutionPlan? plan,
+  }) {
+    final capability = _platformTunnelCapabilityFor(mode);
+    if (capability == null) {
+      return null;
+    }
+    final selectedPlan =
+        plan ?? _defaultPlatformTunnelExecutionPlan(capability);
+    if (selectedPlan != null) {
+      for (final descriptor in capability.executionPlans) {
+        if (_sameExecutionPlan(descriptor.plan, selectedPlan) &&
+            descriptor.transportProfile != null) {
+          return descriptor;
+        }
+      }
+    }
+    final defaultDescriptor = _defaultPlatformTunnelExecutionPlanDescriptor(
+      capability,
+    );
+    if (defaultDescriptor?.transportProfile != null) {
+      return defaultDescriptor;
+    }
+    for (final descriptor in capability.executionPlans) {
+      if (descriptor.transportProfile != null) {
+        return descriptor;
+      }
+    }
+    return null;
+  }
+
+  TransportProfilePrerequisiteStatus? _transportProfilePrerequisiteForMode(
+    PlatformTunnelMode mode, {
+    RuntimeExecutionPlan? plan,
+  }) {
+    return _transportProfileExecutionPlanDescriptorForMode(
+      mode,
+      plan: plan,
+    )?.transportProfile;
+  }
+
+  String? _transportProfileBlockReasonForMode(
+    PlatformTunnelMode mode, {
+    RuntimeExecutionPlan? plan,
+  }) {
+    final prerequisite = _transportProfilePrerequisiteForMode(mode, plan: plan);
+    if (prerequisite == null || prerequisite.isCompatible) {
+      return null;
+    }
+    final hostMessage = prerequisite.message.trim();
+    if (hostMessage.isNotEmpty &&
+        prerequisite.missingKind != null &&
+        !hostSupportsTransportProfileStore) {
+      return hostMessage;
+    }
+    return _copy.vpnTransportProfileRequiredBeforeStarting;
+  }
+
+  TransportProfileImportAdapter? _transportProfileImportAdapterForMode(
+    PlatformTunnelMode mode,
+  ) {
+    final prerequisite = _transportProfilePrerequisiteForMode(mode);
+    if (prerequisite != null && prerequisite.importAdapters.isNotEmpty) {
+      return prerequisite.importAdapters.first;
+    }
+    final capability = hostConnection?.info?.transportProfileStore;
+    if (capability == null || capability.importAdapters.isEmpty) {
+      return null;
+    }
+    return capability.importAdapters.first.id;
+  }
+
+  TransportProfileKind? _profileKindForImportAdapter(
+    TransportProfileImportAdapter adapter,
+  ) {
+    final capability = hostConnection?.info?.transportProfileStore;
+    if (capability == null) {
+      return null;
+    }
+    for (final descriptor in capability.importAdapters) {
+      if (descriptor.id == adapter) {
+        return descriptor.profileKind;
+      }
+    }
+    return null;
+  }
+
+  TransportProfileReference? _transportProfileReferenceForPlan(
+    PlatformTunnelMode mode,
+    RuntimeExecutionPlan plan,
+  ) {
+    final prerequisite = _transportProfilePrerequisiteForMode(mode, plan: plan);
+    if (prerequisite == null || !prerequisite.isCompatible) {
+      return null;
+    }
+    return prerequisite.selectedProfile ?? prerequisite.defaultProfile;
+  }
+
+  TransportProfileStatus? _transportProfileById(String rawProfileId) {
+    final profileId = rawProfileId.trim();
+    if (profileId.isEmpty) {
+      return null;
+    }
+    for (final profile in transportProfiles) {
+      if (profile.id == profileId) {
+        return profile;
+      }
+    }
+    return null;
+  }
+
+  TransportProfileKind? _firstTransportProfileKind(
+    List<TransportProfileKind>? kinds,
+  ) {
+    if (kinds == null || kinds.isEmpty) {
+      return null;
+    }
+    return kinds.first;
+  }
+
+  String _transportProfileKindLabel(TransportProfileKind kind) {
+    return switch (kind) {
+      TransportProfileKind.wireGuardNativeV1 => 'WireGuard',
+    };
+  }
+
+  bool _sameExecutionPlan(
+    RuntimeExecutionPlan left,
+    RuntimeExecutionPlan right,
+  ) {
+    return left.accessMethod == right.accessMethod &&
+        left.carrierFamily == right.carrierFamily &&
+        left.engineFamily == right.engineFamily &&
+        left.hostAdapter == right.hostAdapter;
   }
 
   PlatformTunnelUnderlayRoutePolicy _defaultPlatformTunnelUnderlayRoutePolicy(
@@ -1779,6 +2127,7 @@ class DesktopShellController extends ChangeNotifier {
       message: message,
     );
     _clearPlatformTunnelResults();
+    transportProfiles = const <TransportProfileStatus>[];
     resolutions = const <ResolutionRecord>[];
     sessions = const <SessionRecord>[];
     selectedResolutionId = null;
@@ -1839,6 +2188,21 @@ class DesktopShellController extends ChangeNotifier {
     }
     profiles = restored;
     _scheduleStatePersist();
+  }
+
+  Future<void> _refreshHostInfo() async {
+    final current = hostConnection;
+    if (current == null || !current.isReady) {
+      return;
+    }
+    final nextInfo = await api.hostInfo();
+    hostConnection = HostConnectionResult(
+      state: current.state,
+      message: current.message,
+      info: nextInfo,
+      launched: current.launched,
+      launchSpec: current.launchSpec,
+    );
   }
 
   void _scheduleStatePersist() {

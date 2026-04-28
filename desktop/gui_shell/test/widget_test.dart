@@ -106,6 +106,137 @@ const HostInfo _readyWindowsWintunHostInfo = HostInfo(
   ],
 );
 
+const TransportProfileStoreCapability _transportProfileStoreCapability =
+    TransportProfileStoreCapability(
+      supportedKinds: <TransportProfileKind>[
+        TransportProfileKind.wireGuardNativeV1,
+      ],
+      importAdapters: <TransportProfileImportAdapterDescriptor>[
+        TransportProfileImportAdapterDescriptor(
+          id: TransportProfileImportAdapter.wireGuardConf,
+          profileKind: TransportProfileKind.wireGuardNativeV1,
+          displayName: 'WireGuard .conf',
+          extensions: <String>['conf'],
+        ),
+      ],
+      lifecycleActions: <TransportProfileLifecycleAction>[
+        TransportProfileLifecycleAction.list,
+        TransportProfileLifecycleAction.import,
+        TransportProfileLifecycleAction.replace,
+        TransportProfileLifecycleAction.forget,
+        TransportProfileLifecycleAction.validate,
+        TransportProfileLifecycleAction.selectForStartup,
+      ],
+    );
+
+HostInfo _desktopTransportProfileHostInfo({required bool configured}) {
+  final reference = configured
+      ? const TransportProfileReference(
+          profileId: 'transport-profile-1',
+          kind: TransportProfileKind.wireGuardNativeV1,
+        )
+      : null;
+  final prerequisite = configured
+      ? TransportProfilePrerequisiteStatus(
+          requiredKinds: const <TransportProfileKind>[
+            TransportProfileKind.wireGuardNativeV1,
+          ],
+          state: TransportProfileCompatibilityState.compatible,
+          selectedProfile: reference,
+          defaultProfile: reference,
+          importAdapters: const <TransportProfileImportAdapter>[
+            TransportProfileImportAdapter.wireGuardConf,
+          ],
+        )
+      : const TransportProfilePrerequisiteStatus(
+          requiredKinds: <TransportProfileKind>[
+            TransportProfileKind.wireGuardNativeV1,
+          ],
+          state: TransportProfileCompatibilityState.incompatible,
+          missingKind: TransportProfileKind.wireGuardNativeV1,
+          importAdapters: <TransportProfileImportAdapter>[
+            TransportProfileImportAdapter.wireGuardConf,
+          ],
+          message:
+              'VPN transport profile wireguard_native_v1 is not configured.',
+        );
+  return HostInfo(
+    contractVersion: '1',
+    build: _testHostBuild,
+    capabilities: const <Capability>[
+      Capability.desktopSidecar,
+      Capability.platformTunnels,
+      Capability.profiles,
+      Capability.providerConfigs,
+      Capability.providerRuntimeArtifacts,
+      Capability.runtimeExecutionPlanning,
+      Capability.sessions,
+      Capability.challenges,
+      Capability.diagnostics,
+      Capability.eventStream,
+      Capability.vpnTransportProfileStore,
+    ],
+    transportProfileStore: _transportProfileStoreCapability,
+    platformTunnels: <PlatformTunnelCapability>[
+      PlatformTunnelCapability(
+        mode: PlatformTunnelMode.windowsWintun,
+        available: true,
+        satisfiedPrerequisites: const <PlatformTunnelPrerequisite>[
+          PlatformTunnelPrerequisite.driver,
+          PlatformTunnelPrerequisite.routeExclusion,
+          PlatformTunnelPrerequisite.dnsBypass,
+        ],
+        supportedUnderlayRoutePolicies:
+            const <PlatformTunnelUnderlayRoutePolicy>[
+              PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork,
+            ],
+        executionPlans: <RuntimeExecutionPlanDescriptor>[
+          RuntimeExecutionPlanDescriptor(
+            plan: _windowsWintunExecutionPlan,
+            supportState: configured
+                ? RuntimeExecutionPlanSupportState.supported
+                : RuntimeExecutionPlanSupportState.unavailable,
+            remoteEndpointFamily: RuntimeRemoteEndpointFamily.turnServer,
+            isDefault: true,
+            requiredTransportProfileKinds: const <TransportProfileKind>[
+              TransportProfileKind.wireGuardNativeV1,
+            ],
+            transportProfile: prerequisite,
+            message: configured
+                ? null
+                : 'VPN transport profile wireguard_native_v1 is not configured.',
+          ),
+        ],
+      ),
+    ],
+  );
+}
+
+TransportProfileStatus _desktopTransportProfileStatus() {
+  return TransportProfileStatus(
+    id: 'transport-profile-1',
+    kind: TransportProfileKind.wireGuardNativeV1,
+    version: '1',
+    displayName: 'WireGuard',
+    validation: const TransportProfileValidationStatus(
+      state: TransportProfileValidationState.valid,
+      fingerprint: 'wg:test',
+    ),
+    compatibility: const TransportProfileCompatibilityStatus(
+      state: TransportProfileCompatibilityState.compatible,
+      compatibleExecutionPlans: <RuntimeExecutionPlan>[
+        _windowsWintunExecutionPlan,
+      ],
+    ),
+    secretMaterialRef: const TransportProfileSecretMaterialRef(
+      kind: TransportProfileMaterialSource.importAdapter,
+      ref: 'host-owned:transport-profile-1',
+    ),
+    importedAt: DateTime.utc(2026, 4, 28, 12),
+    updatedAt: DateTime.utc(2026, 4, 28, 12),
+  );
+}
+
 const List<ProviderDescriptor> _providerDescriptors = <ProviderDescriptor>[
   ProviderDescriptor(
     id: 'vk',
@@ -340,6 +471,76 @@ void main() {
     expect(controller.selectedSessionId, 'platform-session-1');
     expect(find.text('Turn off VPN'), findsOneWidget);
   });
+
+  testWidgets(
+    'desktop shell exposes VPN transport profile setup before start',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1600, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final hostInfo = _desktopTransportProfileHostInfo(configured: false);
+      final api = _FakeControlPlaneApi(hostInfo: hostInfo);
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _FakeHostSupervisor(
+          result: HostConnectionResult(
+            state: HostLifecycleState.ready,
+            message: 'Connected to local host 127.0.0.1:7777',
+            info: hostInfo,
+          ),
+        ),
+        stateStore: const _InMemoryShellStateStore(),
+        transportProfileContentPicker: () async => 'wg-profile',
+        appBuild: _testGuiBuild,
+      );
+
+      await controller.initialize();
+      await pumpDesktopShellTestApp(tester, controller: controller);
+
+      expect(find.text('Setup needed'), findsOneWidget);
+      expect(find.text('Import VPN profile'), findsOneWidget);
+      expect(
+        find.text('VPN transport profile: not configured.'),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('desktop-section-routing')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(
+          const ValueKey<String>(
+            'desktop-routing-import-vpn-transport-profile-windows_wintun',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('WireGuard .conf'), findsWidgets);
+
+      await tester.tap(find.text('Import VPN profile').first);
+      await tester.pumpAndSettle();
+
+      expect(api.importTransportProfileCalls, hasLength(1));
+      expect(find.text('Request startup'), findsWidgets);
+      expect(find.text('WireGuard profile: configured.'), findsWidgets);
+      expect(find.text('Replace VPN profile'), findsWidgets);
+      expect(find.text('Forget VPN profile'), findsWidgets);
+
+      await tester.tap(find.text('Request startup').first);
+      await tester.pumpAndSettle();
+
+      expect(api.startedPlatformTunnels, <PlatformTunnelMode>[
+        PlatformTunnelMode.windowsWintun,
+      ]);
+      expect(
+        api.startedPlatformTunnelProfiles.single?.profileId,
+        'transport-profile-1',
+      );
+    },
+  );
 
   testWidgets('desktop shell consumes the shared RelayDock visual contract', (
     WidgetTester tester,
@@ -2008,6 +2209,8 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
     List<ProviderDescriptor>? providers,
     List<ProviderConfigRecord>? providerConfigs,
     List<ProfileRecord>? profiles,
+    HostInfo? hostInfo,
+    List<TransportProfileStatus>? transportProfiles,
     this.startPlatformTunnelResult = const PlatformTunnelStartResult(
       mode: PlatformTunnelMode.windowsWintun,
       ready: false,
@@ -2020,6 +2223,10 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
        ),
        _providerConfigs = List<ProviderConfigRecord>.of(
          providerConfigs ?? const <ProviderConfigRecord>[],
+       ),
+       _hostInfo = hostInfo ?? _readyHostInfo,
+       _transportProfiles = List<TransportProfileStatus>.of(
+         transportProfiles ?? const <TransportProfileStatus>[],
        ),
        _resolutions = List<ResolutionRecord>.of(resolutionsList),
        _profiles = List<ProfileRecord>.of(
@@ -2051,9 +2258,15 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
 
   final List<ProviderDescriptor> _providers;
   final List<ProviderConfigRecord> _providerConfigs;
+  HostInfo _hostInfo;
+  final List<TransportProfileStatus> _transportProfiles;
   final List<String> startedProfileIDs = <String>[];
   final List<PlatformTunnelMode> startedPlatformTunnels =
       <PlatformTunnelMode>[];
+  final List<TransportProfileReference?> startedPlatformTunnelProfiles =
+      <TransportProfileReference?>[];
+  final List<TransportProfileImportRequest> importTransportProfileCalls =
+      <TransportProfileImportRequest>[];
   final PlatformTunnelStartResult startPlatformTunnelResult;
   final List<ResolutionRecord> _resolutions;
   final List<ProfileRecord> _profiles;
@@ -2117,7 +2330,50 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
 
   @override
   Future<HostInfo> hostInfo() async {
-    return _readyHostInfo;
+    return _hostInfo;
+  }
+
+  @override
+  Future<List<TransportProfileStatus>> transportProfiles() async {
+    return _transportProfiles;
+  }
+
+  @override
+  Future<TransportProfileStatus> importTransportProfile(
+    TransportProfileImportRequest request,
+  ) async {
+    importTransportProfileCalls.add(request);
+    final status = _desktopTransportProfileStatus();
+    _transportProfiles
+      ..clear()
+      ..add(status);
+    _hostInfo = _desktopTransportProfileHostInfo(configured: true);
+    return status;
+  }
+
+  @override
+  Future<TransportProfileStatus> validateTransportProfile(
+    String profileId,
+  ) async {
+    return _transportProfiles.firstWhere(
+      (TransportProfileStatus profile) => profile.id == profileId,
+    );
+  }
+
+  @override
+  Future<TransportProfileStatus> selectTransportProfileForStartup(
+    String profileId,
+    TransportProfileSelectForStartupRequest request,
+  ) {
+    return validateTransportProfile(profileId);
+  }
+
+  @override
+  Future<void> forgetTransportProfile(String profileId) async {
+    _transportProfiles.removeWhere(
+      (TransportProfileStatus profile) => profile.id == profileId,
+    );
+    _hostInfo = _desktopTransportProfileHostInfo(configured: false);
   }
 
   @override
@@ -2153,6 +2409,7 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
     String? resolutionId,
     RuntimeDefaults? runtimeDefaults,
     RuntimeExecutionPlan? executionPlan,
+    TransportProfileReference? transportProfile,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
     PlatformTunnelUnderlayRoutePolicy underlayRoutePolicy =
@@ -2161,6 +2418,7 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
     List<String> disallowedPackages = const <String>[],
   }) async {
     startedPlatformTunnels.add(mode);
+    startedPlatformTunnelProfiles.add(transportProfile);
     if (startPlatformTunnelResult.ready) {
       final now = DateTime(2026, 4, 5, 17, 1);
       final session = SessionRecord(

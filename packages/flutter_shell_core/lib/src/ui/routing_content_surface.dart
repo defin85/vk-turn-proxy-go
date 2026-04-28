@@ -20,6 +20,13 @@ class RoutingContentSurface extends StatefulWidget {
     required this.onSpecChanged,
     required this.onOpenProfiles,
     required this.onStartPlatformTunnel,
+    this.transportProfileStatusSummaryForMode,
+    this.transportProfileImportAdapterLabelForMode,
+    this.platformTunnelStartBlockReasonForMode,
+    this.canConfigureTransportProfileForMode,
+    this.transportProfileConfiguredForMode,
+    this.onImportTransportProfile,
+    this.onForgetTransportProfile,
     this.selectedProfileName,
     this.selectedProfileProvider,
     this.onSave,
@@ -37,6 +44,20 @@ class RoutingContentSurface extends StatefulWidget {
   final ValueChanged<ProfileSpec> onSpecChanged;
   final VoidCallback onOpenProfiles;
   final Future<void> Function(PlatformTunnelMode mode) onStartPlatformTunnel;
+  final String? Function(PlatformTunnelMode mode)?
+  transportProfileStatusSummaryForMode;
+  final String? Function(PlatformTunnelMode mode)?
+  transportProfileImportAdapterLabelForMode;
+  final String? Function(PlatformTunnelMode mode)?
+  platformTunnelStartBlockReasonForMode;
+  final bool Function(PlatformTunnelMode mode)?
+  canConfigureTransportProfileForMode;
+  final bool Function(PlatformTunnelMode mode)?
+  transportProfileConfiguredForMode;
+  final Future<void> Function(PlatformTunnelMode mode)?
+  onImportTransportProfile;
+  final Future<void> Function(PlatformTunnelMode mode)?
+  onForgetTransportProfile;
   final String? selectedProfileName;
   final String? selectedProfileProvider;
   final Future<void> Function()? onSave;
@@ -135,7 +156,7 @@ class _RoutingContentSurfaceState extends State<RoutingContentSurface> {
   Widget _buildDesktopSurface(BuildContext context) {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        final stacked = constraints.maxWidth < 1320;
+        final stacked = constraints.maxWidth < 1120;
         final specCard = _RoutingSpecCard(
           variant: widget.variant,
           title: context.shellText.desktopRoutingParameters,
@@ -149,15 +170,30 @@ class _RoutingContentSurfaceState extends State<RoutingContentSurface> {
           platformTunnels: widget.platformTunnels,
           platformTunnelResultFor: widget.platformTunnelResultFor,
           onStartPlatformTunnel: widget.onStartPlatformTunnel,
+          transportProfileStatusSummaryForMode:
+              widget.transportProfileStatusSummaryForMode,
+          transportProfileImportAdapterLabelForMode:
+              widget.transportProfileImportAdapterLabelForMode,
+          platformTunnelStartBlockReasonForMode:
+              widget.platformTunnelStartBlockReasonForMode,
+          canConfigureTransportProfileForMode:
+              widget.canConfigureTransportProfileForMode,
+          transportProfileConfiguredForMode:
+              widget.transportProfileConfiguredForMode,
+          onImportTransportProfile: widget.onImportTransportProfile,
+          onForgetTransportProfile: widget.onForgetTransportProfile,
           onStopPlatformTunnel: widget.onStopPlatformTunnel,
         );
         if (stacked) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              Expanded(child: specCard),
+              Expanded(flex: 3, child: specCard),
               const SizedBox(height: 12),
-              tunnelPanel,
+              Expanded(
+                flex: 2,
+                child: SingleChildScrollView(child: tunnelPanel),
+              ),
             ],
           );
         }
@@ -168,7 +204,7 @@ class _RoutingContentSurfaceState extends State<RoutingContentSurface> {
             const SizedBox(width: 12),
             SizedBox(
               width: 420,
-              child: Align(alignment: Alignment.topCenter, child: tunnelPanel),
+              child: SingleChildScrollView(child: tunnelPanel),
             ),
           ],
         );
@@ -546,6 +582,13 @@ class _RoutingPlatformTunnelPanel extends StatefulWidget {
     required this.platformTunnels,
     required this.platformTunnelResultFor,
     required this.onStartPlatformTunnel,
+    this.transportProfileStatusSummaryForMode,
+    this.transportProfileImportAdapterLabelForMode,
+    this.platformTunnelStartBlockReasonForMode,
+    this.canConfigureTransportProfileForMode,
+    this.transportProfileConfiguredForMode,
+    this.onImportTransportProfile,
+    this.onForgetTransportProfile,
     this.onStopPlatformTunnel,
   });
 
@@ -556,6 +599,20 @@ class _RoutingPlatformTunnelPanel extends StatefulWidget {
   final PlatformTunnelStartResult? Function(PlatformTunnelMode mode)
   platformTunnelResultFor;
   final Future<void> Function(PlatformTunnelMode mode) onStartPlatformTunnel;
+  final String? Function(PlatformTunnelMode mode)?
+  transportProfileStatusSummaryForMode;
+  final String? Function(PlatformTunnelMode mode)?
+  transportProfileImportAdapterLabelForMode;
+  final String? Function(PlatformTunnelMode mode)?
+  platformTunnelStartBlockReasonForMode;
+  final bool Function(PlatformTunnelMode mode)?
+  canConfigureTransportProfileForMode;
+  final bool Function(PlatformTunnelMode mode)?
+  transportProfileConfiguredForMode;
+  final Future<void> Function(PlatformTunnelMode mode)?
+  onImportTransportProfile;
+  final Future<void> Function(PlatformTunnelMode mode)?
+  onForgetTransportProfile;
   final Future<void> Function(PlatformTunnelMode mode)? onStopPlatformTunnel;
 
   @override
@@ -572,7 +629,7 @@ class _RoutingPlatformTunnelPanelState
   @override
   void initState() {
     super.initState();
-    _detailsExpanded = _latestResult()?.ready == true;
+    _detailsExpanded = _latestResult()?.ready == true || _hasStartBlock(widget);
   }
 
   @override
@@ -580,7 +637,9 @@ class _RoutingPlatformTunnelPanelState
     super.didUpdateWidget(oldWidget);
     final previousReady = _latestResultFor(oldWidget)?.ready == true;
     final nextReady = _latestResult()?.ready == true;
-    if (!previousReady && nextReady) {
+    final previousBlocked = _hasStartBlock(oldWidget);
+    final nextBlocked = _hasStartBlock(widget);
+    if ((!previousReady && nextReady) || (!previousBlocked && nextBlocked)) {
       _detailsExpanded = true;
     }
   }
@@ -708,8 +767,11 @@ class _RoutingPlatformTunnelPanelState
     if (capability == null) {
       return null;
     }
+    final startBlocked =
+        widget.platformTunnelStartBlockReasonForMode?.call(capability.mode) !=
+        null;
     return FilledButton.tonalIcon(
-      onPressed: widget.busy || !widget.hostReady
+      onPressed: widget.busy || !widget.hostReady || startBlocked
           ? null
           : () => unawaited(widget.onStartPlatformTunnel(capability.mode)),
       icon: const Icon(Icons.power_settings_new_rounded),
@@ -737,7 +799,31 @@ class _RoutingPlatformTunnelPanelState
               result: widget.platformTunnelResultFor(capability.mode),
               busy: widget.busy,
               hostReady: widget.hostReady,
+              transportProfileStatusSummary: widget
+                  .transportProfileStatusSummaryForMode
+                  ?.call(capability.mode),
+              transportProfileImportAdapterLabel: widget
+                  .transportProfileImportAdapterLabelForMode
+                  ?.call(capability.mode),
+              startBlockReason: widget.platformTunnelStartBlockReasonForMode
+                  ?.call(capability.mode),
+              canConfigureTransportProfile:
+                  widget.canConfigureTransportProfileForMode?.call(
+                    capability.mode,
+                  ) ??
+                  false,
+              transportProfileConfigured:
+                  widget.transportProfileConfiguredForMode?.call(
+                    capability.mode,
+                  ) ??
+                  false,
               onStart: () => widget.onStartPlatformTunnel(capability.mode),
+              onImportTransportProfile: widget.onImportTransportProfile == null
+                  ? null
+                  : () => widget.onImportTransportProfile!(capability.mode),
+              onForgetTransportProfile: widget.onForgetTransportProfile == null
+                  ? null
+                  : () => widget.onForgetTransportProfile!(capability.mode),
               onStop: widget.onStopPlatformTunnel == null
                   ? null
                   : () => widget.onStopPlatformTunnel!(capability.mode),
@@ -772,6 +858,18 @@ class _RoutingPlatformTunnelPanelState
       }
     }
     return null;
+  }
+
+  bool _hasStartBlock(_RoutingPlatformTunnelPanel source) {
+    for (final capability in source.platformTunnels) {
+      final reason = source.platformTunnelStartBlockReasonForMode
+          ?.call(capability.mode)
+          ?.trim();
+      if (reason?.isNotEmpty == true) {
+        return true;
+      }
+    }
+    return false;
   }
 
   PlatformTunnelStartResult? _latestResultFor(
@@ -849,7 +947,14 @@ class _RoutingPlatformTunnelCard extends StatelessWidget {
     required this.result,
     required this.busy,
     required this.hostReady,
+    this.transportProfileStatusSummary,
+    this.transportProfileImportAdapterLabel,
+    this.startBlockReason,
+    this.canConfigureTransportProfile = false,
+    this.transportProfileConfigured = false,
     required this.onStart,
+    this.onImportTransportProfile,
+    this.onForgetTransportProfile,
     this.onStop,
   });
 
@@ -858,7 +963,14 @@ class _RoutingPlatformTunnelCard extends StatelessWidget {
   final PlatformTunnelStartResult? result;
   final bool busy;
   final bool hostReady;
+  final String? transportProfileStatusSummary;
+  final String? transportProfileImportAdapterLabel;
+  final String? startBlockReason;
+  final bool canConfigureTransportProfile;
+  final bool transportProfileConfigured;
   final Future<void> Function() onStart;
+  final Future<void> Function()? onImportTransportProfile;
+  final Future<void> Function()? onForgetTransportProfile;
   final Future<void> Function()? onStop;
 
   bool get _desktop => variant == RoutingContentSurfaceVariant.desktop;
@@ -866,17 +978,24 @@ class _RoutingPlatformTunnelCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final startBlocked = startBlockReason?.trim().isNotEmpty == true;
     final button = switch ((result?.ready == true, onStop != null)) {
       (true, true) => OutlinedButton(
         onPressed: busy || !hostReady ? null : () => unawaited(onStop!.call()),
         child: Text(context.shellText.disconnectVpn),
       ),
       _ when capability.available => FilledButton.tonal(
-        onPressed: busy || !hostReady ? null : () => unawaited(onStart()),
+        onPressed: busy || !hostReady || startBlocked
+            ? null
+            : () => unawaited(onStart()),
         child: Text(context.shellText.requestStartup),
       ),
       _ => null,
     };
+    final canImport =
+        canConfigureTransportProfile && onImportTransportProfile != null;
+    final canForget =
+        transportProfileConfigured && onForgetTransportProfile != null;
 
     return Container(
       padding: EdgeInsets.all(_desktop ? 16 : 14),
@@ -933,7 +1052,33 @@ class _RoutingPlatformTunnelCard extends StatelessWidget {
               ),
             ),
           ],
+          if (transportProfileStatusSummary?.trim().isNotEmpty ==
+              true) ...<Widget>[
+            const SizedBox(height: 10),
+            _RoutingTransportProfileStatus(
+              variant: variant,
+              mode: capability.mode,
+              status: transportProfileStatusSummary!.trim(),
+              adapterLabel: transportProfileImportAdapterLabel,
+              busy: busy,
+              hostReady: hostReady,
+              canImport: canImport,
+              configured: transportProfileConfigured,
+              canForget: canForget,
+              onImport: onImportTransportProfile,
+              onForget: onForgetTransportProfile,
+            ),
+          ],
           if (button != null) ...<Widget>[const SizedBox(height: 12), button],
+          if (startBlocked) ...<Widget>[
+            const SizedBox(height: 8),
+            Text(
+              startBlockReason!.trim(),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
           Text(
             result == null
@@ -945,6 +1090,106 @@ class _RoutingPlatformTunnelCard extends StatelessWidget {
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RoutingTransportProfileStatus extends StatelessWidget {
+  const _RoutingTransportProfileStatus({
+    required this.variant,
+    required this.mode,
+    required this.status,
+    required this.adapterLabel,
+    required this.busy,
+    required this.hostReady,
+    required this.canImport,
+    required this.configured,
+    required this.canForget,
+    required this.onImport,
+    required this.onForget,
+  });
+
+  final RoutingContentSurfaceVariant variant;
+  final PlatformTunnelMode mode;
+  final String status;
+  final String? adapterLabel;
+  final bool busy;
+  final bool hostReady;
+  final bool canImport;
+  final bool configured;
+  final bool canForget;
+  final Future<void> Function()? onImport;
+  final Future<void> Function()? onForget;
+
+  bool get _desktop => variant == RoutingContentSurfaceVariant.desktop;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final copy = context.shellText;
+    final adapter = adapterLabel?.trim() ?? '';
+    final actions = <Widget>[
+      if (canImport)
+        OutlinedButton.icon(
+          key: ValueKey<String>(
+            '${variant.name}-routing-${configured ? 'replace' : 'import'}-vpn-transport-profile-${mode.value}',
+          ),
+          onPressed: busy || !hostReady ? null : () => unawaited(onImport!()),
+          icon: Icon(
+            configured ? Icons.upload_file_rounded : Icons.vpn_key_rounded,
+          ),
+          label: Text(
+            configured
+                ? copy.replaceVPNTransportProfile
+                : copy.importVPNTransportProfile,
+          ),
+        ),
+      if (canForget)
+        TextButton.icon(
+          key: ValueKey<String>(
+            '${variant.name}-routing-forget-vpn-transport-profile-${mode.value}',
+          ),
+          onPressed: busy || !hostReady ? null : () => unawaited(onForget!()),
+          icon: const Icon(Icons.delete_outline_rounded),
+          label: Text(copy.forgetVPNTransportProfile),
+        ),
+    ];
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(_desktop ? 14 : 12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: 0.54),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.54),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            status,
+            style:
+                (_desktop
+                        ? theme.textTheme.bodyMedium
+                        : theme.textTheme.bodySmall)
+                    ?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          if (adapter.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 4),
+            Text(
+              adapter,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+          if (actions.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 10),
+            Wrap(spacing: 8, runSpacing: 8, children: actions),
+          ],
         ],
       ),
     );

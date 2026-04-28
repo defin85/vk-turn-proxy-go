@@ -51,6 +51,9 @@
       import adapter.
 - [x] 4.4 Keep VPN startup disabled or setup-gated when a required profile is
       missing or incompatible.
+- [x] 4.5 Wire the desktop GUI routing/home surfaces to the shared transport
+      profile workflow so profile-backed desktop platform tunnel modes import,
+      replace, forget, and start only with host-reported profile references.
 
 ## 5. Verification
 - [x] 5.1 Add control-plane tests proving ordinary profile reads are redacted
@@ -67,3 +70,6 @@
       satisfy product profile-store support claims.
 - [x] 5.6 Run
       `openspec validate add-73-vpn-transport-profile-store --strict --no-interactive`.
+- [x] 5.7 Add desktop controller/widget regression coverage proving missing VPN
+      transport profiles block startup, import through the profile-store API,
+      and pass the selected profile reference into desktop tunnel startup.

@@ -1249,6 +1249,16 @@ class _RoutingWorkbenchSurface extends StatelessWidget {
                 hostReady: controller.hostConnection?.isReady == true,
                 platformTunnels: controller.platformTunnels,
                 platformTunnelResultFor: controller.platformTunnelResultFor,
+                transportProfileStatusSummaryForMode:
+                    controller.vpnTransportProfileStatusSummaryForMode,
+                transportProfileImportAdapterLabelForMode:
+                    controller.vpnTransportProfileImportAdapterLabelForMode,
+                platformTunnelStartBlockReasonForMode:
+                    controller.platformTunnelStartPreparationBlockReason,
+                canConfigureTransportProfileForMode:
+                    controller.canConfigureVPNTransportProfileForMode,
+                transportProfileConfiguredForMode:
+                    controller.activeVPNTransportProfileConfiguredForMode,
                 onSpecChanged: (ProfileSpec nextSpec) {
                   controller.updateDraft(
                     controller.draft.copyWith(spec: nextSpec),
@@ -1260,6 +1270,10 @@ class _RoutingWorkbenchSurface extends StatelessWidget {
                     ? null
                     : controller.startSelectedProfile,
                 onStartPlatformTunnel: controller.startPlatformTunnel,
+                onImportTransportProfile:
+                    controller.importVPNTransportProfileForMode,
+                onForgetTransportProfile:
+                    controller.forgetVPNTransportProfileForMode,
               ),
             ),
           ],
@@ -2603,6 +2617,79 @@ HomeWorkflowPrimaryActionData _desktopHomePrimaryActionData(
     );
   }
   if (primaryTunnelMode != null) {
+    final blockReason = controller.platformTunnelStartPreparationBlockReason(
+      primaryTunnelMode,
+    );
+    if (blockReason != null) {
+      final canConfigure = controller.canConfigureVPNTransportProfileForMode(
+        primaryTunnelMode,
+      );
+      final configured = controller.activeVPNTransportProfileConfiguredForMode(
+        primaryTunnelMode,
+      );
+      return HomeWorkflowPrimaryActionData(
+        tone: ShellSemanticTone.attention,
+        eyebrow: copy.setupNeededTone,
+        title: copy.unavailable,
+        subtitle: blockReason,
+        leadingIcon: Icons.block_rounded,
+        primaryAction: HomeWorkflowAction(
+          label: canConfigure && !configured
+              ? copy.importVPNTransportProfile
+              : copy.mobileTurnOnVpn,
+          icon: canConfigure && !configured
+              ? Icons.vpn_key_rounded
+              : Icons.power_settings_new_rounded,
+          onPressed:
+              controller.status == ShellStatus.ready &&
+                  !controller.busy &&
+                  canConfigure &&
+                  !configured
+              ? () => unawaited(
+                  controller.importVPNTransportProfileForMode(
+                    primaryTunnelMode,
+                  ),
+                )
+              : null,
+        ),
+        annotation: controller.vpnTransportProfileStatusSummaryForMode(
+          primaryTunnelMode,
+        ),
+        secondaryActions: <HomeWorkflowAction>[
+          if (canConfigure && configured)
+            HomeWorkflowAction(
+              label: copy.replaceVPNTransportProfile,
+              icon: Icons.upload_file_rounded,
+              style: HomeWorkflowActionStyle.outlined,
+              onPressed: controller.busy
+                  ? null
+                  : () => unawaited(
+                      controller.importVPNTransportProfileForMode(
+                        primaryTunnelMode,
+                      ),
+                    ),
+            ),
+          if (canConfigure && configured)
+            HomeWorkflowAction(
+              label: copy.forgetVPNTransportProfile,
+              icon: Icons.delete_outline_rounded,
+              style: HomeWorkflowActionStyle.text,
+              onPressed: controller.busy
+                  ? null
+                  : () => unawaited(
+                      controller.forgetVPNTransportProfileForMode(
+                        primaryTunnelMode,
+                      ),
+                    ),
+            ),
+          HomeWorkflowAction(
+            label: t.commonRouting,
+            style: HomeWorkflowActionStyle.tonal,
+            onPressed: controller.showRouting,
+          ),
+        ],
+      );
+    }
     return HomeWorkflowPrimaryActionData(
       tone: ShellSemanticTone.info,
       eyebrow: copy.mainActionTone,

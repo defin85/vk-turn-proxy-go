@@ -129,6 +129,28 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
   Future<HostInfo> hostInfo() async => _readyHostInfo;
 
   @override
+  Future<List<TransportProfileStatus>> transportProfiles() async =>
+      const <TransportProfileStatus>[];
+
+  @override
+  Future<TransportProfileStatus> importTransportProfile(
+    TransportProfileImportRequest request,
+  ) => Future<TransportProfileStatus>.error(UnimplementedError());
+
+  @override
+  Future<TransportProfileStatus> validateTransportProfile(String profileId) =>
+      Future<TransportProfileStatus>.error(UnimplementedError());
+
+  @override
+  Future<TransportProfileStatus> selectTransportProfileForStartup(
+    String profileId,
+    TransportProfileSelectForStartupRequest request,
+  ) => Future<TransportProfileStatus>.error(UnimplementedError());
+
+  @override
+  Future<void> forgetTransportProfile(String profileId) async {}
+
+  @override
   Future<SessionRecord> materializeResolution({
     required String resolutionId,
     required RuntimeDefaults runtimeDefaults,
@@ -187,6 +209,7 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
     String? resolutionId,
     RuntimeDefaults? runtimeDefaults,
     RuntimeExecutionPlan? executionPlan,
+    TransportProfileReference? transportProfile,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
     PlatformTunnelUnderlayRoutePolicy underlayRoutePolicy =

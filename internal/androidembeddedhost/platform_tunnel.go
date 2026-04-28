@@ -293,11 +293,12 @@ func (c *androidVPNServiceController) finishStartup(
 		var err error
 		lease, err = c.leaseFn(ctx, req, selectedPlanPtr)
 		if err != nil {
+			stage, prerequisite := leaseMaterializationFailureClassification(err)
 			return startFailureResult(
 				req.Mode,
 				selectedPlanPtr,
-				clientcontrol.PlatformTunnelStartupStageRuntimeAttach,
-				clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+				stage,
+				prerequisite,
 				req.UnderlayRoutePolicy,
 				err.Error(),
 			)
@@ -420,6 +421,18 @@ func startFailureResult(
 		Message:             strings.TrimSpace(message),
 	}
 	return clientcontrol.PlatformTunnelStartResult{}, &clientcontrol.PlatformTunnelStartError{Result: result}
+}
+
+func leaseMaterializationFailureClassification(err error) (clientcontrol.PlatformTunnelStartupStage, clientcontrol.PlatformTunnelPrerequisite) {
+	if errors.Is(err, clientcontrol.ErrTransportProfileStoreUnavailable) ||
+		errors.Is(err, clientcontrol.ErrTransportProfileNotFound) ||
+		errors.Is(err, clientcontrol.ErrTransportProfileInvalid) ||
+		errors.Is(err, clientcontrol.ErrTransportProfileIncompatible) {
+		return clientcontrol.PlatformTunnelStartupStageProfileValidate,
+			clientcontrol.PlatformTunnelPrerequisiteTransportProfile
+	}
+	return clientcontrol.PlatformTunnelStartupStageRuntimeAttach,
+		clientcontrol.PlatformTunnelPrerequisiteHostImplementation
 }
 
 func routePolicyPrerequisite(err error) clientcontrol.PlatformTunnelPrerequisite {

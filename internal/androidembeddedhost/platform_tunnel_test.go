@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -715,6 +716,57 @@ func TestManagerPlatformTunnelStartRuntimeAttachFailureCleansUp(t *testing.T) {
 		)
 	}
 	assertAndroidVPNExecutionPlan(t, result.ExecutionPlan)
+}
+
+func TestAndroidVPNServiceControllerMapsTransportProfileLeaseFailureToProfileValidate(t *testing.T) {
+	t.Parallel()
+
+	lifecycle := &fakeAndroidVPNServiceLifecycle{}
+	controller, ok := newAndroidVPNServiceController(
+		supportedAndroidVPNServiceCapability(""),
+		lifecycle,
+	).(*androidVPNServiceController)
+	if !ok {
+		t.Fatal("newAndroidVPNServiceController() type assertion failed")
+	}
+	controller.setWireGuardTurnLeaseProvider(func(
+		context.Context,
+		clientcontrol.PlatformTunnelStartRequest,
+		*clientcontrol.RuntimeExecutionPlan,
+	) (*clientcontrol.WireGuardTurnExecutionLease, error) {
+		return nil, fmt.Errorf("%w: strict WireGuard profile materialization requires a peer endpoint address", clientcontrol.ErrTransportProfileInvalid)
+	})
+
+	_, err := controller.Start(context.Background(), clientcontrol.PlatformTunnelStartRequest{
+		Mode:         clientcontrol.PlatformTunnelModeAndroidVPNService,
+		ResolutionID: "resolution-android-1",
+		RuntimeDefaults: &clientcontrol.RuntimeDefaults{
+			ListenAddr: "127.0.0.1:7777",
+		},
+	})
+	var startErr *clientcontrol.PlatformTunnelStartError
+	if !errors.As(err, &startErr) {
+		t.Fatalf("controller.Start() error = %v, want PlatformTunnelStartError", err)
+	}
+	result := startErr.Result
+	if result.Ready {
+		t.Fatal("controller.Start() ready = true, want false")
+	}
+	if result.Stage != clientcontrol.PlatformTunnelStartupStageProfileValidate {
+		t.Fatalf("controller.Start() stage = %q, want %q", result.Stage, clientcontrol.PlatformTunnelStartupStageProfileValidate)
+	}
+	if result.MissingPrerequisite != clientcontrol.PlatformTunnelPrerequisiteTransportProfile {
+		t.Fatalf("controller.Start() missing_prerequisite = %q, want %q", result.MissingPrerequisite, clientcontrol.PlatformTunnelPrerequisiteTransportProfile)
+	}
+	if !strings.Contains(strings.ToLower(result.Message), "peer endpoint") {
+		t.Fatalf("controller.Start() message = %q, want profile materialization detail", result.Message)
+	}
+	if lifecycle.cleanupCalls != 0 {
+		t.Fatalf("cleanup calls = %d, want 0", lifecycle.cleanupCalls)
+	}
+	if got := strings.Join(lifecycle.calls, ","); got != "acquire_permission,validate_route_policy" {
+		t.Fatalf("lifecycle calls = %q, want %q", got, "acquire_permission,validate_route_policy")
+	}
 }
 
 func TestManagerPlatformTunnelStopCleansUpActiveAndroidVPNService(t *testing.T) {
