@@ -638,6 +638,7 @@ class HttpMobileHostBridge implements MobileHostBridge {
       Capability.profiles,
       Capability.providerRuntimeArtifacts,
       Capability.runtimeExecutionPlanning,
+      Capability.vpnTransportProfileStore,
       Capability.sessions,
       Capability.challenges,
       Capability.diagnostics,
@@ -696,6 +697,23 @@ class HttpMobileHostBridge implements MobileHostBridge {
   @override
   Future<void> deleteProviderConfig(String configId) {
     return _client.deleteProviderConfig(configId);
+  }
+
+  @override
+  Future<List<TransportProfileStatus>> transportProfiles() {
+    return _client.transportProfiles();
+  }
+
+  @override
+  Future<TransportProfileStatus> importTransportProfile(
+    TransportProfileImportRequest request,
+  ) {
+    return _client.importTransportProfile(request);
+  }
+
+  @override
+  Future<void> forgetTransportProfile(String profileId) {
+    return _client.forgetTransportProfile(profileId);
   }
 
   @override
@@ -840,6 +858,7 @@ class HttpMobileHostBridge implements MobileHostBridge {
     String? resolutionId,
     RuntimeDefaults? runtimeDefaults,
     RuntimeExecutionPlan? executionPlan,
+    TransportProfileReference? transportProfile,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
     PlatformTunnelUnderlayRoutePolicy underlayRoutePolicy =
@@ -852,6 +871,7 @@ class HttpMobileHostBridge implements MobileHostBridge {
       resolutionId: resolutionId,
       runtimeDefaults: runtimeDefaults,
       executionPlan: executionPlan,
+      transportProfile: transportProfile,
       applicationRoutingPolicy: applicationRoutingPolicy,
       underlayRoutePolicy: underlayRoutePolicy,
       allowedPackages: allowedPackages,
@@ -944,6 +964,17 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
   Future<void> deleteProviderConfig(String configId) => _fail();
 
   @override
+  Future<List<TransportProfileStatus>> transportProfiles() => _fail();
+
+  @override
+  Future<TransportProfileStatus> importTransportProfile(
+    TransportProfileImportRequest request,
+  ) => _fail();
+
+  @override
+  Future<void> forgetTransportProfile(String profileId) => _fail();
+
+  @override
   Future<ResolutionRecord> cancelResolution(String resolutionId) => _fail();
 
   @override
@@ -988,6 +1019,7 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
     String? resolutionId,
     RuntimeDefaults? runtimeDefaults,
     RuntimeExecutionPlan? executionPlan,
+    TransportProfileReference? transportProfile,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
     PlatformTunnelUnderlayRoutePolicy underlayRoutePolicy =

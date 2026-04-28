@@ -45,12 +45,15 @@ required_capabilities = {
     "challenges",
     "diagnostics",
     "event_stream",
+    "vpn-transport-profile-store",
 }
 
 lib = ctypes.CDLL(os.environ["LIB_PATH"])
 lib.AndroidEmbeddedHostEnsureStarted.restype = ctypes.c_void_p
 lib.AndroidEmbeddedHostLastError.restype = ctypes.c_void_p
 lib.AndroidEmbeddedHostStop.restype = None
+lib.AndroidEmbeddedHostSetTransportProfileStorePath.argtypes = [ctypes.c_char_p]
+lib.AndroidEmbeddedHostSetTransportProfileStorePath.restype = None
 lib.AndroidEmbeddedHostFreeString.argtypes = [ctypes.c_void_p]
 lib.AndroidEmbeddedHostFreeString.restype = None
 
@@ -64,6 +67,13 @@ def read_c_string(ptr):
         lib.AndroidEmbeddedHostFreeString(ptr)
 
 
+store_path = os.path.join(
+    os.path.dirname(os.environ["LIB_PATH"]),
+    "no-backup",
+    "vpn-transport-profiles",
+    "store.json",
+)
+lib.AndroidEmbeddedHostSetTransportProfileStorePath(store_path.encode("utf-8"))
 base_ptr = lib.AndroidEmbeddedHostEnsureStarted()
 base_url = read_c_string(base_ptr)
 if not base_url:
@@ -106,7 +116,41 @@ try:
         method="POST",
     )
     with urllib.request.urlopen(start_request, timeout=5) as response:
-        start_result = json.load(response)
+        missing_profile_start_result = json.load(response)
+
+    import_request = urllib.request.Request(
+        base_url + "/v1/transport-profiles",
+        data=json.dumps(
+            {
+                "adapter": "wireguard_conf",
+                "kind": "wireguard_native_v1",
+                "display_name": "smoke Android VPN transport profile",
+                "material": "\n".join(
+                    [
+                        "[Interface]",
+                        "PrivateKey = smoke-client-private-key",
+                        "Address = 10.10.0.2/32",
+                        "",
+                        "[Peer]",
+                        "PublicKey = smoke-peer-public-key",
+                        "AllowedIPs = 0.0.0.0/0",
+                        "Endpoint = relay.example.test:51820",
+                        "",
+                    ]
+                ),
+            }
+        ).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(import_request, timeout=5) as response:
+        imported_profile = json.load(response)
+
+    with urllib.request.urlopen(base_url + "/v1/transport-profiles", timeout=5) as response:
+        transport_profiles = json.load(response)
+
+    with urllib.request.urlopen(start_request, timeout=5) as response:
+        permission_start_result = json.load(response)
 finally:
     lib.AndroidEmbeddedHostStop()
 
@@ -125,19 +169,45 @@ role = negotiated.get("build", {}).get("role")
 if role != "android_embedded_host":
     raise SystemExit(f"unexpected embedded host build role: {role}")
 
-if start_result.get("ready") is not False:
-    raise SystemExit(f"unexpected platform tunnel start readiness: {start_result}")
-
-if start_result.get("stage") != "permission_acquire":
+if missing_profile_start_result.get("ready") is not False:
     raise SystemExit(
-        "unexpected platform tunnel start stage: "
-        + str(start_result.get("stage"))
+        f"unexpected missing-profile start readiness: {missing_profile_start_result}"
     )
 
-if start_result.get("missing_prerequisite") != "permission":
+if missing_profile_start_result.get("stage") != "profile_validate":
+    raise SystemExit(
+        "unexpected missing-profile start stage: "
+        + str(missing_profile_start_result.get("stage"))
+    )
+
+if missing_profile_start_result.get("missing_prerequisite") != "transport_profile":
+    raise SystemExit(
+        "unexpected missing-profile prerequisite: "
+        + str(missing_profile_start_result.get("missing_prerequisite"))
+    )
+
+if imported_profile.get("kind") != "wireguard_native_v1":
+    raise SystemExit(f"unexpected imported profile: {imported_profile}")
+
+profiles_json = json.dumps(transport_profiles)
+if "smoke-client-private-key" in profiles_json or store_path in profiles_json:
+    raise SystemExit(f"transport profile read leaked secret material/path: {profiles_json}")
+
+if permission_start_result.get("ready") is not False:
+    raise SystemExit(
+        f"unexpected platform tunnel start readiness: {permission_start_result}"
+    )
+
+if permission_start_result.get("stage") != "permission_acquire":
+    raise SystemExit(
+        "unexpected platform tunnel start stage: "
+        + str(permission_start_result.get("stage"))
+    )
+
+if permission_start_result.get("missing_prerequisite") != "permission":
     raise SystemExit(
         "unexpected platform tunnel missing_prerequisite: "
-        + str(start_result.get("missing_prerequisite"))
+        + str(permission_start_result.get("missing_prerequisite"))
     )
 
 print(f"embedded host smoke passed: {base_url}")

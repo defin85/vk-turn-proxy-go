@@ -32,6 +32,58 @@ const BuildIdentity _testHostBuild = BuildIdentity(
   target: 'android/debug',
 );
 
+const TransportProfileReference _androidTransportProfileReference =
+    TransportProfileReference(
+      profileId: 'transport-profile-1',
+      kind: TransportProfileKind.wireGuardNativeV1,
+    );
+
+const TransportProfileStoreCapability _transportProfileStoreCapability =
+    TransportProfileStoreCapability(
+      supportedKinds: <TransportProfileKind>[
+        TransportProfileKind.wireGuardNativeV1,
+      ],
+      importAdapters: <TransportProfileImportAdapterDescriptor>[
+        TransportProfileImportAdapterDescriptor(
+          id: TransportProfileImportAdapter.wireGuardConf,
+          profileKind: TransportProfileKind.wireGuardNativeV1,
+          displayName: 'WireGuard .conf',
+          extensions: <String>['conf'],
+        ),
+      ],
+      lifecycleActions: <TransportProfileLifecycleAction>[
+        TransportProfileLifecycleAction.list,
+        TransportProfileLifecycleAction.import,
+        TransportProfileLifecycleAction.replace,
+        TransportProfileLifecycleAction.forget,
+        TransportProfileLifecycleAction.validate,
+        TransportProfileLifecycleAction.selectForStartup,
+      ],
+    );
+
+const TransportProfilePrerequisiteStatus
+_configuredTransportProfilePrerequisite = TransportProfilePrerequisiteStatus(
+  requiredKinds: <TransportProfileKind>[TransportProfileKind.wireGuardNativeV1],
+  state: TransportProfileCompatibilityState.compatible,
+  selectedProfile: _androidTransportProfileReference,
+  importAdapters: <TransportProfileImportAdapter>[
+    TransportProfileImportAdapter.wireGuardConf,
+  ],
+);
+
+const TransportProfilePrerequisiteStatus _missingTransportProfilePrerequisite =
+    TransportProfilePrerequisiteStatus(
+      requiredKinds: <TransportProfileKind>[
+        TransportProfileKind.wireGuardNativeV1,
+      ],
+      state: TransportProfileCompatibilityState.incompatible,
+      missingKind: TransportProfileKind.wireGuardNativeV1,
+      importAdapters: <TransportProfileImportAdapter>[
+        TransportProfileImportAdapter.wireGuardConf,
+      ],
+      message: 'VPN transport profile wireguard_native_v1 is not configured.',
+    );
+
 const RuntimeExecutionPlanDescriptor _androidVpnExecutionPlanDescriptor =
     RuntimeExecutionPlanDescriptor(
       plan: RuntimeExecutionPlan(
@@ -43,6 +95,10 @@ const RuntimeExecutionPlanDescriptor _androidVpnExecutionPlanDescriptor =
       supportState: RuntimeExecutionPlanSupportState.supported,
       remoteEndpointFamily: RuntimeRemoteEndpointFamily.turnServer,
       isDefault: true,
+      requiredTransportProfileKinds: <TransportProfileKind>[
+        TransportProfileKind.wireGuardNativeV1,
+      ],
+      transportProfile: _configuredTransportProfilePrerequisite,
     );
 
 const RuntimeExecutionPlanDescriptor
@@ -60,6 +116,25 @@ _unavailableAndroidVpnExecutionPlanDescriptor = RuntimeExecutionPlanDescriptor(
       'The android/arm64 host does not yet implement the strict TURN datagram WireGuard carrier/materializer required for mode android_vpn_service.',
 );
 
+const RuntimeExecutionPlanDescriptor
+_missingProfileAndroidVpnExecutionPlanDescriptor =
+    RuntimeExecutionPlanDescriptor(
+      plan: RuntimeExecutionPlan(
+        accessMethod: RuntimeAccessMethod.turnCredentials,
+        carrierFamily: RuntimeCarrierFamily.turnDatagram,
+        engineFamily: RuntimeEngineFamily.wireguardNative,
+        hostAdapter: RuntimeHostAdapter.androidVpnService,
+      ),
+      supportState: RuntimeExecutionPlanSupportState.unavailable,
+      remoteEndpointFamily: RuntimeRemoteEndpointFamily.turnServer,
+      isDefault: true,
+      requiredTransportProfileKinds: <TransportProfileKind>[
+        TransportProfileKind.wireGuardNativeV1,
+      ],
+      transportProfile: _missingTransportProfilePrerequisite,
+      message: 'VPN transport profile wireguard_native_v1 is not configured.',
+    );
+
 const HostInfo _readyHostInfo = HostInfo(
   contractVersion: '1',
   build: _testHostBuild,
@@ -70,6 +145,7 @@ const HostInfo _readyHostInfo = HostInfo(
     Capability.providerConfigs,
     Capability.providerRuntimeArtifacts,
     Capability.runtimeExecutionPlanning,
+    Capability.vpnTransportProfileStore,
     Capability.sessions,
     Capability.challenges,
     Capability.diagnostics,
@@ -90,6 +166,7 @@ const HostInfo _readyHostInfo = HostInfo(
       message: 'mobile host does not implement tunnel startup yet',
     ),
   ],
+  transportProfileStore: _transportProfileStoreCapability,
 );
 
 const HostInfo _hostInfoWithoutSupportedAndroidExecutionPath = HostInfo(
@@ -102,6 +179,7 @@ const HostInfo _hostInfoWithoutSupportedAndroidExecutionPath = HostInfo(
     Capability.providerConfigs,
     Capability.providerRuntimeArtifacts,
     Capability.runtimeExecutionPlanning,
+    Capability.vpnTransportProfileStore,
     Capability.sessions,
     Capability.challenges,
     Capability.diagnostics,
@@ -123,6 +201,44 @@ const HostInfo _hostInfoWithoutSupportedAndroidExecutionPath = HostInfo(
           'The android/arm64 host does not yet implement the strict TURN datagram WireGuard carrier/materializer required for mode android_vpn_service.',
     ),
   ],
+  transportProfileStore: _transportProfileStoreCapability,
+);
+
+const HostInfo _hostInfoMissingTransportProfile = HostInfo(
+  contractVersion: '1',
+  build: _testHostBuild,
+  capabilities: <Capability>[
+    Capability.mobileHostBridge,
+    Capability.platformTunnels,
+    Capability.profiles,
+    Capability.providerConfigs,
+    Capability.providerRuntimeArtifacts,
+    Capability.runtimeExecutionPlanning,
+    Capability.vpnTransportProfileStore,
+    Capability.sessions,
+    Capability.challenges,
+    Capability.diagnostics,
+    Capability.eventStream,
+  ],
+  platformTunnels: <PlatformTunnelCapability>[
+    PlatformTunnelCapability(
+      mode: PlatformTunnelMode.androidVpnService,
+      available: true,
+      satisfiedPrerequisites: <PlatformTunnelPrerequisite>[
+        PlatformTunnelPrerequisite.routeExclusion,
+        PlatformTunnelPrerequisite.dnsBypass,
+      ],
+      supportedUnderlayRoutePolicies: <PlatformTunnelUnderlayRoutePolicy>[
+        PlatformTunnelUnderlayRoutePolicy.standard,
+        PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork,
+      ],
+      executionPlans: <RuntimeExecutionPlanDescriptor>[
+        _missingProfileAndroidVpnExecutionPlanDescriptor,
+      ],
+      message: 'Android VPN Service is available after profile setup.',
+    ),
+  ],
+  transportProfileStore: _transportProfileStoreCapability,
 );
 
 const HostInfo _readyHostInfoWithoutDevelopmentRouting = HostInfo(
@@ -135,6 +251,7 @@ const HostInfo _readyHostInfoWithoutDevelopmentRouting = HostInfo(
     Capability.providerConfigs,
     Capability.providerRuntimeArtifacts,
     Capability.runtimeExecutionPlanning,
+    Capability.vpnTransportProfileStore,
     Capability.sessions,
     Capability.challenges,
     Capability.diagnostics,
@@ -154,6 +271,7 @@ const HostInfo _readyHostInfoWithoutDevelopmentRouting = HostInfo(
       message: 'mobile host does not implement tunnel startup yet',
     ),
   ],
+  transportProfileStore: _transportProfileStoreCapability,
 );
 
 const List<ProviderDescriptor> _providerDescriptors = <ProviderDescriptor>[
@@ -203,6 +321,44 @@ const List<ProviderDescriptor> _providerDescriptors = <ProviderDescriptor>[
     ),
   ),
 ];
+
+List<TransportProfileStatus> _transportProfileStatuses() {
+  return <TransportProfileStatus>[
+    TransportProfileStatus(
+      id: _androidTransportProfileReference.profileId,
+      kind: TransportProfileKind.wireGuardNativeV1,
+      version: '1',
+      displayName: 'WireGuard',
+      validation: const TransportProfileValidationStatus(
+        state: TransportProfileValidationState.valid,
+        fingerprint: 'sha256:testprofile',
+      ),
+      compatibility: const TransportProfileCompatibilityStatus(
+        state: TransportProfileCompatibilityState.compatible,
+        compatibleExecutionPlans: <RuntimeExecutionPlan>[
+          RuntimeExecutionPlan(
+            accessMethod: RuntimeAccessMethod.turnCredentials,
+            carrierFamily: RuntimeCarrierFamily.turnDatagram,
+            engineFamily: RuntimeEngineFamily.wireguardNative,
+            hostAdapter: RuntimeHostAdapter.androidVpnService,
+          ),
+        ],
+      ),
+      secretMaterialRef: const TransportProfileSecretMaterialRef(
+        kind: TransportProfileMaterialSource.importAdapter,
+        ref: 'host-owned:transport-profile-1',
+      ),
+      actions: const <TransportProfileLifecycleAction>[
+        TransportProfileLifecycleAction.replace,
+        TransportProfileLifecycleAction.forget,
+        TransportProfileLifecycleAction.validate,
+        TransportProfileLifecycleAction.selectForStartup,
+      ],
+      importedAt: DateTime.utc(2026, 4, 28, 12),
+      updatedAt: DateTime.utc(2026, 4, 28, 12),
+    ),
+  ];
+}
 
 const ProviderDescriptor _providerWithSettingsDescriptor = ProviderDescriptor(
   id: 'wb-stream',
@@ -2293,19 +2449,21 @@ void main() {
   );
 
   test(
-    'controller requires explicit Android WireGuard profile before platform tunnel startup',
+    'controller uses VPN transport profile store before platform tunnel startup',
     () async {
       final profile = ProfileRecord(
         id: 'profile-1',
         name: 'vk live',
         spec: _profileSpec(),
       );
-      final bridge = _FakeMobileHostBridge();
-      final wireGuardProfileManager = _FakeAndroidWireGuardProfileManager(
-        const AndroidWireGuardProfileStatus(
-          platformAvailable: true,
-          configured: false,
+      final bridge = _FakeMobileHostBridge(
+        ensureReadyResult: const MobileHostConnectionResult(
+          state: MobileHostLifecycleState.ready,
+          message: 'Connected to embedded mobile host bridge',
+          info: _hostInfoMissingTransportProfile,
+          description: 'native bridge',
         ),
+        transportProfilesList: const <TransportProfileStatus>[],
       );
       final controller = MobileShellController(
         bridge: bridge,
@@ -2317,20 +2475,23 @@ void main() {
             draft: ProfileDraft.fromProfile(profile),
           ),
         ),
-        androidWireGuardProfileManager: wireGuardProfileManager,
-        androidWireGuardProfileContentPicker: () async => 'wg-profile',
+        transportProfileContentPicker: () async => 'wg-profile',
         appBuild: _testGuiBuild,
       );
       addTearDown(controller.dispose);
 
       await controller.initialize();
 
-      expect(controller.canConfigureAndroidWireGuardProfile, isTrue);
+      expect(controller.canConfigureVPNTransportProfile, isTrue);
+      expect(
+        controller.activeVPNTransportProfileStatusSummary,
+        contains('not configured'),
+      );
       expect(
         controller.platformTunnelStartPreparationBlockReason(
           PlatformTunnelMode.androidVpnService,
         ),
-        contains('WireGuard configuration'),
+        contains('VPN transport profile'),
       );
 
       await controller.startPlatformTunnel(
@@ -2340,10 +2501,13 @@ void main() {
       expect(bridge.startResolutionCalls, isEmpty);
       expect(bridge.startedPlatformTunnels, isEmpty);
 
-      await controller.importAndroidWireGuardProfile();
+      await controller.importVPNTransportProfile();
 
-      expect(wireGuardProfileManager.configureCalls, <String>['wg-profile']);
-      expect(controller.androidWireGuardProfileStatus.configured, isTrue);
+      expect(controller.activeVPNTransportProfileConfigured, isTrue);
+      expect(
+        controller.activeVPNTransportProfileStatusSummary,
+        contains('WireGuard profile: configured'),
+      );
       expect(
         controller.platformTunnelStartPreparationBlockReason(
           PlatformTunnelMode.androidVpnService,
@@ -2359,16 +2523,23 @@ void main() {
       expect(bridge.startedPlatformTunnels, <PlatformTunnelMode>[
         PlatformTunnelMode.androidVpnService,
       ]);
+      expect(
+        bridge.startedPlatformTunnelProfiles.single?.profileId,
+        'transport-profile-1',
+      );
 
-      await controller.forgetAndroidWireGuardProfile();
+      await controller.forgetVPNTransportProfile();
 
-      expect(wireGuardProfileManager.clearCalls, 1);
-      expect(controller.androidWireGuardProfileStatus.configured, isFalse);
+      expect(controller.activeVPNTransportProfileConfigured, isFalse);
+      expect(
+        controller.activeVPNTransportProfileStatusSummary,
+        contains('not configured'),
+      );
       expect(
         controller.platformTunnelStartPreparationBlockReason(
           PlatformTunnelMode.androidVpnService,
         ),
-        contains('WireGuard configuration'),
+        contains('VPN transport profile'),
       );
     },
   );
@@ -3142,39 +3313,6 @@ class _FakeOwnedBrowserSessionStateResetter
   }
 }
 
-class _FakeAndroidWireGuardProfileManager
-    implements AndroidWireGuardProfileManager {
-  _FakeAndroidWireGuardProfileManager(this._status);
-
-  AndroidWireGuardProfileStatus _status;
-  final List<String> configureCalls = <String>[];
-  int clearCalls = 0;
-
-  @override
-  Future<AndroidWireGuardProfileStatus> status() async => _status;
-
-  @override
-  Future<AndroidWireGuardProfileStatus> configure(String contents) async {
-    configureCalls.add(contents);
-    _status = AndroidWireGuardProfileStatus(
-      platformAvailable: true,
-      configured: true,
-      bytes: contents.length,
-    );
-    return _status;
-  }
-
-  @override
-  Future<AndroidWireGuardProfileStatus> clear() async {
-    clearCalls += 1;
-    _status = const AndroidWireGuardProfileStatus(
-      platformAvailable: true,
-      configured: false,
-    );
-    return _status;
-  }
-}
-
 class _FakeMobileHostBridge implements MobileHostBridge {
   _FakeMobileHostBridge({
     this.ensureReadyResult = const MobileHostConnectionResult(
@@ -3187,6 +3325,7 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     List<ProviderConfigRecord>? providerConfigsList,
     List<ProfileRecord>? profilesList,
     List<ResolutionRecord>? resolutionsList,
+    List<TransportProfileStatus>? transportProfilesList,
     this.sessionsList = const <SessionRecord>[],
     this.challengeMap = const <String, ChallengeRecord>{},
     this.startSessionError,
@@ -3242,13 +3381,19 @@ class _FakeMobileHostBridge implements MobileHostBridge {
        ),
        _resolutions = List<ResolutionRecord>.of(
          resolutionsList ?? const <ResolutionRecord>[],
+       ),
+       _hostInfo = ensureReadyResult.info ?? _readyHostInfo,
+       _transportProfiles = List<TransportProfileStatus>.of(
+         transportProfilesList ?? _transportProfileStatuses(),
        );
 
   final MobileHostConnectionResult ensureReadyResult;
+  HostInfo _hostInfo;
   final List<ProviderDescriptor> _providers;
   final List<ProviderConfigRecord> _providerConfigs;
   final List<ProfileRecord> _profiles;
   final List<SessionRecord> sessionsList;
+  final List<TransportProfileStatus> _transportProfiles;
   final Map<String, ChallengeRecord> challengeMap;
   final ControlPlaneError? startSessionError;
   final PlatformTunnelStartResult startPlatformTunnelResult;
@@ -3278,6 +3423,8 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       <RuntimeDefaults?>[];
   final List<RuntimeExecutionPlan?> startedPlatformTunnelExecutionPlans =
       <RuntimeExecutionPlan?>[];
+  final List<TransportProfileReference?> startedPlatformTunnelProfiles =
+      <TransportProfileReference?>[];
   final List<PlatformTunnelApplicationRoutingPolicy>
   startedPlatformTunnelRoutingPolicies =
       <PlatformTunnelApplicationRoutingPolicy>[];
@@ -3348,6 +3495,49 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   }
 
   @override
+  Future<List<TransportProfileStatus>> transportProfiles() async =>
+      _transportProfiles;
+
+  @override
+  Future<TransportProfileStatus> importTransportProfile(
+    TransportProfileImportRequest request,
+  ) async {
+    final replacementID = request.replaceProfileId.trim();
+    final profileID = replacementID.isEmpty
+        ? 'transport-profile-${_transportProfiles.length + 1}'
+        : replacementID;
+    final profile = _transportProfileStatuses().first;
+    final next = TransportProfileStatus(
+      id: profileID,
+      kind: request.kind,
+      version: profile.version,
+      displayName: request.displayName,
+      validation: profile.validation,
+      compatibility: profile.compatibility,
+      secretMaterialRef: TransportProfileSecretMaterialRef(
+        kind: TransportProfileMaterialSource.importAdapter,
+        ref: 'host-owned:$profileID',
+      ),
+      actions: profile.actions,
+      importedAt: profile.importedAt,
+      updatedAt: DateTime.utc(2026, 4, 28, 12, _transportProfiles.length),
+    );
+    _transportProfiles
+      ..removeWhere((TransportProfileStatus current) => current.id == profileID)
+      ..add(next);
+    _hostInfo = _readyHostInfo;
+    return next;
+  }
+
+  @override
+  Future<void> forgetTransportProfile(String profileId) async {
+    _transportProfiles.removeWhere(
+      (TransportProfileStatus current) => current.id == profileId,
+    );
+    _hostInfo = _hostInfoMissingTransportProfile;
+  }
+
+  @override
   Future<DiagnosticsBundle> diagnostics(String sessionId) async {
     return diagnosticsBundle;
   }
@@ -3365,23 +3555,27 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   @override
   Future<MobileHostConnectionResult> ensureReady() async {
     ensureReadyCalls += 1;
-    return ensureReadyResult;
+    return MobileHostConnectionResult(
+      state: ensureReadyResult.state,
+      message: ensureReadyResult.message,
+      info: _hostInfo,
+      description: ensureReadyResult.description,
+    );
   }
 
   @override
   Stream<EventRecord> events() => _events.stream;
 
   @override
-  Future<HostInfo> hostInfo() async => ensureReadyResult.info ?? _readyHostInfo;
+  Future<HostInfo> hostInfo() async => _hostInfo;
 
   @override
   Future<HostInfo> negotiate({
     required List<String> supportedVersions,
     required List<Capability> requiredCapabilities,
   }) async {
-    final info = ensureReadyResult.info;
-    if (ensureReadyResult.state == MobileHostLifecycleState.incompatible ||
-        info == null) {
+    final info = _hostInfo;
+    if (ensureReadyResult.state == MobileHostLifecycleState.incompatible) {
       throw const ControlPlaneError(
         statusCode: 409,
         code: 'incompatible_host',
@@ -3407,6 +3601,7 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     String? resolutionId,
     RuntimeDefaults? runtimeDefaults,
     RuntimeExecutionPlan? executionPlan,
+    TransportProfileReference? transportProfile,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
     List<String> allowedPackages = const <String>[],
@@ -3418,6 +3613,7 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     startedPlatformTunnelResolutionIDs.add(resolutionId);
     startedPlatformTunnelRuntimeDefaults.add(runtimeDefaults);
     startedPlatformTunnelExecutionPlans.add(executionPlan);
+    startedPlatformTunnelProfiles.add(transportProfile);
     startedPlatformTunnelRoutingPolicies.add(applicationRoutingPolicy);
     startedPlatformTunnelUnderlayRoutePolicies.add(underlayRoutePolicy);
     startedPlatformTunnelAllowedPackages.add(List<String>.of(allowedPackages));

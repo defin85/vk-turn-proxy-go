@@ -373,7 +373,8 @@ func isKnownPlatformTunnelPrerequisite(prerequisite PlatformTunnelPrerequisite) 
 		PlatformTunnelPrerequisiteRouteExclusion,
 		PlatformTunnelPrerequisiteDNSBypass,
 		PlatformTunnelPrerequisiteAppRoutingPolicy,
-		PlatformTunnelPrerequisiteHostImplementation:
+		PlatformTunnelPrerequisiteHostImplementation,
+		PlatformTunnelPrerequisiteTransportProfile:
 		return true
 	default:
 		return false
@@ -407,6 +408,7 @@ func isKnownPlatformTunnelStartupStage(stage PlatformTunnelStartupStage) bool {
 		PlatformTunnelStartupStagePermissionAcquire,
 		PlatformTunnelStartupStageEntitlementAcquire,
 		PlatformTunnelStartupStageDriverCheck,
+		PlatformTunnelStartupStageProfileValidate,
 		PlatformTunnelStartupStageRouteValidate,
 		PlatformTunnelStartupStageHostBringup,
 		PlatformTunnelStartupStageRuntimeAttach:
@@ -426,6 +428,13 @@ func hostTargetLabel(build BuildIdentity) string {
 func normalizePlatformTunnelStartRequest(req PlatformTunnelStartRequest) (PlatformTunnelStartRequest, error) {
 	normalized := req
 	normalized.ResolutionID = strings.TrimSpace(normalized.ResolutionID)
+	if normalized.TransportProfile != nil {
+		ref := *normalized.TransportProfile
+		ref.ProfileID = strings.TrimSpace(ref.ProfileID)
+		ref.Kind = TransportProfileKind(strings.TrimSpace(string(ref.Kind)))
+		ref.DefaultScopeID = strings.TrimSpace(ref.DefaultScopeID)
+		normalized.TransportProfile = &ref
+	}
 	if normalized.RuntimeDefaults != nil {
 		defaults := *normalized.RuntimeDefaults
 		defaults.ListenAddr = strings.TrimSpace(defaults.ListenAddr)

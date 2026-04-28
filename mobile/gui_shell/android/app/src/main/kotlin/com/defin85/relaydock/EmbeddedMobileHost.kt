@@ -14,13 +14,16 @@ internal object EmbeddedMobileHostNative {
     external fun registerPlatformTunnelBridge(bridge: Any)
     external fun clearPlatformTunnelBridge()
     external fun setAndroidWireGuardProfilePath(path: String?)
+    external fun setTransportProfileStorePath(path: String?)
 }
 
 internal object EmbeddedMobileHost {
     private const val APP_WIREGUARD_PROFILE_PATH = "wireguard/android-vpn-service.conf"
+    private const val TRANSPORT_PROFILE_STORE_PATH = "vpn-transport-profiles/store.json"
     private const val MAX_WIREGUARD_PROFILE_BYTES = 256 * 1024
 
     fun ensureStarted(context: Context): String {
+        configureTransportProfileStore(context)
         restoreConfiguredWireGuardProfile(context)
         val baseUrl = EmbeddedMobileHostNative.ensureStarted()?.trim().orEmpty()
         if (baseUrl.isNotEmpty()) {
@@ -84,6 +87,16 @@ internal object EmbeddedMobileHost {
         EmbeddedMobileHostNative.setAndroidWireGuardProfilePath(
             if (profile.isFile) profile.absolutePath else null,
         )
+    }
+
+    private fun configureTransportProfileStore(context: Context) {
+        val store = transportProfileStoreFile(context)
+        store.parentFile?.mkdirs()
+        EmbeddedMobileHostNative.setTransportProfileStorePath(store.absolutePath)
+    }
+
+    private fun transportProfileStoreFile(context: Context): File {
+        return File(context.noBackupFilesDir, TRANSPORT_PROFILE_STORE_PATH)
     }
 
     private fun wireGuardProfileFile(context: Context): File {

@@ -224,6 +224,9 @@ class TranslationsRu extends Translations
   String get sharedPlatformTunnelPrerequisiteHostImplementation =>
       'реализация хоста';
   @override
+  String get sharedPlatformTunnelPrerequisiteTransportProfile =>
+      'VPN transport profile';
+  @override
   String get sharedPlatformTunnelStartupStageCapabilityCheck =>
       'Проверка возможностей';
   @override
@@ -234,6 +237,9 @@ class TranslationsRu extends Translations
       'Получение права доступа';
   @override
   String get sharedPlatformTunnelStartupStageDriverCheck => 'Проверка драйвера';
+  @override
+  String get sharedPlatformTunnelStartupStageProfileValidate =>
+      'Проверка профиля';
   @override
   String get sharedPlatformTunnelStartupStageRouteValidate =>
       'Проверка маршрута';
@@ -811,13 +817,28 @@ class TranslationsRu extends Translations
   }) => 'Выберите путь выполнения перед запуском ${modeLabel}.';
   @override
   String get shellTextAndroidWireGuardProfileRequiredBeforeStarting =>
-      'Импортируйте WireGuard-конфигурацию в приложении перед запуском Android VPN Service.';
+      'Импортируйте VPN transport profile перед запуском Android VPN Service. Для этого пути поддерживается WireGuard .conf.';
   @override
   String get shellTextAndroidWireGuardProfileConfigured =>
-      'Android WireGuard-конфигурация импортирована.';
+      'VPN transport profile импортирован.';
   @override
   String get shellTextAndroidWireGuardProfileCleared =>
-      'Android WireGuard-конфигурация забыта.';
+      'VPN transport profile забыт.';
+  @override
+  String get shellTextVpnTransportProfileStatusNotConfigured =>
+      'VPN transport profile: не настроен.';
+  @override
+  String shellTextVpnTransportProfileStatusConfigured({
+    required Object profileKind,
+  }) => '${profileKind} profile: настроен.';
+  @override
+  String shellTextVpnTransportProfileStatusInvalid({
+    required Object profileKind,
+  }) => '${profileKind} profile: невалиден.';
+  @override
+  String shellTextVpnTransportProfileStatusIncompatible({
+    required Object profileKind,
+  }) => '${profileKind} profile: несовместим с выбранным путём выполнения.';
   @override
   String get shellTextResetLocalMobileShellStateBeforeReconnecting =>
       'Сбросьте локальное состояние мобильной оболочки перед переподключением.';
@@ -1599,13 +1620,11 @@ class TranslationsRu extends Translations
   @override
   String get shellTextMobileTurnOffVpn => 'Выключить VPN';
   @override
-  String get shellTextImportAndroidWireGuardConfig =>
-      'Импорт WireGuard-конфига';
+  String get shellTextImportAndroidWireGuardConfig => 'Импорт VPN profile';
   @override
-  String get shellTextReplaceAndroidWireGuardConfig =>
-      'Заменить WireGuard-конфиг';
+  String get shellTextReplaceAndroidWireGuardConfig => 'Заменить VPN profile';
   @override
-  String get shellTextForgetAndroidWireGuardConfig => 'Забыть WireGuard-конфиг';
+  String get shellTextForgetAndroidWireGuardConfig => 'Забыть VPN profile';
   @override
   String get shellTextMobileProvidersTitle => 'Провайдеры';
   @override
@@ -2285,6 +2304,8 @@ extension on TranslationsRu {
             'политика маршрутизации приложений',
           'sharedPlatformTunnelPrerequisiteHostImplementation' =>
             'реализация хоста',
+          'sharedPlatformTunnelPrerequisiteTransportProfile' =>
+            'VPN transport profile',
           'sharedPlatformTunnelStartupStageCapabilityCheck' =>
             'Проверка возможностей',
           'sharedPlatformTunnelStartupStagePermissionAcquire' =>
@@ -2292,6 +2313,8 @@ extension on TranslationsRu {
           'sharedPlatformTunnelStartupStageEntitlementAcquire' =>
             'Получение права доступа',
           'sharedPlatformTunnelStartupStageDriverCheck' => 'Проверка драйвера',
+          'sharedPlatformTunnelStartupStageProfileValidate' =>
+            'Проверка профиля',
           'sharedPlatformTunnelStartupStageRouteValidate' =>
             'Проверка маршрута',
           'sharedPlatformTunnelStartupStageHostBringup' => 'Подъем хоста',
@@ -2667,11 +2690,22 @@ extension on TranslationsRu {
             ({required Object modeLabel}) =>
                 'Выберите путь выполнения перед запуском ${modeLabel}.',
           'shellTextAndroidWireGuardProfileRequiredBeforeStarting' =>
-            'Импортируйте WireGuard-конфигурацию в приложении перед запуском Android VPN Service.',
+            'Импортируйте VPN transport profile перед запуском Android VPN Service. Для этого пути поддерживается WireGuard .conf.',
           'shellTextAndroidWireGuardProfileConfigured' =>
-            'Android WireGuard-конфигурация импортирована.',
+            'VPN transport profile импортирован.',
           'shellTextAndroidWireGuardProfileCleared' =>
-            'Android WireGuard-конфигурация забыта.',
+            'VPN transport profile забыт.',
+          'shellTextVpnTransportProfileStatusNotConfigured' =>
+            'VPN transport profile: не настроен.',
+          'shellTextVpnTransportProfileStatusConfigured' =>
+            ({required Object profileKind}) =>
+                '${profileKind} profile: настроен.',
+          'shellTextVpnTransportProfileStatusInvalid' =>
+            ({required Object profileKind}) =>
+                '${profileKind} profile: невалиден.',
+          'shellTextVpnTransportProfileStatusIncompatible' =>
+            ({required Object profileKind}) =>
+                '${profileKind} profile: несовместим с выбранным путём выполнения.',
           'shellTextResetLocalMobileShellStateBeforeReconnecting' =>
             'Сбросьте локальное состояние мобильной оболочки перед переподключением.',
           'shellTextDetectedBrowserReturnAndContinuedChallenge' =>
@@ -3115,6 +3149,9 @@ extension on TranslationsRu {
             'Все объявленные туннельные режимы сейчас находятся в fail-closed состоянии. Используйте Диагностика -> Детали туннеля, когда захотите явно проверить запуск.',
           'shellTextDesktopHostModeAvailable' =>
             'Хост сообщает, что этот режим доступен.',
+          _ => null,
+        } ??
+        switch (path) {
           'shellTextDesktopHostModeUnavailable' =>
             'Хост сообщает, что этот режим недоступен.',
           'shellTextDesktopNoStartupRequestYet' =>
@@ -3127,9 +3164,6 @@ extension on TranslationsRu {
             'Оболочка переподключается к локальному хосту. Сохраняйте поверхность редактора стабильной, пока согласование не завершится.',
           'shellTextDesktopWorkflowAssuranceBlocked' =>
             'Локальный хост заблокирован или несовместим. Держите путь восстановления видимым из основной рабочей поверхности.',
-          _ => null,
-        } ??
-        switch (path) {
           'shellTextDesktopWorkflowAssuranceReadyLive' =>
             'Локальный хост готов. Сохраняйте текущий рабочий процесс главным, пока детали живого рантайма остаются в одном шаге.',
           'shellTextDesktopWorkflowAssuranceReadyIdle' =>
@@ -3154,10 +3188,9 @@ extension on TranslationsRu {
           'shellTextMobileSelectedForHome' => 'Выбран для Главной',
           'shellTextMobileTurnOnVpn' => 'Включить VPN',
           'shellTextMobileTurnOffVpn' => 'Выключить VPN',
-          'shellTextImportAndroidWireGuardConfig' => 'Импорт WireGuard-конфига',
-          'shellTextReplaceAndroidWireGuardConfig' =>
-            'Заменить WireGuard-конфиг',
-          'shellTextForgetAndroidWireGuardConfig' => 'Забыть WireGuard-конфиг',
+          'shellTextImportAndroidWireGuardConfig' => 'Импорт VPN profile',
+          'shellTextReplaceAndroidWireGuardConfig' => 'Заменить VPN profile',
+          'shellTextForgetAndroidWireGuardConfig' => 'Забыть VPN profile',
           'shellTextMobileProvidersTitle' => 'Провайдеры',
           'shellTextMobileProvidersSubtitle' =>
             'Выберите сохраненный переиспользуемый провайдер или добавьте новый для Профилей.',

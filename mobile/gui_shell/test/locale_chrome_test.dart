@@ -29,6 +29,7 @@ const HostInfo _readyHostInfo = HostInfo(
     Capability.providerConfigs,
     Capability.providerRuntimeArtifacts,
     Capability.runtimeExecutionPlanning,
+    Capability.vpnTransportProfileStore,
     Capability.sessions,
     Capability.challenges,
     Capability.diagnostics,

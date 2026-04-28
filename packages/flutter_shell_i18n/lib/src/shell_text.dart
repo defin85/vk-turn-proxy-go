@@ -441,10 +441,24 @@ class ShellText {
       t.shellTextSelectExecutionPathBeforeStarting(modeLabel: modeLabel);
   String get androidWireGuardProfileRequiredBeforeStarting =>
       t.shellTextAndroidWireGuardProfileRequiredBeforeStarting;
+  String get vpnTransportProfileRequiredBeforeStarting =>
+      t.shellTextAndroidWireGuardProfileRequiredBeforeStarting;
   String get androidWireGuardProfileConfigured =>
+      t.shellTextAndroidWireGuardProfileConfigured;
+  String get vpnTransportProfileConfigured =>
       t.shellTextAndroidWireGuardProfileConfigured;
   String get androidWireGuardProfileCleared =>
       t.shellTextAndroidWireGuardProfileCleared;
+  String get vpnTransportProfileCleared =>
+      t.shellTextAndroidWireGuardProfileCleared;
+  String get vpnTransportProfileStatusNotConfigured =>
+      t.shellTextVpnTransportProfileStatusNotConfigured;
+  String vpnTransportProfileStatusConfigured(String profileKind) =>
+      t.shellTextVpnTransportProfileStatusConfigured(profileKind: profileKind);
+  String vpnTransportProfileStatusInvalid(String profileKind) =>
+      t.shellTextVpnTransportProfileStatusInvalid(profileKind: profileKind);
+  String vpnTransportProfileStatusIncompatible(String profileKind) => t
+      .shellTextVpnTransportProfileStatusIncompatible(profileKind: profileKind);
   String get resetLocalMobileShellStateBeforeReconnecting =>
       t.shellTextResetLocalMobileShellStateBeforeReconnecting;
   String detectedBrowserReturnAndContinuedChallenge(
@@ -1043,9 +1057,15 @@ class ShellText {
   String get mobileTurnOffVpn => t.shellTextMobileTurnOffVpn;
   String get importAndroidWireGuardConfig =>
       t.shellTextImportAndroidWireGuardConfig;
+  String get importVPNTransportProfile =>
+      t.shellTextImportAndroidWireGuardConfig;
   String get replaceAndroidWireGuardConfig =>
       t.shellTextReplaceAndroidWireGuardConfig;
+  String get replaceVPNTransportProfile =>
+      t.shellTextReplaceAndroidWireGuardConfig;
   String get forgetAndroidWireGuardConfig =>
+      t.shellTextForgetAndroidWireGuardConfig;
+  String get forgetVPNTransportProfile =>
       t.shellTextForgetAndroidWireGuardConfig;
   String get mobileProvidersTitle => t.shellTextMobileProvidersTitle;
   String get mobileProvidersSubtitle => t.shellTextMobileProvidersSubtitle;

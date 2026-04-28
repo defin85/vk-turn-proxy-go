@@ -18,6 +18,7 @@ const (
 	CapabilityPlatformTunnels          Capability = "platform_tunnels"
 	CapabilityProviderRuntimeArtifacts Capability = "provider-runtime-artifacts"
 	CapabilityRuntimeExecutionPlanning Capability = "runtime-execution-planning"
+	CapabilityVPNTransportProfileStore Capability = "vpn-transport-profile-store"
 )
 
 type TransportMode string
@@ -121,6 +122,7 @@ const (
 	PlatformTunnelPrerequisiteDNSBypass           PlatformTunnelPrerequisite = "dns_bypass"
 	PlatformTunnelPrerequisiteAppRoutingPolicy    PlatformTunnelPrerequisite = "app_routing_policy"
 	PlatformTunnelPrerequisiteHostImplementation  PlatformTunnelPrerequisite = "host_implementation"
+	PlatformTunnelPrerequisiteTransportProfile    PlatformTunnelPrerequisite = "transport_profile"
 )
 
 type PlatformTunnelStartupStage string
@@ -130,6 +132,7 @@ const (
 	PlatformTunnelStartupStagePermissionAcquire  PlatformTunnelStartupStage = "permission_acquire"
 	PlatformTunnelStartupStageEntitlementAcquire PlatformTunnelStartupStage = "entitlement_acquire"
 	PlatformTunnelStartupStageDriverCheck        PlatformTunnelStartupStage = "driver_check"
+	PlatformTunnelStartupStageProfileValidate    PlatformTunnelStartupStage = "profile_validate"
 	PlatformTunnelStartupStageRouteValidate      PlatformTunnelStartupStage = "route_validate"
 	PlatformTunnelStartupStageHostBringup        PlatformTunnelStartupStage = "host_bringup"
 	PlatformTunnelStartupStageRuntimeAttach      PlatformTunnelStartupStage = "runtime_attach"
@@ -161,11 +164,12 @@ type PlatformTunnelCapability struct {
 }
 
 type HostInfo struct {
-	Version         string                     `json:"version,omitempty"`
-	ContractVersion string                     `json:"contract_version,omitempty"`
-	Build           BuildIdentity              `json:"build"`
-	Capabilities    []Capability               `json:"capabilities"`
-	PlatformTunnels []PlatformTunnelCapability `json:"platform_tunnels,omitempty"`
+	Version               string                           `json:"version,omitempty"`
+	ContractVersion       string                           `json:"contract_version,omitempty"`
+	Build                 BuildIdentity                    `json:"build"`
+	Capabilities          []Capability                     `json:"capabilities"`
+	PlatformTunnels       []PlatformTunnelCapability       `json:"platform_tunnels,omitempty"`
+	TransportProfileStore *TransportProfileStoreCapability `json:"transport_profile_store,omitempty"`
 }
 
 type BuildIdentity struct {
@@ -177,6 +181,130 @@ type BuildIdentity struct {
 	BuiltAt     string `json:"built_at,omitempty"`
 	Role        string `json:"role,omitempty"`
 	Target      string `json:"target,omitempty"`
+}
+
+type TransportProfileKind string
+
+const (
+	TransportProfileKindWireGuardNativeV1 TransportProfileKind = "wireguard_native_v1"
+)
+
+type TransportProfileImportAdapter string
+
+const (
+	TransportProfileImportAdapterWireGuardConf TransportProfileImportAdapter = "wireguard_conf"
+)
+
+type TransportProfileLifecycleAction string
+
+const (
+	TransportProfileLifecycleActionList             TransportProfileLifecycleAction = "list"
+	TransportProfileLifecycleActionImport           TransportProfileLifecycleAction = "import"
+	TransportProfileLifecycleActionReplace          TransportProfileLifecycleAction = "replace"
+	TransportProfileLifecycleActionForget           TransportProfileLifecycleAction = "forget"
+	TransportProfileLifecycleActionValidate         TransportProfileLifecycleAction = "validate"
+	TransportProfileLifecycleActionSelectForStartup TransportProfileLifecycleAction = "select_for_startup"
+)
+
+type TransportProfileValidationState string
+
+const (
+	TransportProfileValidationStateValid   TransportProfileValidationState = "valid"
+	TransportProfileValidationStateInvalid TransportProfileValidationState = "invalid"
+)
+
+type TransportProfileCompatibilityState string
+
+const (
+	TransportProfileCompatibilityStateUnknown      TransportProfileCompatibilityState = "unknown"
+	TransportProfileCompatibilityStateCompatible   TransportProfileCompatibilityState = "compatible"
+	TransportProfileCompatibilityStateIncompatible TransportProfileCompatibilityState = "incompatible"
+)
+
+type TransportProfileMaterialSource string
+
+const (
+	TransportProfileMaterialSourceImportAdapter TransportProfileMaterialSource = "import_adapter"
+	TransportProfileMaterialSourceLegacyPath    TransportProfileMaterialSource = "legacy_path"
+)
+
+type TransportProfileSecretMaterialRef struct {
+	Kind TransportProfileMaterialSource `json:"kind"`
+	Ref  string                         `json:"ref"`
+}
+
+type TransportProfileValidationStatus struct {
+	State       TransportProfileValidationState `json:"state"`
+	Message     string                          `json:"message,omitempty"`
+	Fingerprint string                          `json:"fingerprint,omitempty"`
+}
+
+type TransportProfileCompatibilityStatus struct {
+	State                    TransportProfileCompatibilityState `json:"state"`
+	Message                  string                             `json:"message,omitempty"`
+	CompatibleExecutionPlans []RuntimeExecutionPlan             `json:"compatible_execution_plans,omitempty"`
+}
+
+type TransportProfileReference struct {
+	ProfileID      string               `json:"profile_id,omitempty"`
+	Kind           TransportProfileKind `json:"kind,omitempty"`
+	UseDefault     bool                 `json:"use_default,omitempty"`
+	DefaultScopeID string               `json:"default_scope_id,omitempty"`
+}
+
+type TransportProfileDefaultBinding struct {
+	ProfileID   string               `json:"profile_id"`
+	Kind        TransportProfileKind `json:"kind"`
+	HostAdapter RuntimeHostAdapter   `json:"host_adapter"`
+	Plan        RuntimeExecutionPlan `json:"plan"`
+	ScopeID     string               `json:"scope_id"`
+}
+
+type TransportProfileStatus struct {
+	ID                string                              `json:"id"`
+	Kind              TransportProfileKind                `json:"kind"`
+	Version           string                              `json:"version"`
+	DisplayName       string                              `json:"display_name,omitempty"`
+	Validation        TransportProfileValidationStatus    `json:"validation"`
+	Compatibility     TransportProfileCompatibilityStatus `json:"compatibility"`
+	SecretMaterialRef TransportProfileSecretMaterialRef   `json:"secret_material_ref"`
+	Actions           []TransportProfileLifecycleAction   `json:"actions,omitempty"`
+	DefaultFor        []TransportProfileDefaultBinding    `json:"default_for,omitempty"`
+	ImportedAt        time.Time                           `json:"imported_at"`
+	UpdatedAt         time.Time                           `json:"updated_at"`
+}
+
+type TransportProfileImportAdapterDescriptor struct {
+	ID          TransportProfileImportAdapter `json:"id"`
+	ProfileKind TransportProfileKind          `json:"profile_kind"`
+	DisplayName string                        `json:"display_name,omitempty"`
+	Extensions  []string                      `json:"extensions,omitempty"`
+}
+
+type TransportProfileStoreCapability struct {
+	SupportedKinds      []TransportProfileKind                    `json:"supported_kinds,omitempty"`
+	ImportAdapters      []TransportProfileImportAdapterDescriptor `json:"import_adapters,omitempty"`
+	LifecycleActions    []TransportProfileLifecycleAction         `json:"lifecycle_actions,omitempty"`
+	RedactionGuarantees []string                                  `json:"redaction_guarantees,omitempty"`
+}
+
+type TransportProfileImportRequest struct {
+	Adapter          TransportProfileImportAdapter `json:"adapter"`
+	Kind             TransportProfileKind          `json:"kind"`
+	DisplayName      string                        `json:"display_name,omitempty"`
+	Material         string                        `json:"material"`
+	ReplaceProfileID string                        `json:"replace_profile_id,omitempty"`
+	DefaultFor       *RuntimeExecutionPlan         `json:"default_for,omitempty"`
+}
+
+type TransportProfilePrerequisiteStatus struct {
+	RequiredKinds   []TransportProfileKind             `json:"required_kinds,omitempty"`
+	State           TransportProfileCompatibilityState `json:"state,omitempty"`
+	SelectedProfile *TransportProfileReference         `json:"selected_profile,omitempty"`
+	DefaultProfile  *TransportProfileReference         `json:"default_profile,omitempty"`
+	MissingKind     TransportProfileKind               `json:"missing_kind,omitempty"`
+	ImportAdapters  []TransportProfileImportAdapter    `json:"import_adapters,omitempty"`
+	Message         string                             `json:"message,omitempty"`
 }
 
 type NegotiateRequest struct {
@@ -413,6 +541,7 @@ type PlatformTunnelStartRequest struct {
 	RuntimeDefaults          *RuntimeDefaults                       `json:"runtime_defaults,omitempty"`
 	Mode                     PlatformTunnelMode                     `json:"mode"`
 	ExecutionPlan            *RuntimeExecutionPlan                  `json:"execution_plan,omitempty"`
+	TransportProfile         *TransportProfileReference             `json:"transport_profile,omitempty"`
 	ApplicationRoutingPolicy PlatformTunnelApplicationRoutingPolicy `json:"application_routing_policy,omitempty"`
 	UnderlayRoutePolicy      PlatformTunnelUnderlayRoutePolicy      `json:"underlay_route_policy,omitempty"`
 	AllowedPackages          []string                               `json:"allowed_packages,omitempty"`
@@ -430,6 +559,7 @@ type PlatformTunnelStopRequest struct {
 type PlatformTunnelStartResult struct {
 	Mode                    PlatformTunnelMode                `json:"mode"`
 	ExecutionPlan           *RuntimeExecutionPlan             `json:"execution_plan,omitempty"`
+	TransportProfile        *TransportProfileReference        `json:"transport_profile,omitempty"`
 	Ready                   bool                              `json:"ready"`
 	SessionID               string                            `json:"session_id,omitempty"`
 	Stage                   PlatformTunnelStartupStage        `json:"stage,omitempty"`

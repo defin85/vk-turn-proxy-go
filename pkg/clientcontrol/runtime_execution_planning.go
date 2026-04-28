@@ -57,12 +57,14 @@ type RuntimeExecutionPlan struct {
 }
 
 type RuntimeExecutionPlanDescriptor struct {
-	Plan                 RuntimeExecutionPlan             `json:"plan"`
-	SupportState         RuntimeExecutionPlanSupportState `json:"support_state"`
-	RemoteEndpointFamily RuntimeRemoteEndpointFamily      `json:"remote_endpoint_family"`
-	Default              bool                             `json:"default,omitempty"`
-	RequiresCapability   Capability                       `json:"requires_capability,omitempty"`
-	Message              string                           `json:"message,omitempty"`
+	Plan                          RuntimeExecutionPlan                `json:"plan"`
+	SupportState                  RuntimeExecutionPlanSupportState    `json:"support_state"`
+	RemoteEndpointFamily          RuntimeRemoteEndpointFamily         `json:"remote_endpoint_family"`
+	Default                       bool                                `json:"default,omitempty"`
+	RequiresCapability            Capability                          `json:"requires_capability,omitempty"`
+	RequiredTransportProfileKinds []TransportProfileKind              `json:"required_transport_profile_kinds,omitempty"`
+	TransportProfile              *TransportProfilePrerequisiteStatus `json:"transport_profile,omitempty"`
+	Message                       string                              `json:"message,omitempty"`
 }
 
 func cloneRuntimeExecutionPlan(plan *RuntimeExecutionPlan) *RuntimeExecutionPlan {
@@ -79,7 +81,14 @@ func cloneRuntimeExecutionPlanDescriptors(descriptors []RuntimeExecutionPlanDesc
 	}
 	out := make([]RuntimeExecutionPlanDescriptor, 0, len(descriptors))
 	for _, descriptor := range descriptors {
-		out = append(out, descriptor)
+		clone := descriptor
+		if len(descriptor.RequiredTransportProfileKinds) > 0 {
+			clone.RequiredTransportProfileKinds = append([]TransportProfileKind(nil), descriptor.RequiredTransportProfileKinds...)
+		}
+		if descriptor.TransportProfile != nil {
+			clone.TransportProfile = cloneTransportProfilePrerequisiteStatus(descriptor.TransportProfile)
+		}
+		out = append(out, clone)
 	}
 	return out
 }

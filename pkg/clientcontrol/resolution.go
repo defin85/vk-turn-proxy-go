@@ -317,6 +317,7 @@ func (h *Host) MaterializeResolutionWithPlan(
 				*selectedPlan,
 				secret.Credentials,
 				defaults,
+				nil,
 			)
 			if materializeErr != nil {
 				return Session{}, &ResolutionActionError{

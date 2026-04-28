@@ -71,7 +71,27 @@ void main() {
                   'desktop_sidecar',
                   'platform_tunnels',
                   'runtime-execution-planning',
+                  'vpn-transport-profile-store',
                 ],
+                'transport_profile_store': <String, dynamic>{
+                  'supported_kinds': <String>['wireguard_native_v1'],
+                  'import_adapters': <Map<String, dynamic>>[
+                    <String, dynamic>{
+                      'id': 'wireguard_conf',
+                      'profile_kind': 'wireguard_native_v1',
+                      'display_name': 'WireGuard .conf',
+                      'extensions': <String>['conf'],
+                    },
+                  ],
+                  'lifecycle_actions': <String>[
+                    'list',
+                    'import',
+                    'replace',
+                    'forget',
+                    'validate',
+                    'select_for_startup',
+                  ],
+                },
                 'platform_tunnels': <Map<String, dynamic>>[
                   <String, dynamic>{
                     'mode': 'windows_wintun',
@@ -87,6 +107,17 @@ void main() {
                         'support_state': 'unavailable',
                         'remote_endpoint_family': 'turn_server',
                         'default': true,
+                        'required_transport_profile_kinds': <String>[
+                          'wireguard_native_v1',
+                        ],
+                        'transport_profile': <String, dynamic>{
+                          'required_kinds': <String>['wireguard_native_v1'],
+                          'state': 'incompatible',
+                          'missing_kind': 'wireguard_native_v1',
+                          'import_adapters': <String>['wireguard_conf'],
+                          'message':
+                              'VPN transport profile wireguard_native_v1 is not configured.',
+                        },
                         'message':
                             'packaged host missing tunnel implementation',
                       },
@@ -117,6 +148,10 @@ void main() {
             expect(executionPlan['carrier_family'], 'turn_datagram');
             expect(executionPlan['engine_family'], 'wireguard_native');
             expect(executionPlan['host_adapter'], 'windows_wintun');
+            final transportProfile =
+                payload['transport_profile'] as Map<String, dynamic>;
+            expect(transportProfile['profile_id'], 'transport-profile-1');
+            expect(transportProfile['kind'], 'wireguard_native_v1');
             expect(
               payload['underlay_route_policy'],
               'preserve_active_local_network',
@@ -134,12 +169,47 @@ void main() {
                   'engine_family': 'wireguard_native',
                   'host_adapter': 'windows_wintun',
                 },
+                'transport_profile': <String, dynamic>{
+                  'profile_id': 'transport-profile-1',
+                  'kind': 'wireguard_native_v1',
+                },
                 'ready': false,
-                'stage': 'capability_check',
-                'missing_prerequisite': 'host_implementation',
+                'stage': 'profile_validate',
+                'missing_prerequisite': 'transport_profile',
                 'message': 'packaged host missing tunnel implementation',
               }),
             );
+            await request.response.close();
+            return;
+          case '/v1/transport-profiles':
+            switch (request.method) {
+              case 'GET':
+                request.response.headers.contentType = ContentType.json;
+                request.response.write(
+                  jsonEncode(<Map<String, dynamic>>[
+                    _transportProfileStatusPayload(),
+                  ]),
+                );
+                await request.response.close();
+                return;
+              case 'POST':
+                final payload =
+                    jsonDecode(await utf8.decoder.bind(request).join())
+                        as Map<String, dynamic>;
+                expect(payload['adapter'], 'wireguard_conf');
+                expect(payload['kind'], 'wireguard_native_v1');
+                expect(payload['material'], contains('[Interface]'));
+                request.response.headers.contentType = ContentType.json;
+                request.response.write(
+                  jsonEncode(_transportProfileStatusPayload()),
+                );
+                await request.response.close();
+                return;
+            }
+            break;
+          case '/v1/transport-profiles/transport-profile-1':
+            expect(request.method, 'DELETE');
+            request.response.statusCode = HttpStatus.noContent;
             await request.response.close();
             return;
           case '/v1/platform-tunnels/stop':
@@ -290,6 +360,10 @@ void main() {
       expect(info.build.version, '0.1.0');
       expect(info.capabilities, contains(Capability.desktopSidecar));
       expect(info.capabilities, contains(Capability.runtimeExecutionPlanning));
+      expect(info.capabilities, contains(Capability.vpnTransportProfileStore));
+      expect(info.transportProfileStore?.supportedKinds, <TransportProfileKind>[
+        TransportProfileKind.wireGuardNativeV1,
+      ]);
       expect(info.platformTunnels, hasLength(1));
       expect(
         info.platformTunnels.single.mode,
@@ -308,6 +382,40 @@ void main() {
         info.platformTunnels.single.executionPlans.single.supportState,
         RuntimeExecutionPlanSupportState.unavailable,
       );
+      expect(
+        info
+            .platformTunnels
+            .single
+            .executionPlans
+            .single
+            .requiredTransportProfileKinds,
+        <TransportProfileKind>[TransportProfileKind.wireGuardNativeV1],
+      );
+      expect(
+        info
+            .platformTunnels
+            .single
+            .executionPlans
+            .single
+            .transportProfile
+            ?.missingKind,
+        TransportProfileKind.wireGuardNativeV1,
+      );
+
+      final profiles = await client.transportProfiles();
+      expect(profiles.single.id, 'transport-profile-1');
+      expect(profiles.single.secretMaterialRef.ref, startsWith('host-owned:'));
+
+      final imported = await client.importTransportProfile(
+        const TransportProfileImportRequest(
+          adapter: TransportProfileImportAdapter.wireGuardConf,
+          kind: TransportProfileKind.wireGuardNativeV1,
+          material: '[Interface]\nPrivateKey = redacted\n',
+        ),
+      );
+      expect(imported.kind, TransportProfileKind.wireGuardNativeV1);
+
+      await client.forgetTransportProfile('transport-profile-1');
 
       final startResult = await client.startPlatformTunnel(
         mode: PlatformTunnelMode.windowsWintun,
@@ -324,11 +432,20 @@ void main() {
           engineFamily: RuntimeEngineFamily.wireguardNative,
           hostAdapter: RuntimeHostAdapter.windowsWintun,
         ),
+        transportProfile: const TransportProfileReference(
+          profileId: 'transport-profile-1',
+          kind: TransportProfileKind.wireGuardNativeV1,
+        ),
         underlayRoutePolicy:
             PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork,
       );
       expect(startResult.ready, isFalse);
-      expect(startResult.stage, PlatformTunnelStartupStage.capabilityCheck);
+      expect(startResult.stage, PlatformTunnelStartupStage.profileValidate);
+      expect(
+        startResult.missingPrerequisite,
+        PlatformTunnelPrerequisite.transportProfile,
+      );
+      expect(startResult.transportProfile?.profileId, 'transport-profile-1');
       expect(
         startResult.executionPlan?.engineFamily,
         RuntimeEngineFamily.wireguardNative,
@@ -1004,4 +1121,35 @@ void main() {
       expect(startResult.startupAttemptId, isEmpty);
     },
   );
+}
+
+Map<String, dynamic> _transportProfileStatusPayload() {
+  return <String, dynamic>{
+    'id': 'transport-profile-1',
+    'kind': 'wireguard_native_v1',
+    'version': '1',
+    'display_name': 'WireGuard',
+    'validation': <String, dynamic>{
+      'state': 'valid',
+      'fingerprint': 'sha256:testprofile',
+    },
+    'compatibility': <String, dynamic>{
+      'state': 'compatible',
+      'compatible_execution_plans': <Map<String, dynamic>>[
+        <String, dynamic>{
+          'access_method': 'turn_credentials',
+          'carrier_family': 'turn_datagram',
+          'engine_family': 'wireguard_native',
+          'host_adapter': 'windows_wintun',
+        },
+      ],
+    },
+    'secret_material_ref': <String, dynamic>{
+      'kind': 'import_adapter',
+      'ref': 'host-owned:transport-profile-1',
+    },
+    'actions': <String>['replace', 'forget', 'validate', 'select_for_startup'],
+    'imported_at': DateTime.utc(2026, 4, 28, 12).toIso8601String(),
+    'updated_at': DateTime.utc(2026, 4, 28, 12).toIso8601String(),
+  };
 }

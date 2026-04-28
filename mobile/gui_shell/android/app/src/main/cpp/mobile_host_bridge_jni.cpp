@@ -14,6 +14,7 @@ using free_string_fn = void (*)(char *);
 using register_platform_tunnel_bridge_fn = void (*)(void *, void *);
 using clear_platform_tunnel_bridge_fn = void (*)(void *);
 using set_android_wireguard_profile_path_fn = void (*)(const char *);
+using set_transport_profile_store_path_fn = void (*)(const char *);
 
 struct HostLibrary {
     void *handle = nullptr;
@@ -24,6 +25,7 @@ struct HostLibrary {
     register_platform_tunnel_bridge_fn register_platform_tunnel_bridge = nullptr;
     clear_platform_tunnel_bridge_fn clear_platform_tunnel_bridge = nullptr;
     set_android_wireguard_profile_path_fn set_android_wireguard_profile_path = nullptr;
+    set_transport_profile_store_path_fn set_transport_profile_store_path = nullptr;
     std::string load_error;
 };
 
@@ -54,6 +56,9 @@ HostLibrary loadHostLibrary() {
     library.set_android_wireguard_profile_path =
         reinterpret_cast<set_android_wireguard_profile_path_fn>(
             dlsym(library.handle, "AndroidEmbeddedHostSetAndroidWireGuardProfilePath"));
+    library.set_transport_profile_store_path =
+        reinterpret_cast<set_transport_profile_store_path_fn>(
+            dlsym(library.handle, "AndroidEmbeddedHostSetTransportProfileStorePath"));
 
     if (library.ensure_started == nullptr || library.last_error == nullptr ||
         library.stop == nullptr || library.free_string == nullptr) {
@@ -152,6 +157,23 @@ Java_com_defin85_relaydock_EmbeddedMobileHostNative_setAndroidWireGuardProfilePa
     }
     const char *utf = value == nullptr ? nullptr : env->GetStringUTFChars(value, nullptr);
     library.set_android_wireguard_profile_path(utf);
+    if (utf != nullptr) {
+        env->ReleaseStringUTFChars(value, utf);
+    }
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_defin85_relaydock_EmbeddedMobileHostNative_setTransportProfileStorePath(
+    JNIEnv *env,
+    jclass /*clazz*/,
+    jstring value
+) {
+    HostLibrary &library = hostLibrary();
+    if (library.set_transport_profile_store_path == nullptr) {
+        return;
+    }
+    const char *utf = value == nullptr ? nullptr : env->GetStringUTFChars(value, nullptr);
+    library.set_transport_profile_store_path(utf);
     if (utf != nullptr) {
         env->ReleaseStringUTFChars(value, utf);
     }

@@ -113,6 +113,10 @@ void main() {
         api.negotiateCalls.single,
         contains(Capability.runtimeExecutionPlanning),
       );
+      expect(
+        api.negotiateCalls.single,
+        contains(Capability.vpnTransportProfileStore),
+      );
     },
   );
 
@@ -750,6 +754,7 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
       Capability.providerConfigs,
       Capability.providerRuntimeArtifacts,
       Capability.runtimeExecutionPlanning,
+      Capability.vpnTransportProfileStore,
       Capability.sessions,
       Capability.challenges,
       Capability.diagnostics,
@@ -763,6 +768,17 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
         message: 'native bridge does not implement tunnel startup yet',
       ),
     ],
+    transportProfileStore: TransportProfileStoreCapability(
+      supportedKinds: <TransportProfileKind>[
+        TransportProfileKind.wireGuardNativeV1,
+      ],
+      importAdapters: <TransportProfileImportAdapterDescriptor>[
+        TransportProfileImportAdapterDescriptor(
+          id: TransportProfileImportAdapter.wireGuardConf,
+          profileKind: TransportProfileKind.wireGuardNativeV1,
+        ),
+      ],
+    ),
   );
 
   final List<List<Capability>> negotiateCalls = <List<Capability>>[];
@@ -798,6 +814,20 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
 
   @override
   Future<void> deleteProviderConfig(String configId) async {}
+
+  @override
+  Future<List<TransportProfileStatus>> transportProfiles() async =>
+      const <TransportProfileStatus>[];
+
+  @override
+  Future<TransportProfileStatus> importTransportProfile(
+    TransportProfileImportRequest request,
+  ) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> forgetTransportProfile(String profileId) async {}
 
   @override
   Future<ResolutionRecord> cancelResolution(String resolutionId) {
@@ -838,6 +868,7 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
     String? resolutionId,
     RuntimeDefaults? runtimeDefaults,
     RuntimeExecutionPlan? executionPlan,
+    TransportProfileReference? transportProfile,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
     List<String> allowedPackages = const <String>[],

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -18,17 +19,20 @@ import (
 type Option func(*config)
 
 type config struct {
-	listenAddr               string
-	logger                   *slog.Logger
-	hostFactory              func(*slog.Logger) *clientcontrol.Host
-	platformTunnelController platformTunnelController
+	listenAddr                string
+	logger                    *slog.Logger
+	hostFactory               func(*slog.Logger) *clientcontrol.Host
+	platformTunnelController  platformTunnelController
+	transportProfileStorePath string
 }
 
 type Manager struct {
-	mu          sync.Mutex
-	listenAddr  string
-	logger      *slog.Logger
-	hostFactory func(*slog.Logger) *clientcontrol.Host
+	mu                        sync.Mutex
+	listenAddr                string
+	logger                    *slog.Logger
+	hostFactory               func(*slog.Logger) *clientcontrol.Host
+	controller                platformTunnelController
+	transportProfileStorePath string
 
 	host     *clientcontrol.Host
 	server   *http.Server
@@ -54,14 +58,12 @@ func New(opts ...Option) *Manager {
 			slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}),
 		)
 	}
-	if cfg.hostFactory == nil {
-		cfg.hostFactory = newHostFactory(cfg.platformTunnelController)
-	}
-
 	return &Manager{
-		listenAddr:  cfg.listenAddr,
-		logger:      cfg.logger,
-		hostFactory: cfg.hostFactory,
+		listenAddr:                cfg.listenAddr,
+		logger:                    cfg.logger,
+		hostFactory:               cfg.hostFactory,
+		controller:                cfg.platformTunnelController,
+		transportProfileStorePath: strings.TrimSpace(cfg.transportProfileStorePath),
 	}
 }
 
@@ -80,6 +82,12 @@ func WithLogger(logger *slog.Logger) Option {
 func WithHostFactory(factory func(*slog.Logger) *clientcontrol.Host) Option {
 	return func(cfg *config) {
 		cfg.hostFactory = factory
+	}
+}
+
+func WithTransportProfileStorePath(path string) Option {
+	return func(cfg *config) {
+		cfg.transportProfileStorePath = strings.TrimSpace(path)
 	}
 }
 
@@ -109,7 +117,11 @@ func (m *Manager) EnsureStarted() (string, error) {
 		m.mu.Unlock()
 		return "", err
 	}
-	host := m.hostFactory(m.logger)
+	hostFactory := m.hostFactory
+	if hostFactory == nil {
+		hostFactory = newHostFactory(m.controller, m.transportProfileStorePath)
+	}
+	host := hostFactory(m.logger)
 	server := &http.Server{
 		Handler: clientcontrol.Handler(host),
 		BaseContext: func(net.Listener) context.Context {
@@ -139,6 +151,12 @@ func (m *Manager) EnsureStarted() (string, error) {
 	}()
 
 	return baseURL, nil
+}
+
+func (m *Manager) SetTransportProfileStorePath(path string) {
+	m.mu.Lock()
+	m.transportProfileStorePath = strings.TrimSpace(path)
+	m.mu.Unlock()
 }
 
 func (m *Manager) Stop() error {
@@ -182,7 +200,10 @@ func currentBuildIdentity() clientcontrol.BuildIdentity {
 	}
 }
 
-func newHostFactory(controller platformTunnelController) func(*slog.Logger) *clientcontrol.Host {
+func newHostFactory(
+	controller platformTunnelController,
+	transportProfileStorePath string,
+) func(*slog.Logger) *clientcontrol.Host {
 	return func(logger *slog.Logger) *clientcontrol.Host {
 		materializer := defaultAndroidWireGuardTurnMaterializer()
 		opts := []clientcontrol.Option{
@@ -192,6 +213,11 @@ func newHostFactory(controller platformTunnelController) func(*slog.Logger) *cli
 			clientcontrol.WithInteractiveChallengeMetadataResolver(
 				mobileChallengeMetadata,
 			),
+		}
+		if strings.TrimSpace(transportProfileStorePath) != "" {
+			opts = append(opts, clientcontrol.WithVPNTransportProfileStorePath(transportProfileStorePath))
+		} else {
+			opts = append(opts, clientcontrol.WithVPNTransportProfileStore())
 		}
 		if materializer != nil {
 			opts = append(opts, clientcontrol.WithWireGuardTurnMaterializer(materializer))
@@ -207,6 +233,7 @@ func newHostFactory(controller platformTunnelController) func(*slog.Logger) *cli
 			)
 		}
 		host := clientcontrol.New(opts...)
+		migrateLegacyAndroidWireGuardProfile(logger, host)
 		if androidController, ok := controller.(*androidVPNServiceController); ok {
 			androidController.setWireGuardTurnLeaseProvider(
 				func(
@@ -223,15 +250,39 @@ func newHostFactory(controller platformTunnelController) func(*slog.Logger) *cli
 					if req.RuntimeDefaults == nil {
 						return nil, fmt.Errorf("android platform tunnel startup requires runtime_defaults")
 					}
-					return host.MaterializeWireGuardTurnExecutionLease(
+					return host.MaterializeWireGuardTurnExecutionLeaseForProfile(
 						ctx,
 						req.ResolutionID,
 						*req.RuntimeDefaults,
 						plan,
+						req.TransportProfile,
 					)
 				},
 			)
 		}
 		return host
+	}
+}
+
+func migrateLegacyAndroidWireGuardProfile(logger *slog.Logger, host *clientcontrol.Host) {
+	if host == nil {
+		return
+	}
+	legacyPath, ok := detectAndroidWireGuardProfilePath()
+	if !ok {
+		return
+	}
+	if _, migrated, err := host.MigrateWireGuardTransportProfileFromPath(legacyPath); err != nil {
+		if logger != nil {
+			logger.Warn("legacy Android WireGuard profile migration failed", "error", err)
+		}
+	} else if migrated {
+		if err := os.Remove(legacyPath); err != nil && !os.IsNotExist(err) {
+			if logger != nil {
+				logger.Warn("legacy Android WireGuard profile cleanup failed", "error", err)
+			}
+			return
+		}
+		SetAndroidWireGuardProfilePath("")
 	}
 }

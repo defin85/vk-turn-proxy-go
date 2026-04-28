@@ -19,7 +19,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 typedef DirectoryProvider = Future<Directory> Function();
 typedef IDFactory = String Function();
-typedef AndroidWireGuardProfileContentPicker = Future<String?> Function();
+typedef VPNTransportProfileContentPicker = Future<String?> Function();
 
 enum ShellStatus { booting, ready, blocked }
 
@@ -49,11 +49,11 @@ class ExternalBrowserLauncher implements BrowserLauncher {
   }
 }
 
-Future<String?> _pickAndroidWireGuardProfileContents() async {
+Future<String?> _pickVPNTransportProfileContents() async {
   final file = await openFile(
     acceptedTypeGroups: const <XTypeGroup>[
       XTypeGroup(
-        label: 'WireGuard configuration',
+        label: 'WireGuard VPN transport profile',
         extensions: <String>['conf'],
       ),
     ],
@@ -73,8 +73,7 @@ class MobileShellController extends ChangeNotifier {
     MobilePortableProfileTransferAdapter? portableProfileTransferAdapter,
     MobilePlatformAppInventory? appInventory,
     MobileOwnedBrowserSessionStateResetter? ownedBrowserSessionStateResetter,
-    AndroidWireGuardProfileManager? androidWireGuardProfileManager,
-    AndroidWireGuardProfileContentPicker? androidWireGuardProfileContentPicker,
+    VPNTransportProfileContentPicker? transportProfileContentPicker,
     DirectoryProvider? diagnosticsDirectoryProvider,
     DateTime Function()? clock,
     IDFactory? idFactory,
@@ -89,12 +88,8 @@ class MobileShellController extends ChangeNotifier {
        _ownedBrowserSessionStateResetter =
            ownedBrowserSessionStateResetter ??
            const PlatformMobileOwnedBrowserSessionStateResetter(),
-       _androidWireGuardProfileManager =
-           androidWireGuardProfileManager ??
-           const PlatformAndroidWireGuardProfileManager(),
-       _androidWireGuardProfileContentPicker =
-           androidWireGuardProfileContentPicker ??
-           _pickAndroidWireGuardProfileContents,
+       _transportProfileContentPicker =
+           transportProfileContentPicker ?? _pickVPNTransportProfileContents,
        _diagnosticsDirectoryProvider =
            diagnosticsDirectoryProvider ?? defaultDiagnosticsDirectory,
        _clock = clock ?? DateTime.now,
@@ -112,9 +107,7 @@ class MobileShellController extends ChangeNotifier {
   final MobilePlatformAppInventory _appInventory;
   final MobileOwnedBrowserSessionStateResetter
   _ownedBrowserSessionStateResetter;
-  final AndroidWireGuardProfileManager _androidWireGuardProfileManager;
-  final AndroidWireGuardProfileContentPicker
-  _androidWireGuardProfileContentPicker;
+  final VPNTransportProfileContentPicker _transportProfileContentPicker;
   final DirectoryProvider _diagnosticsDirectoryProvider;
   final DateTime Function() _clock;
   final IDFactory _idFactory;
@@ -134,6 +127,8 @@ class MobileShellController extends ChangeNotifier {
   List<ResolutionRecord> resolutions = const <ResolutionRecord>[];
   List<SessionRecord> sessions = const <SessionRecord>[];
   List<EventRecord> events = const <EventRecord>[];
+  List<TransportProfileStatus> transportProfiles =
+      const <TransportProfileStatus>[];
   ProfileDraft draft = ProfileDraft.defaults();
   ManagedProviderDraft managedProviderDraft = ManagedProviderDraft.defaults();
   ProviderTemplateDraft providerTemplateDraft =
@@ -150,8 +145,6 @@ class MobileShellController extends ChangeNotifier {
       <String, ProfileProviderBinding>{};
   Map<String, MobilePlatformModePreferences> platformModePreferences =
       <String, MobilePlatformModePreferences>{};
-  AndroidWireGuardProfileStatus androidWireGuardProfileStatus =
-      const AndroidWireGuardProfileStatus.unavailable();
   List<MobilePlatformApp> installedApps = const <MobilePlatformApp>[];
   bool loadingInstalledApps = false;
   String? installedAppsError;
@@ -188,6 +181,7 @@ class MobileShellController extends ChangeNotifier {
     Capability.profiles,
     Capability.providerRuntimeArtifacts,
     Capability.runtimeExecutionPlanning,
+    Capability.vpnTransportProfileStore,
     Capability.sessions,
     Capability.challenges,
     Capability.diagnostics,
@@ -291,28 +285,91 @@ class MobileShellController extends ChangeNotifier {
   RuntimeExecutionPlan? get activeExecutionPlan =>
       activePlatformModePreferences.executionPlan;
 
-  bool get activeModeRequiresAndroidWireGuardProfile {
+  bool get activeModeRequiresVPNTransportProfile {
     final mode = activePlatformTunnelMode;
     if (mode == null) {
       return false;
     }
-    return _modeRequiresAndroidWireGuardProfile(mode);
+    return _transportProfilePrerequisiteForMode(mode) != null;
   }
 
-  bool get canConfigureAndroidWireGuardProfile {
-    return androidWireGuardProfileStatus.platformAvailable &&
-        activeModeRequiresAndroidWireGuardProfile;
+  bool get canConfigureVPNTransportProfile {
+    return _hostSupportsTransportProfileStore &&
+        activeModeRequiresVPNTransportProfile &&
+        _activeTransportProfileImportAdapter() != null;
+  }
+
+  bool get activeVPNTransportProfileConfigured {
+    return activeVPNTransportProfileStatus != null;
+  }
+
+  String? get activeVPNTransportProfileStatusSummary {
+    final prerequisite = activeTransportProfilePrerequisite;
+    if (prerequisite == null) {
+      return null;
+    }
+    final profile = activeVPNTransportProfileStatus;
+    if (profile == null) {
+      return _copy.vpnTransportProfileStatusNotConfigured;
+    }
+    final kindLabel = _transportProfileKindLabel(profile.kind);
+    if (profile.validation.state == TransportProfileValidationState.invalid) {
+      return _copy.vpnTransportProfileStatusInvalid(kindLabel);
+    }
+    if (profile.compatibility.state ==
+            TransportProfileCompatibilityState.incompatible ||
+        prerequisite.state == TransportProfileCompatibilityState.incompatible) {
+      return _copy.vpnTransportProfileStatusIncompatible(kindLabel);
+    }
+    return _copy.vpnTransportProfileStatusConfigured(kindLabel);
+  }
+
+  TransportProfileStatus? get activeVPNTransportProfileStatus {
+    final prerequisite = activeTransportProfilePrerequisite;
+    final profileId =
+        prerequisite?.selectedProfile?.profileId.trim().isNotEmpty == true
+        ? prerequisite!.selectedProfile!.profileId.trim()
+        : prerequisite?.defaultProfile?.profileId.trim();
+    if (profileId != null && profileId.isNotEmpty) {
+      return _transportProfileById(profileId);
+    }
+    final requiredKinds = prerequisite?.requiredKinds;
+    if (requiredKinds == null || requiredKinds.isEmpty) {
+      return null;
+    }
+    for (final profile in transportProfiles) {
+      if (requiredKinds.contains(profile.kind)) {
+        return profile;
+      }
+    }
+    return null;
+  }
+
+  TransportProfilePrerequisiteStatus? get activeTransportProfilePrerequisite {
+    final mode = activePlatformTunnelMode;
+    if (mode == null) {
+      return null;
+    }
+    return _transportProfilePrerequisiteForMode(mode);
   }
 
   String? platformTunnelStartPreparationBlockReason(PlatformTunnelMode mode) {
     final executionPlan = _resolvedExecutionPlanForMode(mode);
     if (executionPlan == null) {
+      final transportProfileBlockReason = _transportProfileBlockReasonForMode(
+        mode,
+      );
+      if (transportProfileBlockReason != null) {
+        return transportProfileBlockReason;
+      }
       return _executionPlanSelectionRequiredMessage(mode);
     }
-    if (_executionPlanRequiresAndroidWireGuardProfile(executionPlan) &&
-        androidWireGuardProfileStatus.platformAvailable &&
-        !androidWireGuardProfileStatus.configured) {
-      return _copy.androidWireGuardProfileRequiredBeforeStarting;
+    final transportProfileBlockReason = _transportProfileBlockReasonForMode(
+      mode,
+      plan: executionPlan,
+    );
+    if (transportProfileBlockReason != null) {
+      return transportProfileBlockReason;
     }
     return null;
   }
@@ -460,7 +517,7 @@ class MobileShellController extends ChangeNotifier {
     }
     return capability.executionPlans
         .where((RuntimeExecutionPlanDescriptor descriptor) {
-          return descriptor.isSelectable;
+          return descriptor.isSelectable || descriptor.isProfileSetupNeeded;
         })
         .toList(growable: false);
   }
@@ -492,33 +549,54 @@ class MobileShellController extends ChangeNotifier {
     });
   }
 
-  Future<void> refreshAndroidWireGuardProfileStatus({
-    bool notify = true,
-  }) async {
-    androidWireGuardProfileStatus = await _androidWireGuardProfileManager
-        .status();
-    if (notify) {
-      _notify();
-    }
-  }
-
-  Future<void> importAndroidWireGuardProfile() async {
-    await _runLocalMutation(() async {
-      final contents = await _androidWireGuardProfileContentPicker();
+  Future<void> importVPNTransportProfile() async {
+    await _runBridgeMutation(() async {
+      final contents = await _transportProfileContentPicker();
       if (contents == null) {
         return;
       }
-      androidWireGuardProfileStatus = await _androidWireGuardProfileManager
-          .configure(contents);
-      notice = _copy.androidWireGuardProfileConfigured;
+      final mode = activePlatformTunnelMode;
+      if (mode == null) {
+        notice = _copy.noMobileTunnelModeSelected;
+        return;
+      }
+      final descriptor = _transportProfileExecutionPlanDescriptorForMode(mode);
+      final prerequisite = descriptor?.transportProfile;
+      final adapter =
+          _activeTransportProfileImportAdapter() ??
+          TransportProfileImportAdapter.wireGuardConf;
+      final kind =
+          prerequisite?.missingKind ??
+          _firstTransportProfileKind(prerequisite?.requiredKinds) ??
+          TransportProfileKind.wireGuardNativeV1;
+      final existing = activeVPNTransportProfileStatus;
+      await bridge.importTransportProfile(
+        TransportProfileImportRequest(
+          adapter: adapter,
+          kind: kind,
+          displayName: _transportProfileKindLabel(kind),
+          material: contents,
+          replaceProfileId: existing?.id ?? '',
+          defaultFor: descriptor?.plan,
+        ),
+      );
+      await _refreshHostInfo();
+      await refresh();
+      notice = _copy.vpnTransportProfileConfigured;
     });
   }
 
-  Future<void> forgetAndroidWireGuardProfile() async {
-    await _runLocalMutation(() async {
-      androidWireGuardProfileStatus = await _androidWireGuardProfileManager
-          .clear();
-      notice = _copy.androidWireGuardProfileCleared;
+  Future<void> forgetVPNTransportProfile() async {
+    await _runBridgeMutation(() async {
+      final profile = activeVPNTransportProfileStatus;
+      if (profile == null) {
+        notice = _copy.vpnTransportProfileRequiredBeforeStarting;
+        return;
+      }
+      await bridge.forgetTransportProfile(profile.id);
+      await _refreshHostInfo();
+      await refresh();
+      notice = _copy.vpnTransportProfileCleared;
     });
   }
 
@@ -563,7 +641,6 @@ class MobileShellController extends ChangeNotifier {
     _startBrowserReturnSignals();
     _startPortableProfileIngress();
     await _restorePersistedState();
-    await refreshAndroidWireGuardProfileStatus(notify: false);
     if (_requiresLocalStateReset) {
       await _connectBridge(localStateBlocked: true);
       return;
@@ -599,6 +676,9 @@ class MobileShellController extends ChangeNotifier {
     }
     try {
       final nextProviders = await bridge.providers();
+      final nextTransportProfiles = _hostSupportsTransportProfileStore
+          ? await bridge.transportProfiles()
+          : const <TransportProfileStatus>[];
       final nextResolutions = _orderedResolutions(await bridge.resolutions());
       final nextSessions = _orderedSessions(await bridge.sessions());
       final nextChallenges = await _loadActiveChallenges(
@@ -608,6 +688,7 @@ class MobileShellController extends ChangeNotifier {
       providerDescriptors = nextProviders;
       managedProviders = _overlayManagedProviders(managedProviders);
       providerTemplates = _overlayProviderTemplates(providerTemplates);
+      transportProfiles = nextTransportProfiles;
       resolutions = nextResolutions;
       draft = _normalizeDraft(draft);
       managedProviderDraft = _normalizeManagedProviderDraft(
@@ -2005,6 +2086,10 @@ class MobileShellController extends ChangeNotifier {
         resolutionId: resolutionId,
         runtimeDefaults: runtimeDefaults,
         executionPlan: executionPlan,
+        transportProfile: _transportProfileReferenceForPlan(
+          mode,
+          executionPlan,
+        ),
         applicationRoutingPolicy: _effectiveRoutingPolicyForMode(
           mode,
           modePreferences,
@@ -2351,6 +2436,7 @@ class MobileShellController extends ChangeNotifier {
       } else {
         await _stopRuntimeMonitoring();
         _challengeCache.clear();
+        transportProfiles = const <TransportProfileStatus>[];
         resolutions = const <ResolutionRecord>[];
         sessions = const <SessionRecord>[];
         selectedResolutionId = null;
@@ -2369,6 +2455,7 @@ class MobileShellController extends ChangeNotifier {
     if (hostConnection?.isReady != true) {
       await _stopRuntimeMonitoring();
       _challengeCache.clear();
+      transportProfiles = const <TransportProfileStatus>[];
       resolutions = const <ResolutionRecord>[];
       sessions = const <SessionRecord>[];
       selectedResolutionId = null;
@@ -2853,24 +2940,6 @@ class MobileShellController extends ChangeNotifier {
     }
   }
 
-  Future<void> _runLocalMutation(Future<void> Function() action) async {
-    if (_requiresLocalStateReset) {
-      notice = _localStateResetBlockMessage();
-      _notify();
-      return;
-    }
-    busy = true;
-    _notify();
-    try {
-      await action();
-    } catch (error) {
-      notice = '$error';
-    } finally {
-      busy = false;
-      _notify();
-    }
-  }
-
   bool _bridgeShouldFailClosed(ControlPlaneError error) {
     return error.statusCode == 0 ||
         error.incompatibleHost ||
@@ -2892,6 +2961,21 @@ class MobileShellController extends ChangeNotifier {
       info: current.info,
       description: current.description,
     );
+  }
+
+  Future<void> _refreshHostInfo() async {
+    final current = hostConnection;
+    if (current == null || !current.isReady) {
+      return;
+    }
+    final info = await bridge.hostInfo();
+    hostConnection = MobileHostConnectionResult(
+      state: current.state,
+      message: current.message,
+      info: info,
+      description: current.description,
+    );
+    _normalizeSelectedPlatformTunnelMode();
   }
 
   String? _mobileHostEndpointFromMessage(String? message) {
@@ -2916,6 +3000,7 @@ class MobileShellController extends ChangeNotifier {
       description: hostConnection?.description ?? '',
     );
     _clearPlatformTunnelResults();
+    transportProfiles = const <TransportProfileStatus>[];
     resolutions = const <ResolutionRecord>[];
     sessions = const <SessionRecord>[];
     selectedResolutionId = null;
@@ -3506,19 +3591,122 @@ class MobileShellController extends ChangeNotifier {
     return modePreferencesFor(mode).executionPlan;
   }
 
-  bool _modeRequiresAndroidWireGuardProfile(PlatformTunnelMode mode) {
-    return _executionPlanRequiresAndroidWireGuardProfile(
-      _resolvedExecutionPlanForMode(mode),
-    );
+  bool get _hostSupportsTransportProfileStore {
+    final info = hostConnection?.info;
+    if (info == null) {
+      return false;
+    }
+    return info.capabilities.contains(Capability.vpnTransportProfileStore) &&
+        info.transportProfileStore != null;
   }
 
-  bool _executionPlanRequiresAndroidWireGuardProfile(
+  RuntimeExecutionPlanDescriptor?
+  _transportProfileExecutionPlanDescriptorForMode(
+    PlatformTunnelMode mode, {
     RuntimeExecutionPlan? plan,
+  }) {
+    final capability = capabilityForMode(mode);
+    if (capability == null) {
+      return null;
+    }
+    final selectedPlan = plan ?? _resolvedExecutionPlanForMode(mode);
+    if (selectedPlan != null) {
+      for (final descriptor in capability.executionPlans) {
+        if (_sameExecutionPlan(descriptor.plan, selectedPlan) &&
+            descriptor.transportProfile != null) {
+          return descriptor;
+        }
+      }
+    }
+    for (final descriptor in capability.executionPlans) {
+      if (descriptor.transportProfile != null && descriptor.isDefault) {
+        return descriptor;
+      }
+    }
+    for (final descriptor in capability.executionPlans) {
+      if (descriptor.transportProfile != null) {
+        return descriptor;
+      }
+    }
+    return null;
+  }
+
+  TransportProfilePrerequisiteStatus? _transportProfilePrerequisiteForMode(
+    PlatformTunnelMode mode, {
+    RuntimeExecutionPlan? plan,
+  }) {
+    return _transportProfileExecutionPlanDescriptorForMode(
+      mode,
+      plan: plan,
+    )?.transportProfile;
+  }
+
+  String? _transportProfileBlockReasonForMode(
+    PlatformTunnelMode mode, {
+    RuntimeExecutionPlan? plan,
+  }) {
+    final prerequisite = _transportProfilePrerequisiteForMode(mode, plan: plan);
+    if (prerequisite == null || prerequisite.isCompatible) {
+      return null;
+    }
+    final hostMessage = prerequisite.message.trim();
+    if (hostMessage.isNotEmpty &&
+        prerequisite.missingKind != null &&
+        !_hostSupportsTransportProfileStore) {
+      return hostMessage;
+    }
+    return _copy.vpnTransportProfileRequiredBeforeStarting;
+  }
+
+  TransportProfileImportAdapter? _activeTransportProfileImportAdapter() {
+    final prerequisite = activeTransportProfilePrerequisite;
+    if (prerequisite != null && prerequisite.importAdapters.isNotEmpty) {
+      return prerequisite.importAdapters.first;
+    }
+    final capability = hostConnection?.info?.transportProfileStore;
+    if (capability == null || capability.importAdapters.isEmpty) {
+      return null;
+    }
+    return capability.importAdapters.first.id;
+  }
+
+  TransportProfileReference? _transportProfileReferenceForPlan(
+    PlatformTunnelMode mode,
+    RuntimeExecutionPlan plan,
   ) {
-    return plan != null &&
-        plan.hostAdapter == RuntimeHostAdapter.androidVpnService &&
-        plan.carrierFamily == RuntimeCarrierFamily.turnDatagram &&
-        plan.engineFamily == RuntimeEngineFamily.wireguardNative;
+    final prerequisite = _transportProfilePrerequisiteForMode(mode, plan: plan);
+    if (prerequisite == null || !prerequisite.isCompatible) {
+      return null;
+    }
+    return prerequisite.selectedProfile ?? prerequisite.defaultProfile;
+  }
+
+  TransportProfileStatus? _transportProfileById(String rawProfileId) {
+    final profileId = rawProfileId.trim();
+    if (profileId.isEmpty) {
+      return null;
+    }
+    for (final profile in transportProfiles) {
+      if (profile.id == profileId) {
+        return profile;
+      }
+    }
+    return null;
+  }
+
+  TransportProfileKind? _firstTransportProfileKind(
+    List<TransportProfileKind>? kinds,
+  ) {
+    if (kinds == null || kinds.isEmpty) {
+      return null;
+    }
+    return kinds.first;
+  }
+
+  String _transportProfileKindLabel(TransportProfileKind kind) {
+    return switch (kind) {
+      TransportProfileKind.wireGuardNativeV1 => 'WireGuard',
+    };
   }
 
   String? _platformTunnelRuntimeDefaultsBlockReason({

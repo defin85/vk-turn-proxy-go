@@ -15,10 +15,11 @@ const WireGuardTurnRemoteEndpointRoleDatagramTermination = "wireguard_turn_datag
 var errWireGuardTurnCarrierLeaseInvalid = errors.New("strict TURN datagram WireGuard carrier lease is invalid")
 
 type WireGuardTurnMaterializeRequest struct {
-	ResolutionID string
-	Descriptor   RuntimeExecutionPlanDescriptor
-	Credentials  provider.Credentials
-	Defaults     RuntimeDefaults
+	ResolutionID     string
+	Descriptor       RuntimeExecutionPlanDescriptor
+	Credentials      provider.Credentials
+	Defaults         RuntimeDefaults
+	TransportProfile *TransportProfileReference
 }
 
 type WireGuardTurnExecutionLease struct {
@@ -89,9 +90,10 @@ func applyWireGuardTurnCarrierAvailability(
 	capabilities []PlatformTunnelCapability,
 	build BuildIdentity,
 	materializer WireGuardTurnMaterializer,
+	profileStoreEnabled bool,
 ) []PlatformTunnelCapability {
 	snapshot := clonePlatformTunnelCapabilities(capabilities)
-	if materializer != nil {
+	if materializer != nil || profileStoreEnabled {
 		return snapshot
 	}
 
@@ -193,7 +195,25 @@ func (h *Host) materializeWireGuardTurnLease(
 	descriptor RuntimeExecutionPlanDescriptor,
 	credentials provider.Credentials,
 	defaults RuntimeDefaults,
+	transportProfile *TransportProfileReference,
 ) (*WireGuardTurnExecutionLease, error) {
+	if h.transportProfileStoreEnabled {
+		lease, err := h.materializeWireGuardTurnLeaseFromTransportProfile(
+			resolutionID,
+			descriptor,
+			credentials,
+			defaults,
+			transportProfile,
+		)
+		if err == nil {
+			return lease, nil
+		}
+		return nil, fmt.Errorf(
+			"%w: strict TURN datagram WireGuard carrier materialization failed: %v",
+			errRuntimeExecutionPlanUnavailable,
+			err,
+		)
+	}
 	if h.wireGuardTurnMaterializer == nil {
 		return nil, fmt.Errorf(
 			"%w: strict TURN datagram WireGuard carrier materializer is not configured on this host",
@@ -202,10 +222,11 @@ func (h *Host) materializeWireGuardTurnLease(
 	}
 
 	request := WireGuardTurnMaterializeRequest{
-		ResolutionID: resolutionID,
-		Descriptor:   descriptor,
-		Credentials:  credentials,
-		Defaults:     defaults,
+		ResolutionID:     resolutionID,
+		Descriptor:       descriptor,
+		Credentials:      credentials,
+		Defaults:         defaults,
+		TransportProfile: cloneTransportProfileReference(transportProfile),
 	}
 	lease, err := h.wireGuardTurnMaterializer(ctx, request)
 	if err != nil {
@@ -226,6 +247,22 @@ func (h *Host) MaterializeWireGuardTurnExecutionLease(
 	resolutionID string,
 	defaults RuntimeDefaults,
 	requestedPlan *RuntimeExecutionPlan,
+) (*WireGuardTurnExecutionLease, error) {
+	return h.MaterializeWireGuardTurnExecutionLeaseForProfile(
+		ctx,
+		resolutionID,
+		defaults,
+		requestedPlan,
+		nil,
+	)
+}
+
+func (h *Host) MaterializeWireGuardTurnExecutionLeaseForProfile(
+	ctx context.Context,
+	resolutionID string,
+	defaults RuntimeDefaults,
+	requestedPlan *RuntimeExecutionPlan,
+	transportProfile *TransportProfileReference,
 ) (*WireGuardTurnExecutionLease, error) {
 	h.mu.Lock()
 	managed, ok := h.resolutions[resolutionID]
@@ -285,6 +322,7 @@ func (h *Host) MaterializeWireGuardTurnExecutionLease(
 		*selectedPlan,
 		secret.Credentials,
 		defaults,
+		transportProfile,
 	)
 	if err != nil {
 		return nil, &ResolutionActionError{

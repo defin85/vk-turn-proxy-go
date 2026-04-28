@@ -77,6 +77,15 @@ func AndroidEmbeddedHostSetAndroidWireGuardProfilePath(value *C.char) {
 	androidembeddedhost.SetAndroidWireGuardProfilePath(C.GoString(value))
 }
 
+//export AndroidEmbeddedHostSetTransportProfileStorePath
+func AndroidEmbeddedHostSetTransportProfileStorePath(value *C.char) {
+	if value == nil {
+		hostManager.SetTransportProfileStorePath("")
+		return
+	}
+	hostManager.SetTransportProfileStorePath(C.GoString(value))
+}
+
 func setLastError(value string) {
 	stateMu.Lock()
 	lastError = value

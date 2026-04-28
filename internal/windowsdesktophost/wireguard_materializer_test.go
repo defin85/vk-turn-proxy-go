@@ -87,3 +87,33 @@ func TestDefaultWindowsWireGuardTurnMaterializerLoadsValidatedProfile(t *testing
 		t.Fatalf("lease.AllowedIPs len = %d, want 2", len(lease.AllowedIPs))
 	}
 }
+
+func TestWindowsWireGuardEnvPathDoesNotAdvertiseTransportProfileStore(t *testing.T) {
+	profilePath := filepath.Join(t.TempDir(), "desktop1-windows.conf")
+	profileContents := strings.Join([]string{
+		"[Interface]",
+		"PrivateKey = client-private-key",
+		"Address = 10.10.0.2/32",
+		"",
+		"[Peer]",
+		"PublicKey = peer-public-key",
+		"AllowedIPs = 0.0.0.0/0",
+		"Endpoint = relay.example.test:3478",
+		"",
+	}, "\n")
+	if err := os.WriteFile(profilePath, []byte(profileContents), 0o600); err != nil {
+		t.Fatalf("write profile: %v", err)
+	}
+	t.Setenv(windowsWireGuardProfileEnv, profilePath)
+
+	host := NewClientControlHost(nil)
+	info := host.Info()
+	for _, capability := range info.Capabilities {
+		if capability == clientcontrol.CapabilityVPNTransportProfileStore {
+			t.Fatalf("capabilities = %v, want env WireGuard path to stay outside product profile-store support", info.Capabilities)
+		}
+	}
+	if info.TransportProfileStore != nil {
+		t.Fatalf("transport_profile_store = %+v, want nil for env/default WireGuard path materializer", info.TransportProfileStore)
+	}
+}

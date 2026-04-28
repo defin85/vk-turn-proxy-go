@@ -5,8 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -51,11 +54,21 @@ func TestManagerReportsSupportedAndroidVPNServiceCapabilityFromController(t *tes
 	if len(capability.ExecutionPlans) != 1 {
 		t.Fatalf("platform_tunnels[0].execution_plans len = %d, want 1", len(capability.ExecutionPlans))
 	}
-	if capability.ExecutionPlans[0].SupportState != clientcontrol.RuntimeExecutionPlanSupportStateSupported {
+	if capability.ExecutionPlans[0].SupportState != clientcontrol.RuntimeExecutionPlanSupportStateUnavailable {
 		t.Fatalf(
 			"platform_tunnels[0].execution_plans[0].support_state = %q, want %q",
 			capability.ExecutionPlans[0].SupportState,
-			clientcontrol.RuntimeExecutionPlanSupportStateSupported,
+			clientcontrol.RuntimeExecutionPlanSupportStateUnavailable,
+		)
+	}
+	if capability.ExecutionPlans[0].TransportProfile == nil {
+		t.Fatal("platform_tunnels[0].execution_plans[0].transport_profile = nil, want missing profile status")
+	}
+	if capability.ExecutionPlans[0].TransportProfile.MissingKind != clientcontrol.TransportProfileKindWireGuardNativeV1 {
+		t.Fatalf(
+			"transport_profile.missing_kind = %q, want %q",
+			capability.ExecutionPlans[0].TransportProfile.MissingKind,
+			clientcontrol.TransportProfileKindWireGuardNativeV1,
 		)
 	}
 	if capability.ExecutionPlans[0].Plan.HostAdapter != clientcontrol.RuntimeHostAdapterAndroidVPNService {
@@ -84,6 +97,136 @@ func TestManagerReportsSupportedAndroidVPNServiceCapabilityFromController(t *tes
 	}
 }
 
+func TestManagerPersistsTransportProfileStoreAcrossRestarts(t *testing.T) {
+	t.Parallel()
+
+	storePath := filepath.Join(t.TempDir(), "no-backup", "vpn-transport-profiles", "store.json")
+	manager := New(
+		WithTransportProfileStorePath(storePath),
+		withPlatformTunnelController(newAndroidVPNServiceController(
+			supportedAndroidVPNServiceCapability(""),
+			&fakeAndroidVPNServiceLifecycle{},
+		)),
+	)
+	baseURL := ensureStartedManager(t, manager)
+	status := importAndroidWireGuardTransportProfile(t, baseURL)
+	if err := manager.Stop(); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+
+	restored := New(
+		WithTransportProfileStorePath(storePath),
+		withPlatformTunnelController(newAndroidVPNServiceController(
+			supportedAndroidVPNServiceCapability(""),
+			&fakeAndroidVPNServiceLifecycle{},
+		)),
+	)
+	restoredURL := ensureStartedManager(t, restored)
+	profiles := getAndroidTransportProfiles(t, restoredURL)
+	if len(profiles) != 1 || profiles[0].ID != status.ID {
+		t.Fatalf("restored transport profiles = %+v, want %s", profiles, status.ID)
+	}
+	body, err := json.Marshal(profiles)
+	if err != nil {
+		t.Fatalf("Marshal(profiles) error = %v", err)
+	}
+	if strings.Contains(string(body), "client-private-key") {
+		t.Fatalf("ordinary profile read leaked private key: %s", body)
+	}
+	if strings.Contains(string(body), storePath) {
+		t.Fatalf("ordinary profile read leaked store path: %s", body)
+	}
+}
+
+func TestManagerMigratesLegacyAndroidWireGuardPathIntoTransportProfileStoreOnce(t *testing.T) {
+	legacyPath := filepath.Join(t.TempDir(), "wireguard", "android-vpn-service.conf")
+	if err := os.MkdirAll(filepath.Dir(legacyPath), 0o700); err != nil {
+		t.Fatalf("MkdirAll(legacy): %v", err)
+	}
+	if err := os.WriteFile(legacyPath, []byte(strings.Join([]string{
+		"[Interface]",
+		"PrivateKey = legacy-client-key",
+		"Address = 10.10.0.2/32",
+		"",
+		"[Peer]",
+		"PublicKey = peer-public-key",
+		"AllowedIPs = 0.0.0.0/0",
+		"Endpoint = relay.example.test:51820",
+		"",
+	}, "\n")), 0o600); err != nil {
+		t.Fatalf("WriteFile(legacy): %v", err)
+	}
+	SetAndroidWireGuardProfilePath(legacyPath)
+	t.Cleanup(func() { SetAndroidWireGuardProfilePath("") })
+
+	storePath := filepath.Join(t.TempDir(), "no-backup", "vpn-transport-profiles", "store.json")
+	manager := New(
+		WithTransportProfileStorePath(storePath),
+		withPlatformTunnelController(newAndroidVPNServiceController(
+			supportedAndroidVPNServiceCapability(""),
+			&fakeAndroidVPNServiceLifecycle{},
+		)),
+	)
+	baseURL := ensureStartedManager(t, manager)
+	profiles := getAndroidTransportProfiles(t, baseURL)
+	if len(profiles) != 1 {
+		t.Fatalf("transport profiles len = %d, want migrated profile", len(profiles))
+	}
+	if profiles[0].SecretMaterialRef.Kind != clientcontrol.TransportProfileMaterialSourceLegacyPath {
+		t.Fatalf("secret material source = %q, want %q", profiles[0].SecretMaterialRef.Kind, clientcontrol.TransportProfileMaterialSourceLegacyPath)
+	}
+	body, err := json.Marshal(profiles)
+	if err != nil {
+		t.Fatalf("Marshal(profiles) error = %v", err)
+	}
+	if strings.Contains(string(body), "legacy-client-key") || strings.Contains(string(body), legacyPath) {
+		t.Fatalf("migrated profile ordinary read leaked legacy material/path: %s", body)
+	}
+	if _, err := os.Stat(legacyPath); !os.IsNotExist(err) {
+		t.Fatalf("legacy profile path stat error = %v, want removed after migration", err)
+	}
+
+	info := getAndroidHostInfo(t, baseURL)
+	plan := info.PlatformTunnels[0].ExecutionPlans[0]
+	if plan.TransportProfile == nil || plan.TransportProfile.SelectedProfile == nil {
+		t.Fatalf("execution plan transport profile = %+v, want migrated selected profile", plan.TransportProfile)
+	}
+	if plan.TransportProfile.SelectedProfile.ProfileID != profiles[0].ID {
+		t.Fatalf("selected profile id = %q, want %q", plan.TransportProfile.SelectedProfile.ProfileID, profiles[0].ID)
+	}
+}
+
+func TestAndroidKotlinUsesNoBackupTransportProfileStorePath(t *testing.T) {
+	t.Parallel()
+
+	sourcePath := filepath.Join(
+		"..",
+		"..",
+		"mobile",
+		"gui_shell",
+		"android",
+		"app",
+		"src",
+		"main",
+		"kotlin",
+		"com",
+		"defin85",
+		"relaydock",
+		"EmbeddedMobileHost.kt",
+	)
+	data, err := os.ReadFile(sourcePath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", sourcePath, err)
+	}
+	source := string(data)
+	if !strings.Contains(source, "context.noBackupFilesDir") {
+		t.Fatalf("EmbeddedMobileHost.kt does not configure transport profile store under noBackupFilesDir")
+	}
+	if strings.Contains(source, "File(context.filesDir, TRANSPORT_PROFILE_STORE_PATH)") {
+		t.Fatalf("EmbeddedMobileHost.kt stores transport profile store under filesDir instead of noBackupFilesDir")
+	}
+}
+
 func TestManagerPlatformTunnelStartPermissionAcquireFailureStaysFailClosed(t *testing.T) {
 	t.Parallel()
 
@@ -95,6 +238,7 @@ func TestManagerPlatformTunnelStartPermissionAcquireFailureStaysFailClosed(t *te
 		lifecycle,
 	)))
 	baseURL := ensureStartedManager(t, manager)
+	importAndroidWireGuardTransportProfile(t, baseURL)
 
 	result := startPlatformTunnel(t, baseURL, clientcontrol.PlatformTunnelStartRequest{
 		Mode: clientcontrol.PlatformTunnelModeAndroidVPNService,
@@ -133,6 +277,7 @@ func TestManagerPlatformTunnelStartReturnsResumablePermissionAttempt(t *testing.
 		lifecycle,
 	)))
 	baseURL := ensureStartedManager(t, manager)
+	importAndroidWireGuardTransportProfile(t, baseURL)
 
 	result := startPlatformTunnel(t, baseURL, clientcontrol.PlatformTunnelStartRequest{
 		Mode: clientcontrol.PlatformTunnelModeAndroidVPNService,
@@ -174,6 +319,7 @@ func TestManagerPlatformTunnelResumeContinuesAfterPermissionGrantAndFailsWithout
 		lifecycle,
 	)))
 	baseURL := ensureStartedManager(t, manager)
+	importAndroidWireGuardTransportProfile(t, baseURL)
 
 	startResult := startPlatformTunnel(t, baseURL, clientcontrol.PlatformTunnelStartRequest{
 		Mode:         clientcontrol.PlatformTunnelModeAndroidVPNService,
@@ -258,6 +404,7 @@ func TestManagerPlatformTunnelStartRouteValidationFailureCleansUp(t *testing.T) 
 				lifecycle,
 			)))
 			baseURL := ensureStartedManager(t, manager)
+			importAndroidWireGuardTransportProfile(t, baseURL)
 
 			result := startPlatformTunnel(t, baseURL, clientcontrol.PlatformTunnelStartRequest{
 				Mode: clientcontrol.PlatformTunnelModeAndroidVPNService,
@@ -310,6 +457,7 @@ func TestManagerPlatformTunnelStartRejectsUnsupportedUnderlayRoutePolicyBeforePe
 		lifecycle,
 	)))
 	baseURL := ensureStartedManager(t, manager)
+	importAndroidWireGuardTransportProfile(t, baseURL)
 
 	result := startPlatformTunnel(t, baseURL, clientcontrol.PlatformTunnelStartRequest{
 		Mode:                clientcontrol.PlatformTunnelModeAndroidVPNService,
@@ -638,6 +786,92 @@ func ensureStartedManager(t *testing.T, manager *Manager) string {
 		}
 	})
 	return baseURL
+}
+
+func importAndroidWireGuardTransportProfile(t *testing.T, baseURL string) clientcontrol.TransportProfileStatus {
+	t.Helper()
+
+	req := clientcontrol.TransportProfileImportRequest{
+		Adapter:     clientcontrol.TransportProfileImportAdapterWireGuardConf,
+		Kind:        clientcontrol.TransportProfileKindWireGuardNativeV1,
+		DisplayName: "Android WireGuard profile",
+		Material: strings.Join([]string{
+			"[Interface]",
+			"PrivateKey = client-private-key",
+			"Address = 10.10.0.2/32",
+			"DNS = 1.1.1.1",
+			"",
+			"[Peer]",
+			"PublicKey = peer-public-key",
+			"AllowedIPs = 0.0.0.0/0",
+			"Endpoint = relay.example.test:51820",
+			"",
+		}, "\n"),
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Post(baseURL+"/v1/transport-profiles", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST /v1/transport-profiles error = %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("POST /v1/transport-profiles status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	var status clientcontrol.TransportProfileStatus
+	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+		t.Fatalf("decode transport profile status: %v", err)
+	}
+	if status.ID == "" {
+		t.Fatal("transport profile id = empty")
+	}
+	return status
+}
+
+func getAndroidHostInfo(t *testing.T, baseURL string) clientcontrol.HostInfo {
+	t.Helper()
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(baseURL + "/v1/host")
+	if err != nil {
+		t.Fatalf("GET /v1/host error = %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("GET /v1/host status = %d, want %d: %s", resp.StatusCode, http.StatusOK, body)
+	}
+	var info clientcontrol.HostInfo
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		t.Fatalf("decode host info: %v", err)
+	}
+	return info
+}
+
+func getAndroidTransportProfiles(t *testing.T, baseURL string) []clientcontrol.TransportProfileStatus {
+	t.Helper()
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(baseURL + "/v1/transport-profiles")
+	if err != nil {
+		t.Fatalf("GET /v1/transport-profiles error = %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("GET /v1/transport-profiles status = %d, want %d: %s", resp.StatusCode, http.StatusOK, body)
+	}
+	var profiles []clientcontrol.TransportProfileStatus
+	if err := json.NewDecoder(resp.Body).Decode(&profiles); err != nil {
+		t.Fatalf("decode transport profiles: %v", err)
+	}
+	return profiles
 }
 
 func startPlatformTunnel(

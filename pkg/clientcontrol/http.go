@@ -76,6 +76,36 @@ func Handler(host *Host) http.Handler {
 			writeMethodNotAllowed(w, r.Method)
 		}
 	})
+	mux.HandleFunc("/v1/transport-profiles", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			profiles, err := host.TransportProfiles()
+			if err != nil {
+				writeError(w, http.StatusNotFound, "transport_profile_store_unavailable", err)
+				return
+			}
+			writeJSON(w, http.StatusOK, profiles)
+		case http.MethodPost:
+			var req TransportProfileImportRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_json", err)
+				return
+			}
+			profile, err := host.ImportTransportProfile(req)
+			if err != nil {
+				switch {
+				case errors.Is(err, ErrTransportProfileStoreUnavailable):
+					writeError(w, http.StatusNotFound, "transport_profile_store_unavailable", err)
+				default:
+					writeError(w, http.StatusBadRequest, "transport_profile_invalid", err)
+				}
+				return
+			}
+			writeJSON(w, http.StatusOK, profile)
+		default:
+			writeMethodNotAllowed(w, r.Method)
+		}
+	})
 	mux.HandleFunc("/v1/provider-configs", func(w http.ResponseWriter, r *http.Request) {
 		requestedLocale := requestedDisplayLocale(r)
 		switch r.Method {
@@ -135,6 +165,29 @@ func Handler(host *Host) http.Handler {
 		case http.MethodDelete:
 			if err := host.DeleteProfile(profileID); err != nil {
 				writeNotFound(w, err)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			writeMethodNotAllowed(w, r.Method)
+		}
+	})
+	mux.HandleFunc("/v1/transport-profiles/", func(w http.ResponseWriter, r *http.Request) {
+		profileID := strings.TrimPrefix(r.URL.Path, "/v1/transport-profiles/")
+		profileID = strings.TrimSuffix(profileID, "/")
+		if profileID == "" {
+			http.NotFound(w, r)
+			return
+		}
+		switch r.Method {
+		case http.MethodDelete:
+			if err := host.ForgetTransportProfile(profileID); err != nil {
+				switch {
+				case errors.Is(err, ErrTransportProfileStoreUnavailable):
+					writeError(w, http.StatusNotFound, "transport_profile_store_unavailable", err)
+				default:
+					writeNotFound(w, err)
+				}
 				return
 			}
 			w.WriteHeader(http.StatusNoContent)

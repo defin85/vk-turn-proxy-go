@@ -17,7 +17,8 @@ enum Capability {
   mobileHostBridge('mobile_host_bridge'),
   platformTunnels('platform_tunnels'),
   providerRuntimeArtifacts('provider-runtime-artifacts'),
-  runtimeExecutionPlanning('runtime-execution-planning');
+  runtimeExecutionPlanning('runtime-execution-planning'),
+  vpnTransportProfileStore('vpn-transport-profile-store');
 
   const Capability(this.value);
 
@@ -1054,7 +1055,8 @@ enum PlatformTunnelPrerequisite {
   routeExclusion('route_exclusion'),
   dnsBypass('dns_bypass'),
   appRoutingPolicy('app_routing_policy'),
-  hostImplementation('host_implementation');
+  hostImplementation('host_implementation'),
+  transportProfile('transport_profile');
 
   const PlatformTunnelPrerequisite(this.value);
 
@@ -1088,6 +1090,8 @@ extension PlatformTunnelPrerequisiteDisplay on PlatformTunnelPrerequisite {
       t.sharedPlatformTunnelPrerequisiteAppRoutingPolicy,
     PlatformTunnelPrerequisite.hostImplementation =>
       t.sharedPlatformTunnelPrerequisiteHostImplementation,
+    PlatformTunnelPrerequisite.transportProfile =>
+      t.sharedPlatformTunnelPrerequisiteTransportProfile,
   };
 }
 
@@ -1133,6 +1137,7 @@ enum PlatformTunnelStartupStage {
   permissionAcquire('permission_acquire'),
   entitlementAcquire('entitlement_acquire'),
   driverCheck('driver_check'),
+  profileValidate('profile_validate'),
   routeValidate('route_validate'),
   hostBringup('host_bringup'),
   runtimeAttach('runtime_attach');
@@ -1161,6 +1166,8 @@ extension PlatformTunnelStartupStageDisplay on PlatformTunnelStartupStage {
       t.sharedPlatformTunnelStartupStageEntitlementAcquire,
     PlatformTunnelStartupStage.driverCheck =>
       t.sharedPlatformTunnelStartupStageDriverCheck,
+    PlatformTunnelStartupStage.profileValidate =>
+      t.sharedPlatformTunnelStartupStageProfileValidate,
     PlatformTunnelStartupStage.routeValidate =>
       t.sharedPlatformTunnelStartupStageRouteValidate,
     PlatformTunnelStartupStage.hostBringup =>
@@ -1267,6 +1274,7 @@ class HostInfo {
     required this.build,
     required this.capabilities,
     this.platformTunnels = const <PlatformTunnelCapability>[],
+    this.transportProfileStore,
   });
 
   factory HostInfo.fromJson(Map<String, dynamic> json) {
@@ -1288,6 +1296,12 @@ class HostInfo {
           : BuildIdentity.unknown,
       capabilities: capabilities,
       platformTunnels: platformTunnels,
+      transportProfileStore:
+          json['transport_profile_store'] is Map<String, dynamic>
+          ? TransportProfileStoreCapability.fromJson(
+              json['transport_profile_store'] as Map<String, dynamic>,
+            )
+          : null,
     );
   }
 
@@ -1295,6 +1309,7 @@ class HostInfo {
   final BuildIdentity build;
   final List<Capability> capabilities;
   final List<PlatformTunnelCapability> platformTunnels;
+  final TransportProfileStoreCapability? transportProfileStore;
 
   String get version => contractVersion;
 }
@@ -1385,6 +1400,7 @@ class PlatformTunnelStartResult {
     required this.mode,
     required this.ready,
     this.executionPlan,
+    this.transportProfile,
     this.sessionId = '',
     this.stage,
     this.missingPrerequisite,
@@ -1447,6 +1463,11 @@ class PlatformTunnelStartResult {
               json['execution_plan'] as Map<String, dynamic>,
             )
           : null,
+      transportProfile: json['transport_profile'] is Map<String, dynamic>
+          ? TransportProfileReference.fromJson(
+              json['transport_profile'] as Map<String, dynamic>,
+            )
+          : null,
       sessionId: sessionId,
       stage: stage,
       missingPrerequisite: missingPrerequisite,
@@ -1462,6 +1483,7 @@ class PlatformTunnelStartResult {
   final PlatformTunnelMode mode;
   final bool ready;
   final RuntimeExecutionPlan? executionPlan;
+  final TransportProfileReference? transportProfile;
   final String sessionId;
   final PlatformTunnelStartupStage? stage;
   final PlatformTunnelPrerequisite? missingPrerequisite;
@@ -1474,6 +1496,7 @@ class PlatformTunnelStartResult {
       'mode': mode.value,
       'ready': ready,
       'execution_plan': executionPlan?.toJson(),
+      'transport_profile': transportProfile?.toJson(),
       'session_id': sessionId.isEmpty ? null : sessionId,
       'stage': stage?.value,
       'missing_prerequisite': missingPrerequisite?.value,

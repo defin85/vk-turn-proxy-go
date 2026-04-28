@@ -15,6 +15,7 @@ abstract class ControlPlaneApi {
     String? resolutionId,
     RuntimeDefaults? runtimeDefaults,
     RuntimeExecutionPlan? executionPlan,
+    TransportProfileReference? transportProfile,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
     PlatformTunnelUnderlayRoutePolicy underlayRoutePolicy =
@@ -37,6 +38,11 @@ abstract class ControlPlaneApi {
     ProviderConfigRecord config,
   );
   Future<void> deleteProviderConfig(String configId);
+  Future<List<TransportProfileStatus>> transportProfiles();
+  Future<TransportProfileStatus> importTransportProfile(
+    TransportProfileImportRequest request,
+  );
+  Future<void> forgetTransportProfile(String profileId);
   Future<List<ProfileRecord>> profiles();
   Future<ProfileRecord> upsertProfile(ProfileRecord profile);
   Future<void> deleteProfile(String profileId);
@@ -122,6 +128,7 @@ class ControlPlaneClient implements ControlPlaneApi {
     String? resolutionId,
     RuntimeDefaults? runtimeDefaults,
     RuntimeExecutionPlan? executionPlan,
+    TransportProfileReference? transportProfile,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
     PlatformTunnelUnderlayRoutePolicy underlayRoutePolicy =
@@ -139,6 +146,8 @@ class ControlPlaneClient implements ControlPlaneApi {
           'runtime_defaults': runtimeDefaults.toJson(),
         'mode': mode.value,
         if (executionPlan != null) 'execution_plan': executionPlan.toJson(),
+        if (transportProfile != null && !transportProfile.isEmpty)
+          'transport_profile': transportProfile.toJson(),
         if (_modeSupportsApplicationRouting(mode))
           'application_routing_policy': applicationRoutingPolicy.value,
         if (_modeSupportsUnderlayRoutePolicy(mode))
@@ -216,6 +225,29 @@ class ControlPlaneClient implements ControlPlaneApi {
   @override
   Future<void> deleteProviderConfig(String configId) async {
     await _request('DELETE', '/v1/provider-configs/$configId');
+  }
+
+  @override
+  Future<List<TransportProfileStatus>> transportProfiles() async {
+    final payload = await _jsonRequestList('GET', '/v1/transport-profiles');
+    return payload.map(TransportProfileStatus.fromJson).toList(growable: false);
+  }
+
+  @override
+  Future<TransportProfileStatus> importTransportProfile(
+    TransportProfileImportRequest request,
+  ) async {
+    final payload = await _jsonRequest(
+      'POST',
+      '/v1/transport-profiles',
+      body: request.toJson(),
+    );
+    return TransportProfileStatus.fromJson(payload);
+  }
+
+  @override
+  Future<void> forgetTransportProfile(String profileId) async {
+    await _request('DELETE', '/v1/transport-profiles/$profileId');
   }
 
   @override

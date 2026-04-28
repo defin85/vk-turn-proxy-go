@@ -71,10 +71,11 @@ func defaultRuntimeExecutionPlansForPlatformTunnel(capability PlatformTunnelCapa
 			EngineFamily:  RuntimeEngineFamilyWireGuardNative,
 			HostAdapter:   hostAdapter,
 		},
-		SupportState:         supportState,
-		RemoteEndpointFamily: RuntimeRemoteEndpointFamilyTURNServer,
-		Default:              true,
-		Message:              strings.TrimSpace(capability.Message),
+		SupportState:                  supportState,
+		RemoteEndpointFamily:          RuntimeRemoteEndpointFamilyTURNServer,
+		Default:                       true,
+		RequiredTransportProfileKinds: []TransportProfileKind{TransportProfileKindWireGuardNativeV1},
+		Message:                       strings.TrimSpace(capability.Message),
 	}}
 }
 
@@ -118,6 +119,11 @@ func validateRuntimeExecutionPlanDescriptor(descriptor RuntimeExecutionPlanDescr
 	}
 	if !isKnownRuntimeRemoteEndpointFamily(descriptor.RemoteEndpointFamily) {
 		return fmt.Errorf("runtime execution plan remote_endpoint_family %q is unknown", descriptor.RemoteEndpointFamily)
+	}
+	for _, kind := range descriptor.RequiredTransportProfileKinds {
+		if !isKnownTransportProfileKind(kind) {
+			return fmt.Errorf("runtime execution plan requires unknown transport profile kind %q", kind)
+		}
 	}
 
 	switch {

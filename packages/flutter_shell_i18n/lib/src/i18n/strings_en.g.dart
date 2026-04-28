@@ -292,6 +292,10 @@ class Translations with BaseTranslations<AppLocale, Translations> {
   String get sharedPlatformTunnelPrerequisiteHostImplementation =>
       'host implementation';
 
+  /// en: 'VPN transport profile'
+  String get sharedPlatformTunnelPrerequisiteTransportProfile =>
+      'VPN transport profile';
+
   /// en: 'Capability check'
   String get sharedPlatformTunnelStartupStageCapabilityCheck =>
       'Capability check';
@@ -306,6 +310,10 @@ class Translations with BaseTranslations<AppLocale, Translations> {
 
   /// en: 'Driver check'
   String get sharedPlatformTunnelStartupStageDriverCheck => 'Driver check';
+
+  /// en: 'Profile validation'
+  String get sharedPlatformTunnelStartupStageProfileValidate =>
+      'Profile validation';
 
   /// en: 'Route validation'
   String get sharedPlatformTunnelStartupStageRouteValidate =>
@@ -1046,17 +1054,36 @@ class Translations with BaseTranslations<AppLocale, Translations> {
     required Object modeLabel,
   }) => 'Select an execution path before starting ${modeLabel}.';
 
-  /// en: 'Import a WireGuard configuration in the app before starting Android VPN Service.'
+  /// en: 'Import a VPN transport profile before starting Android VPN Service. WireGuard .conf is supported for this execution path.'
   String get shellTextAndroidWireGuardProfileRequiredBeforeStarting =>
-      'Import a WireGuard configuration in the app before starting Android VPN Service.';
+      'Import a VPN transport profile before starting Android VPN Service. WireGuard .conf is supported for this execution path.';
 
-  /// en: 'Android WireGuard configuration imported.'
+  /// en: 'VPN transport profile imported.'
   String get shellTextAndroidWireGuardProfileConfigured =>
-      'Android WireGuard configuration imported.';
+      'VPN transport profile imported.';
 
-  /// en: 'Android WireGuard configuration forgotten.'
+  /// en: 'VPN transport profile forgotten.'
   String get shellTextAndroidWireGuardProfileCleared =>
-      'Android WireGuard configuration forgotten.';
+      'VPN transport profile forgotten.';
+
+  /// en: 'VPN transport profile: not configured.'
+  String get shellTextVpnTransportProfileStatusNotConfigured =>
+      'VPN transport profile: not configured.';
+
+  /// en: '{profileKind} profile: configured.'
+  String shellTextVpnTransportProfileStatusConfigured({
+    required Object profileKind,
+  }) => '${profileKind} profile: configured.';
+
+  /// en: '{profileKind} profile: invalid.'
+  String shellTextVpnTransportProfileStatusInvalid({
+    required Object profileKind,
+  }) => '${profileKind} profile: invalid.';
+
+  /// en: '{profileKind} profile: incompatible with this execution path.'
+  String shellTextVpnTransportProfileStatusIncompatible({
+    required Object profileKind,
+  }) => '${profileKind} profile: incompatible with this execution path.';
 
   /// en: 'Reset local mobile shell state before reconnecting.'
   String get shellTextResetLocalMobileShellStateBeforeReconnecting =>
@@ -2092,15 +2119,14 @@ class Translations with BaseTranslations<AppLocale, Translations> {
   /// en: 'Turn off VPN'
   String get shellTextMobileTurnOffVpn => 'Turn off VPN';
 
-  /// en: 'Import WireGuard config'
-  String get shellTextImportAndroidWireGuardConfig => 'Import WireGuard config';
+  /// en: 'Import VPN profile'
+  String get shellTextImportAndroidWireGuardConfig => 'Import VPN profile';
 
-  /// en: 'Replace WireGuard config'
-  String get shellTextReplaceAndroidWireGuardConfig =>
-      'Replace WireGuard config';
+  /// en: 'Replace VPN profile'
+  String get shellTextReplaceAndroidWireGuardConfig => 'Replace VPN profile';
 
-  /// en: 'Forget WireGuard config'
-  String get shellTextForgetAndroidWireGuardConfig => 'Forget WireGuard config';
+  /// en: 'Forget VPN profile'
+  String get shellTextForgetAndroidWireGuardConfig => 'Forget VPN profile';
 
   /// en: 'Providers'
   String get shellTextMobileProvidersTitle => 'Providers';
@@ -2982,6 +3008,8 @@ extension on Translations {
             'app routing policy',
           'sharedPlatformTunnelPrerequisiteHostImplementation' =>
             'host implementation',
+          'sharedPlatformTunnelPrerequisiteTransportProfile' =>
+            'VPN transport profile',
           'sharedPlatformTunnelStartupStageCapabilityCheck' =>
             'Capability check',
           'sharedPlatformTunnelStartupStagePermissionAcquire' =>
@@ -2989,6 +3017,8 @@ extension on Translations {
           'sharedPlatformTunnelStartupStageEntitlementAcquire' =>
             'Entitlement acquire',
           'sharedPlatformTunnelStartupStageDriverCheck' => 'Driver check',
+          'sharedPlatformTunnelStartupStageProfileValidate' =>
+            'Profile validation',
           'sharedPlatformTunnelStartupStageRouteValidate' => 'Route validation',
           'sharedPlatformTunnelStartupStageHostBringup' => 'Host bring-up',
           'sharedPlatformTunnelStartupStageRuntimeAttach' => 'Runtime attach',
@@ -3360,11 +3390,22 @@ extension on Translations {
             ({required Object modeLabel}) =>
                 'Select an execution path before starting ${modeLabel}.',
           'shellTextAndroidWireGuardProfileRequiredBeforeStarting' =>
-            'Import a WireGuard configuration in the app before starting Android VPN Service.',
+            'Import a VPN transport profile before starting Android VPN Service. WireGuard .conf is supported for this execution path.',
           'shellTextAndroidWireGuardProfileConfigured' =>
-            'Android WireGuard configuration imported.',
+            'VPN transport profile imported.',
           'shellTextAndroidWireGuardProfileCleared' =>
-            'Android WireGuard configuration forgotten.',
+            'VPN transport profile forgotten.',
+          'shellTextVpnTransportProfileStatusNotConfigured' =>
+            'VPN transport profile: not configured.',
+          'shellTextVpnTransportProfileStatusConfigured' =>
+            ({required Object profileKind}) =>
+                '${profileKind} profile: configured.',
+          'shellTextVpnTransportProfileStatusInvalid' =>
+            ({required Object profileKind}) =>
+                '${profileKind} profile: invalid.',
+          'shellTextVpnTransportProfileStatusIncompatible' =>
+            ({required Object profileKind}) =>
+                '${profileKind} profile: incompatible with this execution path.',
           'shellTextResetLocalMobileShellStateBeforeReconnecting' =>
             'Reset local mobile shell state before reconnecting.',
           'shellTextDetectedBrowserReturnAndContinuedChallenge' =>
@@ -3791,6 +3832,9 @@ extension on Translations {
             'All reported tunnel modes are currently fail-closed. Use Diagnostics -> Tunnel detail when you want to test startup explicitly.',
           'shellTextDesktopHostModeAvailable' =>
             'The host reports that this mode is available.',
+          _ => null,
+        } ??
+        switch (path) {
           'shellTextDesktopHostModeUnavailable' =>
             'The host reports that this mode is unavailable.',
           'shellTextDesktopNoStartupRequestYet' =>
@@ -3803,9 +3847,6 @@ extension on Translations {
             'The shell is reconnecting to the local host. Keep the editor surface stable while negotiation completes.',
           'shellTextDesktopWorkflowAssuranceBlocked' =>
             'The local host is blocked or incompatible. Keep the recovery path visible from the primary workflow surface.',
-          _ => null,
-        } ??
-        switch (path) {
           'shellTextDesktopWorkflowAssuranceReadyLive' =>
             'The local host is ready. Keep the current workflow dominant while live runtime detail stays one step away.',
           'shellTextDesktopWorkflowAssuranceReadyIdle' =>
@@ -3829,10 +3870,9 @@ extension on Translations {
           'shellTextMobileSelectedForHome' => 'Selected for Home',
           'shellTextMobileTurnOnVpn' => 'Turn on VPN',
           'shellTextMobileTurnOffVpn' => 'Turn off VPN',
-          'shellTextImportAndroidWireGuardConfig' => 'Import WireGuard config',
-          'shellTextReplaceAndroidWireGuardConfig' =>
-            'Replace WireGuard config',
-          'shellTextForgetAndroidWireGuardConfig' => 'Forget WireGuard config',
+          'shellTextImportAndroidWireGuardConfig' => 'Import VPN profile',
+          'shellTextReplaceAndroidWireGuardConfig' => 'Replace VPN profile',
+          'shellTextForgetAndroidWireGuardConfig' => 'Forget VPN profile',
           'shellTextMobileProvidersTitle' => 'Providers',
           'shellTextMobileProvidersSubtitle' =>
             'Choose a saved reusable provider or add a new one for Profiles.',

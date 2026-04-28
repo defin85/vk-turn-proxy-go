@@ -27,6 +27,14 @@ func Load(path string) (*Profile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read WireGuard profile: %w", err)
 	}
+	return Parse(data, path)
+}
+
+func Parse(data []byte, source string) (*Profile, error) {
+	source = strings.TrimSpace(source)
+	if source == "" {
+		source = "WireGuard profile"
+	}
 	profile := &Profile{MTU: 1280}
 	section := ""
 	for _, rawLine := range strings.Split(string(data), "\n") {
@@ -70,16 +78,16 @@ func Load(path string) (*Profile, error) {
 		}
 	}
 	if strings.TrimSpace(profile.PrivateKey) == "" {
-		return nil, fmt.Errorf("WireGuard profile %s is missing Interface.PrivateKey", path)
+		return nil, fmt.Errorf("WireGuard profile %s is missing Interface.PrivateKey", source)
 	}
 	if len(profile.Addresses) == 0 {
-		return nil, fmt.Errorf("WireGuard profile %s is missing Interface.Address", path)
+		return nil, fmt.Errorf("WireGuard profile %s is missing Interface.Address", source)
 	}
 	if strings.TrimSpace(profile.PeerPublicKey) == "" {
-		return nil, fmt.Errorf("WireGuard profile %s is missing Peer.PublicKey", path)
+		return nil, fmt.Errorf("WireGuard profile %s is missing Peer.PublicKey", source)
 	}
 	if len(profile.AllowedIPs) == 0 {
-		return nil, fmt.Errorf("WireGuard profile %s is missing Peer.AllowedIPs", path)
+		return nil, fmt.Errorf("WireGuard profile %s is missing Peer.AllowedIPs", source)
 	}
 	return profile, nil
 }

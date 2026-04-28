@@ -4811,10 +4811,10 @@ HomeWorkflowPrimaryActionData _mobileHomePrimaryActionData(
       ? _activePlatformTunnelStartBlockReason(controller)
       : null;
   final startBlocked = startBlockReason != null;
-  final needsAndroidWireGuardProfile =
+  final needsVPNTransportProfile =
       startBlocked &&
-      controller.canConfigureAndroidWireGuardProfile &&
-      !controller.androidWireGuardProfileStatus.configured;
+      controller.canConfigureVPNTransportProfile &&
+      !controller.activeVPNTransportProfileConfigured;
   final tone = switch ((
     activeChallenge,
     tunnelReady,
@@ -4858,6 +4858,8 @@ HomeWorkflowPrimaryActionData _mobileHomePrimaryActionData(
     (null, false, false, true) => startBlockReason!,
     (null, false, false, false) => context.shellText.startCurrentMobileVpnPath,
   };
+  final vpnTransportProfileStatus =
+      controller.activeVPNTransportProfileStatusSummary;
   final primaryAction = switch ((
     activeChallenge,
     tunnelReady,
@@ -4892,13 +4894,13 @@ HomeWorkflowPrimaryActionData _mobileHomePrimaryActionData(
       onPressed: controller.busy ? null : onOpenProfiles,
     ),
     (null, false, false, true) =>
-      needsAndroidWireGuardProfile
+      needsVPNTransportProfile
           ? HomeWorkflowAction(
-              label: context.shellText.importAndroidWireGuardConfig,
+              label: context.shellText.importVPNTransportProfile,
               icon: Icons.vpn_key_rounded,
               onPressed: controller.busy
                   ? null
-                  : () => unawaited(controller.importAndroidWireGuardProfile()),
+                  : () => unawaited(controller.importVPNTransportProfile()),
             )
           : HomeWorkflowAction(
               label: context.shellText.mobileTurnOnVpn,
@@ -4940,27 +4942,27 @@ HomeWorkflowPrimaryActionData _mobileHomePrimaryActionData(
       ),
     if (activeChallenge == null &&
         !tunnelReady &&
-        controller.canConfigureAndroidWireGuardProfile &&
-        controller.androidWireGuardProfileStatus.configured)
+        controller.canConfigureVPNTransportProfile &&
+        controller.activeVPNTransportProfileConfigured)
       HomeWorkflowAction(
-        label: context.shellText.replaceAndroidWireGuardConfig,
+        label: context.shellText.replaceVPNTransportProfile,
         icon: Icons.upload_file_rounded,
         style: HomeWorkflowActionStyle.outlined,
         onPressed: controller.busy
             ? null
-            : () => unawaited(controller.importAndroidWireGuardProfile()),
+            : () => unawaited(controller.importVPNTransportProfile()),
       ),
     if (activeChallenge == null &&
         !tunnelReady &&
-        controller.canConfigureAndroidWireGuardProfile &&
-        controller.androidWireGuardProfileStatus.configured)
+        controller.canConfigureVPNTransportProfile &&
+        controller.activeVPNTransportProfileConfigured)
       HomeWorkflowAction(
-        label: context.shellText.forgetAndroidWireGuardConfig,
+        label: context.shellText.forgetVPNTransportProfile,
         icon: Icons.delete_outline_rounded,
         style: HomeWorkflowActionStyle.text,
         onPressed: controller.busy
             ? null
-            : () => unawaited(controller.forgetAndroidWireGuardProfile()),
+            : () => unawaited(controller.forgetVPNTransportProfile()),
       ),
   ];
 
@@ -4994,7 +4996,7 @@ HomeWorkflowPrimaryActionData _mobileHomePrimaryActionData(
     },
     primaryAction: primaryAction,
     annotation: activeChallenge == null
-        ? null
+        ? vpnTransportProfileStatus
         : context.shellText.challengeKind(activeChallenge.kind),
     secondaryActions: secondaryActions,
   );
