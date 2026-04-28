@@ -41,3 +41,17 @@ handshake, and bidirectional data-plane traffic through the selected ingress.
 - **THEN** the system does not claim end-to-end strict `wireguard_native` support
 - **AND** diagnostics identify the missing remote data-plane evidence separately
   from local adapter attach
+
+### Requirement: WireGuard-native material is not sourced from hidden app seeds
+
+The system SHALL treat local WireGuard material as explicit host or app-owned
+runtime state. Packaged app assets and workstation-local seed paths SHALL NOT be
+used as an implicit source for strict `wireguard_native` materialization.
+
+#### Scenario: Hidden packaged profile seed is ignored
+
+- **GIVEN** a strict `wireguard_native` materializer is running inside a
+  packaged client
+- **WHEN** no explicit runtime WireGuard profile has been configured
+- **THEN** the materializer fails closed
+- **AND** it does not search for or load a hidden packaged `phone1.conf`

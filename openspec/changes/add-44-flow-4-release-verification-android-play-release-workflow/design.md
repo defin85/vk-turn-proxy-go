@@ -64,15 +64,15 @@ Bundle (`.aab`). If the workflow also stages an APK for local smoke or archive
 purposes, that APK is secondary and should not replace the upload artifact in
 the contract.
 
-### Decision: Play-target release packages must exclude repo-local seeded assets
+### Decision: Play-target release packages must exclude packaged seed assets
 
-The debug packaging lane may stage repo-local development assets such as
-`phone1.conf`, but the Play-target release lane must not.
+Android package lanes must not stage repo-local WireGuard seed profiles; the
+old `phone1.conf` debug seed is treated as a forbidden legacy package asset.
 
 Release packaging should remain aligned with the production mobile slice:
 - packaged host startup stays the default
 - development bridge overrides remain explicit non-store flows
-- workstation-local seeded assets do not become part of the published app
+- workstation-local seed assets do not become part of any app package
 
 ### Decision: The repo owns the build and staging path, while the operator owns Play Console
 
@@ -136,7 +136,7 @@ the installed Flutter SDK.
 
 1. Define the Play-target Android release artifact and signing contract.
 2. Add the repo-owned release entrypoint and explicit signing preflight.
-3. Separate release packaging from debug-only seeded assets and other
+3. Separate release packaging from debug-only seed assets and other
    workstation-local conveniences.
 4. Document the operator handoff from staged artifact to Google Play Console.
 5. Add checks that prove the release lane fails closed on missing signing

@@ -45,6 +45,21 @@ const RuntimeExecutionPlanDescriptor _androidVpnExecutionPlanDescriptor =
       isDefault: true,
     );
 
+const RuntimeExecutionPlanDescriptor
+_unavailableAndroidVpnExecutionPlanDescriptor = RuntimeExecutionPlanDescriptor(
+  plan: RuntimeExecutionPlan(
+    accessMethod: RuntimeAccessMethod.turnCredentials,
+    carrierFamily: RuntimeCarrierFamily.turnDatagram,
+    engineFamily: RuntimeEngineFamily.wireguardNative,
+    hostAdapter: RuntimeHostAdapter.androidVpnService,
+  ),
+  supportState: RuntimeExecutionPlanSupportState.unavailable,
+  remoteEndpointFamily: RuntimeRemoteEndpointFamily.turnServer,
+  isDefault: true,
+  message:
+      'The android/arm64 host does not yet implement the strict TURN datagram WireGuard carrier/materializer required for mode android_vpn_service.',
+);
+
 const HostInfo _readyHostInfo = HostInfo(
   contractVersion: '1',
   build: _testHostBuild,
@@ -73,6 +88,39 @@ const HostInfo _readyHostInfo = HostInfo(
       ],
       missingPrerequisite: PlatformTunnelPrerequisite.hostImplementation,
       message: 'mobile host does not implement tunnel startup yet',
+    ),
+  ],
+);
+
+const HostInfo _hostInfoWithoutSupportedAndroidExecutionPath = HostInfo(
+  contractVersion: '1',
+  build: _testHostBuild,
+  capabilities: <Capability>[
+    Capability.mobileHostBridge,
+    Capability.platformTunnels,
+    Capability.profiles,
+    Capability.providerConfigs,
+    Capability.providerRuntimeArtifacts,
+    Capability.runtimeExecutionPlanning,
+    Capability.sessions,
+    Capability.challenges,
+    Capability.diagnostics,
+    Capability.eventStream,
+  ],
+  platformTunnels: <PlatformTunnelCapability>[
+    PlatformTunnelCapability(
+      mode: PlatformTunnelMode.androidVpnService,
+      available: false,
+      supportedUnderlayRoutePolicies: <PlatformTunnelUnderlayRoutePolicy>[
+        PlatformTunnelUnderlayRoutePolicy.standard,
+        PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork,
+      ],
+      executionPlans: <RuntimeExecutionPlanDescriptor>[
+        _unavailableAndroidVpnExecutionPlanDescriptor,
+      ],
+      missingPrerequisite: PlatformTunnelPrerequisite.hostImplementation,
+      message:
+          'The android/arm64 host does not yet implement the strict TURN datagram WireGuard carrier/materializer required for mode android_vpn_service.',
     ),
   ],
 );
@@ -2191,6 +2239,141 @@ void main() {
   );
 
   test(
+    'controller blocks platform tunnel startup when no supported execution path is advertised',
+    () async {
+      final profile = ProfileRecord(
+        id: 'profile-1',
+        name: 'vk live',
+        spec: _profileSpec(),
+      );
+      final bridge = _FakeMobileHostBridge(
+        ensureReadyResult: const MobileHostConnectionResult(
+          state: MobileHostLifecycleState.ready,
+          message: 'Connected to embedded mobile host bridge',
+          info: _hostInfoWithoutSupportedAndroidExecutionPath,
+          description: 'native bridge',
+        ),
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[profile],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: profile.id,
+            draft: ProfileDraft.fromProfile(profile),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(controller.activeExecutionPlan, isNull);
+      expect(
+        controller.platformTunnelStartPreparationBlockReason(
+          PlatformTunnelMode.androidVpnService,
+        ),
+        contains('strict TURN datagram WireGuard carrier/materializer'),
+      );
+
+      await controller.startPlatformTunnel(
+        PlatformTunnelMode.androidVpnService,
+      );
+
+      expect(bridge.startResolutionCalls, isEmpty);
+      expect(bridge.startedPlatformTunnels, isEmpty);
+      expect(
+        controller.notice,
+        contains('strict TURN datagram WireGuard carrier/materializer'),
+      );
+      expect(controller.notice, isNot(contains('Select an execution path')));
+    },
+  );
+
+  test(
+    'controller requires explicit Android WireGuard profile before platform tunnel startup',
+    () async {
+      final profile = ProfileRecord(
+        id: 'profile-1',
+        name: 'vk live',
+        spec: _profileSpec(),
+      );
+      final bridge = _FakeMobileHostBridge();
+      final wireGuardProfileManager = _FakeAndroidWireGuardProfileManager(
+        const AndroidWireGuardProfileStatus(
+          platformAvailable: true,
+          configured: false,
+        ),
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[profile],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: profile.id,
+            draft: ProfileDraft.fromProfile(profile),
+          ),
+        ),
+        androidWireGuardProfileManager: wireGuardProfileManager,
+        androidWireGuardProfileContentPicker: () async => 'wg-profile',
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(controller.canConfigureAndroidWireGuardProfile, isTrue);
+      expect(
+        controller.platformTunnelStartPreparationBlockReason(
+          PlatformTunnelMode.androidVpnService,
+        ),
+        contains('WireGuard configuration'),
+      );
+
+      await controller.startPlatformTunnel(
+        PlatformTunnelMode.androidVpnService,
+      );
+
+      expect(bridge.startResolutionCalls, isEmpty);
+      expect(bridge.startedPlatformTunnels, isEmpty);
+
+      await controller.importAndroidWireGuardProfile();
+
+      expect(wireGuardProfileManager.configureCalls, <String>['wg-profile']);
+      expect(controller.androidWireGuardProfileStatus.configured, isTrue);
+      expect(
+        controller.platformTunnelStartPreparationBlockReason(
+          PlatformTunnelMode.androidVpnService,
+        ),
+        isNull,
+      );
+
+      await controller.startPlatformTunnel(
+        PlatformTunnelMode.androidVpnService,
+      );
+
+      expect(bridge.startResolutionCalls, hasLength(1));
+      expect(bridge.startedPlatformTunnels, <PlatformTunnelMode>[
+        PlatformTunnelMode.androidVpnService,
+      ]);
+
+      await controller.forgetAndroidWireGuardProfile();
+
+      expect(wireGuardProfileManager.clearCalls, 1);
+      expect(controller.androidWireGuardProfileStatus.configured, isFalse);
+      expect(
+        controller.platformTunnelStartPreparationBlockReason(
+          PlatformTunnelMode.androidVpnService,
+        ),
+        contains('WireGuard configuration'),
+      );
+    },
+  );
+
+  test(
     'controller resolves the active draft before platform tunnel startup when no resolution is selected',
     () async {
       final profile = ProfileRecord(
@@ -2956,6 +3139,39 @@ class _FakeOwnedBrowserSessionStateResetter
     if (error != null) {
       throw error!;
     }
+  }
+}
+
+class _FakeAndroidWireGuardProfileManager
+    implements AndroidWireGuardProfileManager {
+  _FakeAndroidWireGuardProfileManager(this._status);
+
+  AndroidWireGuardProfileStatus _status;
+  final List<String> configureCalls = <String>[];
+  int clearCalls = 0;
+
+  @override
+  Future<AndroidWireGuardProfileStatus> status() async => _status;
+
+  @override
+  Future<AndroidWireGuardProfileStatus> configure(String contents) async {
+    configureCalls.add(contents);
+    _status = AndroidWireGuardProfileStatus(
+      platformAvailable: true,
+      configured: true,
+      bytes: contents.length,
+    );
+    return _status;
+  }
+
+  @override
+  Future<AndroidWireGuardProfileStatus> clear() async {
+    clearCalls += 1;
+    _status = const AndroidWireGuardProfileStatus(
+      platformAvailable: true,
+      configured: false,
+    );
+    return _status;
   }
 }
 

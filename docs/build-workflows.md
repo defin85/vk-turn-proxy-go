@@ -215,15 +215,13 @@ That workflow:
    WSL
 4. writes Linux-native `android/local.properties` with the active Android SDK
    and Flutter SDK roots
-5. optionally stages the local Android WireGuard dev profile from
-   `VKTP_ANDROID_WIREGUARD_PROFILE` or
-   `~/.local/state/vk-turn-proxy-go/wg/phone1.conf` into the packaged app
-   assets for the debug `android_vpn_service` path
-6. builds the debug APK through the pinned Linux Flutter SDK with stamped build
+5. builds the debug APK through the pinned Linux Flutter SDK with stamped build
    identity
-7. stages the final APK under `dist/mobile/android-gui-shell/`
-8. validates that the APK contains the packaged JNI and embedded-host `.so`
+6. stages the final APK under `dist/mobile/android-gui-shell/`
+7. validates that the APK contains the packaged JNI and embedded-host `.so`
    files
+8. rejects packaged WireGuard seed assets; Android WireGuard runtime material
+   must be configured explicitly at runtime rather than hidden in the APK
 
 The staged directory includes:
 - `app-debug.apk`
@@ -293,7 +291,7 @@ That workflow stages:
 
 The workflow fails closed when release signing inputs are missing, when the
 effective release `targetSdkVersion` is below the documented Play floor, or when
-the staged AAB contains debug-only assets such as
+the staged AAB contains packaged WireGuard seed assets such as
 `base/assets/wireguard/phone1.conf`. It also runs a pinned `bundletool-all`
 local delivery verifier, which builds device-targeted APK splits from the AAB
 and checks the delivered native libraries, forbidden release assets, and JNI

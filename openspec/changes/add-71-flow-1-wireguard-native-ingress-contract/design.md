@@ -44,6 +44,20 @@ route sessions, preserve reply routing, and expose metrics/errors per protocol.
 Until that exists, sharing `56040/udp` would hide a protocol mismatch behind a
 single address.
 
+### Decision: Android WireGuard material is explicit runtime state
+
+The earlier phone/tablet evidence used a workstation-local WireGuard profile as
+PoC input. That file is not an application configuration contract. No Android
+debug, MCP, release, or Play build may package or auto-stage `phone1.conf`, and
+the embedded host must not read a WireGuard profile from environment defaults.
+
+Android `android_vpn_service` may advertise the strict
+`turn_datagram + wireguard_native` execution path only when the app has an
+operator-imported app-owned WireGuard profile and the host can materialize a
+lease from that explicit path. The mobile GUI owns the import/replace/forget
+surface; ordinary shell state may remember only status metadata, not raw private
+keys.
+
 ## Alternatives Considered
 
 - Switch `56040/udp` from DTLS to plain. Rejected because it breaks the existing
@@ -61,6 +75,8 @@ single address.
   regress DTLS clients.
 - Windows UI readiness can still be misleading unless verification distinguishes
   host attach, WireGuard handshake, and bidirectional traffic.
+- Android UI readiness can also be misleading unless missing WireGuard material
+  is surfaced as a setup action instead of a hidden file prerequisite.
 
 ## Migration Plan
 
@@ -72,6 +88,8 @@ single address.
    a strict WireGuard ingress.
 4. Verify Windows VM data-plane success and confirm the existing DTLS overlay
    path still targets the DTLS listener.
+5. Remove Android packaged WireGuard seed paths and add an explicit app-owned
+   runtime profile surface before claiming Android strict WireGuard support.
 
 ## Open Questions
 
@@ -79,3 +97,6 @@ single address.
   raw-WireGuard ingress, or should the final port be configured per deployment?
 - Do we need one external port for operator simplicity, or is a separate
   protocol-specific port acceptable for the first supported Windows VPN path?
+- Should the Android UI import a full WireGuard `.conf` first, or should a later
+  flow generate/import only the minimal key/address fields through typed form
+  controls?

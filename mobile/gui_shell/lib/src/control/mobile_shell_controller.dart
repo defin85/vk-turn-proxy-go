@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter_shell_core/portable_profile_transfer.dart';
 import 'package:flutter/widgets.dart';
@@ -18,6 +19,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 typedef DirectoryProvider = Future<Directory> Function();
 typedef IDFactory = String Function();
+typedef AndroidWireGuardProfileContentPicker = Future<String?> Function();
 
 enum ShellStatus { booting, ready, blocked }
 
@@ -47,6 +49,21 @@ class ExternalBrowserLauncher implements BrowserLauncher {
   }
 }
 
+Future<String?> _pickAndroidWireGuardProfileContents() async {
+  final file = await openFile(
+    acceptedTypeGroups: const <XTypeGroup>[
+      XTypeGroup(
+        label: 'WireGuard configuration',
+        extensions: <String>['conf'],
+      ),
+    ],
+  );
+  if (file == null) {
+    return null;
+  }
+  return file.readAsString();
+}
+
 class MobileShellController extends ChangeNotifier {
   MobileShellController({
     required this.bridge,
@@ -56,6 +73,8 @@ class MobileShellController extends ChangeNotifier {
     MobilePortableProfileTransferAdapter? portableProfileTransferAdapter,
     MobilePlatformAppInventory? appInventory,
     MobileOwnedBrowserSessionStateResetter? ownedBrowserSessionStateResetter,
+    AndroidWireGuardProfileManager? androidWireGuardProfileManager,
+    AndroidWireGuardProfileContentPicker? androidWireGuardProfileContentPicker,
     DirectoryProvider? diagnosticsDirectoryProvider,
     DateTime Function()? clock,
     IDFactory? idFactory,
@@ -70,6 +89,12 @@ class MobileShellController extends ChangeNotifier {
        _ownedBrowserSessionStateResetter =
            ownedBrowserSessionStateResetter ??
            const PlatformMobileOwnedBrowserSessionStateResetter(),
+       _androidWireGuardProfileManager =
+           androidWireGuardProfileManager ??
+           const PlatformAndroidWireGuardProfileManager(),
+       _androidWireGuardProfileContentPicker =
+           androidWireGuardProfileContentPicker ??
+           _pickAndroidWireGuardProfileContents,
        _diagnosticsDirectoryProvider =
            diagnosticsDirectoryProvider ?? defaultDiagnosticsDirectory,
        _clock = clock ?? DateTime.now,
@@ -87,6 +112,9 @@ class MobileShellController extends ChangeNotifier {
   final MobilePlatformAppInventory _appInventory;
   final MobileOwnedBrowserSessionStateResetter
   _ownedBrowserSessionStateResetter;
+  final AndroidWireGuardProfileManager _androidWireGuardProfileManager;
+  final AndroidWireGuardProfileContentPicker
+  _androidWireGuardProfileContentPicker;
   final DirectoryProvider _diagnosticsDirectoryProvider;
   final DateTime Function() _clock;
   final IDFactory _idFactory;
@@ -122,6 +150,8 @@ class MobileShellController extends ChangeNotifier {
       <String, ProfileProviderBinding>{};
   Map<String, MobilePlatformModePreferences> platformModePreferences =
       <String, MobilePlatformModePreferences>{};
+  AndroidWireGuardProfileStatus androidWireGuardProfileStatus =
+      const AndroidWireGuardProfileStatus.unavailable();
   List<MobilePlatformApp> installedApps = const <MobilePlatformApp>[];
   bool loadingInstalledApps = false;
   String? installedAppsError;
@@ -260,6 +290,32 @@ class MobileShellController extends ChangeNotifier {
 
   RuntimeExecutionPlan? get activeExecutionPlan =>
       activePlatformModePreferences.executionPlan;
+
+  bool get activeModeRequiresAndroidWireGuardProfile {
+    final mode = activePlatformTunnelMode;
+    if (mode == null) {
+      return false;
+    }
+    return _modeRequiresAndroidWireGuardProfile(mode);
+  }
+
+  bool get canConfigureAndroidWireGuardProfile {
+    return androidWireGuardProfileStatus.platformAvailable &&
+        activeModeRequiresAndroidWireGuardProfile;
+  }
+
+  String? platformTunnelStartPreparationBlockReason(PlatformTunnelMode mode) {
+    final executionPlan = _resolvedExecutionPlanForMode(mode);
+    if (executionPlan == null) {
+      return _executionPlanSelectionRequiredMessage(mode);
+    }
+    if (_executionPlanRequiresAndroidWireGuardProfile(executionPlan) &&
+        androidWireGuardProfileStatus.platformAvailable &&
+        !androidWireGuardProfileStatus.configured) {
+      return _copy.androidWireGuardProfileRequiredBeforeStarting;
+    }
+    return null;
+  }
 
   bool get activeModeSupportsAppRouting =>
       _modeSupportsAppRouting(activePlatformTunnelMode);
@@ -436,6 +492,36 @@ class MobileShellController extends ChangeNotifier {
     });
   }
 
+  Future<void> refreshAndroidWireGuardProfileStatus({
+    bool notify = true,
+  }) async {
+    androidWireGuardProfileStatus = await _androidWireGuardProfileManager
+        .status();
+    if (notify) {
+      _notify();
+    }
+  }
+
+  Future<void> importAndroidWireGuardProfile() async {
+    await _runLocalMutation(() async {
+      final contents = await _androidWireGuardProfileContentPicker();
+      if (contents == null) {
+        return;
+      }
+      androidWireGuardProfileStatus = await _androidWireGuardProfileManager
+          .configure(contents);
+      notice = _copy.androidWireGuardProfileConfigured;
+    });
+  }
+
+  Future<void> forgetAndroidWireGuardProfile() async {
+    await _runLocalMutation(() async {
+      androidWireGuardProfileStatus = await _androidWireGuardProfileManager
+          .clear();
+      notice = _copy.androidWireGuardProfileCleared;
+    });
+  }
+
   List<ProviderPreset> get presetCatalog => kProviderPresetCatalog;
 
   List<SupportedProviderDefinition> get supportedProviderCatalog =>
@@ -477,6 +563,7 @@ class MobileShellController extends ChangeNotifier {
     _startBrowserReturnSignals();
     _startPortableProfileIngress();
     await _restorePersistedState();
+    await refreshAndroidWireGuardProfileStatus(notify: false);
     if (_requiresLocalStateReset) {
       await _connectBridge(localStateBlocked: true);
       return;
@@ -1871,11 +1958,14 @@ class MobileShellController extends ChangeNotifier {
 
   Future<void> startPlatformTunnel(PlatformTunnelMode mode) async {
     await _runBridgeMutation(() async {
-      final executionPlan = _resolvedExecutionPlanForMode(mode);
-      if (executionPlan == null) {
-        notice = _executionPlanSelectionRequiredMessage(mode);
+      final preparationBlockReason = platformTunnelStartPreparationBlockReason(
+        mode,
+      );
+      if (preparationBlockReason != null) {
+        notice = preparationBlockReason;
         return;
       }
+      final executionPlan = _resolvedExecutionPlanForMode(mode)!;
       final runtimeDefaults = RuntimeDefaults.fromProfileSpec(
         currentProfileDraft.spec,
       );
@@ -2763,6 +2853,24 @@ class MobileShellController extends ChangeNotifier {
     }
   }
 
+  Future<void> _runLocalMutation(Future<void> Function() action) async {
+    if (_requiresLocalStateReset) {
+      notice = _localStateResetBlockMessage();
+      _notify();
+      return;
+    }
+    busy = true;
+    _notify();
+    try {
+      await action();
+    } catch (error) {
+      notice = '$error';
+    } finally {
+      busy = false;
+      _notify();
+    }
+  }
+
   bool _bridgeShouldFailClosed(ControlPlaneError error) {
     return error.statusCode == 0 ||
         error.incompatibleHost ||
@@ -3398,6 +3506,21 @@ class MobileShellController extends ChangeNotifier {
     return modePreferencesFor(mode).executionPlan;
   }
 
+  bool _modeRequiresAndroidWireGuardProfile(PlatformTunnelMode mode) {
+    return _executionPlanRequiresAndroidWireGuardProfile(
+      _resolvedExecutionPlanForMode(mode),
+    );
+  }
+
+  bool _executionPlanRequiresAndroidWireGuardProfile(
+    RuntimeExecutionPlan? plan,
+  ) {
+    return plan != null &&
+        plan.hostAdapter == RuntimeHostAdapter.androidVpnService &&
+        plan.carrierFamily == RuntimeCarrierFamily.turnDatagram &&
+        plan.engineFamily == RuntimeEngineFamily.wireguardNative;
+  }
+
   String? _platformTunnelRuntimeDefaultsBlockReason({
     required PlatformTunnelMode mode,
     required RuntimeExecutionPlan executionPlan,
@@ -3542,7 +3665,11 @@ class MobileShellController extends ChangeNotifier {
     if (capability == null) {
       return _copy.selectedMobileModeNotAdvertisedByConnectedHost;
     }
-    if (capability.executionPlans.isEmpty) {
+    if (executionPlanOptionsForMode(mode).isEmpty) {
+      final hostMessage = capability.message.trim();
+      if (hostMessage.isNotEmpty) {
+        return hostMessage;
+      }
       return _copy.modeDoesNotAdvertiseSupportedExecutionPath(mode.label);
     }
     return _copy.selectExecutionPathBeforeStarting(mode.label);

@@ -38,12 +38,11 @@ This workflow does not claim:
 
 ## One-time WireGuard profile
 
-The working profile for the first phone lives outside the repository in:
+Use an operator-provided WireGuard profile for the phone. The old workstation
+`phone1.conf` seed was a local PoC artifact, not a supported app configuration
+surface, and app packages must not contain or auto-stage it.
 
-- `~/.local/state/vk-turn-proxy-go/wg/phone1.conf`
-- `~/.local/state/vk-turn-proxy-go/wg/phone1-qr.png`
-
-That profile must keep this exclusion:
+For the external WireGuard-app PoC, the profile must keep this exclusion:
 
 ```ini
 ExcludedApplications = com.defin85.relaydock
@@ -125,8 +124,8 @@ The helper script:
 ## Reproducible run
 
 1. Install the latest APK on the phone.
-2. Import the current `phone1.conf` into `WireGuard`.
-3. Enable the `phone1` tunnel in `WireGuard`.
+2. Import the operator-provided profile into `WireGuard`.
+3. Enable that tunnel in `WireGuard`.
 4. Resolve a live `generic-turn://...` link on WSL with `cmd/probe`.
 5. Start or restart the phone transport session:
 

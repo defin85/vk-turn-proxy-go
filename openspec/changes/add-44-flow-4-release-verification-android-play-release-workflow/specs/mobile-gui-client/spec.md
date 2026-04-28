@@ -4,8 +4,8 @@
 
 The system SHALL keep Google Play-target Android packages aligned with the
 packaged-host production mobile slice rather than with debug-only local-device
-conveniences. Release package verification SHALL prove workstation-local seeded
-assets are absent from the staged store artifact.
+conveniences. Release package verification SHALL prove workstation-local
+packaged seed assets are absent from the staged store artifact.
 
 #### Scenario: Store-target Android package boots without debug-only local assets
 
@@ -17,18 +17,18 @@ assets are absent from the staged store artifact.
   repo-local WireGuard development profile assets to start its supported
   production slice
 
-#### Scenario: Store-target Android package excludes workstation-local seeded assets
+#### Scenario: Store-target Android package excludes workstation-local packaged seed assets
 
-- **GIVEN** repo-local mobile debug assets or workstation-local seeded files
+- **GIVEN** repo-local mobile debug assets or workstation-local seed files
   exist while the Android release package is assembled for Google Play
 - **WHEN** the release packaging workflow stages the store-target artifact
 - **THEN** those local development assets are excluded from the packaged mobile
   artifact
-- **AND** the release workflow does not read `VKTP_ANDROID_WIREGUARD_PROFILE`
-  or the default local `phone1.conf` seed while producing the store-target
+- **AND** the release workflow does not read workstation-local WireGuard profile
+  environment or default local seed paths while producing the store-target
   package
 - **AND** package content inspection fails the release if
-  `assets/wireguard/phone1.conf` or an equivalent debug WireGuard seed is
+  `assets/wireguard/phone1.conf` or an equivalent packaged WireGuard seed is
   present
 - **AND** the published package contents do not depend on one workstation's
   local state

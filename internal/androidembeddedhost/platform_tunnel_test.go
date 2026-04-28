@@ -45,24 +45,17 @@ func TestManagerReportsSupportedAndroidVPNServiceCapabilityFromController(t *tes
 	if capability.Mode != clientcontrol.PlatformTunnelModeAndroidVPNService {
 		t.Fatalf("platform_tunnels[0].mode = %q, want %q", capability.Mode, clientcontrol.PlatformTunnelModeAndroidVPNService)
 	}
-	if capability.Available {
-		t.Fatal("platform_tunnels[0].available = true, want false until strict carrier/materializer exists")
-	}
-	if capability.MissingPrerequisite != clientcontrol.PlatformTunnelPrerequisiteHostImplementation {
-		t.Fatalf(
-			"platform_tunnels[0].missing_prerequisite = %q, want %q",
-			capability.MissingPrerequisite,
-			clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
-		)
+	if !capability.Available {
+		t.Fatal("platform_tunnels[0].available = false, want supported android_vpn_service capability")
 	}
 	if len(capability.ExecutionPlans) != 1 {
 		t.Fatalf("platform_tunnels[0].execution_plans len = %d, want 1", len(capability.ExecutionPlans))
 	}
-	if capability.ExecutionPlans[0].SupportState != clientcontrol.RuntimeExecutionPlanSupportStateUnavailable {
+	if capability.ExecutionPlans[0].SupportState != clientcontrol.RuntimeExecutionPlanSupportStateSupported {
 		t.Fatalf(
 			"platform_tunnels[0].execution_plans[0].support_state = %q, want %q",
 			capability.ExecutionPlans[0].SupportState,
-			clientcontrol.RuntimeExecutionPlanSupportStateUnavailable,
+			clientcontrol.RuntimeExecutionPlanSupportStateSupported,
 		)
 	}
 	if capability.ExecutionPlans[0].Plan.HostAdapter != clientcontrol.RuntimeHostAdapterAndroidVPNService {

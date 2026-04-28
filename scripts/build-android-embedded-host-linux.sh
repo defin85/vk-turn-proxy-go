@@ -5,8 +5,6 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION_MANIFEST="${ROOT_DIR}/version.json"
 ANDROID_HOST_BUILD_METADATA="${ROOT_DIR}/dist/build/android-embedded-host-build-metadata.json"
 ANDROID_API_LEVEL="${ANDROID_API_LEVEL:-21}"
-ANDROID_INCLUDE_DEV_WIREGUARD_PROFILE="${VKTP_ANDROID_INCLUDE_DEV_WIREGUARD_PROFILE:-1}"
-ANDROID_DEV_WIREGUARD_PROFILE_DEFAULT="${HOME}/.local/state/vk-turn-proxy-go/wg/phone1.conf"
 DEFAULT_ANDROID_SDK_ROOT="${HOME}/.local/share/android-sdk"
 
 require_command() {
@@ -156,23 +154,5 @@ EOF
 build_one "arm64-v8a" "arm64" "${TOOLCHAIN_ROOT}/aarch64-linux-android${ANDROID_API_LEVEL}-clang" "android/arm64"
 build_one "armeabi-v7a" "arm" "${TOOLCHAIN_ROOT}/armv7a-linux-androideabi${ANDROID_API_LEVEL}-clang" "android/arm" "7"
 build_one "x86_64" "amd64" "${TOOLCHAIN_ROOT}/x86_64-linux-android${ANDROID_API_LEVEL}-clang" "android/amd64"
-
-case "${ANDROID_INCLUDE_DEV_WIREGUARD_PROFILE,,}" in
-  1|true|yes)
-    ANDROID_DEV_WIREGUARD_PROFILE="${VKTP_ANDROID_WIREGUARD_PROFILE:-${ANDROID_DEV_WIREGUARD_PROFILE_DEFAULT}}"
-    if [[ -f "${ANDROID_DEV_WIREGUARD_PROFILE}" ]]; then
-      mkdir -p "${ASSETS_ROOT}/wireguard"
-      cp "${ANDROID_DEV_WIREGUARD_PROFILE}" "${ASSETS_ROOT}/wireguard/phone1.conf"
-      echo "staged Android dev WireGuard profile from ${ANDROID_DEV_WIREGUARD_PROFILE}"
-    fi
-    ;;
-  0|false|no)
-    echo "skipped Android dev WireGuard profile staging"
-    ;;
-  *)
-    echo "VKTP_ANDROID_INCLUDE_DEV_WIREGUARD_PROFILE must be 1/true/yes or 0/false/no" >&2
-    exit 1
-    ;;
-esac
 
 echo "staged Android embedded host under ${OUTPUT_ROOT}"

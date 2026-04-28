@@ -3,7 +3,6 @@ package androidembeddedhost
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -12,22 +11,20 @@ import (
 	"github.com/defin85/vk-turn-proxy-go/pkg/clientcontrol"
 )
 
-const androidWireGuardProfileEnv = "VKTP_ANDROID_WIREGUARD_PROFILE"
-
 var (
 	androidWireGuardProfilePathMu sync.RWMutex
 	androidWireGuardProfilePath   string
 )
 
 func defaultAndroidWireGuardTurnMaterializer() clientcontrol.WireGuardTurnMaterializer {
-	profilePath, ok := detectAndroidWireGuardProfilePath()
-	if !ok {
-		return nil
-	}
 	return func(
 		_ context.Context,
 		req clientcontrol.WireGuardTurnMaterializeRequest,
 	) (*clientcontrol.WireGuardTurnExecutionLease, error) {
+		profilePath, ok := detectAndroidWireGuardProfilePath()
+		if !ok {
+			return nil, fmt.Errorf("explicit Android WireGuard profile is not configured")
+		}
 		profile, err := wireguardprofile.Load(profilePath)
 		if err != nil {
 			return nil, err
@@ -84,12 +81,6 @@ func detectAndroidWireGuardProfilePath() (string, bool) {
 	overridePath := androidWireGuardProfilePath
 	androidWireGuardProfilePathMu.RUnlock()
 	if override := strings.TrimSpace(overridePath); override != "" {
-		if wireguardprofile.FileExists(override) {
-			return override, true
-		}
-		return "", false
-	}
-	if override := strings.TrimSpace(os.Getenv(androidWireGuardProfileEnv)); override != "" {
 		if wireguardprofile.FileExists(override) {
 			return override, true
 		}

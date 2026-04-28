@@ -103,13 +103,11 @@ That workflow:
 1. uses the Linux Android SDK/NDK from WSL
 2. rebuilds the packaged Android embedded host in-place
 3. writes Linux-native `android/local.properties`
-4. optionally stages the local Android WireGuard dev profile from
-   `VKTP_ANDROID_WIREGUARD_PROFILE` or
-   `~/.local/state/vk-turn-proxy-go/wg/phone1.conf` into the debug APK assets
-   for the packaged `android_vpn_service` dev path
-5. builds the debug APK with the pinned Flutter SDK
+4. builds the debug APK with the pinned Flutter SDK
 5. validates that the APK contains the packaged JNI and embedded-host `.so` files
-6. stages the result under `dist/mobile/android-gui-shell/`
+6. rejects packaged WireGuard seed assets; Android WireGuard runtime material
+   must be configured explicitly at runtime rather than hidden in the APK
+7. stages the result under `dist/mobile/android-gui-shell/`
 
 The WSL shell environment should expose:
 

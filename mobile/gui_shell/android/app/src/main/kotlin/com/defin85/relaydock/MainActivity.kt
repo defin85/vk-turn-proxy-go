@@ -88,6 +88,12 @@ class MainActivity : FlutterActivity() {
                         }
                     "requestPlatformTunnelPermission" ->
                         requestPlatformTunnelPermission(call, result)
+                    "getAndroidWireGuardProfileStatus" ->
+                        result.success(EmbeddedMobileHost.wireGuardProfileStatus(applicationContext))
+                    "configureAndroidWireGuardProfile" ->
+                        configureAndroidWireGuardProfile(call, result)
+                    "clearAndroidWireGuardProfile" ->
+                        clearAndroidWireGuardProfile(result)
                     "hideSoftKeyboard" -> {
                         hideSoftKeyboard()
                         result.success(null)
@@ -410,6 +416,42 @@ class MainActivity : FlutterActivity() {
         pendingPlatformTunnelPermissionResult = result
         @Suppress("DEPRECATION")
         startActivityForResult(prepareIntent, PLATFORM_TUNNEL_PERMISSION_REQUEST_CODE)
+    }
+
+    private fun configureAndroidWireGuardProfile(
+        call: MethodCall,
+        result: MethodChannel.Result,
+    ) {
+        try {
+            val contents = call.argument<String>("contents").orEmpty()
+            result.success(
+                EmbeddedMobileHost.configureWireGuardProfile(applicationContext, contents),
+            )
+        } catch (error: IllegalArgumentException) {
+            result.error(
+                "invalid_android_wireguard_profile",
+                error.message ?: "Invalid Android WireGuard configuration.",
+                null,
+            )
+        } catch (error: IllegalStateException) {
+            result.error(
+                "android_wireguard_profile_unavailable",
+                error.message ?: "Android WireGuard configuration is unavailable.",
+                null,
+            )
+        }
+    }
+
+    private fun clearAndroidWireGuardProfile(result: MethodChannel.Result) {
+        try {
+            result.success(EmbeddedMobileHost.clearWireGuardProfile(applicationContext))
+        } catch (error: IllegalStateException) {
+            result.error(
+                "android_wireguard_profile_unavailable",
+                error.message ?: "Android WireGuard configuration is unavailable.",
+                null,
+            )
+        }
     }
 
     private fun finishPlatformTunnelPermissionRequest(granted: Boolean?) {

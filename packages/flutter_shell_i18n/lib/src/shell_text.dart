@@ -439,6 +439,12 @@ class ShellText {
       );
   String selectExecutionPathBeforeStarting(String modeLabel) =>
       t.shellTextSelectExecutionPathBeforeStarting(modeLabel: modeLabel);
+  String get androidWireGuardProfileRequiredBeforeStarting =>
+      t.shellTextAndroidWireGuardProfileRequiredBeforeStarting;
+  String get androidWireGuardProfileConfigured =>
+      t.shellTextAndroidWireGuardProfileConfigured;
+  String get androidWireGuardProfileCleared =>
+      t.shellTextAndroidWireGuardProfileCleared;
   String get resetLocalMobileShellStateBeforeReconnecting =>
       t.shellTextResetLocalMobileShellStateBeforeReconnecting;
   String detectedBrowserReturnAndContinuedChallenge(
@@ -1035,6 +1041,12 @@ class ShellText {
   String get mobileSelectedForHome => t.shellTextMobileSelectedForHome;
   String get mobileTurnOnVpn => t.shellTextMobileTurnOnVpn;
   String get mobileTurnOffVpn => t.shellTextMobileTurnOffVpn;
+  String get importAndroidWireGuardConfig =>
+      t.shellTextImportAndroidWireGuardConfig;
+  String get replaceAndroidWireGuardConfig =>
+      t.shellTextReplaceAndroidWireGuardConfig;
+  String get forgetAndroidWireGuardConfig =>
+      t.shellTextForgetAndroidWireGuardConfig;
   String get mobileProvidersTitle => t.shellTextMobileProvidersTitle;
   String get mobileProvidersSubtitle => t.shellTextMobileProvidersSubtitle;
   String get mobileAddProvider => t.shellTextMobileAddProvider;

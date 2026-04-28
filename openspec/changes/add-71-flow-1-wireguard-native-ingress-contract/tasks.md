@@ -27,12 +27,27 @@
 - [ ] 3.3 Keep the desktop one-button flow intact: users should not manually edit
   peer, DTLS, or raw ingress settings in the normal path.
 
-## 4. Verification
+## 4. Android Host and UI
 
-- [ ] 4.1 Add focused Go tests for endpoint selection and fail-closed protocol
+- [x] 4.1 Remove hidden Android `phone1.conf` staging from embedded-host and GUI
+  packaging workflows, including environment/default profile fallbacks.
+- [x] 4.2 Keep Android WireGuard material app-owned and explicit by adding a
+  mobile UI/import path that stores the profile in app-private files and passes
+  only that app-owned path to the embedded host.
+- [x] 4.3 Keep the mobile Home action fail-closed when the selected strict
+  Android WireGuard path has no supported execution plan or no explicit
+  imported profile.
+- [ ] 4.4 Add a richer Android settings surface for profile metadata,
+  validation detail, and replace/forget confirmation before production rollout.
+
+## 5. Verification
+
+- [ ] 5.1 Add focused Go tests for endpoint selection and fail-closed protocol
   mismatch handling.
-- [ ] 4.2 Add or update Windows VM smoke coverage to prove fresh WireGuard
+- [ ] 5.2 Add or update Windows VM smoke coverage to prove fresh WireGuard
   handshake, Wintun received bytes, and egress IP through the VPS.
-- [ ] 4.3 Verify the existing DTLS/custom-overlay contour still targets the DTLS
+- [ ] 5.3 Verify the existing DTLS/custom-overlay contour still targets the DTLS
   endpoint after the WireGuard-native ingress change.
-- [ ] 4.4 Run `openspec validate add-71-flow-1-wireguard-native-ingress-contract --strict --no-interactive`.
+- [x] 5.4 Verify Android debug APK contents reject packaged WireGuard seed
+  assets.
+- [x] 5.5 Run `openspec validate add-71-flow-1-wireguard-native-ingress-contract --strict --no-interactive`.

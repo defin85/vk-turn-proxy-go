@@ -1330,6 +1330,10 @@ VoidCallback? _profileWorkspaceVpnAction(MobileShellController controller) {
     return null;
   }
   final ready = controller.platformTunnelResultFor(mode)?.ready == true;
+  if (!ready &&
+      controller.platformTunnelStartPreparationBlockReason(mode) != null) {
+    return null;
+  }
   return () => unawaited(
     ready
         ? controller.stopPlatformTunnel(mode)
@@ -4802,41 +4806,65 @@ HomeWorkflowPrimaryActionData _mobileHomePrimaryActionData(
 }) {
   final activeChallenge = challenge;
   final needsProfileSelection = !tunnelReady && !hasSelectedProfile;
-  final tone = switch ((activeChallenge, tunnelReady, needsProfileSelection)) {
-    (final ChallengeRecord _, _, _) => ShellSemanticTone.attention,
-    (null, true, _) => ShellSemanticTone.ready,
-    (null, false, true) => ShellSemanticTone.neutral,
-    (null, false, false) => ShellSemanticTone.info,
+  final startBlockReason =
+      activeChallenge == null && !tunnelReady && !needsProfileSelection
+      ? _activePlatformTunnelStartBlockReason(controller)
+      : null;
+  final startBlocked = startBlockReason != null;
+  final needsAndroidWireGuardProfile =
+      startBlocked &&
+      controller.canConfigureAndroidWireGuardProfile &&
+      !controller.androidWireGuardProfileStatus.configured;
+  final tone = switch ((
+    activeChallenge,
+    tunnelReady,
+    needsProfileSelection,
+    startBlocked,
+  )) {
+    (final ChallengeRecord _, _, _, _) => ShellSemanticTone.attention,
+    (null, true, _, _) => ShellSemanticTone.ready,
+    (null, false, true, _) => ShellSemanticTone.neutral,
+    (null, false, false, true) => ShellSemanticTone.attention,
+    (null, false, false, false) => ShellSemanticTone.info,
   };
-  final title = switch ((activeChallenge, tunnelReady, needsProfileSelection)) {
-    (final ChallengeRecord _, _, _) =>
+  final title = switch ((
+    activeChallenge,
+    tunnelReady,
+    needsProfileSelection,
+    startBlocked,
+  )) {
+    (final ChallengeRecord _, _, _, _) =>
       context.shellText.finishProviderValidation,
-    (null, true, _) => context.shellText.vpnIsOn,
-    (null, false, true) => context.shellText.profileRequired,
-    (null, false, false) => context.shellText.vpnIsOff,
+    (null, true, _, _) => context.shellText.vpnIsOn,
+    (null, false, true, _) => context.shellText.profileRequired,
+    (null, false, false, true) => context.shellText.unavailable,
+    (null, false, false, false) => context.shellText.vpnIsOff,
   };
   final subtitle = switch ((
     activeChallenge,
     tunnelReady,
     needsProfileSelection,
+    startBlocked,
   )) {
-    (final ChallengeRecord currentChallenge, _, _) =>
+    (final ChallengeRecord currentChallenge, _, _, _) =>
       controller.challengeRequiresOwnedBrowser(currentChallenge)
           ? (currentChallenge.prompt?.trim().isNotEmpty == true
                 ? currentChallenge.prompt!
                 : context.shellText.continueProviderFlowInApp)
           : context.shellText.openRequiredBrowserStepFromHome,
-    (null, true, _) => context.shellText.disconnectCurrentMobileVpnPath,
-    (null, false, true) =>
+    (null, true, _, _) => context.shellText.disconnectCurrentMobileVpnPath,
+    (null, false, true, _) =>
       context.shellText.chooseOrFinishProfileBeforeStartingVpn,
-    (null, false, false) => context.shellText.startCurrentMobileVpnPath,
+    (null, false, false, true) => startBlockReason!,
+    (null, false, false, false) => context.shellText.startCurrentMobileVpnPath,
   };
   final primaryAction = switch ((
     activeChallenge,
     tunnelReady,
     needsProfileSelection,
+    startBlocked,
   )) {
-    (final ChallengeRecord currentChallenge, _, _) => HomeWorkflowAction(
+    (final ChallengeRecord currentChallenge, _, _, _) => HomeWorkflowAction(
       label: openChallengeLabel(currentChallenge),
       icon: controller.challengeRequiresOwnedBrowser(currentChallenge)
           ? Icons.open_in_browser_rounded
@@ -4845,7 +4873,7 @@ HomeWorkflowPrimaryActionData _mobileHomePrimaryActionData(
           ? null
           : () => unawaited(onLaunchChallengeSurface(currentChallenge)),
     ),
-    (null, true, _) => HomeWorkflowAction(
+    (null, true, _, _) => HomeWorkflowAction(
       label: context.shellText.mobileTurnOffVpn,
       icon: Icons.power_settings_new_rounded,
       onPressed: controller.busy || controller.hostConnection?.isReady != true
@@ -4858,12 +4886,26 @@ HomeWorkflowPrimaryActionData _mobileHomePrimaryActionData(
               unawaited(controller.stopPlatformTunnel(mode));
             },
     ),
-    (null, false, true) => HomeWorkflowAction(
+    (null, false, true, _) => HomeWorkflowAction(
       label: context.shellText.continueInProfiles,
       icon: Icons.arrow_forward_rounded,
       onPressed: controller.busy ? null : onOpenProfiles,
     ),
-    (null, false, false) => HomeWorkflowAction(
+    (null, false, false, true) =>
+      needsAndroidWireGuardProfile
+          ? HomeWorkflowAction(
+              label: context.shellText.importAndroidWireGuardConfig,
+              icon: Icons.vpn_key_rounded,
+              onPressed: controller.busy
+                  ? null
+                  : () => unawaited(controller.importAndroidWireGuardProfile()),
+            )
+          : HomeWorkflowAction(
+              label: context.shellText.mobileTurnOnVpn,
+              icon: Icons.power_settings_new_rounded,
+              onPressed: null,
+            ),
+    (null, false, false, false) => HomeWorkflowAction(
       label: context.shellText.mobileTurnOnVpn,
       icon: Icons.power_settings_new_rounded,
       onPressed: controller.busy || controller.hostConnection?.isReady != true
@@ -4896,15 +4938,45 @@ HomeWorkflowPrimaryActionData _mobileHomePrimaryActionData(
             ? null
             : () => unawaited(controller.cancelChallenge(activeChallenge.id)),
       ),
+    if (activeChallenge == null &&
+        !tunnelReady &&
+        controller.canConfigureAndroidWireGuardProfile &&
+        controller.androidWireGuardProfileStatus.configured)
+      HomeWorkflowAction(
+        label: context.shellText.replaceAndroidWireGuardConfig,
+        icon: Icons.upload_file_rounded,
+        style: HomeWorkflowActionStyle.outlined,
+        onPressed: controller.busy
+            ? null
+            : () => unawaited(controller.importAndroidWireGuardProfile()),
+      ),
+    if (activeChallenge == null &&
+        !tunnelReady &&
+        controller.canConfigureAndroidWireGuardProfile &&
+        controller.androidWireGuardProfileStatus.configured)
+      HomeWorkflowAction(
+        label: context.shellText.forgetAndroidWireGuardConfig,
+        icon: Icons.delete_outline_rounded,
+        style: HomeWorkflowActionStyle.text,
+        onPressed: controller.busy
+            ? null
+            : () => unawaited(controller.forgetAndroidWireGuardProfile()),
+      ),
   ];
 
   return HomeWorkflowPrimaryActionData(
     tone: tone,
-    eyebrow: switch ((activeChallenge, tunnelReady, needsProfileSelection)) {
-      (final ChallengeRecord _, _, _) => context.shellText.providerStepTone,
-      (null, true, _) => context.shellText.connectionLiveTone,
-      (null, false, true) => context.shellText.setupNeededTone,
-      (null, false, false) => context.shellText.mainActionTone,
+    eyebrow: switch ((
+      activeChallenge,
+      tunnelReady,
+      needsProfileSelection,
+      startBlocked,
+    )) {
+      (final ChallengeRecord _, _, _, _) => context.shellText.providerStepTone,
+      (null, true, _, _) => context.shellText.connectionLiveTone,
+      (null, false, true, _) => context.shellText.setupNeededTone,
+      (null, false, false, true) => context.shellText.setupNeededTone,
+      (null, false, false, false) => context.shellText.mainActionTone,
     },
     title: title,
     subtitle: subtitle,
@@ -4912,11 +4984,13 @@ HomeWorkflowPrimaryActionData _mobileHomePrimaryActionData(
       activeChallenge,
       tunnelReady,
       needsProfileSelection,
+      startBlocked,
     )) {
-      (final ChallengeRecord _, _, _) => Icons.travel_explore_rounded,
-      (null, true, _) => Icons.shield_rounded,
-      (null, false, true) => Icons.folder_open_rounded,
-      (null, false, false) => Icons.power_rounded,
+      (final ChallengeRecord _, _, _, _) => Icons.travel_explore_rounded,
+      (null, true, _, _) => Icons.shield_rounded,
+      (null, false, true, _) => Icons.folder_open_rounded,
+      (null, false, false, true) => Icons.block_rounded,
+      (null, false, false, false) => Icons.power_rounded,
     },
     primaryAction: primaryAction,
     annotation: activeChallenge == null
@@ -4924,6 +4998,16 @@ HomeWorkflowPrimaryActionData _mobileHomePrimaryActionData(
         : context.shellText.challengeKind(activeChallenge.kind),
     secondaryActions: secondaryActions,
   );
+}
+
+String? _activePlatformTunnelStartBlockReason(
+  MobileShellController controller,
+) {
+  final mode = controller.activePlatformTunnelMode;
+  if (mode == null) {
+    return null;
+  }
+  return controller.platformTunnelStartPreparationBlockReason(mode);
 }
 
 HomeWorkflowModeSectionData _mobileHomeModeSectionData(

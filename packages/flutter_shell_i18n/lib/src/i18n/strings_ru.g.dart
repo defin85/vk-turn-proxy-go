@@ -810,6 +810,15 @@ class TranslationsRu extends Translations
     required Object modeLabel,
   }) => 'Выберите путь выполнения перед запуском ${modeLabel}.';
   @override
+  String get shellTextAndroidWireGuardProfileRequiredBeforeStarting =>
+      'Импортируйте WireGuard-конфигурацию в приложении перед запуском Android VPN Service.';
+  @override
+  String get shellTextAndroidWireGuardProfileConfigured =>
+      'Android WireGuard-конфигурация импортирована.';
+  @override
+  String get shellTextAndroidWireGuardProfileCleared =>
+      'Android WireGuard-конфигурация забыта.';
+  @override
   String get shellTextResetLocalMobileShellStateBeforeReconnecting =>
       'Сбросьте локальное состояние мобильной оболочки перед переподключением.';
   @override
@@ -1589,6 +1598,14 @@ class TranslationsRu extends Translations
   String get shellTextMobileTurnOnVpn => 'Включить VPN';
   @override
   String get shellTextMobileTurnOffVpn => 'Выключить VPN';
+  @override
+  String get shellTextImportAndroidWireGuardConfig =>
+      'Импорт WireGuard-конфига';
+  @override
+  String get shellTextReplaceAndroidWireGuardConfig =>
+      'Заменить WireGuard-конфиг';
+  @override
+  String get shellTextForgetAndroidWireGuardConfig => 'Забыть WireGuard-конфиг';
   @override
   String get shellTextMobileProvidersTitle => 'Провайдеры';
   @override
@@ -2649,6 +2666,12 @@ extension on TranslationsRu {
           'shellTextSelectExecutionPathBeforeStarting' =>
             ({required Object modeLabel}) =>
                 'Выберите путь выполнения перед запуском ${modeLabel}.',
+          'shellTextAndroidWireGuardProfileRequiredBeforeStarting' =>
+            'Импортируйте WireGuard-конфигурацию в приложении перед запуском Android VPN Service.',
+          'shellTextAndroidWireGuardProfileConfigured' =>
+            'Android WireGuard-конфигурация импортирована.',
+          'shellTextAndroidWireGuardProfileCleared' =>
+            'Android WireGuard-конфигурация забыта.',
           'shellTextResetLocalMobileShellStateBeforeReconnecting' =>
             'Сбросьте локальное состояние мобильной оболочки перед переподключением.',
           'shellTextDetectedBrowserReturnAndContinuedChallenge' =>
@@ -3104,15 +3127,15 @@ extension on TranslationsRu {
             'Оболочка переподключается к локальному хосту. Сохраняйте поверхность редактора стабильной, пока согласование не завершится.',
           'shellTextDesktopWorkflowAssuranceBlocked' =>
             'Локальный хост заблокирован или несовместим. Держите путь восстановления видимым из основной рабочей поверхности.',
+          _ => null,
+        } ??
+        switch (path) {
           'shellTextDesktopWorkflowAssuranceReadyLive' =>
             'Локальный хост готов. Сохраняйте текущий рабочий процесс главным, пока детали живого рантайма остаются в одном шаге.',
           'shellTextDesktopWorkflowAssuranceReadyIdle' =>
             'Локальный хост готов. Рутинная поддержка остается компактной, чтобы активный рабочий процесс сохранял визуальный приоритет.',
           'shellTextContinueAfterBrowserStep' =>
             'Продолжить после шага в браузере',
-          _ => null,
-        } ??
-        switch (path) {
           'shellTextContinueInBrowser' => 'Продолжить в браузере',
           'shellTextProviderFamilyLabel' =>
             ({required Object familyTitle}) =>
@@ -3131,6 +3154,10 @@ extension on TranslationsRu {
           'shellTextMobileSelectedForHome' => 'Выбран для Главной',
           'shellTextMobileTurnOnVpn' => 'Включить VPN',
           'shellTextMobileTurnOffVpn' => 'Выключить VPN',
+          'shellTextImportAndroidWireGuardConfig' => 'Импорт WireGuard-конфига',
+          'shellTextReplaceAndroidWireGuardConfig' =>
+            'Заменить WireGuard-конфиг',
+          'shellTextForgetAndroidWireGuardConfig' => 'Забыть WireGuard-конфиг',
           'shellTextMobileProvidersTitle' => 'Провайдеры',
           'shellTextMobileProvidersSubtitle' =>
             'Выберите сохраненный переиспользуемый провайдер или добавьте новый для Профилей.',

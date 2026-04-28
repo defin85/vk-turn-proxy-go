@@ -22,18 +22,25 @@ behavior.
 - Require runtime execution planning to materialize a `wireguard_native` remote
   ingress separately from the DTLS overlay endpoint used by
   `turn_dtls_overlay + custom_packet_overlay`.
+- Require Android WireGuard material to enter through explicit app runtime/UI
+  configuration. Packaged clients must not rely on a hidden `phone1.conf`,
+  workstation-local seed asset, or environment fallback.
 - Document that one UDP port may serve many clients for the same protocol or a
   proven demux contract, but not mixed DTLS overlay and raw WireGuard traffic by
   assumption.
 - Add implementation tasks for the VPS service/runbook, Windows host defaults,
-  fail-closed validation, and live VM/VPS verification.
+  Android runtime configuration, fail-closed validation, and live device/VM/VPS
+  verification.
 
 ## Impact
 
-- Affected specs: `wireguard-turn-carrier`, `runtime-execution-planning`
+- Affected specs: `wireguard-turn-carrier`, `runtime-execution-planning`,
+  `android-embedded-mobile-host`, `mobile-gui-client`
 - Affected code: `internal/windowsdesktophost`,
+  `internal/androidembeddedhost`, `mobile/gui_shell`,
   `internal/wireguardturnruntime`, `pkg/clientcontrol`, runtime-default
-  materialization, VPS service/runbook scripts, Windows VM smoke scripts
+  materialization, VPS service/runbook scripts, Android device checks, Windows
+  VM smoke scripts
 - Deployment impact: likely requires either a persistent plain UDP ingress
   (validated in the lab as `56042/udp`) or a later explicit UDP demultiplexer on
   the existing external port

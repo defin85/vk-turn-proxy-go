@@ -155,8 +155,6 @@ EOF
 ( cd "${ROOT_DIR}" && dart pub get )
 ( cd "${ROOT_DIR}" && dart pub workspace list )
 
-export VKTP_ANDROID_INCLUDE_DEV_WIREGUARD_PROFILE=0
-unset VKTP_ANDROID_WIREGUARD_PROFILE
 bash "${ROOT_DIR}/scripts/build-android-embedded-host-linux.sh"
 
 EFFECTIVE_TARGET_SDK="$(
@@ -236,7 +234,7 @@ for expected_entry in \
   fi
 done
 if grep -Eq '(^|[[:space:]])base/assets/wireguard/phone1\.conf($|[[:space:]])' <<<"${AAB_ENTRIES}"; then
-  echo "release AAB contains debug WireGuard seed asset: base/assets/wireguard/phone1.conf" >&2
+  echo "release AAB contains forbidden packaged WireGuard seed asset: base/assets/wireguard/phone1.conf" >&2
   exit 1
 fi
 if grep -Eq '(^|[[:space:]])base/assets/adi-registration\.properties($|[[:space:]])' <<<"${AAB_ENTRIES}"; then

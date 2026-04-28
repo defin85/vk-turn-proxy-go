@@ -175,11 +175,9 @@ for expected_entry in \
     exit 1
   fi
 done
-if [[ -f "${ROOT_DIR}/dist/mobile/android-embedded-host/assets/wireguard/phone1.conf" ]]; then
-  if ! grep -Fq "assets/wireguard/phone1.conf" <<<"${APK_ENTRIES}"; then
-    echo "expected packaged Android WireGuard profile asset not found in APK" >&2
-    exit 1
-  fi
+if grep -Fq "assets/wireguard/phone1.conf" <<<"${APK_ENTRIES}"; then
+  echo "unexpected packaged Android WireGuard profile asset found in APK" >&2
+  exit 1
 fi
 
 STAGE_DIR="${ROOT_DIR}/dist/mobile/android-gui-shell"

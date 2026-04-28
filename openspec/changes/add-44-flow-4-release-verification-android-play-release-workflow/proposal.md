@@ -7,8 +7,8 @@ device work, but that path is not a Google Play publication workflow.
 Today the repo-owned Android packaging surface still has three publish blockers:
 - the documented WSL workflow stages only `app-debug.apk`
 - Android `release` still falls back to the debug signing config
-- the debug packaging lane can stage repo-local development assets such as the
-  seeded `phone1.conf` WireGuard profile
+- the debug packaging lane could stage repo-local development assets such as a
+  packaged WireGuard seed profile
 
 That is enough for local iteration, but it is not a store-ready release lane.
 Google Play publication needs an explicit repo-owned Android release workflow
@@ -33,8 +33,8 @@ instead of leaving it as ad hoc tribal knowledge.
   explicit upload-key signing contract that fails closed when signing inputs are
   missing or invalid.
 - Define the release boundary between store-target packages and debug-only
-  mobile workflows so repo-local seeded assets such as the development
-  WireGuard profile do not leak into Play-target builds.
+  mobile workflows so repo-local packaged WireGuard seed assets do not leak into
+  Play-target builds.
 - Add release preflight rules for current Play submission prerequisites that
   belong in the repo-owned build lane, such as a repo-managed minimum Android
   target floor and explicit release packaging checks.

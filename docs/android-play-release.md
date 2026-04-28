@@ -58,12 +58,13 @@ The workflow:
 1. validates the upload-key environment and keystore alias
 2. synchronizes `publish_identity.json` and `version.json` derived assets
 3. writes Linux-native Android `local.properties`
-4. rebuilds the Android embedded host without debug WireGuard seed assets
+4. rebuilds the Android embedded host without packaged WireGuard seed assets
 5. resolves the effective release `targetSdkVersion` through Gradle
 6. enforces the repo-managed Play target SDK floor, currently API `35`
 7. builds a signed release Android App Bundle
 8. verifies the AAB contains the embedded host libraries
-9. rejects debug-only assets such as `base/assets/wireguard/phone1.conf`
+9. rejects packaged WireGuard seed assets such as
+   `base/assets/wireguard/phone1.conf`
 10. verifies the AAB signer matches the Play-confirmed upload certificate
 11. downloads and verifies the pinned `bundletool-all` jar
 12. builds Play-style APK splits from the AAB for a device spec

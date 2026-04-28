@@ -24,3 +24,12 @@ endpoints from raw-WireGuard ingress endpoints.
 - **THEN** runtime planning or host materialization fails closed before reporting
   platform-tunnel readiness
 - **AND** the diagnostic names the expected and actual remote ingress protocols
+
+#### Scenario: Android plan remains blocked until explicit local material exists
+
+- **GIVEN** an Android `android_vpn_service` plan with `carrier_family=turn_datagram`
+  and `engine_family=wireguard_native`
+- **AND** no app-owned WireGuard profile has been imported at runtime
+- **WHEN** the mobile shell prepares startup
+- **THEN** the plan is surfaced as setup-needed rather than ready-to-start
+- **AND** startup does not depend on hidden packaged profile assets

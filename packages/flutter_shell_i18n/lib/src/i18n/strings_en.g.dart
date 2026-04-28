@@ -1046,6 +1046,18 @@ class Translations with BaseTranslations<AppLocale, Translations> {
     required Object modeLabel,
   }) => 'Select an execution path before starting ${modeLabel}.';
 
+  /// en: 'Import a WireGuard configuration in the app before starting Android VPN Service.'
+  String get shellTextAndroidWireGuardProfileRequiredBeforeStarting =>
+      'Import a WireGuard configuration in the app before starting Android VPN Service.';
+
+  /// en: 'Android WireGuard configuration imported.'
+  String get shellTextAndroidWireGuardProfileConfigured =>
+      'Android WireGuard configuration imported.';
+
+  /// en: 'Android WireGuard configuration forgotten.'
+  String get shellTextAndroidWireGuardProfileCleared =>
+      'Android WireGuard configuration forgotten.';
+
   /// en: 'Reset local mobile shell state before reconnecting.'
   String get shellTextResetLocalMobileShellStateBeforeReconnecting =>
       'Reset local mobile shell state before reconnecting.';
@@ -2079,6 +2091,16 @@ class Translations with BaseTranslations<AppLocale, Translations> {
 
   /// en: 'Turn off VPN'
   String get shellTextMobileTurnOffVpn => 'Turn off VPN';
+
+  /// en: 'Import WireGuard config'
+  String get shellTextImportAndroidWireGuardConfig => 'Import WireGuard config';
+
+  /// en: 'Replace WireGuard config'
+  String get shellTextReplaceAndroidWireGuardConfig =>
+      'Replace WireGuard config';
+
+  /// en: 'Forget WireGuard config'
+  String get shellTextForgetAndroidWireGuardConfig => 'Forget WireGuard config';
 
   /// en: 'Providers'
   String get shellTextMobileProvidersTitle => 'Providers';
@@ -3337,6 +3359,12 @@ extension on Translations {
           'shellTextSelectExecutionPathBeforeStarting' =>
             ({required Object modeLabel}) =>
                 'Select an execution path before starting ${modeLabel}.',
+          'shellTextAndroidWireGuardProfileRequiredBeforeStarting' =>
+            'Import a WireGuard configuration in the app before starting Android VPN Service.',
+          'shellTextAndroidWireGuardProfileConfigured' =>
+            'Android WireGuard configuration imported.',
+          'shellTextAndroidWireGuardProfileCleared' =>
+            'Android WireGuard configuration forgotten.',
           'shellTextResetLocalMobileShellStateBeforeReconnecting' =>
             'Reset local mobile shell state before reconnecting.',
           'shellTextDetectedBrowserReturnAndContinuedChallenge' =>
@@ -3775,14 +3803,14 @@ extension on Translations {
             'The shell is reconnecting to the local host. Keep the editor surface stable while negotiation completes.',
           'shellTextDesktopWorkflowAssuranceBlocked' =>
             'The local host is blocked or incompatible. Keep the recovery path visible from the primary workflow surface.',
+          _ => null,
+        } ??
+        switch (path) {
           'shellTextDesktopWorkflowAssuranceReadyLive' =>
             'The local host is ready. Keep the current workflow dominant while live runtime detail stays one step away.',
           'shellTextDesktopWorkflowAssuranceReadyIdle' =>
             'The local host is ready. Routine support stays compact so the active workflow keeps visual priority.',
           'shellTextContinueAfterBrowserStep' => 'Continue after browser step',
-          _ => null,
-        } ??
-        switch (path) {
           'shellTextContinueInBrowser' => 'Continue in browser',
           'shellTextProviderFamilyLabel' =>
             ({required Object familyTitle}) =>
@@ -3801,6 +3829,10 @@ extension on Translations {
           'shellTextMobileSelectedForHome' => 'Selected for Home',
           'shellTextMobileTurnOnVpn' => 'Turn on VPN',
           'shellTextMobileTurnOffVpn' => 'Turn off VPN',
+          'shellTextImportAndroidWireGuardConfig' => 'Import WireGuard config',
+          'shellTextReplaceAndroidWireGuardConfig' =>
+            'Replace WireGuard config',
+          'shellTextForgetAndroidWireGuardConfig' => 'Forget WireGuard config',
           'shellTextMobileProvidersTitle' => 'Providers',
           'shellTextMobileProvidersSubtitle' =>
             'Choose a saved reusable provider or add a new one for Profiles.',
