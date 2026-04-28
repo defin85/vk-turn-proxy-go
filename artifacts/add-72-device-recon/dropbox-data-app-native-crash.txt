@@ -1,0 +1,541 @@
+Drop box contents: 29 entries
+Max entries: 1000
+Low priority rate limit period: 2000 ms
+Low priority tags: {data_app_wtf, keymaster, system_server_wtf, system_app_strictmode, system_app_wtf, system_server_strictmode, data_app_strictmode, netstats}
+Searching for: data_app_native_crash
+
+========================================
+2026-04-24 23:09:59 data_app_native_crash (text, 1633 bytes)
+Process: ru.nspk.mirpay
+PID: 27346
+UID: 10247
+Frozen: false
+Flags: 0x30c83e44
+Package: ru.nspk.mirpay v393 (1.61.1.350)
+Foreground: No
+Process-Runtime: 14209777
+Build: POCO/munch_ru/munch:14/UKQ1.231207.002/V816.0.7.0.ULMRUXM:user/release-keys
+Loading-Progress: 1.0
+Dropped-Count: 0
+
+*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+Build fingerprint: 'POCO/munch_ru/munch:14/UKQ1.231207.002/V816.0.7.0.ULMRUXM:user/release-keys'
+Revision: '0'
+ABI: 'arm64'
+Timestamp: 2026-04-24 23:09:57.895952683+0300
+Process uptime: 29702s
+Cmdline: ru.nspk.mirpay
+pid: 27346, tid: 27404, name: ru.nspk.mirpay  >>> ru.nspk.mirpay <<<
+uid: 10247
+signal 11 (SIGSEGV), code 2 (SEGV_ACCERR), fault addr 0x00000076ef003fe8
+Cause: stack pointer is not in a rw map; likely due to stack overflow.
+    x0  00000000000000ee  x1  00000076ef003ff0  x2  0000000000000011  x3  0000000000000000
+    x4  00000000ffffffff  x5  0000000000000000  x6  0000000030343732  x7  7f7f7f7f7f7f7f7f
+    x8  000000001970f941  x9  00000000ee5a2d72  x10 0000000000000000  x11 00000076ef5fde11
+    x12 b4000077a5c7d600  x13 00000076ef003fe8  x14 00000076ef003ff0  x15 0000000000000000
+    x16 0000000000ee5a2d  x17 000000000000ee5a  x18 000000766e29a000  x19 00000076ef0fca50
+    x20 fffffffffffffffe  x21 00000000000001a4  x22 fffffffffffffff3  x23 00000000fffffffe
+    x24 00000000000001a4  x25 00000000fffffff3  x26 0000000000000000  x27 fffffffffffffff3
+    x28 fffffffffffffff3  x29 00000076ef0fcbf0
+    lr  00000076ef65b778  sp  00000076ef003fe0  pc  00000076ef6382a4  pst 0000000060001000
+1 total frames
+backtrace:
+      #00 pc 00000000000402a4  [anon:15e8]
+
+========================================
+2026-04-24 23:24:06 data_app_native_crash (text, 5599 bytes)
+Process: com.synology.projectkailash
+PID: 9067
+UID: 10460
+Frozen: false
+Flags: 0x28983e44
+Package: com.synology.projectkailash v603 (2.3.8)
+Foreground: No
+Process-Runtime: 23852
+Build: POCO/munch_ru/munch:14/UKQ1.231207.002/V816.0.7.0.ULMRUXM:user/release-keys
+Loading-Progress: 1.0
+Dropped-Count: 0
+
+*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+Build fingerprint: 'POCO/munch_ru/munch:14/UKQ1.231207.002/V816.0.7.0.ULMRUXM:user/release-keys'
+Revision: '0'
+ABI: 'arm64'
+Timestamp: 2026-04-24 23:23:56.970631790+0300
+Process uptime: 15s
+Cmdline: com.synology.projectkailash
+pid: 9067, tid: 9776, name: HolePunch86892  >>> com.synology.projectkailash <<<
+uid: 10460
+signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x00000000000000c0
+Cause: null pointer dereference
+    x0  0000000000000000  x1  b400006a16708500  x2  b400006a167087d4  x3  0000000000000001
+    x4  0000000000000001  x5  0000006a39b35bc0  x6  0000006a16925a74  x7  0000006a16925a74
+    x8  2b99de69c999ef2e  x9  0000000000000002  x10 00000000000f4240  x11 2b99de69c999ef2e
+    x12 0000000010624dd3  x13 0000000000000018  x14 00002494b028a481  x15 00ffffffffffffff
+    x16 0000006a16bd3228  x17 0000006a1693a964  x18 00000000000000b0  x19 0000000000000000
+    x20 b400006a167087ac  x21 b400006a16708500  x22 0000006a39b37000  x23 0000006a39b37000
+    x24 b400006a402d5ae0  x25 0000006a39b36650  x26 0000006a39b37000  x27 b4000076d9478a10
+    x28 0000006a16bf8390  x29 0000006a39b362e0
+    lr  0000006a1692f810  sp  0000006a39b36290  pc  0000006a1693a990  pst 0000000020001000
+17 total frames
+backtrace:
+      #00 pc 00000000000e2990  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/split_config.arm64_v8a.apk!libsynoholepunch.so (offset 0xc8a000) (CRcvQueue::removeConnector(int const&)+44) (BuildId: 3b3b945a7d42b5132b1176e6249aefbccfbdca98)
+      #01 pc 00000000000d780c  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/split_config.arm64_v8a.apk!libsynoholepunch.so (offset 0xc8a000) (CUDT::close()+716) (BuildId: 3b3b945a7d42b5132b1176e6249aefbccfbdca98)
+      #02 pc 00000000000cbad4  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/split_config.arm64_v8a.apk!libsynoholepunch.so (offset 0xc8a000) (CUDTUnited::close(int)+264) (BuildId: 3b3b945a7d42b5132b1176e6249aefbccfbdca98)
+      #03 pc 00000000000ce2ac  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/split_config.arm64_v8a.apk!libsynoholepunch.so (offset 0xc8a000) (CUDT::close(int)+48) (BuildId: 3b3b945a7d42b5132b1176e6249aefbccfbdca98)
+      #04 pc 00000000000c5210  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/split_config.arm64_v8a.apk!libsynoholepunch.so (offset 0xc8a000) (LibPunch::Socket::create_udt_channel_socket(int)+440) (BuildId: 3b3b945a7d42b5132b1176e6249aefbccfbdca98)
+      #05 pc 00000000000c052c  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/split_config.arm64_v8a.apk!libsynoholepunch.so (offset 0xc8a000) (LibPunch::UdtRelayDaemon::PreStart(LibPunch::RELAYDAEMON_OPTIONS const&, void (*)(LibPunch::RELAYDAEMON_INFO, void*), void*)+568) (BuildId: 3b3b945a7d42b5132b1176e6249aefbccfbdca98)
+      #06 pc 00000000000c21ec  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/split_config.arm64_v8a.apk!libsynoholepunch.so (offset 0xc8a000) (LibPunch::UdtRelayDaemon::Start(LibPunch::RELAYDAEMON_OPTIONS const&, void (*)(LibPunch::RELAYDAEMON_INFO, void*), void*)+64) (BuildId: 3b3b945a7d42b5132b1176e6249aefbccfbdca98)
+      #07 pc 00000000000becac  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/split_config.arm64_v8a.apk!libsynoholepunch.so (offset 0xc8a000) (Java_com_synology_synoholepunch_PunchInfo_synopunchStart+400) (BuildId: 3b3b945a7d42b5132b1176e6249aefbccfbdca98)
+      #08 pc 000000000053cba8  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/oat/arm64/base.odex (art_jni_trampoline+184)
+      #09 pc 0000000000414f2c  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/oat/arm64/base.odex (com.synology.synoholepunch.PunchInfo.start+204)
+      #10 pc 00000000003ee2ec  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/oat/arm64/base.odex (com.synology.sylibx.syhttp3.relay.apis.ApiPingDSM$HolePunchDaemonThread.startHolePunch+460)
+      #11 pc 00000000003ee6ec  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/oat/arm64/base.odex (com.synology.sylibx.syhttp3.relay.apis.ApiPingDSM$HolePunchDaemonThread.run+364)
+      #12 pc 00000000002cdd94  /apex/com.android.art/lib64/libart.so (art_quick_invoke_stub+612) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #13 pc 000000000026e624  /apex/com.android.art/lib64/libart.so (art::ArtMethod::Invoke(art::Thread*, unsigned int*, unsigned int, art::JValue*, char const*)+220) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #14 pc 00000000004c3eb0  /apex/com.android.art/lib64/libart.so (art::Thread::CreateCallback(void*)+1184) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #15 pc 00000000000fd528  /apex/com.android.runtime/lib64/bionic/libc.so (__pthread_start(void*)+208) (BuildId: 3d54e8645276c301285abd1dd0ea86ef)
+      #16 pc 0000000000096b24  /apex/com.android.runtime/lib64/bionic/libc.so (__start_thread+68) (BuildId: 3d54e8645276c301285abd1dd0ea86ef)
+
+========================================
+2026-04-25 15:04:42 data_app_native_crash (text, 5599 bytes)
+Process: com.synology.projectkailash
+PID: 32487
+UID: 10460
+Frozen: false
+Flags: 0x28983e44
+Package: com.synology.projectkailash v603 (2.3.8)
+Foreground: No
+Process-Runtime: 5337
+Build: POCO/munch_ru/munch:14/UKQ1.231207.002/V816.0.7.0.ULMRUXM:user/release-keys
+Loading-Progress: 1.0
+Dropped-Count: 0
+
+*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+Build fingerprint: 'POCO/munch_ru/munch:14/UKQ1.231207.002/V816.0.7.0.ULMRUXM:user/release-keys'
+Revision: '0'
+ABI: 'arm64'
+Timestamp: 2026-04-25 15:04:40.982814965+0300
+Process uptime: 5s
+Cmdline: com.synology.projectkailash
+pid: 32487, tid: 32661, name: HolePunch86893  >>> com.synology.projectkailash <<<
+uid: 10460
+signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x00000000000000c0
+Cause: null pointer dereference
+    x0  0000000000000000  x1  b400006d5937d700  x2  b400006d5937d9d4  x3  0000000000000001
+    x4  0000000000000001  x5  0000006a23b9fbc0  x6  0000006a1e517a74  x7  0000006a1e517a74
+    x8  cb662f51ea1a3b70  x9  0000000000000002  x10 00000000000f4240  x11 cb662f51ea1a3b70
+    x12 0000000010624dd3  x13 0000000000000018  x14 0000259105127166  x15 00ffffffffffffff
+    x16 0000006a1e7c5228  x17 0000006a1e52c964  x18 00000000000000b7  x19 0000000000000000
+    x20 b400006d5937d9ac  x21 b400006d5937d700  x22 0000006a23ba1000  x23 0000006a23ba1000
+    x24 b400006d59396380  x25 0000006a23ba0650  x26 0000006a23ba1000  x27 b400006d592a8b50
+    x28 0000006a1e7ea390  x29 0000006a23ba02e0
+    lr  0000006a1e521810  sp  0000006a23ba0290  pc  0000006a1e52c990  pst 0000000020001000
+17 total frames
+backtrace:
+      #00 pc 00000000000e2990  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/split_config.arm64_v8a.apk!libsynoholepunch.so (offset 0xc8a000) (CRcvQueue::removeConnector(int const&)+44) (BuildId: 3b3b945a7d42b5132b1176e6249aefbccfbdca98)
+      #01 pc 00000000000d780c  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/split_config.arm64_v8a.apk!libsynoholepunch.so (offset 0xc8a000) (CUDT::close()+716) (BuildId: 3b3b945a7d42b5132b1176e6249aefbccfbdca98)
+      #02 pc 00000000000cbad4  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/split_config.arm64_v8a.apk!libsynoholepunch.so (offset 0xc8a000) (CUDTUnited::close(int)+264) (BuildId: 3b3b945a7d42b5132b1176e6249aefbccfbdca98)
+      #03 pc 00000000000ce2ac  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/split_config.arm64_v8a.apk!libsynoholepunch.so (offset 0xc8a000) (CUDT::close(int)+48) (BuildId: 3b3b945a7d42b5132b1176e6249aefbccfbdca98)
+      #04 pc 00000000000c5574  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/split_config.arm64_v8a.apk!libsynoholepunch.so (offset 0xc8a000) (LibPunch::Socket::create_udt_listen_socket(int)+420) (BuildId: 3b3b945a7d42b5132b1176e6249aefbccfbdca98)
+      #05 pc 00000000000c05f0  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/split_config.arm64_v8a.apk!libsynoholepunch.so (offset 0xc8a000) (LibPunch::UdtRelayDaemon::PreStart(LibPunch::RELAYDAEMON_OPTIONS const&, void (*)(LibPunch::RELAYDAEMON_INFO, void*), void*)+764) (BuildId: 3b3b945a7d42b5132b1176e6249aefbccfbdca98)
+      #06 pc 00000000000c21ec  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/split_config.arm64_v8a.apk!libsynoholepunch.so (offset 0xc8a000) (LibPunch::UdtRelayDaemon::Start(LibPunch::RELAYDAEMON_OPTIONS const&, void (*)(LibPunch::RELAYDAEMON_INFO, void*), void*)+64) (BuildId: 3b3b945a7d42b5132b1176e6249aefbccfbdca98)
+      #07 pc 00000000000becac  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/split_config.arm64_v8a.apk!libsynoholepunch.so (offset 0xc8a000) (Java_com_synology_synoholepunch_PunchInfo_synopunchStart+400) (BuildId: 3b3b945a7d42b5132b1176e6249aefbccfbdca98)
+      #08 pc 000000000053cba8  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/oat/arm64/base.odex (art_jni_trampoline+184)
+      #09 pc 0000000000414f2c  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/oat/arm64/base.odex (com.synology.synoholepunch.PunchInfo.start+204)
+      #10 pc 00000000003ee2ec  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/oat/arm64/base.odex (com.synology.sylibx.syhttp3.relay.apis.ApiPingDSM$HolePunchDaemonThread.startHolePunch+460)
+      #11 pc 00000000003ee6ec  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/oat/arm64/base.odex (com.synology.sylibx.syhttp3.relay.apis.ApiPingDSM$HolePunchDaemonThread.run+364)
+      #12 pc 00000000002cdd94  /apex/com.android.art/lib64/libart.so (art_quick_invoke_stub+612) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #13 pc 000000000026e624  /apex/com.android.art/lib64/libart.so (art::ArtMethod::Invoke(art::Thread*, unsigned int*, unsigned int, art::JValue*, char const*)+220) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #14 pc 00000000004c3eb0  /apex/com.android.art/lib64/libart.so (art::Thread::CreateCallback(void*)+1184) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #15 pc 00000000000fd528  /apex/com.android.runtime/lib64/bionic/libc.so (__pthread_start(void*)+208) (BuildId: 3d54e8645276c301285abd1dd0ea86ef)
+      #16 pc 0000000000096b24  /apex/com.android.runtime/lib64/bionic/libc.so (__start_thread+68) (BuildId: 3d54e8645276c301285abd1dd0ea86ef)
+
+========================================
+2026-04-25 17:04:43 data_app_native_crash (text, 1630 bytes)
+Process: ru.nspk.mirpay
+PID: 6563
+UID: 10247
+Frozen: false
+Flags: 0x30c83e44
+Package: ru.nspk.mirpay v393 (1.61.1.350)
+Foreground: No
+Process-Runtime: 14166788
+Build: POCO/munch_ru/munch:14/UKQ1.231207.002/V816.0.7.0.ULMRUXM:user/release-keys
+Loading-Progress: 1.0
+Dropped-Count: 0
+
+*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+Build fingerprint: 'POCO/munch_ru/munch:14/UKQ1.231207.002/V816.0.7.0.ULMRUXM:user/release-keys'
+Revision: '0'
+ABI: 'arm64'
+Timestamp: 2026-04-25 17:04:42.212540984+0300
+Process uptime: 19264s
+Cmdline: ru.nspk.mirpay
+pid: 6563, tid: 6583, name: ru.nspk.mirpay  >>> ru.nspk.mirpay <<<
+uid: 10247
+signal 11 (SIGSEGV), code 2 (SEGV_ACCERR), fault addr 0x00000076ef009fe8
+Cause: stack pointer is not in a rw map; likely due to stack overflow.
+    x0  00000000000000ee  x1  00000076ef009ff0  x2  0000000000000011  x3  0000000000000000
+    x4  00000000ffffffff  x5  0000000000000000  x6  0000000033383536  x7  7f7f7f7f7f7f7f7f
+    x8  000000001970f941  x9  00000000ee5a2d72  x10 0000000000000000  x11 00000076ef605e11
+    x12 b4000077a5c7d600  x13 00000076ef009fe8  x14 00000076ef009ff0  x15 0000000000000000
+    x16 0000000000ee5a2d  x17 000000000000ee5a  x18 000000766b9a0000  x19 00000076ef102a50
+    x20 fffffffffffffffe  x21 00000000000001a4  x22 fffffffffffffff3  x23 00000000fffffffe
+    x24 00000000000001a4  x25 00000000fffffff3  x26 0000000000000000  x27 fffffffffffffff3
+    x28 fffffffffffffff3  x29 00000076ef102bf0
+    lr  00000076ef663778  sp  00000076ef009fe0  pc  00000076ef6402a4  pst 0000000060001000
+1 total frames
+backtrace:
+      #00 pc 00000000000402a4  [anon:15e8]
+
+========================================
+2026-04-26 00:27:45 data_app_native_crash (text, 5596 bytes)
+Process: com.synology.projectkailash
+PID: 6408
+UID: 10460
+Frozen: false
+Flags: 0x28983e44
+Package: com.synology.projectkailash v603 (2.3.8)
+Foreground: No
+Process-Runtime: 7491
+Build: POCO/munch_ru/munch:14/UKQ1.231207.002/V816.0.7.0.ULMRUXM:user/release-keys
+Loading-Progress: 1.0
+Dropped-Count: 0
+
+*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+Build fingerprint: 'POCO/munch_ru/munch:14/UKQ1.231207.002/V816.0.7.0.ULMRUXM:user/release-keys'
+Revision: '0'
+ABI: 'arm64'
+Timestamp: 2026-04-26 00:27:43.896064715+0300
+Process uptime: 7s
+Cmdline: com.synology.projectkailash
+pid: 6408, tid: 6536, name: HolePunch86892  >>> com.synology.projectkailash <<<
+uid: 10460
+signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x00000000000000c0
+Cause: null pointer dereference
+    x0  0000000000000000  x1  b400007059326e00  x2  b4000070593270d4  x3  0000000000000001
+    x4  0000000000000001  x5  0000000000000000  x6  0000000000000000  x7  0000006a2f2d4a74
+    x8  064b4b235eaec307  x9  0000000000000002  x10 00000000000f4240  x11 064b4b235eaec307
+    x12 0000000010624dd3  x13 0000000000000018  x14 000026280a8b7aa1  x15 00ffffffffffffff
+    x16 0000006a2f582228  x17 0000006a2f2e9964  x18 000000000000009f  x19 0000000000000000
+    x20 b4000070593270ac  x21 b400007059326e00  x22 0000006a4e4e4000  x23 0000006a4e4e4000
+    x24 b4000070592e68e0  x25 0000006a4e4e3650  x26 0000006a4e4e4000  x27 b40000765f38e850
+    x28 0000006a2f5a7390  x29 0000006a4e4e32e0
+    lr  0000006a2f2de810  sp  0000006a4e4e3290  pc  0000006a2f2e9990  pst 0000000020001000
+17 total frames
+backtrace:
+      #00 pc 00000000000e2990  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/split_config.arm64_v8a.apk!libsynoholepunch.so (offset 0xc8a000) (CRcvQueue::removeConnector(int const&)+44) (BuildId: 3b3b945a7d42b5132b1176e6249aefbccfbdca98)
+      #01 pc 00000000000d780c  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/split_config.arm64_v8a.apk!libsynoholepunch.so (offset 0xc8a000) (CUDT::close()+716) (BuildId: 3b3b945a7d42b5132b1176e6249aefbccfbdca98)
+      #02 pc 00000000000cbad4  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/split_config.arm64_v8a.apk!libsynoholepunch.so (offset 0xc8a000) (CUDTUnited::close(int)+264) (BuildId: 3b3b945a7d42b5132b1176e6249aefbccfbdca98)
+      #03 pc 00000000000ce2ac  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/split_config.arm64_v8a.apk!libsynoholepunch.so (offset 0xc8a000) (CUDT::close(int)+48) (BuildId: 3b3b945a7d42b5132b1176e6249aefbccfbdca98)
+      #04 pc 00000000000c5574  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/split_config.arm64_v8a.apk!libsynoholepunch.so (offset 0xc8a000) (LibPunch::Socket::create_udt_listen_socket(int)+420) (BuildId: 3b3b945a7d42b5132b1176e6249aefbccfbdca98)
+      #05 pc 00000000000c05f0  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/split_config.arm64_v8a.apk!libsynoholepunch.so (offset 0xc8a000) (LibPunch::UdtRelayDaemon::PreStart(LibPunch::RELAYDAEMON_OPTIONS const&, void (*)(LibPunch::RELAYDAEMON_INFO, void*), void*)+764) (BuildId: 3b3b945a7d42b5132b1176e6249aefbccfbdca98)
+      #06 pc 00000000000c21ec  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/split_config.arm64_v8a.apk!libsynoholepunch.so (offset 0xc8a000) (LibPunch::UdtRelayDaemon::Start(LibPunch::RELAYDAEMON_OPTIONS const&, void (*)(LibPunch::RELAYDAEMON_INFO, void*), void*)+64) (BuildId: 3b3b945a7d42b5132b1176e6249aefbccfbdca98)
+      #07 pc 00000000000becac  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/split_config.arm64_v8a.apk!libsynoholepunch.so (offset 0xc8a000) (Java_com_synology_synoholepunch_PunchInfo_synopunchStart+400) (BuildId: 3b3b945a7d42b5132b1176e6249aefbccfbdca98)
+      #08 pc 000000000053cba8  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/oat/arm64/base.odex (art_jni_trampoline+184)
+      #09 pc 0000000000414f2c  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/oat/arm64/base.odex (com.synology.synoholepunch.PunchInfo.start+204)
+      #10 pc 00000000003ee2ec  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/oat/arm64/base.odex (com.synology.sylibx.syhttp3.relay.apis.ApiPingDSM$HolePunchDaemonThread.startHolePunch+460)
+      #11 pc 00000000003ee6ec  /data/app/~~2tK1kw74uYAMiqiQ9Me37g==/com.synology.projectkailash-9F7R6GA20IX95fbJ5Psj7g==/oat/arm64/base.odex (com.synology.sylibx.syhttp3.relay.apis.ApiPingDSM$HolePunchDaemonThread.run+364)
+      #12 pc 00000000002cdd94  /apex/com.android.art/lib64/libart.so (art_quick_invoke_stub+612) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #13 pc 000000000026e624  /apex/com.android.art/lib64/libart.so (art::ArtMethod::Invoke(art::Thread*, unsigned int*, unsigned int, art::JValue*, char const*)+220) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #14 pc 00000000004c3eb0  /apex/com.android.art/lib64/libart.so (art::Thread::CreateCallback(void*)+1184) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #15 pc 00000000000fd528  /apex/com.android.runtime/lib64/bionic/libc.so (__pthread_start(void*)+208) (BuildId: 3d54e8645276c301285abd1dd0ea86ef)
+      #16 pc 0000000000096b24  /apex/com.android.runtime/lib64/bionic/libc.so (__start_thread+68) (BuildId: 3d54e8645276c301285abd1dd0ea86ef)
+
+========================================
+2026-04-26 21:17:03 data_app_native_crash (text, 1633 bytes)
+Process: ru.nspk.mirpay
+PID: 28682
+UID: 10247
+Frozen: false
+Flags: 0x30c83e44
+Package: ru.nspk.mirpay v393 (1.61.1.350)
+Foreground: No
+Process-Runtime: 14164489
+Build: POCO/munch_ru/munch:14/UKQ1.231207.002/V816.0.7.0.ULMRUXM:user/release-keys
+Loading-Progress: 1.0
+Dropped-Count: 0
+
+*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+Build fingerprint: 'POCO/munch_ru/munch:14/UKQ1.231207.002/V816.0.7.0.ULMRUXM:user/release-keys'
+Revision: '0'
+ABI: 'arm64'
+Timestamp: 2026-04-26 21:17:01.347196960+0300
+Process uptime: 20635s
+Cmdline: ru.nspk.mirpay
+pid: 28682, tid: 28713, name: ru.nspk.mirpay  >>> ru.nspk.mirpay <<<
+uid: 10247
+signal 11 (SIGSEGV), code 2 (SEGV_ACCERR), fault addr 0x00000076ef010fe8
+Cause: stack pointer is not in a rw map; likely due to stack overflow.
+    x0  00000000000000ee  x1  00000076ef010ff0  x2  0000000000000011  x3  0000000000000000
+    x4  00000000ffffffff  x5  0000000000000000  x6  0000000031373832  x7  7f7f7f7f7f7f7f7f
+    x8  000000001970f941  x9  00000000ee5a2d72  x10 0000000000000000  x11 00000076ef609e11
+    x12 b4000077a5c7d600  x13 00000076ef010fe8  x14 00000076ef010ff0  x15 0000000000000000
+    x16 0000000000ee5a2d  x17 000000000000ee5a  x18 000000766b5c0000  x19 00000076ef109a50
+    x20 fffffffffffffffe  x21 00000000000001a4  x22 fffffffffffffff3  x23 00000000fffffffe
+    x24 00000000000001a4  x25 00000000fffffff3  x26 0000000000000000  x27 fffffffffffffff3
+    x28 fffffffffffffff3  x29 00000076ef109bf0
+    lr  00000076ef667778  sp  00000076ef010fe0  pc  00000076ef6442a4  pst 0000000060001000
+1 total frames
+backtrace:
+      #00 pc 00000000000402a4  [anon:15e8]
+
+========================================
+2026-04-26 23:44:41 data_app_native_crash (text, 5990 bytes)
+Process: com.defin85.relaydock
+PID: 20444
+UID: 10492
+Frozen: false
+Flags: 0x20a8be44
+Package: com.defin85.relaydock v1 (0.1.0)
+Foreground: Yes
+Process-Runtime: 1473
+Build: POCO/munch_ru/munch:14/UKQ1.231207.002/V816.0.7.0.ULMRUXM:user/release-keys
+Loading-Progress: 1.0
+Dropped-Count: 0
+
+*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+Build fingerprint: 'POCO/munch_ru/munch:14/UKQ1.231207.002/V816.0.7.0.ULMRUXM:user/release-keys'
+Revision: '0'
+ABI: 'arm64'
+Timestamp: 2026-04-26 23:44:41.440985517+0300
+Process uptime: 2s
+Cmdline: com.defin85.relaydock
+pid: 20444, tid: 20444, name: fin85.relaydock  >>> com.defin85.relaydock <<<
+uid: 10492
+signal 6 (SIGABRT), code -1 (SI_QUEUE), fault addr --------
+Abort message: 'Throwing new exception 'no non-static method "LS0/a;.validateAndroidVpnRoutePolicy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;"' with unexpected pending exception: java.lang.NoSuchMethodError: no non-static method "LS0/a;.isAndroidVpnPermissionGranted()Z"
+  at void com.defin85.relaydock.EmbeddedMobileHostNative.registerPlatformTunnelBridge(java.lang.Object) (SourceFile:-2)
+  at void x2.c.onCreate(android.os.Bundle) (SourceFile:831)
+  at void android.app.Activity.performCreate(android.os.Bundle, android.os.PersistableBundle) (Activity.java:8891)
+  at void android.app.Activity.performCreate(android.os.Bundle) (Activity.java:8856)
+  at void android.app.Instrumentation.callActivityOnCreate(android.app.Activity, android.os.Bundle) (Instrumentation.java:1471)
+  at android.app.Activity android.app.ActivityThread.performLaunchActivity(android.app.ActivityThread$ActivityClientRecord, android.content.Intent) (ActivityThread.java:3973)
+  at android.app.Activity android.app.ActivityThread.handleLaunchActivity(android.app.ActivityThread$ActivityClientRecord, android.app.servertransaction.PendingTransactionActions, int, android.content.Intent) (ActivityThread.java:4144)
+  at void android.app.servertransaction.LaunchActivityItem.execute(android.app.ClientTransactionHandler, android.os.IBinder, android.app.servertransaction.PendingTransactionActions) (LaunchActivityItem.java:103)
+  at void android.app.servertransaction.TransactionExecutor.executeCallbacks(android.app.servertransaction.ClientTransaction) (TransactionExecutor.java:149)
+  at void android.app.servertransaction.TransactionExecutor.execute(android.app.servertransaction.ClientTransaction) (TransactionExecutor.java:99)
+  at void android.app.ActivityThread$H.handleMessage(android.os.Message) (ActivityThread.java:2589)
+  at void android.os.Handler.dispatchMessage(android.os.Message) (Handler.java:106)
+  at boolean android.os.Looper.loopOnce(android.os.Looper, long, int) (Looper.java:224)
+  at void android.os.Looper.loop() (Looper.java:318)
+  at void android.app.ActivityThread.main(java.lang.String[]) (ActivityThread.java:8790)
+  at java.lang.Object java.lang.reflect.Method.invoke(java.lang.Object, java.lang.Object[]) (Method.java:-2)
+  at void com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run() (RuntimeInit.java:561)
+  at void com.android.internal.os.ZygoteInit.main(java.lang.String[]) (ZygoteInit.java:1013)'
+    x0  0000000000000000  x1  0000000000004fdc  x2  0000000000000006  x3  0000007fc464f220
+    x4  3333332f311f1f33  x5  3333332f311f1f33  x6  3333332f311f1f33  x7  7f7f7f7f7f7f7f7f
+    x8  00000000000000f0  x9  0000007794a5c168  x10 0000000000000001  x11 0000007794ad8464
+    x12 0000000000000167  x13 0000000000000000  x14 0000000000000001  x15 ffffffffffffff07
+    x16 0000007794b43a20  x17 0000007794b1c490  x18 00000077a7000000  x19 0000000000004fdc
+    x20 0000000000004fdc  x21 00000000ffffffff  x22 0000000000000002  x23 b4000077a5aeac00
+    x24 00000076f4c56000  x25 0000000000fffff9  x26 000000005a000000  x27 0000000000000008
+    x28 0000007fc464f6f0  x29 0000007fc464f2a0
+    lr  0000007794ac91a4  sp  0000007fc464f200  pc  0000007794ac91d0  pst 0000000000001000
+10 total frames
+backtrace:
+      #00 pc 00000000000951d0  /apex/com.android.runtime/lib64/bionic/libc.so (abort+168) (BuildId: 3d54e8645276c301285abd1dd0ea86ef)
+      #01 pc 00000000008fde60  /apex/com.android.art/lib64/libart.so (art::Runtime::Abort(char const*)+1004) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #02 pc 000000000001654c  /apex/com.android.art/lib64/libbase.so (android::base::SetAborter(std::__1::function<void (char const*)>&&)::$_0::__invoke(char const*)+80) (BuildId: 4d7605789d21176764345a0353194396)
+      #03 pc 0000000000015a4c  /apex/com.android.art/lib64/libbase.so (android::base::LogMessage::~LogMessage()+548) (BuildId: 4d7605789d21176764345a0353194396)
+      #04 pc 00000000002c8a28  /apex/com.android.art/lib64/libart.so (art::Thread::AssertNoPendingExceptionForNewException(char const*) const+784) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #05 pc 000000000027d040  /apex/com.android.art/lib64/libart.so (art::Thread::ThrowNewExceptionF(char const*, char const*, ...)+180) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #06 pc 000000000050d994  /apex/com.android.art/lib64/libart.so (art::ThrowNoSuchMethodError(art::ScopedObjectAccess const&, art::ObjPtr<art::mirror::Class>, char const*, char const*, char const*) (.__uniq.267287648927189358846131613051554877057)+112) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #07 pc 0000000000631bb0  /apex/com.android.art/lib64/libart.so (art::JNI<false>::GetMethodID(_JNIEnv*, _jclass*, char const*, char const*)+1784) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #08 pc 0000000000694404  /data/app/~~_WZ2nZuTjUtLyEcHXpI3PA==/com.defin85.relaydock-XxyBDDN0p3FjRYISVGyoIg==/split_config.arm64_v8a.apk (offset 0x1750000) (vktp_register_platform_tunnel_bridge+376) (BuildId: cbeb0404d4f89acaeb673fdbb2437608dc73b8b3)
+      #09 pc 00000000002af5b8  /data/app/~~_WZ2nZuTjUtLyEcHXpI3PA==/com.defin85.relaydock-XxyBDDN0p3FjRYISVGyoIg==/split_config.arm64_v8a.apk (offset 0x1750000) (BuildId: cbeb0404d4f89acaeb673fdbb2437608dc73b8b3)
+
+========================================
+2026-04-26 23:44:57 data_app_native_crash (text, 5989 bytes)
+Process: com.defin85.relaydock
+PID: 20817
+UID: 10492
+Frozen: false
+Flags: 0x2088be44
+Package: com.defin85.relaydock v1 (0.1.0)
+Foreground: Yes
+Process-Runtime: 749
+Build: POCO/munch_ru/munch:14/UKQ1.231207.002/V816.0.7.0.ULMRUXM:user/release-keys
+Loading-Progress: 1.0
+Dropped-Count: 0
+
+*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+Build fingerprint: 'POCO/munch_ru/munch:14/UKQ1.231207.002/V816.0.7.0.ULMRUXM:user/release-keys'
+Revision: '0'
+ABI: 'arm64'
+Timestamp: 2026-04-26 23:44:57.692556605+0300
+Process uptime: 1s
+Cmdline: com.defin85.relaydock
+pid: 20817, tid: 20817, name: fin85.relaydock  >>> com.defin85.relaydock <<<
+uid: 10492
+signal 6 (SIGABRT), code -1 (SI_QUEUE), fault addr --------
+Abort message: 'Throwing new exception 'no non-static method "LS0/a;.validateAndroidVpnRoutePolicy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;"' with unexpected pending exception: java.lang.NoSuchMethodError: no non-static method "LS0/a;.isAndroidVpnPermissionGranted()Z"
+  at void com.defin85.relaydock.EmbeddedMobileHostNative.registerPlatformTunnelBridge(java.lang.Object) (SourceFile:-2)
+  at void x2.c.onCreate(android.os.Bundle) (SourceFile:831)
+  at void android.app.Activity.performCreate(android.os.Bundle, android.os.PersistableBundle) (Activity.java:8891)
+  at void android.app.Activity.performCreate(android.os.Bundle) (Activity.java:8856)
+  at void android.app.Instrumentation.callActivityOnCreate(android.app.Activity, android.os.Bundle) (Instrumentation.java:1471)
+  at android.app.Activity android.app.ActivityThread.performLaunchActivity(android.app.ActivityThread$ActivityClientRecord, android.content.Intent) (ActivityThread.java:3973)
+  at android.app.Activity android.app.ActivityThread.handleLaunchActivity(android.app.ActivityThread$ActivityClientRecord, android.app.servertransaction.PendingTransactionActions, int, android.content.Intent) (ActivityThread.java:4144)
+  at void android.app.servertransaction.LaunchActivityItem.execute(android.app.ClientTransactionHandler, android.os.IBinder, android.app.servertransaction.PendingTransactionActions) (LaunchActivityItem.java:103)
+  at void android.app.servertransaction.TransactionExecutor.executeCallbacks(android.app.servertransaction.ClientTransaction) (TransactionExecutor.java:149)
+  at void android.app.servertransaction.TransactionExecutor.execute(android.app.servertransaction.ClientTransaction) (TransactionExecutor.java:99)
+  at void android.app.ActivityThread$H.handleMessage(android.os.Message) (ActivityThread.java:2589)
+  at void android.os.Handler.dispatchMessage(android.os.Message) (Handler.java:106)
+  at boolean android.os.Looper.loopOnce(android.os.Looper, long, int) (Looper.java:224)
+  at void android.os.Looper.loop() (Looper.java:318)
+  at void android.app.ActivityThread.main(java.lang.String[]) (ActivityThread.java:8790)
+  at java.lang.Object java.lang.reflect.Method.invoke(java.lang.Object, java.lang.Object[]) (Method.java:-2)
+  at void com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run() (RuntimeInit.java:561)
+  at void com.android.internal.os.ZygoteInit.main(java.lang.String[]) (ZygoteInit.java:1013)'
+    x0  0000000000000000  x1  0000000000005151  x2  0000000000000006  x3  0000007fc464f220
+    x4  3630372f311f1f36  x5  3630372f311f1f36  x6  3630372f311f1f36  x7  7f7f7f7f7f7f7f7f
+    x8  00000000000000f0  x9  0000007794a5c168  x10 0000000000000001  x11 0000007794ad8464
+    x12 0000000000000167  x13 0000000000000000  x14 0000000000000001  x15 ffffffffffffff07
+    x16 0000007794b43a20  x17 0000007794b1c490  x18 00000077a7000000  x19 0000000000005151
+    x20 0000000000005151  x21 00000000ffffffff  x22 0000000000000002  x23 b4000077a5aeac00
+    x24 00000076f4c56000  x25 0000000000fffff9  x26 000000005a000000  x27 0000000000000008
+    x28 0000007fc464f6f0  x29 0000007fc464f2a0
+    lr  0000007794ac91a4  sp  0000007fc464f200  pc  0000007794ac91d0  pst 0000000000001000
+10 total frames
+backtrace:
+      #00 pc 00000000000951d0  /apex/com.android.runtime/lib64/bionic/libc.so (abort+168) (BuildId: 3d54e8645276c301285abd1dd0ea86ef)
+      #01 pc 00000000008fde60  /apex/com.android.art/lib64/libart.so (art::Runtime::Abort(char const*)+1004) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #02 pc 000000000001654c  /apex/com.android.art/lib64/libbase.so (android::base::SetAborter(std::__1::function<void (char const*)>&&)::$_0::__invoke(char const*)+80) (BuildId: 4d7605789d21176764345a0353194396)
+      #03 pc 0000000000015a4c  /apex/com.android.art/lib64/libbase.so (android::base::LogMessage::~LogMessage()+548) (BuildId: 4d7605789d21176764345a0353194396)
+      #04 pc 00000000002c8a28  /apex/com.android.art/lib64/libart.so (art::Thread::AssertNoPendingExceptionForNewException(char const*) const+784) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #05 pc 000000000027d040  /apex/com.android.art/lib64/libart.so (art::Thread::ThrowNewExceptionF(char const*, char const*, ...)+180) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #06 pc 000000000050d994  /apex/com.android.art/lib64/libart.so (art::ThrowNoSuchMethodError(art::ScopedObjectAccess const&, art::ObjPtr<art::mirror::Class>, char const*, char const*, char const*) (.__uniq.267287648927189358846131613051554877057)+112) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #07 pc 0000000000631bb0  /apex/com.android.art/lib64/libart.so (art::JNI<false>::GetMethodID(_JNIEnv*, _jclass*, char const*, char const*)+1784) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #08 pc 0000000000694404  /data/app/~~_WZ2nZuTjUtLyEcHXpI3PA==/com.defin85.relaydock-XxyBDDN0p3FjRYISVGyoIg==/split_config.arm64_v8a.apk (offset 0x1750000) (vktp_register_platform_tunnel_bridge+376) (BuildId: cbeb0404d4f89acaeb673fdbb2437608dc73b8b3)
+      #09 pc 00000000002af5b8  /data/app/~~_WZ2nZuTjUtLyEcHXpI3PA==/com.defin85.relaydock-XxyBDDN0p3FjRYISVGyoIg==/split_config.arm64_v8a.apk (offset 0x1750000) (BuildId: cbeb0404d4f89acaeb673fdbb2437608dc73b8b3)
+
+========================================
+2026-04-26 23:49:22 data_app_native_crash (text, 5990 bytes)
+Process: com.defin85.relaydock
+PID: 22429
+UID: 10492
+Frozen: false
+Flags: 0x2088be44
+Package: com.defin85.relaydock v1 (0.1.0)
+Foreground: Yes
+Process-Runtime: 1051
+Build: POCO/munch_ru/munch:14/UKQ1.231207.002/V816.0.7.0.ULMRUXM:user/release-keys
+Loading-Progress: 1.0
+Dropped-Count: 0
+
+*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+Build fingerprint: 'POCO/munch_ru/munch:14/UKQ1.231207.002/V816.0.7.0.ULMRUXM:user/release-keys'
+Revision: '0'
+ABI: 'arm64'
+Timestamp: 2026-04-26 23:49:21.927137129+0300
+Process uptime: 1s
+Cmdline: com.defin85.relaydock
+pid: 22429, tid: 22429, name: fin85.relaydock  >>> com.defin85.relaydock <<<
+uid: 10492
+signal 6 (SIGABRT), code -1 (SI_QUEUE), fault addr --------
+Abort message: 'Throwing new exception 'no non-static method "LS0/a;.validateAndroidVpnRoutePolicy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;"' with unexpected pending exception: java.lang.NoSuchMethodError: no non-static method "LS0/a;.isAndroidVpnPermissionGranted()Z"
+  at void com.defin85.relaydock.EmbeddedMobileHostNative.registerPlatformTunnelBridge(java.lang.Object) (SourceFile:-2)
+  at void x2.c.onCreate(android.os.Bundle) (SourceFile:831)
+  at void android.app.Activity.performCreate(android.os.Bundle, android.os.PersistableBundle) (Activity.java:8891)
+  at void android.app.Activity.performCreate(android.os.Bundle) (Activity.java:8856)
+  at void android.app.Instrumentation.callActivityOnCreate(android.app.Activity, android.os.Bundle) (Instrumentation.java:1471)
+  at android.app.Activity android.app.ActivityThread.performLaunchActivity(android.app.ActivityThread$ActivityClientRecord, android.content.Intent) (ActivityThread.java:3973)
+  at android.app.Activity android.app.ActivityThread.handleLaunchActivity(android.app.ActivityThread$ActivityClientRecord, android.app.servertransaction.PendingTransactionActions, int, android.content.Intent) (ActivityThread.java:4144)
+  at void android.app.servertransaction.LaunchActivityItem.execute(android.app.ClientTransactionHandler, android.os.IBinder, android.app.servertransaction.PendingTransactionActions) (LaunchActivityItem.java:103)
+  at void android.app.servertransaction.TransactionExecutor.executeCallbacks(android.app.servertransaction.ClientTransaction) (TransactionExecutor.java:149)
+  at void android.app.servertransaction.TransactionExecutor.execute(android.app.servertransaction.ClientTransaction) (TransactionExecutor.java:99)
+  at void android.app.ActivityThread$H.handleMessage(android.os.Message) (ActivityThread.java:2589)
+  at void android.os.Handler.dispatchMessage(android.os.Message) (Handler.java:106)
+  at boolean android.os.Looper.loopOnce(android.os.Looper, long, int) (Looper.java:224)
+  at void android.os.Looper.loop() (Looper.java:318)
+  at void android.app.ActivityThread.main(java.lang.String[]) (ActivityThread.java:8790)
+  at java.lang.Object java.lang.reflect.Method.invoke(java.lang.Object, java.lang.Object[]) (Method.java:-2)
+  at void com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run() (RuntimeInit.java:561)
+  at void com.android.internal.os.ZygoteInit.main(java.lang.String[]) (ZygoteInit.java:1013)'
+    x0  0000000000000000  x1  000000000000579d  x2  0000000000000006  x3  0000007fc464f220
+    x4  38313331311f1f38  x5  38313331311f1f38  x6  38313331311f1f38  x7  7f7f7f7f7f7f7f7f
+    x8  00000000000000f0  x9  0000007794a5c168  x10 0000000000000001  x11 0000007794ad8464
+    x12 0000000000000167  x13 0000000000000000  x14 0000000000000001  x15 ffffffffffffff07
+    x16 0000007794b43a20  x17 0000007794b1c490  x18 00000077a7000000  x19 000000000000579d
+    x20 000000000000579d  x21 00000000ffffffff  x22 0000000000000002  x23 b4000077a5aeac00
+    x24 00000076f4c56000  x25 0000000000fffff9  x26 000000005a000000  x27 0000000000000008
+    x28 0000007fc464f6f0  x29 0000007fc464f2a0
+    lr  0000007794ac91a4  sp  0000007fc464f200  pc  0000007794ac91d0  pst 0000000000001000
+10 total frames
+backtrace:
+      #00 pc 00000000000951d0  /apex/com.android.runtime/lib64/bionic/libc.so (abort+168) (BuildId: 3d54e8645276c301285abd1dd0ea86ef)
+      #01 pc 00000000008fde60  /apex/com.android.art/lib64/libart.so (art::Runtime::Abort(char const*)+1004) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #02 pc 000000000001654c  /apex/com.android.art/lib64/libbase.so (android::base::SetAborter(std::__1::function<void (char const*)>&&)::$_0::__invoke(char const*)+80) (BuildId: 4d7605789d21176764345a0353194396)
+      #03 pc 0000000000015a4c  /apex/com.android.art/lib64/libbase.so (android::base::LogMessage::~LogMessage()+548) (BuildId: 4d7605789d21176764345a0353194396)
+      #04 pc 00000000002c8a28  /apex/com.android.art/lib64/libart.so (art::Thread::AssertNoPendingExceptionForNewException(char const*) const+784) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #05 pc 000000000027d040  /apex/com.android.art/lib64/libart.so (art::Thread::ThrowNewExceptionF(char const*, char const*, ...)+180) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #06 pc 000000000050d994  /apex/com.android.art/lib64/libart.so (art::ThrowNoSuchMethodError(art::ScopedObjectAccess const&, art::ObjPtr<art::mirror::Class>, char const*, char const*, char const*) (.__uniq.267287648927189358846131613051554877057)+112) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #07 pc 0000000000631bb0  /apex/com.android.art/lib64/libart.so (art::JNI<false>::GetMethodID(_JNIEnv*, _jclass*, char const*, char const*)+1784) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #08 pc 0000000000694404  /data/app/~~_WZ2nZuTjUtLyEcHXpI3PA==/com.defin85.relaydock-XxyBDDN0p3FjRYISVGyoIg==/split_config.arm64_v8a.apk (offset 0x1750000) (vktp_register_platform_tunnel_bridge+376) (BuildId: cbeb0404d4f89acaeb673fdbb2437608dc73b8b3)
+      #09 pc 00000000002af5b8  /data/app/~~_WZ2nZuTjUtLyEcHXpI3PA==/com.defin85.relaydock-XxyBDDN0p3FjRYISVGyoIg==/split_config.arm64_v8a.apk (offset 0x1750000) (BuildId: cbeb0404d4f89acaeb673fdbb2437608dc73b8b3)
+
+========================================
+2026-04-27 09:53:53 data_app_native_crash (text, 5989 bytes)
+Process: com.defin85.relaydock
+PID: 21553
+UID: 10492
+Frozen: false
+Flags: 0x20a8be44
+Package: com.defin85.relaydock v1 (0.1.0)
+Foreground: Yes
+Process-Runtime: 956
+Build: POCO/munch_ru/munch:14/UKQ1.231207.002/V816.0.7.0.ULMRUXM:user/release-keys
+Loading-Progress: 1.0
+Dropped-Count: 0
+
+*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+Build fingerprint: 'POCO/munch_ru/munch:14/UKQ1.231207.002/V816.0.7.0.ULMRUXM:user/release-keys'
+Revision: '0'
+ABI: 'arm64'
+Timestamp: 2026-04-27 09:53:53.189754886+0300
+Process uptime: 2s
+Cmdline: com.defin85.relaydock
+pid: 21553, tid: 21553, name: fin85.relaydock  >>> com.defin85.relaydock <<<
+uid: 10492
+signal 6 (SIGABRT), code -1 (SI_QUEUE), fault addr --------
+Abort message: 'Throwing new exception 'no non-static method "LS0/a;.validateAndroidVpnRoutePolicy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;"' with unexpected pending exception: java.lang.NoSuchMethodError: no non-static method "LS0/a;.isAndroidVpnPermissionGranted()Z"
+  at void com.defin85.relaydock.EmbeddedMobileHostNative.registerPlatformTunnelBridge(java.lang.Object) (SourceFile:-2)
+  at void x2.c.onCreate(android.os.Bundle) (SourceFile:831)
+  at void android.app.Activity.performCreate(android.os.Bundle, android.os.PersistableBundle) (Activity.java:8891)
+  at void android.app.Activity.performCreate(android.os.Bundle) (Activity.java:8856)
+  at void android.app.Instrumentation.callActivityOnCreate(android.app.Activity, android.os.Bundle) (Instrumentation.java:1471)
+  at android.app.Activity android.app.ActivityThread.performLaunchActivity(android.app.ActivityThread$ActivityClientRecord, android.content.Intent) (ActivityThread.java:3973)
+  at android.app.Activity android.app.ActivityThread.handleLaunchActivity(android.app.ActivityThread$ActivityClientRecord, android.app.servertransaction.PendingTransactionActions, int, android.content.Intent) (ActivityThread.java:4144)
+  at void android.app.servertransaction.LaunchActivityItem.execute(android.app.ClientTransactionHandler, android.os.IBinder, android.app.servertransaction.PendingTransactionActions) (LaunchActivityItem.java:103)
+  at void android.app.servertransaction.TransactionExecutor.executeCallbacks(android.app.servertransaction.ClientTransaction) (TransactionExecutor.java:149)
+  at void android.app.servertransaction.TransactionExecutor.execute(android.app.servertransaction.ClientTransaction) (TransactionExecutor.java:99)
+  at void android.app.ActivityThread$H.handleMessage(android.os.Message) (ActivityThread.java:2589)
+  at void android.os.Handler.dispatchMessage(android.os.Message) (Handler.java:106)
+  at boolean android.os.Looper.loopOnce(android.os.Looper, long, int) (Looper.java:224)
+  at void android.os.Looper.loop() (Looper.java:318)
+  at void android.app.ActivityThread.main(java.lang.String[]) (ActivityThread.java:8790)
+  at java.lang.Object java.lang.reflect.Method.invoke(java.lang.Object, java.lang.Object[]) (Method.java:-2)
+  at void com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run() (RuntimeInit.java:561)
+  at void com.android.internal.os.ZygoteInit.main(java.lang.String[]) (ZygoteInit.java:1013)'
+    x0  0000000000000000  x1  0000000000005431  x2  0000000000000006  x3  0000007fc464f220
+    x4  32343430311f1f32  x5  32343430311f1f32  x6  32343430311f1f32  x7  7f7f7f7f7f7f7f7f
+    x8  00000000000000f0  x9  0000007794a5c168  x10 0000000000000001  x11 0000007794ad8464
+    x12 0000000000000167  x13 0000000000000000  x14 0000000000000001  x15 ffffffffffffff07
+    x16 0000007794b43a20  x17 0000007794b1c490  x18 00000077a7000000  x19 0000000000005431
+    x20 0000000000005431  x21 00000000ffffffff  x22 0000000000000002  x23 b4000077a5aeac00
+    x24 00000076f4c56000  x25 0000000000fffff9  x26 000000005a000000  x27 0000000000000008
+    x28 0000007fc464f6f0  x29 0000007fc464f2a0
+    lr  0000007794ac91a4  sp  0000007fc464f200  pc  0000007794ac91d0  pst 0000000000001000
+10 total frames
+backtrace:
+      #00 pc 00000000000951d0  /apex/com.android.runtime/lib64/bionic/libc.so (abort+168) (BuildId: 3d54e8645276c301285abd1dd0ea86ef)
+      #01 pc 00000000008fde60  /apex/com.android.art/lib64/libart.so (art::Runtime::Abort(char const*)+1004) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #02 pc 000000000001654c  /apex/com.android.art/lib64/libbase.so (android::base::SetAborter(std::__1::function<void (char const*)>&&)::$_0::__invoke(char const*)+80) (BuildId: 4d7605789d21176764345a0353194396)
+      #03 pc 0000000000015a4c  /apex/com.android.art/lib64/libbase.so (android::base::LogMessage::~LogMessage()+548) (BuildId: 4d7605789d21176764345a0353194396)
+      #04 pc 00000000002c8a28  /apex/com.android.art/lib64/libart.so (art::Thread::AssertNoPendingExceptionForNewException(char const*) const+784) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #05 pc 000000000027d040  /apex/com.android.art/lib64/libart.so (art::Thread::ThrowNewExceptionF(char const*, char const*, ...)+180) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #06 pc 000000000050d994  /apex/com.android.art/lib64/libart.so (art::ThrowNoSuchMethodError(art::ScopedObjectAccess const&, art::ObjPtr<art::mirror::Class>, char const*, char const*, char const*) (.__uniq.267287648927189358846131613051554877057)+112) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #07 pc 0000000000631bb0  /apex/com.android.art/lib64/libart.so (art::JNI<false>::GetMethodID(_JNIEnv*, _jclass*, char const*, char const*)+1784) (BuildId: 759e344ef0291bdf924e23387b5bf9ea)
+      #08 pc 0000000000694404  /data/app/~~_WZ2nZuTjUtLyEcHXpI3PA==/com.defin85.relaydock-XxyBDDN0p3FjRYISVGyoIg==/split_config.arm64_v8a.apk (offset 0x1750000) (vktp_register_platform_tunnel_bridge+376) (BuildId: cbeb0404d4f89acaeb673fdbb2437608dc73b8b3)
+      #09 pc 00000000002af5b8  /data/app/~~_WZ2nZuTjUtLyEcHXpI3PA==/com.defin85.relaydock-XxyBDDN0p3FjRYISVGyoIg==/split_config.arm64_v8a.apk (offset 0x1750000) (BuildId: cbeb0404d4f89acaeb673fdbb2437608dc73b8b3)

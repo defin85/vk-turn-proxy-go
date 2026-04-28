@@ -3110,6 +3110,45 @@ void main() {
     },
   );
 
+  testWidgets('mobile shell keeps compact support content within phone height', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+
+    final controller = MobileShellController(
+      bridge: _FakeMobileHostBridge(),
+      stateStore: _InMemoryStateStore(MobileShellState.empty()),
+    );
+    await controller.initialize();
+    await tester.pumpWidget(MobileShellApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    await _openSupportTab(tester);
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Embedded browser cookies and session'), findsOneWidget);
+    await tester.drag(
+      find.byKey(const ValueKey<String>('support-compact-scroll')),
+      const Offset(0, -520),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Resolutions (0)'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('support-resolutions-surface-mobile')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+    expect(
+      find.text(
+        'Inspect provider resolutions and session state without crowding the main workflow.',
+      ),
+      findsNothing,
+    );
+  });
+
   testWidgets('mobile shell uses the wide support layout on tablet widths', (
     WidgetTester tester,
   ) async {

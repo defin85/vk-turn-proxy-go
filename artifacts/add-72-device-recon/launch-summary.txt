@@ -1,0 +1,32 @@
+start_ts=04-27
+--- am start -W ---
+Starting: Intent { cmp=com.defin85.relaydock/.MainActivity }
+Status: ok
+LaunchState: UNKNOWN (0)
+Activity: com.defin85.relaydock/.MainActivity
+WaitTime: 1036
+Complete
+--- pidof after launch ---
+--- top activity ---
+7:      topResumedActivity=ActivityRecord{40fe800 u0 com.mi.android.globallauncher/com.miui.home.launcher.Launcher t2}
+62:  * Task{6fa8fe8 #40993 type=standard I=com.defin85.relaydock/.MainActivity U=0 visible=false visibleRequested=false mode=fullscreen translucent=true sz=1}
+64:    * Hist  #0: ActivityRecord{e14650b u0 com.defin85.relaydock/.MainActivity t40993 f} isExiting}
+65:      packageName=com.defin85.relaydock processName=com.defin85.relaydock
+68:      Intent { flg=0x10000000 cmp=com.defin85.relaydock/.MainActivity }
+69:      rootOfTask=true task=Task{6fa8fe8 #40993 type=standard I=com.defin85.relaydock/.MainActivity}
+71:      mActivityComponent=com.defin85.relaydock/.MainActivity
+72:      baseDir=/data/app/~~_WZ2nZuTjUtLyEcHXpI3PA==/com.defin85.relaydock-XxyBDDN0p3FjRYISVGyoIg==/base.apk
+73:      dataDir=/data/user/0/com.defin85.relaydock
+74:      splitDir=[/data/app/~~_WZ2nZuTjUtLyEcHXpI3PA==/com.defin85.relaydock-XxyBDDN0p3FjRYISVGyoIg==/split_config.arm64_v8a.apk, /data/app/~~_WZ2nZuTjUtLyEcHXpI3PA==/com.defin85.relaydock-XxyBDDN0p3FjRYISVGyoIg==/split_config.ru.apk, /data/app/~~_WZ2nZuTjUtLyEcHXpI3PA==/com.defin85.relaydock-XxyBDDN0p3FjRYISVGyoIg==/split_config.xxhdpi.apk]
+94:      windows=[Window{f7f3af5 u0 Splash Screen com.defin85.relaydock}]
+103:      startingWindow=Window{f7f3af5 u0 Splash Screen com.defin85.relaydock} startingSurface=com.android.server.wm.StartingSurfaceController$StartingSurface@5b13a6c startingDisplayed=true startingMoved=false mVisibleSetFromTransferredStartingWindow=false
+437:      Intent { act=android.intent.action.VIEW cat=[android.intent.category.DEFAULT,android.intent.category.BROWSABLE] dat=https://play.google.com/store/apps/details?id=com.defin85.relaydock&hl=en-US&ah=AsjgDJxubVbOEGhzIL74icCpBbw flg=0x10000400 cmp=com.android.vending/com.google.android.finsky.activities.MainActivity }
+835:  ResumedActivity: ActivityRecord{40fe800 u0 com.mi.android.globallauncher/com.miui.home.launcher.Launcher t2}
+927:      * Task{6fa8fe8 #40993 type=standard I=com.defin85.relaydock/.MainActivity U=0 visible=false visibleRequested=false mode=fullscreen translucent=true sz=1}
+929:        * ActivityRecord{e14650b u0 com.defin85.relaydock/.MainActivity t40993 f} isExiting}
+1011:    mTopFullscreenOpaqueWindowState=Window{f7f3af5 u0 Splash Screen com.defin85.relaydock}
+1012:    mSystemBarColorApps={ActivityRecord{e14650b u0 com.defin85.relaydock/.MainActivity t40993 f} isExiting}}
+1013:    mNavBarColorWindowCandidate=Window{f7f3af5 u0 Splash Screen com.defin85.relaydock}
+1014:    mNavBarBackgroundWindow=Window{f7f3af5 u0 Splash Screen com.defin85.relaydock}
+1019:      Window{f7f3af5 u0 Splash Screen com.defin85.relaydock}
+1219:        (fullscreen) Task{6fa8fe8 #40993 type=standard I=com.defin85.relaydock/.MainActivity}

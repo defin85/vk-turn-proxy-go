@@ -1,0 +1,8 @@
+INFO: The APKs will be signed with the debug keystore found at '/home/egor/.android/debug.keystore'.
+local Play-delivery APKs are missing JNI bridge callback method names from delivered dex. Release shrink/obfuscation likely removed methods required by vktp_register_platform_tunnel_bridge:
+  - isAndroidVpnPermissionGranted
+  - validateAndroidVpnRoutePolicy
+  - bringupAndroidVpnHost
+  - protectAndroidVpnSocket
+  - duplicateAndroidVpnTunFd
+  - cleanupAndroidVpnHost

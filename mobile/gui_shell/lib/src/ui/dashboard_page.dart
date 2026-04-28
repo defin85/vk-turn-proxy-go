@@ -1608,8 +1608,9 @@ class _SupportPage extends StatelessWidget {
 
   Widget _buildCompact(BuildContext context) {
     final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return ListView(
+      key: const ValueKey<String>('support-compact-scroll'),
+      padding: EdgeInsets.zero,
       children: <Widget>[
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
@@ -1652,7 +1653,8 @@ class _SupportPage extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        Expanded(
+        SizedBox(
+          height: _compactSupportSurfaceHeight(context),
           child: switch (supportSurface) {
             _SupportSurface.activity => _ActivityPage(
               controller: controller,
@@ -1661,14 +1663,17 @@ class _SupportPage extends StatelessWidget {
               openChallengeLabel: openChallengeLabel,
               showsManualChallengeContinue: showsManualChallengeContinue,
               onSurfaceChanged: onActivitySurfaceChanged,
+              showHeader: false,
             ),
             _SupportSurface.diagnostics => _DiagnosticsPage(
               controller: controller,
               surface: diagnosticsSurface,
               onSurfaceChanged: onDiagnosticsSurfaceChanged,
+              showHeader: false,
             ),
           },
         ),
+        const SizedBox(height: 20),
       ],
     );
   }
@@ -1723,6 +1728,17 @@ class _SupportPage extends StatelessWidget {
       ),
     );
   }
+}
+
+double _compactSupportSurfaceHeight(BuildContext context) {
+  final scaledHeight = MediaQuery.sizeOf(context).height * 0.52;
+  if (scaledHeight < 440) {
+    return 440;
+  }
+  if (scaledHeight > 560) {
+    return 560;
+  }
+  return scaledHeight;
 }
 
 class _EmbeddedBrowserStateCard extends StatelessWidget {
