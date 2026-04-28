@@ -1,9 +1,12 @@
 package clientcontrol
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -289,6 +292,111 @@ func TestTransportProfileStoreReplaceForgetAndStaleReferenceFailClosed(t *testin
 	)
 	if !errors.Is(err, ErrTransportProfileNotFound) {
 		t.Fatalf("materialize after forget error = %v, want ErrTransportProfileNotFound", err)
+	}
+}
+
+func TestTransportProfileStoreLifecycleValidateAndSelectForStartup(t *testing.T) {
+	host := New(
+		WithBuildIdentity(BuildIdentity{Target: "android/embedded"}),
+		WithVPNTransportProfileStore(),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{supportedTestAndroidVPNCapability()}),
+	)
+	status, err := host.ImportTransportProfile(testWireGuardTransportProfileImport("select-client-key"))
+	if err != nil {
+		t.Fatalf("ImportTransportProfile() error = %v", err)
+	}
+
+	host.mu.Lock()
+	host.transportProfileDefaults = make(map[string]string)
+	host.refreshTransportProfileStatusLocked(status.ID)
+	host.mu.Unlock()
+
+	validated, err := host.ValidateTransportProfile(status.ID)
+	if err != nil {
+		t.Fatalf("ValidateTransportProfile() error = %v", err)
+	}
+	if validated.Validation.State != TransportProfileValidationStateValid {
+		t.Fatalf("validated state = %q, want %q", validated.Validation.State, TransportProfileValidationStateValid)
+	}
+	if len(validated.DefaultFor) != 0 {
+		t.Fatalf("validated default_for = %+v, want none before select", validated.DefaultFor)
+	}
+
+	selected, err := host.SelectTransportProfileForStartup(status.ID, TransportProfileSelectForStartupRequest{
+		Plan: testStrictWireGuardTurnDescriptor().Plan,
+	})
+	if err != nil {
+		t.Fatalf("SelectTransportProfileForStartup() error = %v", err)
+	}
+	if len(selected.DefaultFor) != 1 {
+		t.Fatalf("selected default_for = %+v, want one scoped binding", selected.DefaultFor)
+	}
+	if selected.DefaultFor[0].ProfileID != status.ID {
+		t.Fatalf("default profile id = %q, want %q", selected.DefaultFor[0].ProfileID, status.ID)
+	}
+
+	info := host.Info()
+	ref := info.PlatformTunnels[0].ExecutionPlans[0].TransportProfile.DefaultProfile
+	if ref == nil || ref.ProfileID != status.ID {
+		t.Fatalf("host default profile ref = %+v, want %s", ref, status.ID)
+	}
+}
+
+func TestTransportProfileStoreHTTPExposesValidateAndSelectLifecycleActions(t *testing.T) {
+	host := New(
+		WithBuildIdentity(BuildIdentity{Target: "android/embedded"}),
+		WithVPNTransportProfileStore(),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{supportedTestAndroidVPNCapability()}),
+	)
+	status, err := host.ImportTransportProfile(testWireGuardTransportProfileImport("http-lifecycle-key"))
+	if err != nil {
+		t.Fatalf("ImportTransportProfile() error = %v", err)
+	}
+
+	host.mu.Lock()
+	host.transportProfileDefaults = make(map[string]string)
+	host.refreshTransportProfileStatusLocked(status.ID)
+	host.mu.Unlock()
+
+	server := httptest.NewServer(Handler(host))
+	t.Cleanup(server.Close)
+
+	resp, err := http.Post(server.URL+"/v1/transport-profiles/"+status.ID+"/validate", "application/json", nil)
+	if err != nil {
+		t.Fatalf("POST validate error = %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("POST validate status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var validated TransportProfileStatus
+	if err := json.NewDecoder(resp.Body).Decode(&validated); err != nil {
+		t.Fatalf("decode validated profile: %v", err)
+	}
+	if validated.ID != status.ID || validated.Validation.State != TransportProfileValidationStateValid {
+		t.Fatalf("validated profile = %+v, want valid %s", validated, status.ID)
+	}
+
+	body, err := json.Marshal(TransportProfileSelectForStartupRequest{
+		Plan: testStrictWireGuardTurnDescriptor().Plan,
+	})
+	if err != nil {
+		t.Fatalf("Marshal(select request) error = %v", err)
+	}
+	resp, err = http.Post(server.URL+"/v1/transport-profiles/"+status.ID+"/select-for-startup", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST select-for-startup error = %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("POST select-for-startup status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var selected TransportProfileStatus
+	if err := json.NewDecoder(resp.Body).Decode(&selected); err != nil {
+		t.Fatalf("decode selected profile: %v", err)
+	}
+	if len(selected.DefaultFor) != 1 || selected.DefaultFor[0].ProfileID != status.ID {
+		t.Fatalf("selected default_for = %+v, want scoped default for %s", selected.DefaultFor, status.ID)
 	}
 }
 

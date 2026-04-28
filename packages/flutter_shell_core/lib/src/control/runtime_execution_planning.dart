@@ -556,6 +556,16 @@ class TransportProfileImportRequest {
   }
 }
 
+class TransportProfileSelectForStartupRequest {
+  const TransportProfileSelectForStartupRequest({required this.plan});
+
+  final RuntimeExecutionPlan plan;
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{'plan': plan.toJson()};
+  }
+}
+
 class TransportProfilePrerequisiteStatus {
   const TransportProfilePrerequisiteStatus({
     this.requiredKinds = const <TransportProfileKind>[],

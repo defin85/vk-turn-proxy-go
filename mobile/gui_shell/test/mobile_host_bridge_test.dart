@@ -827,6 +827,19 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
   }
 
   @override
+  Future<TransportProfileStatus> validateTransportProfile(String profileId) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<TransportProfileStatus> selectTransportProfileForStartup(
+    String profileId,
+    TransportProfileSelectForStartupRequest request,
+  ) {
+    throw UnimplementedError();
+  }
+
+  @override
   Future<void> forgetTransportProfile(String profileId) async {}
 
   @override

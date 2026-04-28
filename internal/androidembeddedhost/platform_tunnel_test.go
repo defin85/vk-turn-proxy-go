@@ -196,6 +196,63 @@ func TestManagerMigratesLegacyAndroidWireGuardPathIntoTransportProfileStoreOnce(
 	}
 }
 
+func TestManagerReportsInvalidLegacyAndroidWireGuardPathAsRedactedTransportProfile(t *testing.T) {
+	legacyPath := filepath.Join(t.TempDir(), "wireguard", "android-vpn-service.conf")
+	if err := os.MkdirAll(filepath.Dir(legacyPath), 0o700); err != nil {
+		t.Fatalf("MkdirAll(legacy): %v", err)
+	}
+	if err := os.WriteFile(legacyPath, []byte(strings.Join([]string{
+		"[Interface]",
+		"Address = 10.10.0.2/32",
+		"",
+		"[Peer]",
+		"PublicKey = peer-public-key",
+		"AllowedIPs = 0.0.0.0/0",
+		"Endpoint = relay.example.test:51820",
+		"",
+	}, "\n")), 0o600); err != nil {
+		t.Fatalf("WriteFile(legacy): %v", err)
+	}
+	SetAndroidWireGuardProfilePath(legacyPath)
+	t.Cleanup(func() { SetAndroidWireGuardProfilePath("") })
+
+	storePath := filepath.Join(t.TempDir(), "no-backup", "vpn-transport-profiles", "store.json")
+	manager := New(
+		WithTransportProfileStorePath(storePath),
+		withPlatformTunnelController(newAndroidVPNServiceController(
+			supportedAndroidVPNServiceCapability(""),
+			&fakeAndroidVPNServiceLifecycle{},
+		)),
+	)
+	baseURL := ensureStartedManager(t, manager)
+	profiles := getAndroidTransportProfiles(t, baseURL)
+	if len(profiles) != 1 {
+		t.Fatalf("transport profiles len = %d, want invalid legacy profile", len(profiles))
+	}
+	if profiles[0].Validation.State != clientcontrol.TransportProfileValidationStateInvalid {
+		t.Fatalf("validation state = %q, want %q", profiles[0].Validation.State, clientcontrol.TransportProfileValidationStateInvalid)
+	}
+	if profiles[0].SecretMaterialRef.Kind != clientcontrol.TransportProfileMaterialSourceLegacyPath {
+		t.Fatalf("secret material source = %q, want %q", profiles[0].SecretMaterialRef.Kind, clientcontrol.TransportProfileMaterialSourceLegacyPath)
+	}
+	body, err := json.Marshal(profiles)
+	if err != nil {
+		t.Fatalf("Marshal(profiles) error = %v", err)
+	}
+	if strings.Contains(string(body), legacyPath) || strings.Contains(string(body), "10.10.0.2") || strings.Contains(string(body), "peer-public-key") {
+		t.Fatalf("invalid legacy profile ordinary read leaked legacy material/path: %s", body)
+	}
+	if _, err := os.Stat(legacyPath); err != nil {
+		t.Fatalf("legacy profile path stat error = %v, want invalid file retained for operator recovery", err)
+	}
+
+	info := getAndroidHostInfo(t, baseURL)
+	plan := info.PlatformTunnels[0].ExecutionPlans[0]
+	if plan.TransportProfile == nil || plan.TransportProfile.State != clientcontrol.TransportProfileCompatibilityStateIncompatible {
+		t.Fatalf("execution plan transport profile = %+v, want incompatible invalid legacy status", plan.TransportProfile)
+	}
+}
+
 func TestAndroidKotlinUsesNoBackupTransportProfileStorePath(t *testing.T) {
 	t.Parallel()
 
@@ -224,6 +281,70 @@ func TestAndroidKotlinUsesNoBackupTransportProfileStorePath(t *testing.T) {
 	}
 	if strings.Contains(source, "File(context.filesDir, TRANSPORT_PROFILE_STORE_PATH)") {
 		t.Fatalf("EmbeddedMobileHost.kt stores transport profile store under filesDir instead of noBackupFilesDir")
+	}
+}
+
+func TestAndroidShellDoesNotExposeLegacyWireGuardProfilePathBridge(t *testing.T) {
+	t.Parallel()
+
+	sources := []string{
+		filepath.Join(
+			"..",
+			"..",
+			"mobile",
+			"gui_shell",
+			"android",
+			"app",
+			"src",
+			"main",
+			"kotlin",
+			"com",
+			"defin85",
+			"relaydock",
+			"MainActivity.kt",
+		),
+		filepath.Join(
+			"..",
+			"..",
+			"mobile",
+			"gui_shell",
+			"android",
+			"app",
+			"src",
+			"main",
+			"kotlin",
+			"com",
+			"defin85",
+			"relaydock",
+			"EmbeddedMobileHost.kt",
+		),
+		filepath.Join(
+			"..",
+			"..",
+			"mobile",
+			"gui_shell",
+			"lib",
+			"src",
+			"control",
+			"mobile_host_bridge.dart",
+		),
+	}
+	for _, sourcePath := range sources {
+		data, err := os.ReadFile(sourcePath)
+		if err != nil {
+			t.Fatalf("ReadFile(%s): %v", sourcePath, err)
+		}
+		source := string(data)
+		for _, forbidden := range []string{
+			"getAndroidWireGuardProfileStatus",
+			"configureAndroidWireGuardProfile",
+			"clearAndroidWireGuardProfile",
+			"PlatformAndroidWireGuardProfileManager",
+		} {
+			if strings.Contains(source, forbidden) {
+				t.Fatalf("%s still exposes legacy WireGuard profile path bridge %q", sourcePath, forbidden)
+			}
+		}
 	}
 }
 

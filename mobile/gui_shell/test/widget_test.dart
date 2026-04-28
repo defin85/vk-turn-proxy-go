@@ -5535,6 +5535,23 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   }
 
   @override
+  Future<TransportProfileStatus> validateTransportProfile(
+    String profileId,
+  ) async {
+    return _transportProfiles.firstWhere(
+      (TransportProfileStatus current) => current.id == profileId,
+    );
+  }
+
+  @override
+  Future<TransportProfileStatus> selectTransportProfileForStartup(
+    String profileId,
+    TransportProfileSelectForStartupRequest request,
+  ) async {
+    return validateTransportProfile(profileId);
+  }
+
+  @override
   Future<void> forgetTransportProfile(String profileId) async {
     _transportProfiles.removeWhere(
       (TransportProfileStatus current) => current.id == profileId,

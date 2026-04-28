@@ -173,21 +173,49 @@ func Handler(host *Host) http.Handler {
 		}
 	})
 	mux.HandleFunc("/v1/transport-profiles/", func(w http.ResponseWriter, r *http.Request) {
-		profileID := strings.TrimPrefix(r.URL.Path, "/v1/transport-profiles/")
-		profileID = strings.TrimSuffix(profileID, "/")
+		profileID, action, ok := parseTransportProfilePath(r.URL.Path)
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
 		if profileID == "" {
 			http.NotFound(w, r)
+			return
+		}
+		if action != "" {
+			if r.Method != http.MethodPost {
+				writeMethodNotAllowed(w, r.Method)
+				return
+			}
+			switch action {
+			case "validate":
+				profile, err := host.ValidateTransportProfile(profileID)
+				if err != nil {
+					writeTransportProfileActionError(w, err)
+					return
+				}
+				writeJSON(w, http.StatusOK, profile)
+			case "select-for-startup":
+				var req TransportProfileSelectForStartupRequest
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid_json", err)
+					return
+				}
+				profile, err := host.SelectTransportProfileForStartup(profileID, req)
+				if err != nil {
+					writeTransportProfileActionError(w, err)
+					return
+				}
+				writeJSON(w, http.StatusOK, profile)
+			default:
+				http.NotFound(w, r)
+			}
 			return
 		}
 		switch r.Method {
 		case http.MethodDelete:
 			if err := host.ForgetTransportProfile(profileID); err != nil {
-				switch {
-				case errors.Is(err, ErrTransportProfileStoreUnavailable):
-					writeError(w, http.StatusNotFound, "transport_profile_store_unavailable", err)
-				default:
-					writeNotFound(w, err)
-				}
+				writeTransportProfileActionError(w, err)
 				return
 			}
 			w.WriteHeader(http.StatusNoContent)
@@ -595,6 +623,33 @@ func decodeContinueChallengeRequest(
 		return continueChallengeRequest{}, err
 	}
 	return req, nil
+}
+
+func parseTransportProfilePath(path string) (string, string, bool) {
+	trimmed := strings.Trim(strings.TrimPrefix(path, "/v1/transport-profiles/"), "/")
+	if trimmed == "" {
+		return "", "", false
+	}
+	parts := strings.Split(trimmed, "/")
+	switch len(parts) {
+	case 1:
+		return parts[0], "", true
+	case 2:
+		return parts[0], parts[1], true
+	default:
+		return "", "", false
+	}
+}
+
+func writeTransportProfileActionError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, ErrTransportProfileStoreUnavailable):
+		writeError(w, http.StatusNotFound, "transport_profile_store_unavailable", err)
+	case errors.Is(err, ErrTransportProfileNotFound):
+		writeNotFound(w, err)
+	default:
+		writeError(w, http.StatusBadRequest, "transport_profile_invalid", err)
+	}
 }
 
 type errorResponse struct {

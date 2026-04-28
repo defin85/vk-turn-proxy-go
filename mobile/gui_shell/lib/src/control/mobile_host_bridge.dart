@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io' show Platform;
 
 import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter/services.dart';
@@ -150,43 +149,6 @@ abstract class MobileWebViewUserAgentMetadataController {
 
 abstract class MobileOwnedBrowserSessionStateResetter {
   Future<void> clearSessionState();
-}
-
-class AndroidWireGuardProfileStatus {
-  const AndroidWireGuardProfileStatus({
-    required this.platformAvailable,
-    required this.configured,
-    this.bytes = 0,
-    this.message = '',
-  });
-
-  const AndroidWireGuardProfileStatus.unavailable([String message = ''])
-    : this(platformAvailable: false, configured: false, message: message);
-
-  factory AndroidWireGuardProfileStatus.fromPayload(
-    Map<Object?, Object?>? payload,
-  ) {
-    if (payload == null) {
-      return const AndroidWireGuardProfileStatus.unavailable();
-    }
-    return AndroidWireGuardProfileStatus(
-      platformAvailable: payload['platform_available'] == true,
-      configured: payload['configured'] == true,
-      bytes: payload['bytes'] is int ? payload['bytes'] as int : 0,
-      message: (payload['message'] as String? ?? '').trim(),
-    );
-  }
-
-  final bool platformAvailable;
-  final bool configured;
-  final int bytes;
-  final String message;
-}
-
-abstract class AndroidWireGuardProfileManager {
-  Future<AndroidWireGuardProfileStatus> status();
-  Future<AndroidWireGuardProfileStatus> configure(String contents);
-  Future<AndroidWireGuardProfileStatus> clear();
 }
 
 class PlatformMobileHostConfigResolver implements MobileHostConfigResolver {
@@ -476,82 +438,6 @@ class PlatformMobileOwnedBrowserSessionStateResetter
   }
 }
 
-class PlatformAndroidWireGuardProfileManager
-    implements AndroidWireGuardProfileManager {
-  const PlatformAndroidWireGuardProfileManager({MethodChannel? methodChannel})
-    : _methodChannel = methodChannel ?? const MethodChannel(_bridgeChannelName);
-
-  final MethodChannel _methodChannel;
-
-  @override
-  Future<AndroidWireGuardProfileStatus> status() async {
-    if (!Platform.isAndroid) {
-      return const AndroidWireGuardProfileStatus.unavailable();
-    }
-    try {
-      final payload = await _methodChannel.invokeMethod<Map<Object?, Object?>>(
-        'getAndroidWireGuardProfileStatus',
-      );
-      return AndroidWireGuardProfileStatus.fromPayload(payload);
-    } on MissingPluginException {
-      return const AndroidWireGuardProfileStatus.unavailable();
-    } on PlatformException catch (error) {
-      return AndroidWireGuardProfileStatus.unavailable(
-        error.message ?? error.code,
-      );
-    } catch (error) {
-      return AndroidWireGuardProfileStatus.unavailable('$error');
-    }
-  }
-
-  @override
-  Future<AndroidWireGuardProfileStatus> configure(String contents) async {
-    if (!Platform.isAndroid) {
-      throw MobileHostPlatformActionError(
-        currentShellText.nativeMobileHostBridgePluginUnavailable,
-      );
-    }
-    try {
-      final payload = await _methodChannel.invokeMethod<Map<Object?, Object?>>(
-        'configureAndroidWireGuardProfile',
-        <String, Object?>{'contents': contents},
-      );
-      return AndroidWireGuardProfileStatus.fromPayload(payload);
-    } on MissingPluginException {
-      throw MobileHostPlatformActionError(
-        currentShellText.nativeMobileHostBridgePluginUnavailable,
-      );
-    } on PlatformException catch (error) {
-      throw MobileHostPlatformActionError(error.message ?? error.code);
-    } catch (error) {
-      throw MobileHostPlatformActionError('$error');
-    }
-  }
-
-  @override
-  Future<AndroidWireGuardProfileStatus> clear() async {
-    if (!Platform.isAndroid) {
-      throw MobileHostPlatformActionError(
-        currentShellText.nativeMobileHostBridgePluginUnavailable,
-      );
-    }
-    try {
-      final payload = await _methodChannel.invokeMethod<Map<Object?, Object?>>(
-        'clearAndroidWireGuardProfile',
-      );
-      return AndroidWireGuardProfileStatus.fromPayload(payload);
-    } on MissingPluginException {
-      throw MobileHostPlatformActionError(
-        currentShellText.nativeMobileHostBridgePluginUnavailable,
-      );
-    } on PlatformException catch (error) {
-      throw MobileHostPlatformActionError(error.message ?? error.code);
-    } catch (error) {
-      throw MobileHostPlatformActionError('$error');
-    }
-  }
-}
-
 abstract class MobileHostBridge implements ControlPlaneApi {
   Stream<MobileBrowserReturnSignal> get browserReturnSignals;
   Future<MobileHostConnectionResult> ensureReady();
@@ -709,6 +595,19 @@ class HttpMobileHostBridge implements MobileHostBridge {
     TransportProfileImportRequest request,
   ) {
     return _client.importTransportProfile(request);
+  }
+
+  @override
+  Future<TransportProfileStatus> validateTransportProfile(String profileId) {
+    return _client.validateTransportProfile(profileId);
+  }
+
+  @override
+  Future<TransportProfileStatus> selectTransportProfileForStartup(
+    String profileId,
+    TransportProfileSelectForStartupRequest request,
+  ) {
+    return _client.selectTransportProfileForStartup(profileId, request);
   }
 
   @override
@@ -969,6 +868,16 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
   @override
   Future<TransportProfileStatus> importTransportProfile(
     TransportProfileImportRequest request,
+  ) => _fail();
+
+  @override
+  Future<TransportProfileStatus> validateTransportProfile(String profileId) =>
+      _fail();
+
+  @override
+  Future<TransportProfileStatus> selectTransportProfileForStartup(
+    String profileId,
+    TransportProfileSelectForStartupRequest request,
   ) => _fail();
 
   @override

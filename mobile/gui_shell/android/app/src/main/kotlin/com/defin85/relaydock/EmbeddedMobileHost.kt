@@ -20,7 +20,6 @@ internal object EmbeddedMobileHostNative {
 internal object EmbeddedMobileHost {
     private const val APP_WIREGUARD_PROFILE_PATH = "wireguard/android-vpn-service.conf"
     private const val TRANSPORT_PROFILE_STORE_PATH = "vpn-transport-profiles/store.json"
-    private const val MAX_WIREGUARD_PROFILE_BYTES = 256 * 1024
 
     fun ensureStarted(context: Context): String {
         configureTransportProfileStore(context)
@@ -46,40 +45,6 @@ internal object EmbeddedMobileHost {
 
     fun clearPlatformTunnelBridge() {
         EmbeddedMobileHostNative.clearPlatformTunnelBridge()
-    }
-
-    fun wireGuardProfileStatus(context: Context): Map<String, Any> {
-        val profile = wireGuardProfileFile(context)
-        return mapOf(
-            "platform_available" to true,
-            "configured" to profile.isFile,
-            "bytes" to if (profile.isFile) profile.length() else 0L,
-        )
-    }
-
-    fun configureWireGuardProfile(context: Context, contents: String): Map<String, Any> {
-        val normalized = contents.trim()
-        if (normalized.isEmpty()) {
-            throw IllegalArgumentException("WireGuard configuration is empty.")
-        }
-        val encoded = normalized.toByteArray(Charsets.UTF_8)
-        if (encoded.size > MAX_WIREGUARD_PROFILE_BYTES) {
-            throw IllegalArgumentException("WireGuard configuration is too large.")
-        }
-        val profile = wireGuardProfileFile(context)
-        profile.parentFile?.mkdirs()
-        profile.writeBytes(encoded + byteArrayOf('\n'.code.toByte()))
-        EmbeddedMobileHostNative.setAndroidWireGuardProfilePath(profile.absolutePath)
-        return wireGuardProfileStatus(context)
-    }
-
-    fun clearWireGuardProfile(context: Context): Map<String, Any> {
-        val profile = wireGuardProfileFile(context)
-        if (profile.exists() && !profile.delete()) {
-            throw IllegalStateException("Failed to delete the app-owned WireGuard configuration.")
-        }
-        EmbeddedMobileHostNative.setAndroidWireGuardProfilePath(null)
-        return wireGuardProfileStatus(context)
     }
 
     private fun restoreConfiguredWireGuardProfile(context: Context) {

@@ -42,6 +42,11 @@ abstract class ControlPlaneApi {
   Future<TransportProfileStatus> importTransportProfile(
     TransportProfileImportRequest request,
   );
+  Future<TransportProfileStatus> validateTransportProfile(String profileId);
+  Future<TransportProfileStatus> selectTransportProfileForStartup(
+    String profileId,
+    TransportProfileSelectForStartupRequest request,
+  );
   Future<void> forgetTransportProfile(String profileId);
   Future<List<ProfileRecord>> profiles();
   Future<ProfileRecord> upsertProfile(ProfileRecord profile);
@@ -240,6 +245,30 @@ class ControlPlaneClient implements ControlPlaneApi {
     final payload = await _jsonRequest(
       'POST',
       '/v1/transport-profiles',
+      body: request.toJson(),
+    );
+    return TransportProfileStatus.fromJson(payload);
+  }
+
+  @override
+  Future<TransportProfileStatus> validateTransportProfile(
+    String profileId,
+  ) async {
+    final payload = await _jsonRequest(
+      'POST',
+      '/v1/transport-profiles/$profileId/validate',
+    );
+    return TransportProfileStatus.fromJson(payload);
+  }
+
+  @override
+  Future<TransportProfileStatus> selectTransportProfileForStartup(
+    String profileId,
+    TransportProfileSelectForStartupRequest request,
+  ) async {
+    final payload = await _jsonRequest(
+      'POST',
+      '/v1/transport-profiles/$profileId/select-for-startup',
       body: request.toJson(),
     );
     return TransportProfileStatus.fromJson(payload);

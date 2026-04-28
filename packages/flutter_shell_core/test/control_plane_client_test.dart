@@ -212,6 +212,30 @@ void main() {
             request.response.statusCode = HttpStatus.noContent;
             await request.response.close();
             return;
+          case '/v1/transport-profiles/transport-profile-1/validate':
+            expect(request.method, 'POST');
+            request.response.headers.contentType = ContentType.json;
+            request.response.write(
+              jsonEncode(_transportProfileStatusPayload()),
+            );
+            await request.response.close();
+            return;
+          case '/v1/transport-profiles/transport-profile-1/select-for-startup':
+            expect(request.method, 'POST');
+            final payload =
+                jsonDecode(await utf8.decoder.bind(request).join())
+                    as Map<String, dynamic>;
+            final plan = payload['plan'] as Map<String, dynamic>;
+            expect(plan['access_method'], 'turn_credentials');
+            expect(plan['carrier_family'], 'turn_datagram');
+            expect(plan['engine_family'], 'wireguard_native');
+            expect(plan['host_adapter'], 'windows_wintun');
+            request.response.headers.contentType = ContentType.json;
+            request.response.write(
+              jsonEncode(_transportProfileStatusPayload(defaultFor: true)),
+            );
+            await request.response.close();
+            return;
           case '/v1/platform-tunnels/stop':
             final payload =
                 jsonDecode(await utf8.decoder.bind(request).join())
@@ -414,6 +438,24 @@ void main() {
         ),
       );
       expect(imported.kind, TransportProfileKind.wireGuardNativeV1);
+
+      final validated = await client.validateTransportProfile(
+        'transport-profile-1',
+      );
+      expect(validated.validation.state, TransportProfileValidationState.valid);
+
+      final selected = await client.selectTransportProfileForStartup(
+        'transport-profile-1',
+        const TransportProfileSelectForStartupRequest(
+          plan: RuntimeExecutionPlan(
+            accessMethod: RuntimeAccessMethod.turnCredentials,
+            carrierFamily: RuntimeCarrierFamily.turnDatagram,
+            engineFamily: RuntimeEngineFamily.wireguardNative,
+            hostAdapter: RuntimeHostAdapter.windowsWintun,
+          ),
+        ),
+      );
+      expect(selected.defaultFor.single.profileId, 'transport-profile-1');
 
       await client.forgetTransportProfile('transport-profile-1');
 
@@ -1123,8 +1165,8 @@ void main() {
   );
 }
 
-Map<String, dynamic> _transportProfileStatusPayload() {
-  return <String, dynamic>{
+Map<String, dynamic> _transportProfileStatusPayload({bool defaultFor = false}) {
+  final payload = <String, dynamic>{
     'id': 'transport-profile-1',
     'kind': 'wireguard_native_v1',
     'version': '1',
@@ -1152,4 +1194,22 @@ Map<String, dynamic> _transportProfileStatusPayload() {
     'imported_at': DateTime.utc(2026, 4, 28, 12).toIso8601String(),
     'updated_at': DateTime.utc(2026, 4, 28, 12).toIso8601String(),
   };
+  if (defaultFor) {
+    payload['default_for'] = <Map<String, dynamic>>[
+      <String, dynamic>{
+        'profile_id': 'transport-profile-1',
+        'kind': 'wireguard_native_v1',
+        'host_adapter': 'windows_wintun',
+        'plan': <String, dynamic>{
+          'access_method': 'turn_credentials',
+          'carrier_family': 'turn_datagram',
+          'engine_family': 'wireguard_native',
+          'host_adapter': 'windows_wintun',
+        },
+        'scope_id':
+            'windows_wintun|turn_credentials|turn_datagram|wireguard_native',
+      },
+    ];
+  }
+  return payload;
 }

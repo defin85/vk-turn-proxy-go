@@ -297,6 +297,10 @@ type TransportProfileImportRequest struct {
 	DefaultFor       *RuntimeExecutionPlan         `json:"default_for,omitempty"`
 }
 
+type TransportProfileSelectForStartupRequest struct {
+	Plan RuntimeExecutionPlan `json:"plan"`
+}
+
 type TransportProfilePrerequisiteStatus struct {
 	RequiredKinds   []TransportProfileKind             `json:"required_kinds,omitempty"`
 	State           TransportProfileCompatibilityState `json:"state,omitempty"`

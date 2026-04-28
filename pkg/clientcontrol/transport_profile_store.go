@@ -290,6 +290,71 @@ func (h *Host) ImportTransportProfile(req TransportProfileImportRequest) (Transp
 	return cloneTransportProfileStatus(status), nil
 }
 
+func (h *Host) ValidateTransportProfile(profileID string) (TransportProfileStatus, error) {
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" {
+		return TransportProfileStatus{}, ErrTransportProfileNotFound
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if !h.transportProfileStoreEnabled {
+		return TransportProfileStatus{}, ErrTransportProfileStoreUnavailable
+	}
+	if _, ok := h.transportProfiles[profileID]; !ok {
+		return TransportProfileStatus{}, ErrTransportProfileNotFound
+	}
+	h.refreshTransportProfileStatusLocked(profileID)
+	return cloneTransportProfileStatus(h.transportProfiles[profileID].status), nil
+}
+
+func (h *Host) SelectTransportProfileForStartup(
+	profileID string,
+	req TransportProfileSelectForStartupRequest,
+) (TransportProfileStatus, error) {
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" {
+		return TransportProfileStatus{}, ErrTransportProfileNotFound
+	}
+	if err := validateRuntimeExecutionPlan(req.Plan); err != nil {
+		return TransportProfileStatus{}, fmt.Errorf("%w: %v", ErrTransportProfileInvalid, err)
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if !h.transportProfileStoreEnabled {
+		return TransportProfileStatus{}, ErrTransportProfileStoreUnavailable
+	}
+	managed, ok := h.transportProfiles[profileID]
+	if !ok {
+		return TransportProfileStatus{}, ErrTransportProfileNotFound
+	}
+	requiredKinds := requiredTransportProfileKindsForPlan(req.Plan)
+	if len(requiredKinds) == 0 {
+		return TransportProfileStatus{}, fmt.Errorf("%w: selected execution plan does not require a VPN transport profile", ErrTransportProfileIncompatible)
+	}
+	if _, err := h.validateTransportProfileRefLocked(TransportProfileReference{
+		ProfileID: profileID,
+		Kind:      managed.status.Kind,
+	}, req.Plan, requiredKinds); err != nil {
+		return TransportProfileStatus{}, err
+	}
+	if !h.transportProfilePlanAdvertisedLocked(managed.status.Kind, req.Plan) {
+		return TransportProfileStatus{}, fmt.Errorf("%w: selected execution plan is not advertised by this host", ErrTransportProfileIncompatible)
+	}
+
+	scopeID := transportProfileDefaultScopeID(req.Plan)
+	previousDefaults := cloneTransportProfileDefaults(h.transportProfileDefaults)
+	h.transportProfileDefaults[scopeID] = profileID
+	h.refreshTransportProfileStatusesLocked()
+	if err := h.persistTransportProfileStoreLocked(); err != nil {
+		h.transportProfileDefaults = previousDefaults
+		h.refreshTransportProfileStatusesLocked()
+		return TransportProfileStatus{}, err
+	}
+	return cloneTransportProfileStatus(h.transportProfiles[profileID].status), nil
+}
+
 func (h *Host) MigrateWireGuardTransportProfileFromPath(path string) (TransportProfileStatus, bool, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -299,9 +364,38 @@ func (h *Host) MigrateWireGuardTransportProfileFromPath(path string) (TransportP
 	if err != nil {
 		return TransportProfileStatus{}, false, err
 	}
+
+	h.mu.Lock()
+	if !h.transportProfileStoreEnabled {
+		h.mu.Unlock()
+		return TransportProfileStatus{}, false, ErrTransportProfileStoreUnavailable
+	}
+	for _, managed := range h.transportProfiles {
+		if managed.status.Kind == TransportProfileKindWireGuardNativeV1 {
+			status := cloneTransportProfileStatus(managed.status)
+			h.mu.Unlock()
+			return status, false, nil
+		}
+	}
+	h.mu.Unlock()
+
 	parsed, err := wireguardprofile.Parse(data, "legacy Android WireGuard profile")
 	if err != nil {
-		return TransportProfileStatus{}, false, fmt.Errorf("%w: %v", ErrTransportProfileInvalid, err)
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		if !h.transportProfileStoreEnabled {
+			return TransportProfileStatus{}, false, ErrTransportProfileStoreUnavailable
+		}
+		for _, managed := range h.transportProfiles {
+			if managed.status.Kind == TransportProfileKindWireGuardNativeV1 {
+				return cloneTransportProfileStatus(managed.status), false, nil
+			}
+		}
+		status, storeErr := h.storeInvalidLegacyWireGuardTransportProfileLocked(err)
+		if storeErr != nil {
+			return TransportProfileStatus{}, false, storeErr
+		}
+		return cloneTransportProfileStatus(status), false, nil
 	}
 
 	h.mu.Lock()
@@ -327,6 +421,45 @@ func (h *Host) MigrateWireGuardTransportProfileFromPath(path string) (TransportP
 		return TransportProfileStatus{}, false, err
 	}
 	return cloneTransportProfileStatus(status), true, nil
+}
+
+func (h *Host) storeInvalidLegacyWireGuardTransportProfileLocked(
+	parseErr error,
+) (TransportProfileStatus, error) {
+	profileID := h.newID()
+	now := h.now().UTC()
+	status := TransportProfileStatus{
+		ID:          profileID,
+		Kind:        TransportProfileKindWireGuardNativeV1,
+		Version:     "1",
+		DisplayName: "Invalid migrated WireGuard VPN transport profile",
+		Validation: TransportProfileValidationStatus{
+			State:   TransportProfileValidationStateInvalid,
+			Message: "legacy Android WireGuard profile is invalid",
+		},
+		Compatibility: TransportProfileCompatibilityStatus{
+			State:   TransportProfileCompatibilityStateIncompatible,
+			Message: "transport profile material is invalid",
+		},
+		SecretMaterialRef: TransportProfileSecretMaterialRef{
+			Kind: TransportProfileMaterialSourceLegacyPath,
+			Ref:  "host-owned:" + profileID,
+		},
+		Actions:    transportProfileStatusActions(),
+		ImportedAt: now,
+		UpdatedAt:  now,
+	}
+	if parseErr != nil {
+		status.Validation.Message = fmt.Sprintf("legacy Android WireGuard profile is invalid: %v", parseErr)
+	}
+	h.transportProfiles[profileID] = managedTransportProfile{status: status}
+	h.refreshTransportProfileStatusLocked(profileID)
+	status = h.transportProfiles[profileID].status
+	if err := h.persistTransportProfileStoreLocked(); err != nil {
+		delete(h.transportProfiles, profileID)
+		return TransportProfileStatus{}, err
+	}
+	return cloneTransportProfileStatus(status), nil
 }
 
 func (h *Host) storeParsedTransportProfileLocked(
@@ -378,7 +511,7 @@ func (h *Host) storeParsedTransportProfileLocked(
 	for _, binding := range status.DefaultFor {
 		h.transportProfileDefaults[binding.ScopeID] = profileID
 	}
-	h.refreshTransportProfileStatusLocked(profileID)
+	h.refreshTransportProfileStatusesLocked()
 	status = h.transportProfiles[profileID].status
 	if err := h.persistTransportProfileStoreLocked(); err != nil {
 		if hadPreviousProfile {
@@ -387,6 +520,7 @@ func (h *Host) storeParsedTransportProfileLocked(
 			delete(h.transportProfiles, profileID)
 		}
 		h.transportProfileDefaults = previousDefaults
+		h.refreshTransportProfileStatusesLocked()
 		return TransportProfileStatus{}, err
 	}
 	return cloneTransportProfileStatus(status), nil
@@ -414,9 +548,11 @@ func (h *Host) ForgetTransportProfile(profileID string) error {
 			delete(h.transportProfileDefaults, scopeID)
 		}
 	}
+	h.refreshTransportProfileStatusesLocked()
 	if err := h.persistTransportProfileStoreLocked(); err != nil {
 		h.transportProfiles[profileID] = previousProfile
 		h.transportProfileDefaults = previousDefaults
+		h.refreshTransportProfileStatusesLocked()
 		return err
 	}
 	return nil
@@ -595,6 +731,12 @@ func (h *Host) refreshTransportProfileStatusLocked(profileID string) {
 	status.DefaultFor = h.defaultBindingsForTransportProfileLocked(status)
 	managed.status = status
 	h.transportProfiles[profileID] = managed
+}
+
+func (h *Host) refreshTransportProfileStatusesLocked() {
+	for profileID := range h.transportProfiles {
+		h.refreshTransportProfileStatusLocked(profileID)
+	}
 }
 
 func transportProfileStatusActions() []TransportProfileLifecycleAction {
@@ -888,6 +1030,29 @@ func transportProfileCompatibleWithPlan(kind TransportProfileKind, plan RuntimeE
 	default:
 		return false
 	}
+}
+
+func (h *Host) transportProfilePlanAdvertisedLocked(
+	kind TransportProfileKind,
+	plan RuntimeExecutionPlan,
+) bool {
+	for _, capability := range h.platformTunnels {
+		if !capability.Available {
+			continue
+		}
+		for _, descriptor := range capability.ExecutionPlans {
+			if descriptor.SupportState != RuntimeExecutionPlanSupportStateSupported {
+				continue
+			}
+			if !runtimeExecutionPlanEquals(descriptor.Plan, plan) {
+				continue
+			}
+			if transportProfileCompatibleWithPlan(kind, descriptor.Plan) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func compatiblePlansForTransportProfileKind(
