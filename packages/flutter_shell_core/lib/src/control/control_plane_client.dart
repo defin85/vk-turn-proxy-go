@@ -29,6 +29,7 @@ abstract class ControlPlaneApi {
   Future<PlatformTunnelStopResult> stopPlatformTunnel({
     required PlatformTunnelMode mode,
   });
+  Future<List<PlatformTunnelStatus>> platformTunnelStatuses();
   Future<List<ProviderDescriptor>> providers();
   Future<List<ProviderConfigRecord>> providerConfigs();
   Future<ProviderConfigRecord> upsertProviderConfig(
@@ -41,6 +42,20 @@ abstract class ControlPlaneApi {
   Future<List<TransportProfileStatus>> transportProfiles();
   Future<TransportProfileStatus> importTransportProfile(
     TransportProfileImportRequest request,
+  );
+  Future<TransportProfileStructuredSaveResult> createStructuredTransportProfile(
+    TransportProfileStructuredCreateRequest request,
+  );
+  Future<TransportProfileStructuredSaveResult> updateStructuredTransportProfile(
+    String profileId,
+    TransportProfileStructuredUpdateRequest request,
+  );
+  Future<TransportProfileStructuredValidationResult>
+  validateStructuredTransportProfileDraft(
+    TransportProfileStructuredValidationRequest request,
+  );
+  Future<TransportProfileGeneratedKey> generateTransportProfileKey(
+    TransportProfileGenerateKeyRequest request,
   );
   Future<TransportProfileStatus> validateTransportProfile(String profileId);
   Future<TransportProfileStatus> selectTransportProfileForStartup(
@@ -192,6 +207,15 @@ class ControlPlaneClient implements ControlPlaneApi {
   }
 
   @override
+  Future<List<PlatformTunnelStatus>> platformTunnelStatuses() async {
+    final payload = await _jsonRequestList(
+      'GET',
+      '/v1/platform-tunnels/status',
+    );
+    return payload.map(PlatformTunnelStatus.fromJson).toList(growable: false);
+  }
+
+  @override
   Future<List<ProviderDescriptor>> providers() async {
     final payload = await _jsonRequestList('GET', '/v1/providers');
     return payload.map(ProviderDescriptor.fromJson).toList(growable: false);
@@ -248,6 +272,56 @@ class ControlPlaneClient implements ControlPlaneApi {
       body: request.toJson(),
     );
     return TransportProfileStatus.fromJson(payload);
+  }
+
+  @override
+  Future<TransportProfileStructuredSaveResult> createStructuredTransportProfile(
+    TransportProfileStructuredCreateRequest request,
+  ) async {
+    final payload = await _jsonRequest(
+      'POST',
+      '/v1/transport-profiles:structured',
+      body: request.toJson(),
+    );
+    return TransportProfileStructuredSaveResult.fromJson(payload);
+  }
+
+  @override
+  Future<TransportProfileStructuredSaveResult> updateStructuredTransportProfile(
+    String profileId,
+    TransportProfileStructuredUpdateRequest request,
+  ) async {
+    final payload = await _jsonRequest(
+      'POST',
+      '/v1/transport-profiles/$profileId/structured-update',
+      body: request.toJson(),
+    );
+    return TransportProfileStructuredSaveResult.fromJson(payload);
+  }
+
+  @override
+  Future<TransportProfileStructuredValidationResult>
+  validateStructuredTransportProfileDraft(
+    TransportProfileStructuredValidationRequest request,
+  ) async {
+    final payload = await _jsonRequest(
+      'POST',
+      '/v1/transport-profiles:validate-draft',
+      body: request.toJson(),
+    );
+    return TransportProfileStructuredValidationResult.fromJson(payload);
+  }
+
+  @override
+  Future<TransportProfileGeneratedKey> generateTransportProfileKey(
+    TransportProfileGenerateKeyRequest request,
+  ) async {
+    final payload = await _jsonRequest(
+      'POST',
+      '/v1/transport-profiles:generate-key',
+      body: request.toJson(),
+    );
+    return TransportProfileGeneratedKey.fromJson(payload);
   }
 
   @override

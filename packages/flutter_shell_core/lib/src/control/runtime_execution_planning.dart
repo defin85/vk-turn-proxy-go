@@ -113,38 +113,100 @@ enum RuntimeRemoteEndpointFamily {
   }
 }
 
-enum TransportProfileKind {
-  wireGuardNativeV1('wireguard_native_v1');
-
+class TransportProfileKind {
   const TransportProfileKind(this.value);
+
+  static const wireGuardNativeV1 = TransportProfileKind('wireguard_native_v1');
 
   final String value;
 
   static TransportProfileKind? fromJson(String? raw) {
-    for (final kind in values) {
-      if (kind.value == raw) {
-        return kind;
-      }
+    final value = raw?.trim() ?? '';
+    if (value.isEmpty) {
+      return null;
     }
-    return null;
+    return TransportProfileKind(value);
   }
+
+  bool get isWireGuardNativeV1 => this == wireGuardNativeV1;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TransportProfileKind && other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => value;
 }
 
-enum TransportProfileImportAdapter {
-  wireGuardConf('wireguard_conf');
-
+class TransportProfileImportAdapter {
   const TransportProfileImportAdapter(this.value);
+
+  static const wireGuardConf = TransportProfileImportAdapter('wireguard_conf');
 
   final String value;
 
   static TransportProfileImportAdapter? fromJson(String? raw) {
-    for (final adapter in values) {
-      if (adapter.value == raw) {
-        return adapter;
-      }
+    final value = raw?.trim() ?? '';
+    if (value.isEmpty) {
+      return null;
     }
-    return null;
+    return TransportProfileImportAdapter(value);
   }
+
+  bool get isWireGuardConf => this == wireGuardConf;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TransportProfileImportAdapter && other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => value;
+}
+
+class TransportProfileMaterialAcquisitionMethod {
+  const TransportProfileMaterialAcquisitionMethod(this.value);
+
+  static const plainText = TransportProfileMaterialAcquisitionMethod(
+    'plain_text',
+  );
+  static const filePicker = TransportProfileMaterialAcquisitionMethod(
+    'file_picker',
+  );
+  static const qrPayload = TransportProfileMaterialAcquisitionMethod(
+    'qr_payload',
+  );
+  static const providerManaged = TransportProfileMaterialAcquisitionMethod(
+    'provider_managed',
+  );
+
+  final String value;
+
+  static TransportProfileMaterialAcquisitionMethod? fromJson(String? raw) {
+    final value = raw?.trim() ?? '';
+    if (value.isEmpty) {
+      return null;
+    }
+    return TransportProfileMaterialAcquisitionMethod(value);
+  }
+
+  bool get canAcquireInShell => this == plainText || this == filePicker;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TransportProfileMaterialAcquisitionMethod &&
+      other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => value;
 }
 
 enum TransportProfileLifecycleAction {
@@ -153,7 +215,11 @@ enum TransportProfileLifecycleAction {
   replace('replace'),
   forget('forget'),
   validate('validate'),
-  selectForStartup('select_for_startup');
+  selectForStartup('select_for_startup'),
+  createStructured('create_structured'),
+  updateStructured('update_structured'),
+  validateDraft('validate_draft'),
+  generateKey('generate_key');
 
   const TransportProfileLifecycleAction(this.value);
 
@@ -208,7 +274,8 @@ enum TransportProfileCompatibilityState {
 
 enum TransportProfileMaterialSource {
   importAdapter('import_adapter'),
-  legacyPath('legacy_path');
+  legacyPath('legacy_path'),
+  structuredEditor('structured_editor');
 
   const TransportProfileMaterialSource(this.value);
 
@@ -221,6 +288,140 @@ enum TransportProfileMaterialSource {
       }
     }
     return TransportProfileMaterialSource.importAdapter;
+  }
+}
+
+class TransportProfileStructuredFieldId {
+  const TransportProfileStructuredFieldId(this.value);
+
+  static const schemaVersion = TransportProfileStructuredFieldId(
+    'schema_version',
+  );
+  static const displayName = TransportProfileStructuredFieldId('display_name');
+  static const interfacePrivateKey = TransportProfileStructuredFieldId(
+    'interface_private_key',
+  );
+  static const interfaceAddresses = TransportProfileStructuredFieldId(
+    'interface_addresses',
+  );
+  static const dnsServers = TransportProfileStructuredFieldId('dns_servers');
+  static const mtu = TransportProfileStructuredFieldId('mtu');
+  static const peerPublicKey = TransportProfileStructuredFieldId(
+    'peer_public_key',
+  );
+  static const peerPresharedKey = TransportProfileStructuredFieldId(
+    'peer_preshared_key',
+  );
+  static const allowedIps = TransportProfileStructuredFieldId('allowed_ips');
+  static const endpoint = TransportProfileStructuredFieldId('endpoint');
+  static const persistentKeepalive = TransportProfileStructuredFieldId(
+    'persistent_keepalive',
+  );
+
+  final String value;
+
+  static TransportProfileStructuredFieldId? fromJson(String? raw) {
+    final value = raw?.trim() ?? '';
+    if (value.isEmpty) {
+      return null;
+    }
+    return TransportProfileStructuredFieldId(value);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is TransportProfileStructuredFieldId && other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => value;
+}
+
+class TransportProfileStructuredFieldValueKind {
+  const TransportProfileStructuredFieldValueKind(this.value);
+
+  static const string = TransportProfileStructuredFieldValueKind('string');
+  static const stringList = TransportProfileStructuredFieldValueKind(
+    'string_list',
+  );
+  static const integer = TransportProfileStructuredFieldValueKind('integer');
+  static const secretString = TransportProfileStructuredFieldValueKind(
+    'secret_string',
+  );
+
+  final String value;
+
+  static TransportProfileStructuredFieldValueKind? fromJson(String? raw) {
+    final value = raw?.trim() ?? '';
+    if (value.isEmpty) {
+      return null;
+    }
+    return TransportProfileStructuredFieldValueKind(value);
+  }
+
+  bool get supportedByShell =>
+      this == string ||
+      this == stringList ||
+      this == integer ||
+      this == secretString;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TransportProfileStructuredFieldValueKind && other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => value;
+}
+
+class TransportProfileStructuredFieldCardinality {
+  const TransportProfileStructuredFieldCardinality(this.value);
+
+  static const one = TransportProfileStructuredFieldCardinality('one');
+  static const many = TransportProfileStructuredFieldCardinality('many');
+
+  final String value;
+
+  static TransportProfileStructuredFieldCardinality? fromJson(String? raw) {
+    final value = raw?.trim() ?? '';
+    if (value.isEmpty) {
+      return null;
+    }
+    return TransportProfileStructuredFieldCardinality(value);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is TransportProfileStructuredFieldCardinality &&
+      other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => value;
+}
+
+enum TransportProfileSecretUpdateAction {
+  preserveExisting('preserve_existing'),
+  replaceSubmitted('replace_submitted'),
+  generateHost('generate_host');
+
+  const TransportProfileSecretUpdateAction(this.value);
+
+  final String value;
+
+  static TransportProfileSecretUpdateAction? fromJson(String? raw) {
+    for (final action in values) {
+      if (action.value == raw) {
+        return action;
+      }
+    }
+    return null;
   }
 }
 
@@ -462,6 +663,7 @@ class TransportProfileImportAdapterDescriptor {
     required this.profileKind,
     this.displayName = '',
     this.extensions = const <String>[],
+    this.materialAcquisitionMethod,
   });
 
   factory TransportProfileImportAdapterDescriptor.fromJson(
@@ -481,6 +683,10 @@ class TransportProfileImportAdapterDescriptor {
       extensions: (json['extensions'] as List<dynamic>? ?? const <dynamic>[])
           .whereType<String>()
           .toList(growable: false),
+      materialAcquisitionMethod:
+          TransportProfileMaterialAcquisitionMethod.fromJson(
+            json['material_acquisition_method'] as String?,
+          ),
     );
   }
 
@@ -488,6 +694,151 @@ class TransportProfileImportAdapterDescriptor {
   final TransportProfileKind profileKind;
   final String displayName;
   final List<String> extensions;
+  final TransportProfileMaterialAcquisitionMethod? materialAcquisitionMethod;
+}
+
+class TransportProfileStructuredFieldDescriptor {
+  const TransportProfileStructuredFieldDescriptor({
+    required this.id,
+    required this.valueKind,
+    this.displayName = '',
+    this.helpText = '',
+    this.placeholder = '',
+    this.group = '',
+    this.order = 0,
+    this.cardinality,
+    this.required = false,
+    this.secret = false,
+    this.generated = false,
+    this.updatePreservable = false,
+    this.manualReplacement = false,
+    this.minItems = 0,
+    this.maxItems = 0,
+    this.defaultString = '',
+    this.defaultStringList = const <String>[],
+    this.defaultInteger = 0,
+    this.supported = false,
+    this.unsupportedReason = '',
+    this.secretUpdateActions = const <TransportProfileSecretUpdateAction>[],
+  });
+
+  factory TransportProfileStructuredFieldDescriptor.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    final id = TransportProfileStructuredFieldId.fromJson(
+      json['id'] as String?,
+    );
+    final valueKind = TransportProfileStructuredFieldValueKind.fromJson(
+      json['value_kind'] as String?,
+    );
+    if (id == null || valueKind == null) {
+      throw const FormatException(
+        'transport profile structured field descriptor invalid',
+      );
+    }
+    return TransportProfileStructuredFieldDescriptor(
+      id: id,
+      displayName: json['display_name'] as String? ?? '',
+      helpText: json['help_text'] as String? ?? '',
+      placeholder: json['placeholder'] as String? ?? '',
+      group: json['group'] as String? ?? '',
+      order: json['order'] as int? ?? 0,
+      valueKind: valueKind,
+      cardinality: TransportProfileStructuredFieldCardinality.fromJson(
+        json['cardinality'] as String?,
+      ),
+      required: json['required'] as bool? ?? false,
+      secret: json['secret'] as bool? ?? false,
+      generated: json['generated'] as bool? ?? false,
+      updatePreservable: json['update_preservable'] as bool? ?? false,
+      manualReplacement: json['manual_replacement'] as bool? ?? false,
+      minItems: json['min_items'] as int? ?? 0,
+      maxItems: json['max_items'] as int? ?? 0,
+      defaultString: json['default_string'] as String? ?? '',
+      defaultStringList:
+          (json['default_string_list'] as List<dynamic>? ?? const <dynamic>[])
+              .whereType<String>()
+              .toList(growable: false),
+      defaultInteger: json['default_integer'] as int? ?? 0,
+      supported: json['supported'] as bool? ?? false,
+      unsupportedReason: json['unsupported_reason'] as String? ?? '',
+      secretUpdateActions: _readTransportProfileSecretUpdateActions(
+        json['secret_update_actions'],
+      ),
+    );
+  }
+
+  final TransportProfileStructuredFieldId id;
+  final String displayName;
+  final String helpText;
+  final String placeholder;
+  final String group;
+  final int order;
+  final TransportProfileStructuredFieldValueKind valueKind;
+  final TransportProfileStructuredFieldCardinality? cardinality;
+  final bool required;
+  final bool secret;
+  final bool generated;
+  final bool updatePreservable;
+  final bool manualReplacement;
+  final int minItems;
+  final int maxItems;
+  final String defaultString;
+  final List<String> defaultStringList;
+  final int defaultInteger;
+  final bool supported;
+  final String unsupportedReason;
+  final List<TransportProfileSecretUpdateAction> secretUpdateActions;
+
+  bool get supportedByShell => supported && valueKind.supportedByShell;
+}
+
+class TransportProfileEditableKindSchema {
+  const TransportProfileEditableKindSchema({
+    required this.kind,
+    required this.schemaVersion,
+    this.fields = const <TransportProfileStructuredFieldDescriptor>[],
+    this.lifecycleActions = const <TransportProfileLifecycleAction>[],
+  });
+
+  factory TransportProfileEditableKindSchema.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    final kind = TransportProfileKind.fromJson(json['kind'] as String?);
+    if (kind == null) {
+      throw const FormatException('transport profile editable schema invalid');
+    }
+    return TransportProfileEditableKindSchema(
+      kind: kind,
+      schemaVersion: json['schema_version'] as String? ?? '',
+      fields: (json['fields'] as List<dynamic>? ?? const <dynamic>[])
+          .map(
+            (dynamic raw) => TransportProfileStructuredFieldDescriptor.fromJson(
+              raw as Map<String, dynamic>,
+            ),
+          )
+          .toList(growable: false),
+      lifecycleActions: _readTransportProfileLifecycleActions(
+        json['lifecycle_actions'],
+      ),
+    );
+  }
+
+  final TransportProfileKind kind;
+  final String schemaVersion;
+  final List<TransportProfileStructuredFieldDescriptor> fields;
+  final List<TransportProfileLifecycleAction> lifecycleActions;
+
+  bool get supportsStructuredCreate => lifecycleActions.contains(
+    TransportProfileLifecycleAction.createStructured,
+  );
+
+  bool get supportsStructuredUpdate => lifecycleActions.contains(
+    TransportProfileLifecycleAction.updateStructured,
+  );
+
+  bool get supportsDraftValidation =>
+      lifecycleActions.contains(TransportProfileLifecycleAction.validateDraft);
 }
 
 class TransportProfileStoreCapability {
@@ -496,6 +847,7 @@ class TransportProfileStoreCapability {
     this.importAdapters = const <TransportProfileImportAdapterDescriptor>[],
     this.lifecycleActions = const <TransportProfileLifecycleAction>[],
     this.redactionGuarantees = const <String>[],
+    this.editableKinds = const <TransportProfileEditableKindSchema>[],
   });
 
   factory TransportProfileStoreCapability.fromJson(Map<String, dynamic> json) {
@@ -517,6 +869,14 @@ class TransportProfileStoreCapability {
           (json['redaction_guarantees'] as List<dynamic>? ?? const <dynamic>[])
               .whereType<String>()
               .toList(growable: false),
+      editableKinds:
+          (json['editable_kinds'] as List<dynamic>? ?? const <dynamic>[])
+              .map(
+                (dynamic raw) => TransportProfileEditableKindSchema.fromJson(
+                  raw as Map<String, dynamic>,
+                ),
+              )
+              .toList(growable: false),
     );
   }
 
@@ -524,6 +884,7 @@ class TransportProfileStoreCapability {
   final List<TransportProfileImportAdapterDescriptor> importAdapters;
   final List<TransportProfileLifecycleAction> lifecycleActions;
   final List<String> redactionGuarantees;
+  final List<TransportProfileEditableKindSchema> editableKinds;
 }
 
 class TransportProfileImportRequest {
@@ -564,6 +925,261 @@ class TransportProfileSelectForStartupRequest {
   Map<String, dynamic> toJson() {
     return <String, dynamic>{'plan': plan.toJson()};
   }
+}
+
+class TransportProfileStructuredDraft {
+  const TransportProfileStructuredDraft({
+    required this.kind,
+    this.schemaVersion = '',
+    this.displayName = '',
+    this.fields = const <TransportProfileStructuredFieldId, Object?>{},
+    this.secretActions =
+        const <
+          TransportProfileStructuredFieldId,
+          TransportProfileSecretUpdateAction
+        >{},
+    this.interfacePrivateKey = '',
+    this.interfacePrivateKeyAction,
+    this.interfaceAddresses = const <String>[],
+    this.dnsServers = const <String>[],
+    this.mtu = 0,
+    this.peerPublicKey = '',
+    this.peerPresharedKey = '',
+    this.peerPresharedKeyAction,
+    this.allowedIps = const <String>[],
+    this.endpoint = '',
+    this.persistentKeepaliveSeconds = 0,
+    this.defaultFor,
+  });
+
+  final TransportProfileKind kind;
+  final String schemaVersion;
+  final String displayName;
+  final Map<TransportProfileStructuredFieldId, Object?> fields;
+  final Map<
+    TransportProfileStructuredFieldId,
+    TransportProfileSecretUpdateAction
+  >
+  secretActions;
+  final String interfacePrivateKey;
+  final TransportProfileSecretUpdateAction? interfacePrivateKeyAction;
+  final List<String> interfaceAddresses;
+  final List<String> dnsServers;
+  final int mtu;
+  final String peerPublicKey;
+  final String peerPresharedKey;
+  final TransportProfileSecretUpdateAction? peerPresharedKeyAction;
+  final List<String> allowedIps;
+  final String endpoint;
+  final int persistentKeepaliveSeconds;
+  final RuntimeExecutionPlan? defaultFor;
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'kind': kind.value,
+      if (schemaVersion.trim().isNotEmpty)
+        'schema_version': schemaVersion.trim(),
+      if (displayName.trim().isNotEmpty) 'display_name': displayName.trim(),
+      if (fields.isNotEmpty)
+        'fields': fields.map(
+          (TransportProfileStructuredFieldId field, Object? value) =>
+              MapEntry<String, Object?>(field.value, _jsonFieldValue(value)),
+        ),
+      if (secretActions.isNotEmpty)
+        'secret_actions': secretActions.map(
+          (
+            TransportProfileStructuredFieldId field,
+            TransportProfileSecretUpdateAction action,
+          ) => MapEntry<String, String>(field.value, action.value),
+        ),
+      if (interfacePrivateKey.trim().isNotEmpty)
+        'interface_private_key': interfacePrivateKey.trim(),
+      if (interfacePrivateKeyAction != null)
+        'interface_private_key_action': interfacePrivateKeyAction!.value,
+      if (interfaceAddresses.isNotEmpty)
+        'interface_addresses': _trimmedStringList(interfaceAddresses),
+      if (dnsServers.isNotEmpty) 'dns_servers': _trimmedStringList(dnsServers),
+      if (mtu > 0) 'mtu': mtu,
+      if (peerPublicKey.trim().isNotEmpty)
+        'peer_public_key': peerPublicKey.trim(),
+      if (peerPresharedKey.trim().isNotEmpty)
+        'peer_preshared_key': peerPresharedKey.trim(),
+      if (peerPresharedKeyAction != null)
+        'peer_preshared_key_action': peerPresharedKeyAction!.value,
+      if (allowedIps.isNotEmpty) 'allowed_ips': _trimmedStringList(allowedIps),
+      if (endpoint.trim().isNotEmpty) 'endpoint': endpoint.trim(),
+      if (persistentKeepaliveSeconds > 0)
+        'persistent_keepalive_seconds': persistentKeepaliveSeconds,
+      if (defaultFor != null) 'default_for': defaultFor!.toJson(),
+    };
+  }
+}
+
+class TransportProfileStructuredCreateRequest {
+  const TransportProfileStructuredCreateRequest({required this.draft});
+
+  final TransportProfileStructuredDraft draft;
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{'draft': draft.toJson()};
+  }
+}
+
+class TransportProfileStructuredUpdateRequest {
+  const TransportProfileStructuredUpdateRequest({required this.draft});
+
+  final TransportProfileStructuredDraft draft;
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{'draft': draft.toJson()};
+  }
+}
+
+class TransportProfileStructuredSaveResult {
+  const TransportProfileStructuredSaveResult({
+    required this.profile,
+    this.generatedKeys = const <TransportProfileGeneratedKey>[],
+  });
+
+  factory TransportProfileStructuredSaveResult.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return TransportProfileStructuredSaveResult(
+      profile: TransportProfileStatus.fromJson(
+        json['profile'] as Map<String, dynamic>,
+      ),
+      generatedKeys:
+          (json['generated_keys'] as List<dynamic>? ?? const <dynamic>[])
+              .map(
+                (dynamic raw) => TransportProfileGeneratedKey.fromJson(
+                  raw as Map<String, dynamic>,
+                ),
+              )
+              .toList(growable: false),
+    );
+  }
+
+  final TransportProfileStatus profile;
+  final List<TransportProfileGeneratedKey> generatedKeys;
+}
+
+class TransportProfileStructuredValidationRequest {
+  const TransportProfileStructuredValidationRequest({
+    required this.draft,
+    this.profileId = '',
+  });
+
+  final String profileId;
+  final TransportProfileStructuredDraft draft;
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      if (profileId.trim().isNotEmpty) 'profile_id': profileId.trim(),
+      'draft': draft.toJson(),
+    };
+  }
+}
+
+class TransportProfileFieldValidationError {
+  const TransportProfileFieldValidationError({
+    required this.field,
+    required this.violation,
+    this.message = '',
+  });
+
+  factory TransportProfileFieldValidationError.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return TransportProfileFieldValidationError(
+      field:
+          TransportProfileStructuredFieldId.fromJson(
+            json['field'] as String?,
+          ) ??
+          TransportProfileStructuredFieldId.schemaVersion,
+      violation: json['violation'] as String? ?? '',
+      message: json['message'] as String? ?? '',
+    );
+  }
+
+  final TransportProfileStructuredFieldId field;
+  final String violation;
+  final String message;
+}
+
+class TransportProfileStructuredValidationResult {
+  const TransportProfileStructuredValidationResult({
+    required this.valid,
+    this.errors = const <TransportProfileFieldValidationError>[],
+    this.status,
+  });
+
+  factory TransportProfileStructuredValidationResult.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return TransportProfileStructuredValidationResult(
+      valid: json['valid'] as bool? ?? false,
+      errors: (json['errors'] as List<dynamic>? ?? const <dynamic>[])
+          .map(
+            (dynamic raw) => TransportProfileFieldValidationError.fromJson(
+              raw as Map<String, dynamic>,
+            ),
+          )
+          .toList(growable: false),
+      status: json['status'] is Map<String, dynamic>
+          ? TransportProfileValidationStatus.fromJson(
+              json['status'] as Map<String, dynamic>,
+            )
+          : null,
+    );
+  }
+
+  final bool valid;
+  final List<TransportProfileFieldValidationError> errors;
+  final TransportProfileValidationStatus? status;
+}
+
+class TransportProfileGenerateKeyRequest {
+  const TransportProfileGenerateKeyRequest({required this.kind, this.field});
+
+  final TransportProfileKind kind;
+  final TransportProfileStructuredFieldId? field;
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'kind': kind.value,
+      if (field != null) 'field': field!.value,
+    };
+  }
+}
+
+class TransportProfileGeneratedKey {
+  const TransportProfileGeneratedKey({
+    required this.kind,
+    required this.field,
+    required this.publicKey,
+    required this.fingerprint,
+  });
+
+  factory TransportProfileGeneratedKey.fromJson(Map<String, dynamic> json) {
+    final kind = TransportProfileKind.fromJson(json['kind'] as String?);
+    final field = TransportProfileStructuredFieldId.fromJson(
+      json['field'] as String?,
+    );
+    if (kind == null || field == null) {
+      throw const FormatException('transport profile generated key invalid');
+    }
+    return TransportProfileGeneratedKey(
+      kind: kind,
+      field: field,
+      publicKey: json['public_key'] as String? ?? '',
+      fingerprint: json['fingerprint'] as String? ?? '',
+    );
+  }
+
+  final TransportProfileKind kind;
+  final TransportProfileStructuredFieldId field;
+  final String publicKey;
+  final String fingerprint;
 }
 
 class TransportProfilePrerequisiteStatus {
@@ -798,6 +1414,37 @@ List<TransportProfileLifecycleAction> _readTransportProfileLifecycleActions(
       )
       .whereType<TransportProfileLifecycleAction>()
       .toList(growable: false);
+}
+
+List<TransportProfileSecretUpdateAction>
+_readTransportProfileSecretUpdateActions(dynamic raw) {
+  return (raw as List<dynamic>? ?? const <dynamic>[])
+      .map(
+        (dynamic item) =>
+            TransportProfileSecretUpdateAction.fromJson(item as String?),
+      )
+      .whereType<TransportProfileSecretUpdateAction>()
+      .toList(growable: false);
+}
+
+List<String> _trimmedStringList(List<String> values) {
+  return values
+      .map((String value) => value.trim())
+      .where((String value) => value.isNotEmpty)
+      .toList(growable: false);
+}
+
+Object? _jsonFieldValue(Object? value) {
+  if (value is String) {
+    return value.trim();
+  }
+  if (value is Iterable<String>) {
+    return value
+        .map((String item) => item.trim())
+        .where((String item) => item.isNotEmpty)
+        .toList(growable: false);
+  }
+  return value;
 }
 
 DateTime _readDateTime(dynamic raw) {

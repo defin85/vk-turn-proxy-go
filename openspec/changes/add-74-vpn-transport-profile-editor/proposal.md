@@ -29,6 +29,7 @@ an external file editor and an already available `.conf`.
   - `client-control-plane`
   - `mobile-gui-client`
   - `desktop-gui-client`
+  - `desktop-sidecar-host`
   - `android-embedded-mobile-host`
   - `wireguard-turn-carrier`
 - Affected code:

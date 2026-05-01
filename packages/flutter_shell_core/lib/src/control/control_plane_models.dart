@@ -1177,6 +1177,29 @@ extension PlatformTunnelStartupStageDisplay on PlatformTunnelStartupStage {
   };
 }
 
+enum PlatformTunnelLifecycleState {
+  setupNeeded('setup_needed'),
+  permission('permission'),
+  starting('starting'),
+  ready('ready'),
+  stopping('stopping'),
+  stopped('stopped'),
+  failed('failed');
+
+  const PlatformTunnelLifecycleState(this.value);
+
+  final String value;
+
+  static PlatformTunnelLifecycleState? fromJson(String? raw) {
+    for (final state in values) {
+      if (state.value == raw) {
+        return state;
+      }
+    }
+    return null;
+  }
+}
+
 class BuildIdentity {
   const BuildIdentity({
     required this.product,
@@ -1503,6 +1526,113 @@ class PlatformTunnelStartResult {
       'startup_attempt_id': startupAttemptId.isEmpty ? null : startupAttemptId,
       'underlay_route_policy': underlayRoutePolicy?.value,
       'message': message.isEmpty ? null : message,
+    });
+  }
+}
+
+class PlatformTunnelStatus {
+  const PlatformTunnelStatus({
+    required this.mode,
+    required this.state,
+    required this.ready,
+    required this.updatedAt,
+    this.sessionId = '',
+    this.sourceResolutionId = '',
+    this.executionPlan,
+    this.transportProfile,
+    this.applicationRoutingPolicy,
+    this.underlayRoutePolicy,
+    this.allowedPackages = const <String>[],
+    this.disallowedPackages = const <String>[],
+    this.stage,
+    this.missingPrerequisite,
+    this.startupAttemptId = '',
+    this.message = '',
+  });
+
+  factory PlatformTunnelStatus.fromJson(Map<String, dynamic> json) {
+    final state = _requirePlatformTunnelLifecycleState(json['state']);
+    return PlatformTunnelStatus(
+      mode: _requirePlatformTunnelMode(json['mode']),
+      state: state,
+      ready:
+          json['ready'] as bool? ?? state == PlatformTunnelLifecycleState.ready,
+      sessionId: (json['session_id'] as String? ?? '').trim(),
+      sourceResolutionId: (json['source_resolution_id'] as String? ?? '')
+          .trim(),
+      executionPlan: json['execution_plan'] is Map<String, dynamic>
+          ? RuntimeExecutionPlan.fromJson(
+              json['execution_plan'] as Map<String, dynamic>,
+            )
+          : null,
+      transportProfile: json['transport_profile'] is Map<String, dynamic>
+          ? TransportProfileReference.fromJson(
+              json['transport_profile'] as Map<String, dynamic>,
+            )
+          : null,
+      applicationRoutingPolicy: _readOptionalApplicationRoutingPolicy(
+        json['application_routing_policy'],
+        fieldName: 'application_routing_policy',
+      ),
+      underlayRoutePolicy: _readOptionalUnderlayRoutePolicy(
+        json['underlay_route_policy'],
+        fieldName: 'underlay_route_policy',
+      ),
+      allowedPackages: _readStringList(json['allowed_packages']),
+      disallowedPackages: _readStringList(json['disallowed_packages']),
+      stage: _readOptionalPlatformTunnelStage(
+        json['stage'],
+        fieldName: 'stage',
+      ),
+      missingPrerequisite: _readOptionalPlatformTunnelPrerequisite(
+        json['missing_prerequisite'],
+        fieldName: 'missing_prerequisite',
+      ),
+      startupAttemptId: (json['startup_attempt_id'] as String? ?? '').trim(),
+      message: json['message'] as String? ?? '',
+      updatedAt: _readTimestamp(json['updated_at']),
+    );
+  }
+
+  final PlatformTunnelMode mode;
+  final PlatformTunnelLifecycleState state;
+  final bool ready;
+  final String sessionId;
+  final String sourceResolutionId;
+  final RuntimeExecutionPlan? executionPlan;
+  final TransportProfileReference? transportProfile;
+  final PlatformTunnelApplicationRoutingPolicy? applicationRoutingPolicy;
+  final PlatformTunnelUnderlayRoutePolicy? underlayRoutePolicy;
+  final List<String> allowedPackages;
+  final List<String> disallowedPackages;
+  final PlatformTunnelStartupStage? stage;
+  final PlatformTunnelPrerequisite? missingPrerequisite;
+  final String startupAttemptId;
+  final String message;
+  final DateTime updatedAt;
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{
+      'mode': mode.value,
+      'state': state.value,
+      'ready': ready,
+      'session_id': sessionId.isEmpty ? null : sessionId,
+      'source_resolution_id': sourceResolutionId.isEmpty
+          ? null
+          : sourceResolutionId,
+      'execution_plan': executionPlan?.toJson(),
+      'transport_profile': transportProfile?.toJson(),
+      'application_routing_policy': applicationRoutingPolicy?.value,
+      'underlay_route_policy': underlayRoutePolicy?.value,
+      'allowed_packages': allowedPackages.isEmpty ? null : allowedPackages,
+      'disallowed_packages': disallowedPackages.isEmpty
+          ? null
+          : disallowedPackages,
+      'stage': stage?.value,
+      'missing_prerequisite': missingPrerequisite?.value,
+      'startup_attempt_id': startupAttemptId.isEmpty ? null : startupAttemptId,
+      'message': message.isEmpty ? null : message,
+      'updated_at': updatedAt.toUtc().toIso8601String(),
     });
   }
 }
@@ -3490,6 +3620,17 @@ PlatformTunnelMode _requirePlatformTunnelMode(dynamic raw) {
   );
 }
 
+PlatformTunnelLifecycleState _requirePlatformTunnelLifecycleState(dynamic raw) {
+  final value = raw as String?;
+  final state = PlatformTunnelLifecycleState.fromJson(value);
+  if (state != null) {
+    return state;
+  }
+  throw FormatException(
+    'invalid platform tunnel lifecycle state: ${value ?? '<missing>'}',
+  );
+}
+
 List<PlatformTunnelPrerequisite> _readSatisfiedPrerequisites(dynamic raw) {
   final values = raw as List<dynamic>? ?? const <dynamic>[];
   return values
@@ -3505,6 +3646,19 @@ List<PlatformTunnelPrerequisite> _readSatisfiedPrerequisites(dynamic raw) {
         }
         throw FormatException('invalid platform tunnel prerequisite: $item');
       })
+      .toList(growable: false);
+}
+
+List<String> _readStringList(dynamic raw) {
+  final values = raw as List<dynamic>? ?? const <dynamic>[];
+  return values
+      .map((dynamic item) {
+        if (item is String) {
+          return item.trim();
+        }
+        throw const FormatException('expected string list values');
+      })
+      .where((String item) => item.isNotEmpty)
       .toList(growable: false);
 }
 
@@ -3550,6 +3704,21 @@ PlatformTunnelPrerequisite? _readOptionalPlatformTunnelPrerequisite(
   final prerequisite = PlatformTunnelPrerequisite.fromJson(value);
   if (prerequisite != null) {
     return prerequisite;
+  }
+  throw FormatException('invalid $fieldName: $value');
+}
+
+PlatformTunnelApplicationRoutingPolicy? _readOptionalApplicationRoutingPolicy(
+  dynamic raw, {
+  required String fieldName,
+}) {
+  final value = raw as String?;
+  if (value == null || value.isEmpty) {
+    return null;
+  }
+  final policy = PlatformTunnelApplicationRoutingPolicy.fromJson(value);
+  if (policy != null) {
+    return policy;
   }
   throw FormatException('invalid $fieldName: $value');
 }

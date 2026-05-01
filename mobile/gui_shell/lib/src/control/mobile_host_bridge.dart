@@ -598,6 +598,36 @@ class HttpMobileHostBridge implements MobileHostBridge {
   }
 
   @override
+  Future<TransportProfileStructuredSaveResult> createStructuredTransportProfile(
+    TransportProfileStructuredCreateRequest request,
+  ) {
+    return _client.createStructuredTransportProfile(request);
+  }
+
+  @override
+  Future<TransportProfileStructuredSaveResult> updateStructuredTransportProfile(
+    String profileId,
+    TransportProfileStructuredUpdateRequest request,
+  ) {
+    return _client.updateStructuredTransportProfile(profileId, request);
+  }
+
+  @override
+  Future<TransportProfileStructuredValidationResult>
+  validateStructuredTransportProfileDraft(
+    TransportProfileStructuredValidationRequest request,
+  ) {
+    return _client.validateStructuredTransportProfileDraft(request);
+  }
+
+  @override
+  Future<TransportProfileGeneratedKey> generateTransportProfileKey(
+    TransportProfileGenerateKeyRequest request,
+  ) {
+    return _client.generateTransportProfileKey(request);
+  }
+
+  @override
   Future<TransportProfileStatus> validateTransportProfile(String profileId) {
     return _client.validateTransportProfile(profileId);
   }
@@ -793,6 +823,11 @@ class HttpMobileHostBridge implements MobileHostBridge {
   }
 
   @override
+  Future<List<PlatformTunnelStatus>> platformTunnelStatuses() {
+    return _client.platformTunnelStatuses();
+  }
+
+  @override
   Future<bool> requestPlatformTunnelPermission({
     required PlatformTunnelMode mode,
   }) {
@@ -871,6 +906,28 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
   ) => _fail();
 
   @override
+  Future<TransportProfileStructuredSaveResult> createStructuredTransportProfile(
+    TransportProfileStructuredCreateRequest request,
+  ) => _fail();
+
+  @override
+  Future<TransportProfileStructuredSaveResult> updateStructuredTransportProfile(
+    String profileId,
+    TransportProfileStructuredUpdateRequest request,
+  ) => _fail();
+
+  @override
+  Future<TransportProfileStructuredValidationResult>
+  validateStructuredTransportProfileDraft(
+    TransportProfileStructuredValidationRequest request,
+  ) => _fail();
+
+  @override
+  Future<TransportProfileGeneratedKey> generateTransportProfileKey(
+    TransportProfileGenerateKeyRequest request,
+  ) => _fail();
+
+  @override
   Future<TransportProfileStatus> validateTransportProfile(String profileId) =>
       _fail();
 
@@ -890,6 +947,9 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
   Future<PlatformTunnelStopResult> stopPlatformTunnel({
     required PlatformTunnelMode mode,
   }) => _fail();
+
+  @override
+  Future<List<PlatformTunnelStatus>> platformTunnelStatuses() => _fail();
 
   @override
   Future<DiagnosticsBundle> diagnostics(String sessionId) => _fail();

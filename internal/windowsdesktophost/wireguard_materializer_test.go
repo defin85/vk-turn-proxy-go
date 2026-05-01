@@ -33,11 +33,14 @@ func TestDefaultWindowsWireGuardTurnMaterializerLoadsValidatedProfile(t *testing
 		"PrivateKey = client-private-key",
 		"Address = 10.10.0.2/32",
 		"DNS = 1.1.1.1, 8.8.8.8",
+		"MTU = 1412",
 		"",
 		"[Peer]",
 		"PublicKey = peer-public-key",
+		"PresharedKey = peer-preshared-key",
 		"AllowedIPs = 0.0.0.0/1, 128.0.0.0/1",
 		"Endpoint = relay.example.test:3478",
+		"PersistentKeepalive = 21",
 		"",
 	}, "\n")
 	if err := os.WriteFile(profilePath, []byte(profileContents), 0o600); err != nil {
@@ -85,6 +88,15 @@ func TestDefaultWindowsWireGuardTurnMaterializerLoadsValidatedProfile(t *testing
 	}
 	if len(lease.AllowedIPs) != 2 {
 		t.Fatalf("lease.AllowedIPs len = %d, want 2", len(lease.AllowedIPs))
+	}
+	if lease.MTU != 1412 {
+		t.Fatalf("lease.MTU = %d, want 1412", lease.MTU)
+	}
+	if lease.PresharedKey != "peer-preshared-key" {
+		t.Fatalf("lease.PresharedKey = %q, want peer-preshared-key", lease.PresharedKey)
+	}
+	if lease.PersistentKeepaliveSeconds != 21 {
+		t.Fatalf("lease.PersistentKeepaliveSeconds = %d, want 21", lease.PersistentKeepaliveSeconds)
 	}
 }
 

@@ -454,6 +454,61 @@ void main() {
   );
 
   test(
+    'mobile host bridge returns false when native platform tunnel permission is denied',
+    () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall call) async {
+            expect(call.method, 'requestPlatformTunnelPermission');
+            return false;
+          });
+
+      final bridge = HttpMobileHostBridge(
+        baseUri: Uri.parse('http://127.0.0.1:7777'),
+        client: _ReadyControlPlaneApi(),
+      );
+
+      final granted = await bridge.requestPlatformTunnelPermission(
+        mode: PlatformTunnelMode.androidVpnService,
+      );
+
+      expect(granted, isFalse);
+    },
+  );
+
+  test(
+    'mobile host bridge surfaces native platform tunnel permission cancellation',
+    () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall call) async {
+            expect(call.method, 'requestPlatformTunnelPermission');
+            throw PlatformException(
+              code: 'platform_tunnel_permission_cancelled',
+              message:
+                  'The Android VPN permission request was cancelled before completion.',
+            );
+          });
+
+      final bridge = HttpMobileHostBridge(
+        baseUri: Uri.parse('http://127.0.0.1:7777'),
+        client: _ReadyControlPlaneApi(),
+      );
+
+      await expectLater(
+        bridge.requestPlatformTunnelPermission(
+          mode: PlatformTunnelMode.androidVpnService,
+        ),
+        throwsA(
+          isA<MobileHostPlatformActionError>().having(
+            (MobileHostPlatformActionError error) => error.message,
+            'message',
+            contains('cancelled'),
+          ),
+        ),
+      );
+    },
+  );
+
+  test(
     'mobile control plane client fails closed on invalid platform modes',
     () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -776,6 +831,8 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
         TransportProfileImportAdapterDescriptor(
           id: TransportProfileImportAdapter.wireGuardConf,
           profileKind: TransportProfileKind.wireGuardNativeV1,
+          materialAcquisitionMethod:
+              TransportProfileMaterialAcquisitionMethod.plainText,
         ),
       ],
     ),
@@ -822,6 +879,36 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
   @override
   Future<TransportProfileStatus> importTransportProfile(
     TransportProfileImportRequest request,
+  ) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<TransportProfileStructuredSaveResult> createStructuredTransportProfile(
+    TransportProfileStructuredCreateRequest request,
+  ) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<TransportProfileStructuredSaveResult> updateStructuredTransportProfile(
+    String profileId,
+    TransportProfileStructuredUpdateRequest request,
+  ) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<TransportProfileStructuredValidationResult>
+  validateStructuredTransportProfileDraft(
+    TransportProfileStructuredValidationRequest request,
+  ) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<TransportProfileGeneratedKey> generateTransportProfileKey(
+    TransportProfileGenerateKeyRequest request,
   ) {
     throw UnimplementedError();
   }
@@ -926,6 +1013,10 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
       message: '${mode.label} disconnected.',
     );
   }
+
+  @override
+  Future<List<PlatformTunnelStatus>> platformTunnelStatuses() async =>
+      const <PlatformTunnelStatus>[];
 
   @override
   Future<List<ProfileRecord>> profiles() async => const <ProfileRecord>[];

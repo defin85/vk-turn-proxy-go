@@ -133,9 +133,37 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
       const <TransportProfileStatus>[];
 
   @override
+  Future<List<PlatformTunnelStatus>> platformTunnelStatuses() async =>
+      const <PlatformTunnelStatus>[];
+
+  @override
   Future<TransportProfileStatus> importTransportProfile(
     TransportProfileImportRequest request,
   ) => Future<TransportProfileStatus>.error(UnimplementedError());
+
+  @override
+  Future<TransportProfileStructuredSaveResult> createStructuredTransportProfile(
+    TransportProfileStructuredCreateRequest request,
+  ) => Future<TransportProfileStructuredSaveResult>.error(UnimplementedError());
+
+  @override
+  Future<TransportProfileStructuredSaveResult> updateStructuredTransportProfile(
+    String profileId,
+    TransportProfileStructuredUpdateRequest request,
+  ) => Future<TransportProfileStructuredSaveResult>.error(UnimplementedError());
+
+  @override
+  Future<TransportProfileStructuredValidationResult>
+  validateStructuredTransportProfileDraft(
+    TransportProfileStructuredValidationRequest request,
+  ) => Future<TransportProfileStructuredValidationResult>.error(
+    UnimplementedError(),
+  );
+
+  @override
+  Future<TransportProfileGeneratedKey> generateTransportProfileKey(
+    TransportProfileGenerateKeyRequest request,
+  ) => Future<TransportProfileGeneratedKey>.error(UnimplementedError());
 
   @override
   Future<TransportProfileStatus> validateTransportProfile(String profileId) =>

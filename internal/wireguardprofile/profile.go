@@ -8,13 +8,15 @@ import (
 )
 
 type Profile struct {
-	PrivateKey    string
-	Addresses     []string
-	DNSServers    []string
-	MTU           int
-	PeerPublicKey string
-	AllowedIPs    []string
-	Endpoint      string
+	PrivateKey                 string
+	Addresses                  []string
+	DNSServers                 []string
+	MTU                        int
+	PeerPublicKey              string
+	PresharedKey               string
+	AllowedIPs                 []string
+	Endpoint                   string
+	PersistentKeepaliveSeconds int
 }
 
 func FileExists(path string) bool {
@@ -70,10 +72,16 @@ func Parse(data []byte, source string) (*Profile, error) {
 			switch key {
 			case "publickey":
 				profile.PeerPublicKey = value
+			case "presharedkey":
+				profile.PresharedKey = value
 			case "allowedips":
 				profile.AllowedIPs = append(profile.AllowedIPs, splitCSV(value)...)
 			case "endpoint":
 				profile.Endpoint = value
+			case "persistentkeepalive":
+				if keepalive, err := strconv.Atoi(value); err == nil && keepalive > 0 {
+					profile.PersistentKeepaliveSeconds = keepalive
+				}
 			}
 		}
 	}

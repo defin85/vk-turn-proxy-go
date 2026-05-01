@@ -7,11 +7,8 @@ import 'test_i18n.dart';
 
 void main() {
   testWidgets(
-    'routing content surface renders desktop variant and updates spec fields',
+    'routing content surface renders desktop variant without profile editing',
     (WidgetTester tester) async {
-      var latestSpec = ProfileDraft.defaults().spec;
-      final initialSpec = latestSpec;
-
       await pumpShellCoreLocalizedTestApp(
         tester,
         child: SizedBox(
@@ -19,9 +16,6 @@ void main() {
           height: 860,
           child: RoutingContentSurface(
             variant: RoutingContentSurfaceVariant.desktop,
-            spec: initialSpec,
-            selectedProfileName: 'vk live',
-            selectedProfileProvider: 'vk',
             busy: false,
             hostReady: true,
             platformTunnels: const <PlatformTunnelCapability>[
@@ -34,13 +28,6 @@ void main() {
               ),
             ],
             platformTunnelResultFor: (_) => null,
-            onSpecChanged: (ProfileSpec next) {
-              latestSpec = next;
-            },
-            onSave: () async {},
-            onOpenProfiles: () {},
-            onStartProfile: () async {},
-            onStartPlatformTunnel: (_) async {},
           ),
         ),
       );
@@ -50,46 +37,23 @@ void main() {
         findsOneWidget,
       );
       final copy = tester.element(find.byType(MaterialApp)).shellText;
-      expect(find.text('Routing parameters'), findsOneWidget);
+      expect(find.text('Routing parameters'), findsNothing);
       expect(find.text('Profile settings'), findsNothing);
-      expect(find.text(copy.saveProfile), findsOneWidget);
+      expect(find.text(copy.saveProfile), findsNothing);
       expect(find.text(copy.openProfiles), findsNothing);
       expect(find.text(copy.startOnThisDevice), findsNothing);
-      final listenAddressField = tester.widget<TextField>(
-        find.byKey(
-          const ValueKey<String>('desktop-routing-listen-address-field'),
-        ),
-      );
-      expect(listenAddressField.decoration?.labelText, isNull);
-      expect(find.text(copy.localUdpListen), findsOneWidget);
+      expect(find.text(copy.localUdpListen), findsNothing);
+      expect(find.text(copy.peerAddress), findsNothing);
+      expect(find.text(copy.connections), findsNothing);
+      expect(find.text(copy.turnOverride), findsNothing);
       expect(find.byType(ExpansionTile), findsNothing);
       expect(
         find.byKey(const ValueKey<String>('desktop-routing-mode-field')),
         findsNothing,
       );
-      final advancedToggle = find.byKey(
-        const ValueKey<String>('desktop-routing-toggle-advanced'),
-      );
-      final desktopRoutingScrollable = find.byType(Scrollable).first;
-      await tester.scrollUntilVisible(
-        advancedToggle,
-        120,
-        scrollable: desktopRoutingScrollable,
-      );
-      await tester.pumpAndSettle();
-      expect(find.text(copy.mobileAdvancedRuntimeControls), findsOneWidget);
-      expect(find.text(copy.showAdvancedRuntimeControls), findsOneWidget);
-
-      tester.widget<TextButton>(advancedToggle).onPressed!.call();
-      await tester.pumpAndSettle();
-
-      final modeField = tester.widget<DropdownButtonFormField<TransportMode>>(
-        find.byKey(const ValueKey<String>('desktop-routing-mode-field')),
-      );
-      expect(modeField.decoration.labelText, isNull);
       expect(
-        find.byKey(const ValueKey<String>('desktop-routing-mode-field')),
-        findsOneWidget,
+        find.byKey(const ValueKey<String>('desktop-routing-toggle-advanced')),
+        findsNothing,
       );
       expect(
         find.byKey(
@@ -99,7 +63,8 @@ void main() {
       );
       expect(find.text('windows_wintun'), findsNothing);
       expect(find.text(copy.showPlatformTunnelDetails), findsOneWidget);
-      expect(find.text(copy.requestStartup), findsOneWidget);
+      expect(find.text(copy.requestStartup), findsNothing);
+      expect(find.text(copy.disconnectVpn), findsNothing);
 
       tester
           .widget<TextButton>(
@@ -112,33 +77,95 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('windows_wintun'), findsOneWidget);
-      expect(find.text(copy.requestStartup), findsOneWidget);
-
-      await tester.scrollUntilVisible(
-        find.byKey(
-          const ValueKey<String>('desktop-routing-listen-address-field'),
-        ),
-        -120,
-        scrollable: desktopRoutingScrollable,
-      );
-      await tester.pumpAndSettle();
-      await tester.enterText(
-        find.byKey(
-          const ValueKey<String>('desktop-routing-listen-address-field'),
-        ),
-        '127.0.0.1:7001',
-      );
-      await tester.pump();
-
-      expect(latestSpec.listenAddress, '127.0.0.1:7001');
+      expect(find.text(copy.requestStartup), findsNothing);
+      expect(find.text(copy.disconnectVpn), findsNothing);
     },
   );
 
   testWidgets(
-    'routing content surface renders mobile variant and exposes stop action for ready tunnel',
+    'routing content surface exposes structured editor actions and import fallback',
     (WidgetTester tester) async {
-      var stopCalls = 0;
+      var editCalls = 0;
+      var importCalls = 0;
+      var forgetCalls = 0;
 
+      Future<void> pump({required bool configured}) async {
+        await pumpShellCoreLocalizedTestApp(
+          tester,
+          child: SizedBox(
+            width: 560,
+            height: 720,
+            child: RoutingContentSurface(
+              variant: RoutingContentSurfaceVariant.desktop,
+              busy: false,
+              hostReady: true,
+              platformTunnels: const <PlatformTunnelCapability>[
+                PlatformTunnelCapability(
+                  mode: PlatformTunnelMode.windowsWintun,
+                  available: true,
+                ),
+              ],
+              platformTunnelResultFor: (_) => null,
+              transportProfileStatusSummaryForMode: (_) => configured
+                  ? 'WireGuard profile configured'
+                  : 'WireGuard profile required',
+              platformTunnelStartBlockReasonForMode: (_) =>
+                  'WireGuard profile required before startup',
+              canConfigureTransportProfileForMode: (_) => true,
+              canEditTransportProfileForMode: (_) => true,
+              transportProfileConfiguredForMode: (_) => configured,
+              onEditTransportProfile: (_) async {
+                editCalls += 1;
+              },
+              onImportTransportProfile: (_) async {
+                importCalls += 1;
+              },
+              onForgetTransportProfile: (_) async {
+                forgetCalls += 1;
+              },
+            ),
+          ),
+        );
+      }
+
+      await pump(configured: false);
+      await _tapRoutingAction(
+        tester,
+        'desktop-routing-create-vpn-transport-profile-windows_wintun',
+      );
+      await _tapRoutingAction(
+        tester,
+        'desktop-routing-import-vpn-transport-profile-windows_wintun',
+      );
+      await tester.pump();
+
+      expect(editCalls, 1);
+      expect(importCalls, 1);
+
+      await pump(configured: true);
+      await _tapRoutingAction(
+        tester,
+        'desktop-routing-edit-vpn-transport-profile-windows_wintun',
+      );
+      await _tapRoutingAction(
+        tester,
+        'desktop-routing-replace-vpn-transport-profile-windows_wintun',
+      );
+      await _tapRoutingAction(
+        tester,
+        'desktop-routing-forget-vpn-transport-profile-windows_wintun',
+      );
+      await tester.pump();
+
+      expect(editCalls, 2);
+      expect(importCalls, 2);
+      expect(forgetCalls, 1);
+    },
+  );
+
+  testWidgets(
+    'routing content surface renders mobile variant without vpn toggle actions',
+    (WidgetTester tester) async {
       await pumpShellCoreLocalizedTestApp(
         tester,
         child: SingleChildScrollView(
@@ -146,9 +173,6 @@ void main() {
             width: 460,
             child: RoutingContentSurface(
               variant: RoutingContentSurfaceVariant.mobile,
-              spec: ProfileDraft.defaults().spec,
-              selectedProfileName: 'vk mobile',
-              selectedProfileProvider: 'vk',
               busy: false,
               hostReady: true,
               platformTunnels: const <PlatformTunnelCapability>[
@@ -165,15 +189,24 @@ void main() {
                   const PlatformTunnelStartResult(
                     mode: PlatformTunnelMode.androidVpnService,
                     ready: true,
+                    sessionId: 'session-android-1',
                   ),
-              onSpecChanged: (_) {},
-              onSave: () async {},
-              onOpenProfiles: () {},
-              onStartProfile: () async {},
-              onStartPlatformTunnel: (_) async {},
-              onStopPlatformTunnel: (_) async {
-                stopCalls += 1;
-              },
+              platformTunnelStatusFor: (PlatformTunnelMode mode) =>
+                  PlatformTunnelStatus(
+                    mode: PlatformTunnelMode.androidVpnService,
+                    state: PlatformTunnelLifecycleState.ready,
+                    ready: true,
+                    sessionId: 'session-android-1',
+                    applicationRoutingPolicy:
+                        PlatformTunnelApplicationRoutingPolicy.allowedPackages,
+                    allowedPackages: const <String>[
+                      'com.example.video',
+                      'com.example.chat',
+                    ],
+                    underlayRoutePolicy:
+                        PlatformTunnelUnderlayRoutePolicy.standard,
+                    updatedAt: DateTime.utc(2026, 4, 30, 12),
+                  ),
             ),
           ),
         ),
@@ -191,14 +224,23 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.text(copy.disconnectVpn), findsOneWidget);
-
-      await tester.ensureVisible(find.text(copy.disconnectVpn));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text(copy.disconnectVpn));
-      await tester.pump();
-
-      expect(stopCalls, 1);
+      expect(find.text(copy.localUdpListen), findsNothing);
+      expect(find.text(copy.turnOverride), findsNothing);
+      expect(find.text(copy.saveProfile), findsNothing);
+      expect(find.text(copy.disconnectVpn), findsNothing);
+      expect(find.text(copy.requestStartup), findsNothing);
+      expect(find.textContaining('Session: session-android-1'), findsOneWidget);
+      expect(
+        find.textContaining(copy.scopeOnlySelectedApps(2)),
+        findsOneWidget,
+      );
     },
   );
+}
+
+Future<void> _tapRoutingAction(WidgetTester tester, String key) async {
+  final finder = find.byKey(ValueKey<String>(key));
+  await tester.ensureVisible(finder);
+  await tester.pump();
+  await tester.tap(finder);
 }

@@ -74,13 +74,23 @@ void main() {
                   'vpn-transport-profile-store',
                 ],
                 'transport_profile_store': <String, dynamic>{
-                  'supported_kinds': <String>['wireguard_native_v1'],
+                  'supported_kinds': <String>[
+                    'wireguard_native_v1',
+                    'future_native_v1',
+                  ],
                   'import_adapters': <Map<String, dynamic>>[
                     <String, dynamic>{
                       'id': 'wireguard_conf',
                       'profile_kind': 'wireguard_native_v1',
                       'display_name': 'WireGuard .conf',
                       'extensions': <String>['conf'],
+                      'material_acquisition_method': 'plain_text',
+                    },
+                    <String, dynamic>{
+                      'id': 'future_enrollment',
+                      'profile_kind': 'future_native_v1',
+                      'display_name': 'Future enrollment',
+                      'material_acquisition_method': 'provider_managed',
                     },
                   ],
                   'lifecycle_actions': <String>[
@@ -90,6 +100,39 @@ void main() {
                     'forget',
                     'validate',
                     'select_for_startup',
+                    'create_structured',
+                    'update_structured',
+                    'validate_draft',
+                    'generate_key',
+                  ],
+                  'editable_kinds': <Map<String, dynamic>>[
+                    <String, dynamic>{
+                      'kind': 'wireguard_native_v1',
+                      'schema_version':
+                          'wireguard_native_v1.structured_editor.v1',
+                      'lifecycle_actions': <String>[
+                        'create_structured',
+                        'update_structured',
+                        'validate_draft',
+                        'generate_key',
+                      ],
+                      'fields': <Map<String, dynamic>>[
+                        <String, dynamic>{
+                          'id': 'interface_private_key',
+                          'value_kind': 'secret_string',
+                          'required': true,
+                          'secret': true,
+                          'generated': true,
+                          'update_preservable': true,
+                          'supported': true,
+                          'secret_update_actions': <String>[
+                            'preserve_existing',
+                            'replace_submitted',
+                            'generate_host',
+                          ],
+                        },
+                      ],
+                    },
                   ],
                 },
                 'platform_tunnels': <Map<String, dynamic>>[
@@ -207,6 +250,81 @@ void main() {
                 return;
             }
             break;
+          case '/v1/transport-profiles:structured':
+            expect(request.method, 'POST');
+            final payload =
+                jsonDecode(await utf8.decoder.bind(request).join())
+                    as Map<String, dynamic>;
+            final draft = payload['draft'] as Map<String, dynamic>;
+            expect(draft['kind'], 'wireguard_native_v1');
+            expect(
+              (draft['secret_actions']
+                  as Map<String, dynamic>)['interface_private_key'],
+              'generate_host',
+            );
+            expect(
+              (draft['fields'] as Map<String, dynamic>)['interface_addresses'],
+              <String>['10.10.0.2/32'],
+            );
+            request.response.headers.contentType = ContentType.json;
+            request.response.write(
+              jsonEncode(<String, dynamic>{
+                'profile': _transportProfileStatusPayload(),
+                'generated_keys': <Map<String, dynamic>>[
+                  <String, dynamic>{
+                    'kind': 'wireguard_native_v1',
+                    'field': 'interface_private_key',
+                    'public_key': 'saved-public-key',
+                    'fingerprint': 'sha256:saved-public',
+                  },
+                ],
+              }),
+            );
+            await request.response.close();
+            return;
+          case '/v1/transport-profiles:validate-draft':
+            expect(request.method, 'POST');
+            final payload =
+                jsonDecode(await utf8.decoder.bind(request).join())
+                    as Map<String, dynamic>;
+            expect(payload['profile_id'], 'transport-profile-1');
+            final draft = payload['draft'] as Map<String, dynamic>;
+            expect(
+              (draft['fields'] as Map<String, dynamic>)['allowed_ips'],
+              <String>['0.0.0.0/0'],
+            );
+            request.response.headers.contentType = ContentType.json;
+            request.response.write(
+              jsonEncode(<String, dynamic>{
+                'valid': false,
+                'errors': <Map<String, dynamic>>[
+                  <String, dynamic>{
+                    'field': 'allowed_ips',
+                    'violation': 'malformed',
+                    'message': 'bad prefix',
+                  },
+                ],
+              }),
+            );
+            await request.response.close();
+            return;
+          case '/v1/transport-profiles:generate-key':
+            expect(request.method, 'POST');
+            final payload =
+                jsonDecode(await utf8.decoder.bind(request).join())
+                    as Map<String, dynamic>;
+            expect(payload['kind'], 'wireguard_native_v1');
+            request.response.headers.contentType = ContentType.json;
+            request.response.write(
+              jsonEncode(<String, dynamic>{
+                'kind': 'wireguard_native_v1',
+                'field': 'interface_private_key',
+                'public_key': 'public-key',
+                'fingerprint': 'sha256:public',
+              }),
+            );
+            await request.response.close();
+            return;
           case '/v1/transport-profiles/transport-profile-1':
             expect(request.method, 'DELETE');
             request.response.statusCode = HttpStatus.noContent;
@@ -217,6 +335,25 @@ void main() {
             request.response.headers.contentType = ContentType.json;
             request.response.write(
               jsonEncode(_transportProfileStatusPayload()),
+            );
+            await request.response.close();
+            return;
+          case '/v1/transport-profiles/transport-profile-1/structured-update':
+            expect(request.method, 'POST');
+            final payload =
+                jsonDecode(await utf8.decoder.bind(request).join())
+                    as Map<String, dynamic>;
+            final draft = payload['draft'] as Map<String, dynamic>;
+            expect(
+              (draft['secret_actions']
+                  as Map<String, dynamic>)['interface_private_key'],
+              'preserve_existing',
+            );
+            request.response.headers.contentType = ContentType.json;
+            request.response.write(
+              jsonEncode(<String, dynamic>{
+                'profile': _transportProfileStatusPayload(),
+              }),
             );
             await request.response.close();
             return;
@@ -387,7 +524,24 @@ void main() {
       expect(info.capabilities, contains(Capability.vpnTransportProfileStore));
       expect(info.transportProfileStore?.supportedKinds, <TransportProfileKind>[
         TransportProfileKind.wireGuardNativeV1,
+        const TransportProfileKind('future_native_v1'),
       ]);
+      expect(
+        info.transportProfileStore?.importAdapters.last.id,
+        const TransportProfileImportAdapter('future_enrollment'),
+      );
+      expect(
+        info.transportProfileStore?.importAdapters.last.profileKind,
+        const TransportProfileKind('future_native_v1'),
+      );
+      expect(
+        info.transportProfileStore?.editableKinds.single.schemaVersion,
+        'wireguard_native_v1.structured_editor.v1',
+      );
+      expect(
+        info.transportProfileStore?.editableKinds.single.fields.single.id,
+        TransportProfileStructuredFieldId.interfacePrivateKey,
+      );
       expect(info.platformTunnels, hasLength(1));
       expect(
         info.platformTunnels.single.mode,
@@ -438,6 +592,83 @@ void main() {
         ),
       );
       expect(imported.kind, TransportProfileKind.wireGuardNativeV1);
+
+      final generatedKey = await client.generateTransportProfileKey(
+        const TransportProfileGenerateKeyRequest(
+          kind: TransportProfileKind.wireGuardNativeV1,
+        ),
+      );
+      expect(generatedKey.publicKey, 'public-key');
+
+      final structuredDraft = TransportProfileStructuredDraft(
+        kind: TransportProfileKind.wireGuardNativeV1,
+        schemaVersion: 'wireguard_native_v1.structured_editor.v1',
+        fields: <TransportProfileStructuredFieldId, Object?>{
+          TransportProfileStructuredFieldId.interfaceAddresses: <String>[
+            '10.10.0.2/32',
+          ],
+          TransportProfileStructuredFieldId.peerPublicKey: 'peer-public-key',
+          TransportProfileStructuredFieldId.allowedIps: <String>['0.0.0.0/0'],
+          TransportProfileStructuredFieldId.endpoint:
+              'relay.example.test:51820',
+        },
+        secretActions:
+            <
+              TransportProfileStructuredFieldId,
+              TransportProfileSecretUpdateAction
+            >{
+              TransportProfileStructuredFieldId.interfacePrivateKey:
+                  TransportProfileSecretUpdateAction.generateHost,
+            },
+      );
+      final structured = await client.createStructuredTransportProfile(
+        TransportProfileStructuredCreateRequest(draft: structuredDraft),
+      );
+      expect(structured.profile.id, 'transport-profile-1');
+      expect(structured.generatedKeys.single.publicKey, 'saved-public-key');
+
+      final draftValidation = await client
+          .validateStructuredTransportProfileDraft(
+            TransportProfileStructuredValidationRequest(
+              profileId: 'transport-profile-1',
+              draft: structuredDraft,
+            ),
+          );
+      expect(draftValidation.valid, isFalse);
+      expect(
+        draftValidation.errors.single.field,
+        TransportProfileStructuredFieldId.allowedIps,
+      );
+
+      final updated = await client.updateStructuredTransportProfile(
+        'transport-profile-1',
+        TransportProfileStructuredUpdateRequest(
+          draft: TransportProfileStructuredDraft(
+            kind: TransportProfileKind.wireGuardNativeV1,
+            fields: <TransportProfileStructuredFieldId, Object?>{
+              TransportProfileStructuredFieldId.interfaceAddresses: <String>[
+                '10.10.0.2/32',
+              ],
+              TransportProfileStructuredFieldId.peerPublicKey:
+                  'peer-public-key',
+              TransportProfileStructuredFieldId.allowedIps: <String>[
+                '0.0.0.0/0',
+              ],
+              TransportProfileStructuredFieldId.endpoint:
+                  'relay.example.test:51820',
+            },
+            secretActions:
+                <
+                  TransportProfileStructuredFieldId,
+                  TransportProfileSecretUpdateAction
+                >{
+                  TransportProfileStructuredFieldId.interfacePrivateKey:
+                      TransportProfileSecretUpdateAction.preserveExisting,
+                },
+          ),
+        ),
+      );
+      expect(updated.profile.id, 'transport-profile-1');
 
       final validated = await client.validateTransportProfile(
         'transport-profile-1',

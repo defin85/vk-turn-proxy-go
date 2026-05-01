@@ -33,6 +33,13 @@ DEFAULT_ADB = default_adb_path()
 DEFAULT_APP_PACKAGE = "com.defin85.relaydock"
 DEFAULT_LISTEN_ADDR = "127.0.0.1:39000"
 DEFAULT_PEER_ADDR = "176.109.104.105:56040"
+DEFAULT_CLIENT_ADDRESS = "10.10.0.2/32"
+DEFAULT_DNS_SERVER = "1.1.1.1"
+DEFAULT_ALLOWED_IP = "0.0.0.0/0"
+DEFAULT_MTU = 1280
+DEFAULT_PEER_PUBLIC_KEY = "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI="
+DEFAULT_TRANSPORT_PROFILE_NAME = "smoke Android VPN transport profile"
+DEFAULT_STRUCTURED_WIREGUARD_SCHEMA = "wireguard_native_v1.structured_editor.v1"
 STRICT_ANDROID_VPN_PLAN = {
     "access_method": "turn_credentials",
     "carrier_family": "turn_datagram",
@@ -96,6 +103,16 @@ $ProgressPreference = 'SilentlyContinue'
         return json.loads(proc.stdout)
     except json.JSONDecodeError as exc:
         raise ToolError(f"failed to decode JSON from {method} {url}: {proc.stdout!r}") from exc
+
+
+def concise_tool_error(error: BaseException) -> str:
+    message = str(error).strip()
+    marker = " failed with exit code "
+    if marker in message:
+        message = message.split(marker, 1)[1]
+        if ": " in message:
+            message = message.split(": ", 1)[1]
+    return message[:800]
 
 
 def detect_single_device(adb: str, serial: str | None) -> str:
@@ -207,11 +224,63 @@ def wait_for_resolution(local_port: int, resolution_id: str, timeout: float) -> 
     raise ToolError(f"timed out waiting for resolution {resolution_id} to finish")
 
 
-def build_start_payload(args: argparse.Namespace, resolution_id: str) -> dict[str, Any]:
+def find_wireguard_schema_version(host_info: dict[str, Any]) -> str:
+    store = host_info.get("transport_profile_store") or {}
+    for editable in store.get("editable_kinds") or []:
+        if editable.get("kind") == "wireguard_native_v1":
+            schema = str(editable.get("schema_version", "")).strip()
+            if schema:
+                return schema
+    return DEFAULT_STRUCTURED_WIREGUARD_SCHEMA
+
+
+def create_transport_profile(
+    local_port: int,
+    host_info: dict[str, Any],
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    endpoint = args.transport_profile_endpoint or args.peer_addr
+    payload = {
+        "draft": {
+            "kind": "wireguard_native_v1",
+            "schema_version": find_wireguard_schema_version(host_info),
+            "display_name": args.transport_profile_name,
+            "interface_private_key_action": "generate_host",
+            "interface_addresses": list(args.client_address),
+            "dns_servers": list(args.dns_server),
+            "mtu": args.mtu,
+            "peer_public_key": args.peer_public_key,
+            "allowed_ips": list(args.allowed_ip),
+            "endpoint": endpoint,
+            "persistent_keepalive_seconds": args.persistent_keepalive,
+            "default_for": dict(STRICT_ANDROID_VPN_PLAN),
+        }
+    }
+    created = request_json(
+        f"http://127.0.0.1:{local_port}/v1/transport-profiles:structured",
+        method="POST",
+        payload=payload,
+    )
+    profile = created.get("profile") or {}
+    profile_id = str(profile.get("id", "")).strip()
+    if not profile_id:
+        raise ToolError(f"structured transport profile response did not include profile.id: {created!r}")
+    return profile
+
+
+def build_start_payload(
+    args: argparse.Namespace,
+    resolution_id: str,
+    transport_profile: dict[str, Any],
+) -> dict[str, Any]:
+    profile_id = str(transport_profile.get("id", "")).strip()
+    if not profile_id:
+        raise ToolError(f"transport profile does not include an id: {transport_profile!r}")
     payload: dict[str, Any] = {
         "mode": "android_vpn_service",
         "resolution_id": resolution_id,
         "execution_plan": dict(STRICT_ANDROID_VPN_PLAN),
+        "transport_profile": {"profile_id": profile_id},
         "runtime_defaults": {
             "listen_addr": args.listen_addr,
             "peer_addr": args.peer_addr,
@@ -221,6 +290,7 @@ def build_start_payload(args: argparse.Namespace, resolution_id: str) -> dict[st
             "log_level": args.log_level,
         },
         "application_routing_policy": args.policy,
+        "underlay_route_policy": args.underlay_route_policy,
     }
     if args.allowed_package:
         payload["allowed_packages"] = list(args.allowed_package)
@@ -256,6 +326,42 @@ def ensure_vpn_visible(adb: str, serial: str, app_uid: int) -> str:
     return output
 
 
+def ensure_vpn_not_owned_by_app(adb: str, serial: str, app_uid: int) -> str:
+    output = adb_shell(adb, serial, "dumpsys connectivity")
+    owner_uid = f"OwnerUid: {app_uid}"
+    establishing_uid = f"EstablishingAppUid: {app_uid}"
+    if owner_uid in output or establishing_uid in output:
+        raise ToolError(f"RelayDock VPN still appears active for uid {app_uid} after stop")
+    return output
+
+
+def stop_platform_tunnel(local_port: int) -> dict[str, Any]:
+    stop_result = request_json(
+        f"http://127.0.0.1:{local_port}/v1/platform-tunnels/stop",
+        method="POST",
+        payload={"mode": "android_vpn_service"},
+    )
+    if stop_result.get("stopped") is not True:
+        raise ToolError(
+            "android_vpn_service stop did not return stopped=true: "
+            + json.dumps(stop_result, sort_keys=True)
+        )
+    return stop_result
+
+
+def ready_platform_tunnel_status(local_port: int) -> dict[str, Any]:
+    statuses = request_json(f"http://127.0.0.1:{local_port}/v1/platform-tunnels/status")
+    if not isinstance(statuses, list):
+        raise ToolError(f"platform tunnel status response is not a list: {statuses!r}")
+    for status in statuses:
+        if status.get("mode") == "android_vpn_service" and status.get("ready") is True:
+            return status
+    raise ToolError(
+        "embedded host did not report a ready android_vpn_service status: "
+        + json.dumps(statuses, sort_keys=True)
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--adb", default=DEFAULT_ADB)
@@ -264,7 +370,16 @@ def main() -> int:
     parser.add_argument("--turn-link", default=os.environ.get("TURN_LINK", "").strip())
     parser.add_argument("--listen-addr", default=DEFAULT_LISTEN_ADDR)
     parser.add_argument("--peer-addr", default=DEFAULT_PEER_ADDR)
+    parser.add_argument("--transport-profile-name", default=DEFAULT_TRANSPORT_PROFILE_NAME)
+    parser.add_argument("--transport-profile-endpoint", default="")
+    parser.add_argument("--client-address", action="append", default=[DEFAULT_CLIENT_ADDRESS])
+    parser.add_argument("--dns-server", action="append", default=[DEFAULT_DNS_SERVER])
+    parser.add_argument("--allowed-ip", action="append", default=[DEFAULT_ALLOWED_IP])
+    parser.add_argument("--mtu", type=int, default=DEFAULT_MTU)
+    parser.add_argument("--peer-public-key", default=DEFAULT_PEER_PUBLIC_KEY)
+    parser.add_argument("--persistent-keepalive", type=int, default=0)
     parser.add_argument("--policy", default="all_apps", choices=["all_apps", "allowed_packages", "disallowed_packages"])
+    parser.add_argument("--underlay-route-policy", default="preserve_active_local_network", choices=["standard", "preserve_active_local_network"])
     parser.add_argument("--allowed-package", action="append", default=[])
     parser.add_argument("--disallowed-package", action="append", default=[])
     parser.add_argument("--log-level", default="debug")
@@ -286,6 +401,7 @@ def main() -> int:
         adb_shell(args.adb, serial, "logcat -c", check=False)
         ensure_app_running(args.adb, serial, args.app_package)
         local_port, host_info = discover_host_bridge(args.adb, serial, args.app_package)
+        transport_profile = create_transport_profile(local_port, host_info, args)
 
         resolution = request_json(
             f"http://127.0.0.1:{local_port}/v1/resolutions",
@@ -303,30 +419,65 @@ def main() -> int:
         if resolved.get("state") != "resolved":
             raise ToolError(f"resolution did not reach resolved state: {json.dumps(resolved, sort_keys=True)}")
 
-        start_result = request_json(
-            f"http://127.0.0.1:{local_port}/v1/platform-tunnels/start",
-            method="POST",
-            payload=build_start_payload(args, resolution_id),
-            timeout=args.startup_timeout,
-        )
-        if start_result.get("ready") is not True:
-            raise ToolError(
-                "android_vpn_service did not reach ready=true: "
-                + json.dumps(start_result, sort_keys=True)
+        start_request_error = ""
+        try:
+            start_result = request_json(
+                f"http://127.0.0.1:{local_port}/v1/platform-tunnels/start",
+                method="POST",
+                payload=build_start_payload(args, resolution_id, transport_profile),
+                timeout=args.startup_timeout,
             )
+        except ToolError as exc:
+            start_request_error = concise_tool_error(exc)
+            start_result = {}
+            time.sleep(2.0)
+        if start_result.get("ready") is not True:
+            if start_request_error:
+                ensure_app_running(args.adb, serial, args.app_package)
+                ensure_vpn_visible(args.adb, serial, app_uid)
+                local_port, host_info = discover_host_bridge(args.adb, serial, args.app_package)
+                ready_status = ready_platform_tunnel_status(local_port)
+                start_result = {
+                    "mode": "android_vpn_service",
+                    "ready": True,
+                    "session_id": ready_status.get("session_id", ""),
+                    "message": "start request closed before the JSON response; ready state verified via embedded host status and Android connectivity",
+                    "request_error": start_request_error,
+                }
+            else:
+                raise ToolError(
+                    "android_vpn_service did not reach ready=true: "
+                    + json.dumps(start_result, sort_keys=True)
+                )
 
         time.sleep(2.0)
         ensure_app_running(args.adb, serial, args.app_package)
         ensure_vpn_visible(args.adb, serial, app_uid)
+        local_port, host_info = discover_host_bridge(args.adb, serial, args.app_package)
+        ready_status = ready_platform_tunnel_status(local_port)
+        try:
+            stop_result = stop_platform_tunnel(local_port)
+        except ToolError as exc:
+            stop_result = {
+                "mode": "android_vpn_service",
+                "stopped": True,
+                "message": "stop request closed before the JSON response; Android connectivity verification follows",
+                "request_error": concise_tool_error(exc),
+            }
+        time.sleep(1.0)
+        ensure_vpn_not_owned_by_app(args.adb, serial, app_uid)
 
         print(
             json.dumps(
                 {
                     "device_serial": serial,
                     "host_port": local_port,
+                    "transport_profile_id": transport_profile.get("id"),
                     "resolution_id": resolution_id,
                     "policy": args.policy,
                     "result": start_result,
+                    "ready_status": ready_status,
+                    "stop_result": stop_result,
                     "host_build": host_info.get("build", {}),
                 },
                 indent=2,

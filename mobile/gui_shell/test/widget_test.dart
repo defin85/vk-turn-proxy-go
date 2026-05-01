@@ -88,6 +88,8 @@ const TransportProfileStoreCapability _transportProfileStoreCapability =
           profileKind: TransportProfileKind.wireGuardNativeV1,
           displayName: 'WireGuard .conf',
           extensions: <String>['conf'],
+          materialAcquisitionMethod:
+              TransportProfileMaterialAcquisitionMethod.plainText,
         ),
       ],
       lifecycleActions: <TransportProfileLifecycleAction>[
@@ -265,19 +267,20 @@ void main() {
       findsOneWidget,
     );
     final tunnelButton = find.text('Request startup', skipOffstage: false);
-    expect(tunnelButton, findsOneWidget);
-    await tester.tap(tunnelButton);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 200));
+    expect(tunnelButton, findsNothing);
     expect(
-      controller
-          .platformTunnelResultFor(PlatformTunnelMode.androidVpnService)
-          ?.stage,
-      PlatformTunnelStartupStage.capabilityCheck,
+      controller.platformTunnelResultFor(PlatformTunnelMode.androidVpnService),
+      isNull,
     );
-    expect(find.textContaining('Capability check'), findsWidgets);
     await _openProfilesTab(tester);
     await _openProfileEditorFromProfiles(tester);
+    expect(
+      find.byKey(
+        const ValueKey<String>('profile-workspace-vpn-action'),
+        skipOffstage: false,
+      ),
+      findsNothing,
+    );
     await tester.enterText(find.byType(TextField).first, 'vk mobile draft');
     await tester.pumpAndSettle();
 
@@ -5384,6 +5387,7 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     List<ProviderConfigRecord>? providerConfigsList,
     List<ResolutionRecord>? resolutionsList,
     List<TransportProfileStatus>? transportProfilesList,
+    List<PlatformTunnelStatus>? platformTunnelStatusesList,
     this.sessionsList = const <SessionRecord>[],
     this.challengeMap = const <String, ChallengeRecord>{},
     MobileHostConnectionResult? readyResult,
@@ -5417,6 +5421,9 @@ class _FakeMobileHostBridge implements MobileHostBridge {
        ),
        _transportProfiles = List<TransportProfileStatus>.of(
          transportProfilesList ?? _transportProfileStatuses(),
+       ),
+       _platformTunnelStatuses = List<PlatformTunnelStatus>.of(
+         platformTunnelStatusesList ?? const <PlatformTunnelStatus>[],
        );
 
   final List<ProviderDescriptor> _providers;
@@ -5428,6 +5435,7 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   HostInfo _hostInfo;
   final List<ResolutionRecord> _resolutions;
   final List<TransportProfileStatus> _transportProfiles;
+  final List<PlatformTunnelStatus> _platformTunnelStatuses;
   final PlatformTunnelStartResult startPlatformTunnelResult;
   final List<PlatformTunnelMode> startedPlatformTunnels =
       <PlatformTunnelMode>[];
@@ -5504,6 +5512,10 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       _transportProfiles;
 
   @override
+  Future<List<PlatformTunnelStatus>> platformTunnelStatuses() async =>
+      _platformTunnelStatuses;
+
+  @override
   Future<TransportProfileStatus> importTransportProfile(
     TransportProfileImportRequest request,
   ) async {
@@ -5532,6 +5544,64 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       ..add(next);
     _hostInfo = _readyHostInfo;
     return next;
+  }
+
+  @override
+  Future<TransportProfileStructuredSaveResult> createStructuredTransportProfile(
+    TransportProfileStructuredCreateRequest request,
+  ) async {
+    final profile = _transportProfileStatuses().first;
+    final profileID = 'transport-profile-${_transportProfiles.length + 1}';
+    final next = TransportProfileStatus(
+      id: profileID,
+      kind: request.draft.kind,
+      version: profile.version,
+      displayName: request.draft.displayName,
+      validation: profile.validation,
+      compatibility: profile.compatibility,
+      secretMaterialRef: TransportProfileSecretMaterialRef(
+        kind: TransportProfileMaterialSource.structuredEditor,
+        ref: 'host-owned:$profileID',
+      ),
+      actions: profile.actions,
+      importedAt: profile.importedAt,
+      updatedAt: DateTime.utc(2026, 4, 28, 12, _transportProfiles.length),
+    );
+    _transportProfiles.add(next);
+    _hostInfo = _readyHostInfo;
+    return TransportProfileStructuredSaveResult(profile: next);
+  }
+
+  @override
+  Future<TransportProfileStructuredSaveResult> updateStructuredTransportProfile(
+    String profileId,
+    TransportProfileStructuredUpdateRequest request,
+  ) async {
+    return TransportProfileStructuredSaveResult(
+      profile: await validateTransportProfile(profileId),
+    );
+  }
+
+  @override
+  Future<TransportProfileStructuredValidationResult>
+  validateStructuredTransportProfileDraft(
+    TransportProfileStructuredValidationRequest request,
+  ) async {
+    return const TransportProfileStructuredValidationResult(valid: true);
+  }
+
+  @override
+  Future<TransportProfileGeneratedKey> generateTransportProfileKey(
+    TransportProfileGenerateKeyRequest request,
+  ) async {
+    return TransportProfileGeneratedKey(
+      kind: request.kind,
+      field:
+          request.field ??
+          TransportProfileStructuredFieldId.interfacePrivateKey,
+      publicKey: 'public-key',
+      fingerprint: 'sha256:test',
+    );
   }
 
   @override
@@ -5623,6 +5693,9 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     startedPlatformTunnels.add(mode);
     startedPlatformTunnelResolutionIDs.add(resolutionId);
     startedPlatformTunnelProfiles.add(transportProfile);
+    _replacePlatformTunnelStatus(
+      _statusFromPlatformTunnelStartResult(startPlatformTunnelResult),
+    );
     return startPlatformTunnelResult;
   }
 
@@ -5630,7 +5703,7 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   Future<PlatformTunnelStartResult> resumePlatformTunnel({
     required String startupAttemptId,
   }) async {
-    return PlatformTunnelStartResult(
+    final result = PlatformTunnelStartResult(
       mode: PlatformTunnelMode.androidVpnService,
       ready: false,
       stage: PlatformTunnelStartupStage.permissionAcquire,
@@ -5638,6 +5711,8 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       startupAttemptId: startupAttemptId,
       message: 'embedded mobile host does not implement tunnel resume yet',
     );
+    _replacePlatformTunnelStatus(_statusFromPlatformTunnelStartResult(result));
+    return result;
   }
 
   @override
@@ -5645,6 +5720,15 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     required PlatformTunnelMode mode,
   }) async {
     stoppedPlatformTunnels.add(mode);
+    _replacePlatformTunnelStatus(
+      PlatformTunnelStatus(
+        mode: mode,
+        state: PlatformTunnelLifecycleState.stopped,
+        ready: false,
+        message: 'Android VPN Service disconnected.',
+        updatedAt: DateTime.utc(2026, 4, 7, 14, 10),
+      ),
+    );
     return const PlatformTunnelStopResult(
       mode: PlatformTunnelMode.androidVpnService,
       stopped: true,
@@ -5788,6 +5872,45 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       ..removeWhere((ProviderConfigRecord current) => current.id == next.id)
       ..add(next);
     return next;
+  }
+
+  void _replacePlatformTunnelStatus(PlatformTunnelStatus status) {
+    _platformTunnelStatuses
+      ..removeWhere(
+        (PlatformTunnelStatus current) => current.mode == status.mode,
+      )
+      ..add(status);
+  }
+
+  PlatformTunnelStatus _statusFromPlatformTunnelStartResult(
+    PlatformTunnelStartResult result,
+  ) {
+    final state = result.ready
+        ? PlatformTunnelLifecycleState.ready
+        : result.stage == PlatformTunnelStartupStage.permissionAcquire &&
+              result.missingPrerequisite ==
+                  PlatformTunnelPrerequisite.permission &&
+              result.startupAttemptId.isNotEmpty
+        ? PlatformTunnelLifecycleState.permission
+        : result.stage == PlatformTunnelStartupStage.profileValidate ||
+              result.missingPrerequisite ==
+                  PlatformTunnelPrerequisite.transportProfile
+        ? PlatformTunnelLifecycleState.setupNeeded
+        : PlatformTunnelLifecycleState.failed;
+    return PlatformTunnelStatus(
+      mode: result.mode,
+      state: state,
+      ready: result.ready,
+      sessionId: result.sessionId,
+      executionPlan: result.executionPlan,
+      transportProfile: result.transportProfile,
+      underlayRoutePolicy: result.underlayRoutePolicy,
+      stage: result.stage,
+      missingPrerequisite: result.missingPrerequisite,
+      startupAttemptId: result.startupAttemptId,
+      message: result.message,
+      updatedAt: DateTime.utc(2026, 4, 7, 14, 9),
+    );
   }
 
   bool _providerAdvertised(String providerId) {

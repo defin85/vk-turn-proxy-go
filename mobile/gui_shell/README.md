@@ -130,6 +130,13 @@ For a repo-owned physical-device smoke that proves the packaged
 TURN_LINK='generic-turn://...' make smoke-android-vpn-service
 ```
 
+The smoke creates a structured `wireguard_native_v1` profile inside the
+packaged host, starts the RelayDock-owned Android `VpnService`, verifies the
+active VPN owner through `dumpsys connectivity`, disconnects through the
+RelayDock platform-tunnel API, and verifies the app no longer owns the VPN.
+It defaults to preserving the active local network route so ADB-over-Wi-Fi
+remains reachable during the check.
+
 For a Windows-native build from the mirror:
 
 ```powershell
@@ -178,9 +185,12 @@ The primary product shell is now split into:
   template-backed new-provider flows instead of a preset-heavy root
 - `Support`: activity and diagnostics drill-down without making those surfaces
   the default first impression
-- `Routing`: a dedicated searchable route for app-routing modes; shown as a
-  primary rail destination on wider layouts and opened as an explicit compact
-  workflow on phones
+- `Routing`: a dedicated searchable route for app-routing modes and
+  platform-tunnel status; shown as a primary rail destination on
+  wider layouts and opened as an explicit compact workflow on phones. It may
+  link to VPN transport profile setup, but profile/runtime defaults editing
+  stays in `Profiles`, and the primary VPN connect/disconnect toggle stays on
+  `Home`.
 
 Advanced runtime overrides and secondary resolution/session actions stay
 reachable through explicit disclosure and overflow affordances instead of

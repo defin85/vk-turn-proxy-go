@@ -106,6 +106,57 @@ func Handler(host *Host) http.Handler {
 			writeMethodNotAllowed(w, r.Method)
 		}
 	})
+	mux.HandleFunc("/v1/transport-profiles:structured", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeMethodNotAllowed(w, r.Method)
+			return
+		}
+		var req TransportProfileStructuredCreateRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_json", err)
+			return
+		}
+		profile, err := host.CreateStructuredTransportProfile(req)
+		if err != nil {
+			writeTransportProfileActionError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, profile)
+	})
+	mux.HandleFunc("/v1/transport-profiles:validate-draft", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeMethodNotAllowed(w, r.Method)
+			return
+		}
+		var req TransportProfileStructuredValidationRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_json", err)
+			return
+		}
+		result, err := host.ValidateStructuredTransportProfileDraft(req)
+		if err != nil {
+			writeTransportProfileActionError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, result)
+	})
+	mux.HandleFunc("/v1/transport-profiles:generate-key", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeMethodNotAllowed(w, r.Method)
+			return
+		}
+		var req TransportProfileGenerateKeyRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_json", err)
+			return
+		}
+		key, err := host.GenerateTransportProfileKey(req)
+		if err != nil {
+			writeTransportProfileActionError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, key)
+	})
 	mux.HandleFunc("/v1/provider-configs", func(w http.ResponseWriter, r *http.Request) {
 		requestedLocale := requestedDisplayLocale(r)
 		switch r.Method {
@@ -202,6 +253,18 @@ func Handler(host *Host) http.Handler {
 					return
 				}
 				profile, err := host.SelectTransportProfileForStartup(profileID, req)
+				if err != nil {
+					writeTransportProfileActionError(w, err)
+					return
+				}
+				writeJSON(w, http.StatusOK, profile)
+			case "structured-update":
+				var req TransportProfileStructuredUpdateRequest
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid_json", err)
+					return
+				}
+				profile, err := host.UpdateStructuredTransportProfile(profileID, req)
 				if err != nil {
 					writeTransportProfileActionError(w, err)
 					return
@@ -432,6 +495,13 @@ func Handler(host *Host) http.Handler {
 			return
 		}
 		writeJSON(w, http.StatusOK, result)
+	})
+	mux.HandleFunc("/v1/platform-tunnels/status", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeMethodNotAllowed(w, r.Method)
+			return
+		}
+		writeJSON(w, http.StatusOK, host.PlatformTunnelStatuses())
 	})
 	mux.HandleFunc("/v1/platform-tunnels/stop", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

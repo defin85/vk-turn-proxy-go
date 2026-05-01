@@ -153,6 +153,18 @@ const (
 	PlatformTunnelUnderlayRoutePolicyPreserveActiveLocalNetwork PlatformTunnelUnderlayRoutePolicy = "preserve_active_local_network"
 )
 
+type PlatformTunnelLifecycleState string
+
+const (
+	PlatformTunnelLifecycleStateSetupNeeded PlatformTunnelLifecycleState = "setup_needed"
+	PlatformTunnelLifecycleStatePermission  PlatformTunnelLifecycleState = "permission"
+	PlatformTunnelLifecycleStateStarting    PlatformTunnelLifecycleState = "starting"
+	PlatformTunnelLifecycleStateReady       PlatformTunnelLifecycleState = "ready"
+	PlatformTunnelLifecycleStateStopping    PlatformTunnelLifecycleState = "stopping"
+	PlatformTunnelLifecycleStateStopped     PlatformTunnelLifecycleState = "stopped"
+	PlatformTunnelLifecycleStateFailed      PlatformTunnelLifecycleState = "failed"
+)
+
 type PlatformTunnelCapability struct {
 	Mode                           PlatformTunnelMode                  `json:"mode"`
 	Available                      bool                                `json:"available"`
@@ -195,6 +207,15 @@ const (
 	TransportProfileImportAdapterWireGuardConf TransportProfileImportAdapter = "wireguard_conf"
 )
 
+type TransportProfileMaterialAcquisitionMethod string
+
+const (
+	TransportProfileMaterialAcquisitionMethodPlainText       TransportProfileMaterialAcquisitionMethod = "plain_text"
+	TransportProfileMaterialAcquisitionMethodFilePicker      TransportProfileMaterialAcquisitionMethod = "file_picker"
+	TransportProfileMaterialAcquisitionMethodQRPayload       TransportProfileMaterialAcquisitionMethod = "qr_payload"
+	TransportProfileMaterialAcquisitionMethodProviderManaged TransportProfileMaterialAcquisitionMethod = "provider_managed"
+)
+
 type TransportProfileLifecycleAction string
 
 const (
@@ -204,6 +225,10 @@ const (
 	TransportProfileLifecycleActionForget           TransportProfileLifecycleAction = "forget"
 	TransportProfileLifecycleActionValidate         TransportProfileLifecycleAction = "validate"
 	TransportProfileLifecycleActionSelectForStartup TransportProfileLifecycleAction = "select_for_startup"
+	TransportProfileLifecycleActionCreateStructured TransportProfileLifecycleAction = "create_structured"
+	TransportProfileLifecycleActionUpdateStructured TransportProfileLifecycleAction = "update_structured"
+	TransportProfileLifecycleActionValidateDraft    TransportProfileLifecycleAction = "validate_draft"
+	TransportProfileLifecycleActionGenerateKey      TransportProfileLifecycleAction = "generate_key"
 )
 
 type TransportProfileValidationState string
@@ -226,6 +251,7 @@ type TransportProfileMaterialSource string
 const (
 	TransportProfileMaterialSourceImportAdapter TransportProfileMaterialSource = "import_adapter"
 	TransportProfileMaterialSourceLegacyPath    TransportProfileMaterialSource = "legacy_path"
+	TransportProfileMaterialSourceStructured    TransportProfileMaterialSource = "structured_editor"
 )
 
 type TransportProfileSecretMaterialRef struct {
@@ -275,10 +301,82 @@ type TransportProfileStatus struct {
 }
 
 type TransportProfileImportAdapterDescriptor struct {
-	ID          TransportProfileImportAdapter `json:"id"`
-	ProfileKind TransportProfileKind          `json:"profile_kind"`
-	DisplayName string                        `json:"display_name,omitempty"`
-	Extensions  []string                      `json:"extensions,omitempty"`
+	ID                        TransportProfileImportAdapter             `json:"id"`
+	ProfileKind               TransportProfileKind                      `json:"profile_kind"`
+	DisplayName               string                                    `json:"display_name,omitempty"`
+	Extensions                []string                                  `json:"extensions,omitempty"`
+	MaterialAcquisitionMethod TransportProfileMaterialAcquisitionMethod `json:"material_acquisition_method,omitempty"`
+}
+
+type TransportProfileStructuredFieldID string
+
+const (
+	TransportProfileStructuredFieldSchemaVersion       TransportProfileStructuredFieldID = "schema_version"
+	TransportProfileStructuredFieldDisplayName         TransportProfileStructuredFieldID = "display_name"
+	TransportProfileStructuredFieldInterfacePrivateKey TransportProfileStructuredFieldID = "interface_private_key"
+	TransportProfileStructuredFieldInterfaceAddresses  TransportProfileStructuredFieldID = "interface_addresses"
+	TransportProfileStructuredFieldDNSServers          TransportProfileStructuredFieldID = "dns_servers"
+	TransportProfileStructuredFieldMTU                 TransportProfileStructuredFieldID = "mtu"
+	TransportProfileStructuredFieldPeerPublicKey       TransportProfileStructuredFieldID = "peer_public_key"
+	TransportProfileStructuredFieldPeerPresharedKey    TransportProfileStructuredFieldID = "peer_preshared_key"
+	TransportProfileStructuredFieldAllowedIPs          TransportProfileStructuredFieldID = "allowed_ips"
+	TransportProfileStructuredFieldEndpoint            TransportProfileStructuredFieldID = "endpoint"
+	TransportProfileStructuredFieldPersistentKeepalive TransportProfileStructuredFieldID = "persistent_keepalive"
+)
+
+type TransportProfileStructuredFieldValueKind string
+
+const (
+	TransportProfileStructuredFieldValueKindString       TransportProfileStructuredFieldValueKind = "string"
+	TransportProfileStructuredFieldValueKindStringList   TransportProfileStructuredFieldValueKind = "string_list"
+	TransportProfileStructuredFieldValueKindInteger      TransportProfileStructuredFieldValueKind = "integer"
+	TransportProfileStructuredFieldValueKindSecretString TransportProfileStructuredFieldValueKind = "secret_string"
+)
+
+type TransportProfileStructuredFieldCardinality string
+
+const (
+	TransportProfileStructuredFieldCardinalityOne  TransportProfileStructuredFieldCardinality = "one"
+	TransportProfileStructuredFieldCardinalityMany TransportProfileStructuredFieldCardinality = "many"
+)
+
+type TransportProfileSecretUpdateAction string
+
+const (
+	TransportProfileSecretUpdateActionPreserveExisting TransportProfileSecretUpdateAction = "preserve_existing"
+	TransportProfileSecretUpdateActionReplaceSubmitted TransportProfileSecretUpdateAction = "replace_submitted"
+	TransportProfileSecretUpdateActionGenerateHost     TransportProfileSecretUpdateAction = "generate_host"
+)
+
+type TransportProfileStructuredFieldDescriptor struct {
+	ID                  TransportProfileStructuredFieldID          `json:"id"`
+	DisplayName         string                                     `json:"display_name,omitempty"`
+	HelpText            string                                     `json:"help_text,omitempty"`
+	Placeholder         string                                     `json:"placeholder,omitempty"`
+	Group               string                                     `json:"group,omitempty"`
+	Order               int                                        `json:"order,omitempty"`
+	ValueKind           TransportProfileStructuredFieldValueKind   `json:"value_kind"`
+	Cardinality         TransportProfileStructuredFieldCardinality `json:"cardinality,omitempty"`
+	Required            bool                                       `json:"required,omitempty"`
+	Secret              bool                                       `json:"secret,omitempty"`
+	Generated           bool                                       `json:"generated,omitempty"`
+	UpdatePreservable   bool                                       `json:"update_preservable,omitempty"`
+	ManualReplacement   bool                                       `json:"manual_replacement,omitempty"`
+	MinItems            int                                        `json:"min_items,omitempty"`
+	MaxItems            int                                        `json:"max_items,omitempty"`
+	DefaultString       string                                     `json:"default_string,omitempty"`
+	DefaultStringList   []string                                   `json:"default_string_list,omitempty"`
+	DefaultInteger      int                                        `json:"default_integer,omitempty"`
+	Supported           bool                                       `json:"supported"`
+	UnsupportedReason   string                                     `json:"unsupported_reason,omitempty"`
+	SecretUpdateActions []TransportProfileSecretUpdateAction       `json:"secret_update_actions,omitempty"`
+}
+
+type TransportProfileEditableKindSchema struct {
+	Kind             TransportProfileKind                        `json:"kind"`
+	SchemaVersion    string                                      `json:"schema_version"`
+	Fields           []TransportProfileStructuredFieldDescriptor `json:"fields,omitempty"`
+	LifecycleActions []TransportProfileLifecycleAction           `json:"lifecycle_actions,omitempty"`
 }
 
 type TransportProfileStoreCapability struct {
@@ -286,6 +384,7 @@ type TransportProfileStoreCapability struct {
 	ImportAdapters      []TransportProfileImportAdapterDescriptor `json:"import_adapters,omitempty"`
 	LifecycleActions    []TransportProfileLifecycleAction         `json:"lifecycle_actions,omitempty"`
 	RedactionGuarantees []string                                  `json:"redaction_guarantees,omitempty"`
+	EditableKinds       []TransportProfileEditableKindSchema      `json:"editable_kinds,omitempty"`
 }
 
 type TransportProfileImportRequest struct {
@@ -299,6 +398,68 @@ type TransportProfileImportRequest struct {
 
 type TransportProfileSelectForStartupRequest struct {
 	Plan RuntimeExecutionPlan `json:"plan"`
+}
+
+type TransportProfileStructuredDraft struct {
+	Kind                       TransportProfileKind                                                     `json:"kind"`
+	SchemaVersion              string                                                                   `json:"schema_version,omitempty"`
+	DisplayName                string                                                                   `json:"display_name,omitempty"`
+	Fields                     map[TransportProfileStructuredFieldID]any                                `json:"fields,omitempty"`
+	SecretActions              map[TransportProfileStructuredFieldID]TransportProfileSecretUpdateAction `json:"secret_actions,omitempty"`
+	InterfacePrivateKey        string                                                                   `json:"interface_private_key,omitempty"`
+	InterfacePrivateKeyAction  TransportProfileSecretUpdateAction                                       `json:"interface_private_key_action,omitempty"`
+	InterfaceAddresses         []string                                                                 `json:"interface_addresses,omitempty"`
+	DNSServers                 []string                                                                 `json:"dns_servers,omitempty"`
+	MTU                        int                                                                      `json:"mtu,omitempty"`
+	PeerPublicKey              string                                                                   `json:"peer_public_key,omitempty"`
+	PeerPresharedKey           string                                                                   `json:"peer_preshared_key,omitempty"`
+	PeerPresharedKeyAction     TransportProfileSecretUpdateAction                                       `json:"peer_preshared_key_action,omitempty"`
+	AllowedIPs                 []string                                                                 `json:"allowed_ips,omitempty"`
+	Endpoint                   string                                                                   `json:"endpoint,omitempty"`
+	PersistentKeepaliveSeconds int                                                                      `json:"persistent_keepalive_seconds,omitempty"`
+	DefaultFor                 *RuntimeExecutionPlan                                                    `json:"default_for,omitempty"`
+}
+
+type TransportProfileStructuredCreateRequest struct {
+	Draft TransportProfileStructuredDraft `json:"draft"`
+}
+
+type TransportProfileStructuredUpdateRequest struct {
+	Draft TransportProfileStructuredDraft `json:"draft"`
+}
+
+type TransportProfileStructuredSaveResult struct {
+	Profile       TransportProfileStatus         `json:"profile"`
+	GeneratedKeys []TransportProfileGeneratedKey `json:"generated_keys,omitempty"`
+}
+
+type TransportProfileStructuredValidationRequest struct {
+	ProfileID string                          `json:"profile_id,omitempty"`
+	Draft     TransportProfileStructuredDraft `json:"draft"`
+}
+
+type TransportProfileFieldValidationError struct {
+	Field     TransportProfileStructuredFieldID `json:"field"`
+	Violation string                            `json:"violation"`
+	Message   string                            `json:"message,omitempty"`
+}
+
+type TransportProfileStructuredValidationResult struct {
+	Valid  bool                                   `json:"valid"`
+	Errors []TransportProfileFieldValidationError `json:"errors,omitempty"`
+	Status *TransportProfileValidationStatus      `json:"status,omitempty"`
+}
+
+type TransportProfileGenerateKeyRequest struct {
+	Kind  TransportProfileKind              `json:"kind"`
+	Field TransportProfileStructuredFieldID `json:"field,omitempty"`
+}
+
+type TransportProfileGeneratedKey struct {
+	Kind        TransportProfileKind              `json:"kind"`
+	Field       TransportProfileStructuredFieldID `json:"field"`
+	PublicKey   string                            `json:"public_key"`
+	Fingerprint string                            `json:"fingerprint"`
 }
 
 type TransportProfilePrerequisiteStatus struct {
@@ -558,6 +719,25 @@ type PlatformTunnelResumeRequest struct {
 
 type PlatformTunnelStopRequest struct {
 	Mode PlatformTunnelMode `json:"mode"`
+}
+
+type PlatformTunnelStatus struct {
+	Mode                     PlatformTunnelMode                     `json:"mode"`
+	State                    PlatformTunnelLifecycleState           `json:"state"`
+	Ready                    bool                                   `json:"ready"`
+	SessionID                string                                 `json:"session_id,omitempty"`
+	SourceResolutionID       string                                 `json:"source_resolution_id,omitempty"`
+	ExecutionPlan            *RuntimeExecutionPlan                  `json:"execution_plan,omitempty"`
+	TransportProfile         *TransportProfileReference             `json:"transport_profile,omitempty"`
+	ApplicationRoutingPolicy PlatformTunnelApplicationRoutingPolicy `json:"application_routing_policy,omitempty"`
+	UnderlayRoutePolicy      PlatformTunnelUnderlayRoutePolicy      `json:"underlay_route_policy,omitempty"`
+	AllowedPackages          []string                               `json:"allowed_packages,omitempty"`
+	DisallowedPackages       []string                               `json:"disallowed_packages,omitempty"`
+	Stage                    PlatformTunnelStartupStage             `json:"stage,omitempty"`
+	MissingPrerequisite      PlatformTunnelPrerequisite             `json:"missing_prerequisite,omitempty"`
+	StartupAttemptID         string                                 `json:"startup_attempt_id,omitempty"`
+	Message                  string                                 `json:"message,omitempty"`
+	UpdatedAt                time.Time                              `json:"updated_at"`
 }
 
 type PlatformTunnelStartResult struct {

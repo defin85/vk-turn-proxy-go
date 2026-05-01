@@ -49,6 +49,8 @@ const TransportProfileStoreCapability _transportProfileStoreCapability =
           profileKind: TransportProfileKind.wireGuardNativeV1,
           displayName: 'WireGuard .conf',
           extensions: <String>['conf'],
+          materialAcquisitionMethod:
+              TransportProfileMaterialAcquisitionMethod.plainText,
         ),
       ],
       lifecycleActions: <TransportProfileLifecycleAction>[
@@ -3070,6 +3072,140 @@ void main() {
     },
   );
 
+  test(
+    'controller rehydrates ready platform tunnel state from host status on initialize',
+    () async {
+      final profile = ProfileRecord(
+        id: 'profile-1',
+        name: 'vk live',
+        spec: _profileSpec(),
+      );
+      final bridge = _FakeMobileHostBridge(
+        sessionsList: <SessionRecord>[
+          SessionRecord(
+            id: 'session-android-1',
+            profileId: 'profile-1',
+            profileName: 'vk live',
+            profile: _profileSpec(),
+            state: SessionState.ready,
+            startedAt: DateTime.utc(2026, 4, 7, 14, 0),
+            updatedAt: DateTime.utc(2026, 4, 7, 14, 1),
+            sourceResolutionId: 'resolution-android-1',
+          ),
+        ],
+        platformTunnelStatusesList: <PlatformTunnelStatus>[
+          PlatformTunnelStatus(
+            mode: PlatformTunnelMode.androidVpnService,
+            state: PlatformTunnelLifecycleState.ready,
+            ready: true,
+            sessionId: 'session-android-1',
+            sourceResolutionId: 'resolution-android-1',
+            underlayRoutePolicy: PlatformTunnelUnderlayRoutePolicy.standard,
+            updatedAt: DateTime.utc(2026, 4, 7, 14, 1),
+          ),
+        ],
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[profile],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: profile.id,
+            draft: ProfileDraft.fromProfile(profile),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(bridge.startedPlatformTunnels, isEmpty);
+      expect(
+        controller
+            .platformTunnelResultFor(PlatformTunnelMode.androidVpnService)
+            ?.ready,
+        isTrue,
+      );
+      expect(
+        controller
+            .platformTunnelStatusFor(PlatformTunnelMode.androidVpnService)
+            ?.state,
+        PlatformTunnelLifecycleState.ready,
+      );
+      expect(controller.selectedSessionId, 'session-android-1');
+    },
+  );
+
+  test(
+    'controller removes stale ready state when host status reports stopped',
+    () async {
+      final profile = ProfileRecord(
+        id: 'profile-1',
+        name: 'vk live',
+        spec: _profileSpec(),
+      );
+      final bridge = _FakeMobileHostBridge(
+        platformTunnelStatusesList: <PlatformTunnelStatus>[
+          PlatformTunnelStatus(
+            mode: PlatformTunnelMode.androidVpnService,
+            state: PlatformTunnelLifecycleState.ready,
+            ready: true,
+            sessionId: 'session-android-1',
+            updatedAt: DateTime.utc(2026, 4, 7, 14, 1),
+          ),
+        ],
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[profile],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: profile.id,
+            draft: ProfileDraft.fromProfile(profile),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      expect(
+        controller
+            .platformTunnelResultFor(PlatformTunnelMode.androidVpnService)
+            ?.ready,
+        isTrue,
+      );
+
+      bridge._replacePlatformTunnelStatus(
+        PlatformTunnelStatus(
+          mode: PlatformTunnelMode.androidVpnService,
+          state: PlatformTunnelLifecycleState.stopped,
+          ready: false,
+          sessionId: 'session-android-1',
+          message: 'Android VPN Service disconnected.',
+          updatedAt: DateTime.utc(2026, 4, 7, 14, 2),
+        ),
+      );
+      await controller.refresh();
+
+      expect(
+        controller.platformTunnelResultFor(
+          PlatformTunnelMode.androidVpnService,
+        ),
+        isNull,
+      );
+      expect(
+        controller
+            .platformTunnelStatusFor(PlatformTunnelMode.androidVpnService)
+            ?.state,
+        PlatformTunnelLifecycleState.stopped,
+      );
+    },
+  );
+
   test('controller clears ready platform tunnel state after stop', () async {
     final profile = ProfileRecord(
       id: 'profile-1',
@@ -3326,6 +3462,7 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     List<ProfileRecord>? profilesList,
     List<ResolutionRecord>? resolutionsList,
     List<TransportProfileStatus>? transportProfilesList,
+    List<PlatformTunnelStatus>? platformTunnelStatusesList,
     this.sessionsList = const <SessionRecord>[],
     this.challengeMap = const <String, ChallengeRecord>{},
     this.startSessionError,
@@ -3385,6 +3522,9 @@ class _FakeMobileHostBridge implements MobileHostBridge {
        _hostInfo = ensureReadyResult.info ?? _readyHostInfo,
        _transportProfiles = List<TransportProfileStatus>.of(
          transportProfilesList ?? _transportProfileStatuses(),
+       ),
+       _platformTunnelStatuses = List<PlatformTunnelStatus>.of(
+         platformTunnelStatusesList ?? const <PlatformTunnelStatus>[],
        );
 
   final MobileHostConnectionResult ensureReadyResult;
@@ -3394,6 +3534,7 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   final List<ProfileRecord> _profiles;
   final List<SessionRecord> sessionsList;
   final List<TransportProfileStatus> _transportProfiles;
+  final List<PlatformTunnelStatus> _platformTunnelStatuses;
   final Map<String, ChallengeRecord> challengeMap;
   final ControlPlaneError? startSessionError;
   final PlatformTunnelStartResult startPlatformTunnelResult;
@@ -3499,6 +3640,10 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       _transportProfiles;
 
   @override
+  Future<List<PlatformTunnelStatus>> platformTunnelStatuses() async =>
+      _platformTunnelStatuses;
+
+  @override
   Future<TransportProfileStatus> importTransportProfile(
     TransportProfileImportRequest request,
   ) async {
@@ -3527,6 +3672,64 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       ..add(next);
     _hostInfo = _readyHostInfo;
     return next;
+  }
+
+  @override
+  Future<TransportProfileStructuredSaveResult> createStructuredTransportProfile(
+    TransportProfileStructuredCreateRequest request,
+  ) async {
+    final profile = _transportProfileStatuses().first;
+    final profileID = 'transport-profile-${_transportProfiles.length + 1}';
+    final next = TransportProfileStatus(
+      id: profileID,
+      kind: request.draft.kind,
+      version: profile.version,
+      displayName: request.draft.displayName,
+      validation: profile.validation,
+      compatibility: profile.compatibility,
+      secretMaterialRef: TransportProfileSecretMaterialRef(
+        kind: TransportProfileMaterialSource.structuredEditor,
+        ref: 'host-owned:$profileID',
+      ),
+      actions: profile.actions,
+      importedAt: profile.importedAt,
+      updatedAt: DateTime.utc(2026, 4, 28, 12, _transportProfiles.length),
+    );
+    _transportProfiles.add(next);
+    _hostInfo = _readyHostInfo;
+    return TransportProfileStructuredSaveResult(profile: next);
+  }
+
+  @override
+  Future<TransportProfileStructuredSaveResult> updateStructuredTransportProfile(
+    String profileId,
+    TransportProfileStructuredUpdateRequest request,
+  ) async {
+    return TransportProfileStructuredSaveResult(
+      profile: await validateTransportProfile(profileId),
+    );
+  }
+
+  @override
+  Future<TransportProfileStructuredValidationResult>
+  validateStructuredTransportProfileDraft(
+    TransportProfileStructuredValidationRequest request,
+  ) async {
+    return const TransportProfileStructuredValidationResult(valid: true);
+  }
+
+  @override
+  Future<TransportProfileGeneratedKey> generateTransportProfileKey(
+    TransportProfileGenerateKeyRequest request,
+  ) async {
+    return TransportProfileGeneratedKey(
+      kind: request.kind,
+      field:
+          request.field ??
+          TransportProfileStructuredFieldId.interfacePrivateKey,
+      publicKey: 'public-key',
+      fingerprint: 'sha256:test',
+    );
   }
 
   @override
@@ -3637,6 +3840,9 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     startedPlatformTunnelDisallowedPackages.add(
       List<String>.of(disallowedPackages),
     );
+    _replacePlatformTunnelStatus(
+      _statusFromPlatformTunnelStartResult(startPlatformTunnelResult),
+    );
     return startPlatformTunnelResult;
   }
 
@@ -3645,6 +3851,9 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     required String startupAttemptId,
   }) async {
     resumedPlatformTunnelAttemptIDs.add(startupAttemptId);
+    _replacePlatformTunnelStatus(
+      _statusFromPlatformTunnelStartResult(resumePlatformTunnelResult),
+    );
     return resumePlatformTunnelResult;
   }
 
@@ -3653,6 +3862,15 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     required PlatformTunnelMode mode,
   }) async {
     stoppedPlatformTunnels.add(mode);
+    _replacePlatformTunnelStatus(
+      PlatformTunnelStatus(
+        mode: mode,
+        state: PlatformTunnelLifecycleState.stopped,
+        ready: false,
+        message: stopPlatformTunnelResult.message,
+        updatedAt: DateTime.utc(2026, 4, 7, 14, 10),
+      ),
+    );
     return stopPlatformTunnelResult;
   }
 
@@ -3786,6 +4004,45 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       ..add(next);
     restoredProviderConfigs.add(next);
     return next;
+  }
+
+  void _replacePlatformTunnelStatus(PlatformTunnelStatus status) {
+    _platformTunnelStatuses
+      ..removeWhere(
+        (PlatformTunnelStatus current) => current.mode == status.mode,
+      )
+      ..add(status);
+  }
+
+  PlatformTunnelStatus _statusFromPlatformTunnelStartResult(
+    PlatformTunnelStartResult result,
+  ) {
+    final state = result.ready
+        ? PlatformTunnelLifecycleState.ready
+        : result.stage == PlatformTunnelStartupStage.permissionAcquire &&
+              result.missingPrerequisite ==
+                  PlatformTunnelPrerequisite.permission &&
+              result.startupAttemptId.isNotEmpty
+        ? PlatformTunnelLifecycleState.permission
+        : result.stage == PlatformTunnelStartupStage.profileValidate ||
+              result.missingPrerequisite ==
+                  PlatformTunnelPrerequisite.transportProfile
+        ? PlatformTunnelLifecycleState.setupNeeded
+        : PlatformTunnelLifecycleState.failed;
+    return PlatformTunnelStatus(
+      mode: result.mode,
+      state: state,
+      ready: result.ready,
+      sessionId: result.sessionId,
+      executionPlan: result.executionPlan,
+      transportProfile: result.transportProfile,
+      underlayRoutePolicy: result.underlayRoutePolicy,
+      stage: result.stage,
+      missingPrerequisite: result.missingPrerequisite,
+      startupAttemptId: result.startupAttemptId,
+      message: result.message,
+      updatedAt: DateTime.utc(2026, 4, 7, 14, 9),
+    );
   }
 
   bool _providerAdvertised(String providerId) {

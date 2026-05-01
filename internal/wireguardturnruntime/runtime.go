@@ -357,6 +357,13 @@ func buildIPCConfig(lease *clientcontrol.WireGuardTurnExecutionLease) (string, e
 	if err != nil {
 		return "", fmt.Errorf("decode peer public key: %w", err)
 	}
+	presharedKeyHex := ""
+	if strings.TrimSpace(lease.PresharedKey) != "" {
+		presharedKeyHex, err = decodeKeyHex(lease.PresharedKey)
+		if err != nil {
+			return "", fmt.Errorf("decode peer preshared key: %w", err)
+		}
+	}
 	var builder strings.Builder
 	builder.WriteString("private_key=")
 	builder.WriteString(privateKeyHex)
@@ -364,6 +371,11 @@ func buildIPCConfig(lease *clientcontrol.WireGuardTurnExecutionLease) (string, e
 	builder.WriteString("public_key=")
 	builder.WriteString(publicKeyHex)
 	builder.WriteByte('\n')
+	if presharedKeyHex != "" {
+		builder.WriteString("preshared_key=")
+		builder.WriteString(presharedKeyHex)
+		builder.WriteByte('\n')
+	}
 	builder.WriteString("endpoint=")
 	builder.WriteString(lease.PeerEndpointAddress)
 	builder.WriteByte('\n')
@@ -372,7 +384,11 @@ func buildIPCConfig(lease *clientcontrol.WireGuardTurnExecutionLease) (string, e
 		builder.WriteString(strings.TrimSpace(allowedIP))
 		builder.WriteByte('\n')
 	}
-	builder.WriteString("persistent_keepalive_interval=25\n")
+	keepalive := lease.PersistentKeepaliveSeconds
+	if keepalive <= 0 {
+		keepalive = 25
+	}
+	builder.WriteString(fmt.Sprintf("persistent_keepalive_interval=%d\n", keepalive))
 	return builder.String(), nil
 }
 

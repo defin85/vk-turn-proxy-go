@@ -36,11 +36,14 @@ func TestDefaultAndroidWireGuardTurnMaterializerLoadsExplicitProfilePath(t *test
 		"PrivateKey = client-private-key",
 		"Address = 10.10.0.2/32",
 		"DNS = 1.1.1.1",
+		"MTU = 1412",
 		"",
 		"[Peer]",
 		"PublicKey = peer-public-key",
+		"PresharedKey = peer-preshared-key",
 		"AllowedIPs = 0.0.0.0/0",
 		"Endpoint = relay.example.test:51820",
+		"PersistentKeepalive = 21",
 		"",
 	}, "\n")
 	if err := os.WriteFile(profilePath, []byte(profileContents), 0o600); err != nil {
@@ -61,6 +64,18 @@ func TestDefaultAndroidWireGuardTurnMaterializerLoadsExplicitProfilePath(t *test
 	}
 	if lease.PeerEndpointAddress != "relay.example.test:51820" {
 		t.Fatalf("lease.PeerEndpointAddress = %q, want relay.example.test:51820", lease.PeerEndpointAddress)
+	}
+	if len(lease.DNSServers) != 1 || lease.DNSServers[0] != "1.1.1.1" {
+		t.Fatalf("lease.DNSServers = %+v, want [1.1.1.1]", lease.DNSServers)
+	}
+	if lease.MTU != 1412 {
+		t.Fatalf("lease.MTU = %d, want 1412", lease.MTU)
+	}
+	if lease.PresharedKey != "peer-preshared-key" {
+		t.Fatalf("lease.PresharedKey = %q, want peer-preshared-key", lease.PresharedKey)
+	}
+	if lease.PersistentKeepaliveSeconds != 21 {
+		t.Fatalf("lease.PersistentKeepaliveSeconds = %d, want 21", lease.PersistentKeepaliveSeconds)
 	}
 }
 

@@ -11,9 +11,9 @@ profile to originate from an imported file.
 - **GIVEN** a host supports structured editing for `wireguard_native_v1`
 - **WHEN** a shell negotiates the VPN transport profile store capability
 - **THEN** the host reports that `wireguard_native_v1` is editable
-- **AND** it reports the supported structured fields and which fields are
-  required, optional, secret, generated, or unsupported by the current
-  materializer
+- **AND** it reports a schema version plus stable machine-readable field ids,
+  value kinds, cardinality, and which fields are required, optional, secret,
+  generated, update-preservable, or unsupported by the current materializer
 - **AND** WireGuard `.conf` remains advertised only as an import adapter
 
 #### Scenario: Operator creates profile without conf file
@@ -34,22 +34,25 @@ current host.
 
 #### Scenario: WireGuard draft contains required material
 
-- **GIVEN** a structured WireGuard draft includes interface private-key
-  material or a host-generation request, at least one interface address, peer
-  public key, and allowed IPs
+- **GIVEN** a structured WireGuard draft includes display metadata, at least one
+  interface address, peer public key, allowed IPs, and either interface
+  private-key material, an explicit host-generation request, or an explicit
+  update request to preserve the existing host-owned private key
 - **WHEN** the host validates the draft
 - **THEN** it accepts only normalized values that can be materialized for the
   selected execution plan
 - **AND** DNS servers, MTU, endpoint, and host-supported optional fields such as
-  persistent keepalive are preserved only when the host advertises support for
-  those fields
+  preshared key or persistent keepalive are preserved only when the host
+  advertises support for those fields
 
 #### Scenario: Unsupported field is rejected
 
 - **GIVEN** a shell submits a structured field that the host did not advertise
   as supported for the profile kind
 - **WHEN** the host validates the draft
-- **THEN** validation fails with a field-specific error
+- **THEN** validation fails with a field-specific error and a stable violation
+  code such as `unknown`, `unsupported`, `required`, `malformed`, or
+  `incompatible`
 - **AND** the host does not silently store, ignore, or materialize that field
 
 ### Requirement: Structured edits keep secrets host-owned and redacted
@@ -76,6 +79,19 @@ reads after create or update operations complete.
   material
 - **AND** the shell receives only safe public-key or fingerprint metadata
   needed to complete remote peer configuration
+
+#### Scenario: Secret update intent is explicit
+
+- **GIVEN** an existing `wireguard_native_v1` profile contains a host-owned
+  private key
+- **WHEN** the operator edits only non-secret fields
+- **THEN** the structured update request carries an explicit
+  `preserve_existing` action for the private-key field if the host advertised
+  that action
+- **AND** a create request or unsupported preserve action fails validation
+  instead of silently storing an incomplete profile
+- **AND** a manual replacement uses `replace_submitted` and is redacted from all
+  subsequent ordinary reads
 
 ### Requirement: Structured updates are atomic
 

@@ -47,6 +47,21 @@ fingerprints, public-key material when safe, and validation results.
 For generated keys, the host should generate and store the private key, then
 return only safe public-key or fingerprint metadata needed by the operator.
 
+Structured update payloads must not rely on omitted secret fields to infer
+operator intent. Each write-only secret field uses an explicit action:
+`preserve_existing`, `replace_submitted`, or `generate_host`. A create cannot use
+`preserve_existing`; an update defaults to `preserve_existing` only when the host
+schema advertises that action for the field. This keeps non-secret edits from
+accidentally clearing a startable profile and keeps the shell from retaining a
+raw secret just to resubmit an unchanged value.
+
+Host-side key generation is the primary product path for new WireGuard
+profiles. Manual private-key entry is an advanced path and is available only
+when the host schema advertises manual replacement for that field. The generated
+public key may be returned from the save response and from redacted profile
+details so the operator can configure the remote peer without exposing the
+private key.
+
 ### Decision: Updates are atomic and validation-first
 
 An update must validate the full resulting profile before replacing the
@@ -60,6 +75,12 @@ Importing a `.conf` and saving structured fields both create the same
 `wireguard_native_v1` record type. Startup, diagnostics, default binding,
 forget, and select-for-startup behavior must not branch on whether the profile
 came from a file or from the editor.
+
+The editable schema is versioned separately from stored profile revisions. Field
+descriptors use stable machine-readable ids, value kinds, cardinality,
+secret/generation/update semantics, and materializer support status. Shells may
+localize labels and arrange controls, but they must submit the stable field ids
+the host advertised.
 
 ### Decision: Runtime-owned endpoint defaults remain explicit
 
@@ -94,7 +115,5 @@ closed when neither the profile nor runtime defaults provide one.
 
 ## Open Questions
 
-- Should host-side private-key generation be the default action, with manual
-  private-key entry hidden behind an advanced section?
-- Should a generated public key be copyable directly from the editor result,
-  or only from redacted profile details?
+- None for the proposal. Implementation may still tune labels and layout inside
+  the locked host-schema, secret-intent, and redaction contracts above.

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/netip"
+	"strings"
 	"testing"
 	"time"
 
@@ -146,6 +147,38 @@ func TestDirectDatagramBindCarriesWireGuardTraffic(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatalf("server did not observe client connection: %v", ctx.Err())
 	}
+}
+
+func TestBuildIPCConfigUsesStructuredPresharedKeyAndKeepalive(t *testing.T) {
+	clientPrivate := bytes32(1)
+	peerPublic := bytes32(2)
+	presharedKey := bytes32(3)
+	lease := &clientcontrol.WireGuardTurnExecutionLease{
+		ClientPrivateKey:           base64.StdEncoding.EncodeToString(clientPrivate[:]),
+		PeerPublicKey:              base64.StdEncoding.EncodeToString(peerPublic[:]),
+		PresharedKey:               base64.StdEncoding.EncodeToString(presharedKey[:]),
+		PeerEndpointAddress:        "127.0.0.1:51820",
+		AllowedIPs:                 []string{"10.10.0.1/32"},
+		PersistentKeepaliveSeconds: 13,
+	}
+	ipcConfig, err := buildIPCConfig(lease)
+	if err != nil {
+		t.Fatalf("buildIPCConfig() error = %v", err)
+	}
+	if !strings.Contains(ipcConfig, "preshared_key="+hex.EncodeToString(presharedKey[:])+"\n") {
+		t.Fatalf("IPC config = %q, want preshared key", ipcConfig)
+	}
+	if !strings.Contains(ipcConfig, "persistent_keepalive_interval=13\n") {
+		t.Fatalf("IPC config = %q, want profile keepalive", ipcConfig)
+	}
+}
+
+func bytes32(value byte) [32]byte {
+	var out [32]byte
+	for i := range out {
+		out[i] = value
+	}
+	return out
 }
 
 func mustGenerateWireGuardKeyPair(t *testing.T) ([32]byte, [32]byte) {

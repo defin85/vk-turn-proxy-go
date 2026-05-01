@@ -114,6 +114,8 @@ const TransportProfileStoreCapability _transportProfileStoreCapability =
           profileKind: TransportProfileKind.wireGuardNativeV1,
           displayName: 'WireGuard .conf',
           extensions: <String>['conf'],
+          materialAcquisitionMethod:
+              TransportProfileMaterialAcquisitionMethod.plainText,
         ),
       ],
       lifecycleActions: <TransportProfileLifecycleAction>[
@@ -1964,6 +1966,11 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   }
 
   @override
+  Future<List<PlatformTunnelStatus>> platformTunnelStatuses() async {
+    return const <PlatformTunnelStatus>[];
+  }
+
+  @override
   Future<TransportProfileStatus> importTransportProfile(
     TransportProfileImportRequest request,
   ) async {
@@ -1974,6 +1981,50 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
       ..add(status);
     _hostInfo = _desktopTransportProfileHostInfo(configured: true);
     return status;
+  }
+
+  @override
+  Future<TransportProfileStructuredSaveResult> createStructuredTransportProfile(
+    TransportProfileStructuredCreateRequest request,
+  ) async {
+    final status = _desktopTransportProfileStatus();
+    _transportProfiles
+      ..clear()
+      ..add(status);
+    _hostInfo = _desktopTransportProfileHostInfo(configured: true);
+    return TransportProfileStructuredSaveResult(profile: status);
+  }
+
+  @override
+  Future<TransportProfileStructuredSaveResult> updateStructuredTransportProfile(
+    String profileId,
+    TransportProfileStructuredUpdateRequest request,
+  ) async {
+    return TransportProfileStructuredSaveResult(
+      profile: await validateTransportProfile(profileId),
+    );
+  }
+
+  @override
+  Future<TransportProfileStructuredValidationResult>
+  validateStructuredTransportProfileDraft(
+    TransportProfileStructuredValidationRequest request,
+  ) async {
+    return const TransportProfileStructuredValidationResult(valid: true);
+  }
+
+  @override
+  Future<TransportProfileGeneratedKey> generateTransportProfileKey(
+    TransportProfileGenerateKeyRequest request,
+  ) async {
+    return TransportProfileGeneratedKey(
+      kind: request.kind,
+      field:
+          request.field ??
+          TransportProfileStructuredFieldId.interfacePrivateKey,
+      publicKey: 'public-key',
+      fingerprint: 'sha256:test',
+    );
   }
 
   @override

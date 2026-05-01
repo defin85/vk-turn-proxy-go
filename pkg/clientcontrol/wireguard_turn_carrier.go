@@ -23,23 +23,25 @@ type WireGuardTurnMaterializeRequest struct {
 }
 
 type WireGuardTurnExecutionLease struct {
-	ResolutionID         string
-	AccessMethod         RuntimeAccessMethod
-	CarrierFamily        RuntimeCarrierFamily
-	EngineFamily         RuntimeEngineFamily
-	RemoteEndpointFamily RuntimeRemoteEndpointFamily
-	RemoteEndpointRole   string
-	TURNServerAddress    string
-	TURNUsername         string
-	TURNPassword         string
-	PeerEndpointAddress  string
-	ClientPrivateKey     string
-	ClientAddresses      []string
-	PeerPublicKey        string
-	AllowedIPs           []string
-	DNSServers           []string
-	MTU                  int
-	ExpiresAt            *time.Time
+	ResolutionID               string
+	AccessMethod               RuntimeAccessMethod
+	CarrierFamily              RuntimeCarrierFamily
+	EngineFamily               RuntimeEngineFamily
+	RemoteEndpointFamily       RuntimeRemoteEndpointFamily
+	RemoteEndpointRole         string
+	TURNServerAddress          string
+	TURNUsername               string
+	TURNPassword               string
+	PeerEndpointAddress        string
+	ClientPrivateKey           string
+	ClientAddresses            []string
+	PeerPublicKey              string
+	PresharedKey               string
+	AllowedIPs                 []string
+	DNSServers                 []string
+	MTU                        int
+	PersistentKeepaliveSeconds int
+	ExpiresAt                  *time.Time
 }
 
 type WireGuardTurnMaterializer func(context.Context, WireGuardTurnMaterializeRequest) (*WireGuardTurnExecutionLease, error)

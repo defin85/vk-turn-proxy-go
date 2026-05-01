@@ -131,6 +131,8 @@ type Host struct {
 	sessions                 map[string]*managedSession
 	challenges               map[string]*managedChallenge
 	startupRequests          map[string]PlatformTunnelStartRequest
+	platformTunnelResults    map[PlatformTunnelMode]storedPlatformTunnelResult
+	platformTunnelStops      map[PlatformTunnelMode]storedPlatformTunnelStop
 	subscribers              map[uint64]chan Event
 	nextSubID                uint64
 }
@@ -145,6 +147,17 @@ type managedSession struct {
 	challenges    []Challenge
 	stopRequested bool
 	platformMode  PlatformTunnelMode
+}
+
+type storedPlatformTunnelResult struct {
+	request   PlatformTunnelStartRequest
+	result    PlatformTunnelStartResult
+	updatedAt time.Time
+}
+
+type storedPlatformTunnelStop struct {
+	result    PlatformTunnelStopResult
+	updatedAt time.Time
 }
 
 type managedChallenge struct {
@@ -261,6 +274,8 @@ func New(opts ...Option) *Host {
 		sessions:                     make(map[string]*managedSession),
 		challenges:                   make(map[string]*managedChallenge),
 		startupRequests:              make(map[string]PlatformTunnelStartRequest),
+		platformTunnelResults:        make(map[PlatformTunnelMode]storedPlatformTunnelResult),
+		platformTunnelStops:          make(map[PlatformTunnelMode]storedPlatformTunnelStop),
 		subscribers:                  make(map[uint64]chan Event),
 	}
 	if err := host.loadTransportProfileStore(); err != nil {
@@ -437,9 +452,11 @@ func (h *Host) StartPlatformTunnel(ctx context.Context, req PlatformTunnelStartR
 	}
 	nextReq, profileFailure, ok := h.attachTransportProfileToStartRequest(normalizedReq)
 	if ok {
+		profileFailure = attachPlatformTunnelResultRequestContext(normalizedReq, profileFailure)
 		if validateErr := validatePlatformTunnelStartResult(normalizedReq, profileFailure); validateErr != nil {
 			return PlatformTunnelStartResult{}, fmt.Errorf("invalid platform tunnel startup result: %w", validateErr)
 		}
+		h.rememberPlatformTunnelResult(normalizedReq, profileFailure)
 		return profileFailure, nil
 	}
 	normalizedReq = nextReq
@@ -447,9 +464,11 @@ func (h *Host) StartPlatformTunnel(ctx context.Context, req PlatformTunnelStartR
 	if err != nil {
 		if startResult, ok := platformTunnelStartResultFromError(err); ok {
 			startResult = h.finalizePlatformTunnelFailure(ctx, normalizedReq, startResult)
+			startResult = attachPlatformTunnelResultRequestContext(normalizedReq, startResult)
 			if validateErr := validatePlatformTunnelStartResult(normalizedReq, startResult); validateErr != nil {
 				return PlatformTunnelStartResult{}, fmt.Errorf("invalid platform tunnel startup result: %w", validateErr)
 			}
+			h.rememberPlatformTunnelResult(normalizedReq, startResult)
 			return PlatformTunnelStartResult{}, &PlatformTunnelStartError{Result: startResult}
 		}
 		return PlatformTunnelStartResult{}, err
@@ -458,9 +477,11 @@ func (h *Host) StartPlatformTunnel(ctx context.Context, req PlatformTunnelStartR
 	if err != nil {
 		return PlatformTunnelStartResult{}, err
 	}
+	result = attachPlatformTunnelResultRequestContext(normalizedReq, result)
 	if validateErr := validatePlatformTunnelStartResult(normalizedReq, result); validateErr != nil {
 		return PlatformTunnelStartResult{}, fmt.Errorf("invalid platform tunnel startup result: %w", validateErr)
 	}
+	h.rememberPlatformTunnelResult(normalizedReq, result)
 	return result, nil
 }
 
@@ -477,9 +498,13 @@ func (h *Host) ResumePlatformTunnel(ctx context.Context, req PlatformTunnelResum
 	if err != nil {
 		if startResult, ok := platformTunnelStartResultFromError(err); ok {
 			startResult = h.finalizeResumedPlatformTunnelFailure(ctx, startReq, ok, startResult)
+			if ok {
+				startResult = attachPlatformTunnelResultRequestContext(startReq, startResult)
+			}
 			if validateErr := validatePlatformTunnelStartResult(PlatformTunnelStartRequest{Mode: startResult.Mode}, startResult); validateErr != nil {
 				return PlatformTunnelStartResult{}, fmt.Errorf("invalid platform tunnel startup result: %w", validateErr)
 			}
+			h.rememberPlatformTunnelResult(startReq, startResult)
 			return PlatformTunnelStartResult{}, &PlatformTunnelStartError{Result: startResult}
 		}
 		return PlatformTunnelStartResult{}, err
@@ -488,9 +513,13 @@ func (h *Host) ResumePlatformTunnel(ctx context.Context, req PlatformTunnelResum
 	if err != nil {
 		return PlatformTunnelStartResult{}, err
 	}
+	if ok {
+		result = attachPlatformTunnelResultRequestContext(startReq, result)
+	}
 	if validateErr := validatePlatformTunnelStartResult(PlatformTunnelStartRequest{Mode: result.Mode}, result); validateErr != nil {
 		return PlatformTunnelStartResult{}, fmt.Errorf("invalid platform tunnel startup result: %w", validateErr)
 	}
+	h.rememberPlatformTunnelResult(startReq, result)
 	return result, nil
 }
 
@@ -524,7 +553,95 @@ func (h *Host) StopPlatformTunnel(ctx context.Context, req PlatformTunnelStopReq
 	}
 	h.clearPlatformTunnelStartupRequestsForMode(result.Mode)
 	h.publishPlatformTunnelStop(result.Mode, "stopped")
+	h.rememberPlatformTunnelStop(result)
 	return result, nil
+}
+
+func (h *Host) PlatformTunnelStatuses() []PlatformTunnelStatus {
+	now := h.now().UTC()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	statuses := make(map[PlatformTunnelMode]*PlatformTunnelStatus)
+	order := make([]PlatformTunnelMode, 0, len(h.platformTunnels))
+	ensure := func(mode PlatformTunnelMode) *PlatformTunnelStatus {
+		status, ok := statuses[mode]
+		if ok {
+			return status
+		}
+		status = &PlatformTunnelStatus{
+			Mode:  mode,
+			State: PlatformTunnelLifecycleStateStopped,
+		}
+		statuses[mode] = status
+		order = append(order, mode)
+		return status
+	}
+
+	for _, capability := range h.platformTunnelCapabilitiesWithTransportProfileStateLocked() {
+		if capability.Mode == "" {
+			continue
+		}
+		status := platformTunnelStatusFromCapability(capability)
+		statuses[capability.Mode] = &status
+		order = append(order, capability.Mode)
+	}
+	for attemptID, req := range h.startupRequests {
+		status := ensure(req.Mode)
+		applyPlatformTunnelStartRequestToStatus(status, req)
+		status.State = PlatformTunnelLifecycleStatePermission
+		status.Ready = false
+		status.Stage = PlatformTunnelStartupStagePermissionAcquire
+		status.MissingPrerequisite = PlatformTunnelPrerequisitePermission
+		status.StartupAttemptID = attemptID
+		if strings.TrimSpace(status.Message) == "" {
+			status.Message = "platform tunnel is waiting for native VPN permission"
+		}
+		status.UpdatedAt = now
+	}
+	for mode, stored := range h.platformTunnelResults {
+		status := ensure(mode)
+		applyPlatformTunnelStartRequestToStatus(status, stored.request)
+		applyPlatformTunnelStartResultToStatus(status, stored.result)
+		status.UpdatedAt = stored.updatedAt
+	}
+	for _, managed := range h.sessions {
+		if managed.platformMode == "" {
+			continue
+		}
+		status := ensure(managed.platformMode)
+		if status.UpdatedAt.IsZero() || !managed.snapshot.UpdatedAt.Before(status.UpdatedAt) {
+			applyPlatformTunnelSessionToStatus(status, managed.snapshot)
+		}
+	}
+	for mode, stored := range h.platformTunnelStops {
+		status := ensure(mode)
+		if status.UpdatedAt.IsZero() || !stored.updatedAt.Before(status.UpdatedAt) {
+			applyPlatformTunnelStopToStatus(status, stored.result)
+			status.UpdatedAt = stored.updatedAt
+		}
+	}
+
+	for _, status := range statuses {
+		if status.UpdatedAt.IsZero() {
+			status.UpdatedAt = now
+		}
+	}
+	sort.SliceStable(order, func(i, j int) bool { return order[i] < order[j] })
+	out := make([]PlatformTunnelStatus, 0, len(order))
+	seen := make(map[PlatformTunnelMode]bool, len(order))
+	for _, mode := range order {
+		if seen[mode] {
+			continue
+		}
+		seen[mode] = true
+		status := statuses[mode]
+		if status == nil {
+			continue
+		}
+		out = append(out, clonePlatformTunnelStatus(*status))
+	}
+	return out
 }
 
 func (h *Host) UpsertProfile(profile Profile) (Profile, error) {
@@ -700,6 +817,25 @@ func (h *Host) publishReadyPlatformTunnelResult(
 	}
 	result.SessionID = session.ID
 	return result, nil
+}
+
+func attachPlatformTunnelResultRequestContext(
+	req PlatformTunnelStartRequest,
+	result PlatformTunnelStartResult,
+) PlatformTunnelStartResult {
+	if strings.TrimSpace(string(result.Mode)) == "" {
+		result.Mode = req.Mode
+	}
+	if result.ExecutionPlan == nil {
+		result.ExecutionPlan = cloneRuntimeExecutionPlan(req.ExecutionPlan)
+	}
+	if result.TransportProfile == nil {
+		result.TransportProfile = cloneTransportProfileReference(req.TransportProfile)
+	}
+	if strings.TrimSpace(string(result.UnderlayRoutePolicy)) == "" {
+		result.UnderlayRoutePolicy = req.UnderlayRoutePolicy
+	}
+	return result
 }
 
 func (h *Host) platformTunnelPublicationFailure(
@@ -936,6 +1072,261 @@ func (h *Host) clearPlatformTunnelStartupRequestsForMode(mode PlatformTunnelMode
 		if req.Mode == mode {
 			delete(h.startupRequests, attemptID)
 		}
+	}
+}
+
+func (h *Host) rememberPlatformTunnelResult(req PlatformTunnelStartRequest, result PlatformTunnelStartResult) {
+	if result.Mode == "" {
+		return
+	}
+	h.mu.Lock()
+	h.platformTunnelResults[result.Mode] = storedPlatformTunnelResult{
+		request:   clonePlatformTunnelStartRequest(req),
+		result:    clonePlatformTunnelStartResult(result),
+		updatedAt: h.now().UTC(),
+	}
+	h.mu.Unlock()
+}
+
+func (h *Host) rememberPlatformTunnelStop(result PlatformTunnelStopResult) {
+	if result.Mode == "" {
+		return
+	}
+	h.mu.Lock()
+	h.platformTunnelStops[result.Mode] = storedPlatformTunnelStop{
+		result:    clonePlatformTunnelStopResult(result),
+		updatedAt: h.now().UTC(),
+	}
+	h.mu.Unlock()
+}
+
+func platformTunnelStatusFromCapability(capability PlatformTunnelCapability) PlatformTunnelStatus {
+	status := PlatformTunnelStatus{
+		Mode:  capability.Mode,
+		State: PlatformTunnelLifecycleStateStopped,
+	}
+	descriptor := preferredPlatformTunnelStatusDescriptor(capability)
+	if descriptor != nil {
+		status.ExecutionPlan = cloneRuntimeExecutionPlan(&descriptor.Plan)
+		if descriptor.TransportProfile != nil {
+			status.TransportProfile = cloneTransportProfileReference(firstTransportProfileReference(
+				descriptor.TransportProfile.SelectedProfile,
+				descriptor.TransportProfile.DefaultProfile,
+			))
+			if descriptor.TransportProfile.State != TransportProfileCompatibilityStateCompatible {
+				status.State = PlatformTunnelLifecycleStateSetupNeeded
+				status.Stage = PlatformTunnelStartupStageProfileValidate
+				status.MissingPrerequisite = PlatformTunnelPrerequisiteTransportProfile
+				status.Message = descriptor.TransportProfile.Message
+				return status
+			}
+		}
+		if descriptor.SupportState != RuntimeExecutionPlanSupportStateSupported {
+			status.State = PlatformTunnelLifecycleStateFailed
+			status.Stage = PlatformTunnelStartupStageCapabilityCheck
+			status.MissingPrerequisite = PlatformTunnelPrerequisiteHostImplementation
+			status.Message = runtimeExecutionPlanUnavailableMessage(*descriptor)
+			return status
+		}
+	}
+	if !capability.Available {
+		status.State = PlatformTunnelLifecycleStateFailed
+		status.Stage = PlatformTunnelStartupStageCapabilityCheck
+		status.MissingPrerequisite = capability.MissingPrerequisite
+		if status.MissingPrerequisite == "" {
+			status.MissingPrerequisite = PlatformTunnelPrerequisiteHostImplementation
+		}
+		status.Message = capability.Message
+	}
+	return status
+}
+
+func preferredPlatformTunnelStatusDescriptor(
+	capability PlatformTunnelCapability,
+) *RuntimeExecutionPlanDescriptor {
+	if descriptor, err := selectRuntimeExecutionPlanDescriptor(capability.ExecutionPlans, nil); err == nil {
+		return descriptor
+	}
+	if descriptor, err := selectPlatformTunnelExecutionPlanDescriptor(capability.ExecutionPlans, nil); err == nil {
+		return descriptor
+	}
+	if len(capability.ExecutionPlans) == 0 {
+		return nil
+	}
+	descriptor := capability.ExecutionPlans[0]
+	return &descriptor
+}
+
+func firstTransportProfileReference(refs ...*TransportProfileReference) *TransportProfileReference {
+	for _, ref := range refs {
+		if ref != nil && strings.TrimSpace(ref.ProfileID) != "" {
+			return ref
+		}
+	}
+	return nil
+}
+
+func applyPlatformTunnelStartRequestToStatus(status *PlatformTunnelStatus, req PlatformTunnelStartRequest) {
+	if req.Mode != "" {
+		status.Mode = req.Mode
+	}
+	if strings.TrimSpace(req.ResolutionID) != "" {
+		status.SourceResolutionID = req.ResolutionID
+	}
+	if req.ExecutionPlan != nil {
+		status.ExecutionPlan = cloneRuntimeExecutionPlan(req.ExecutionPlan)
+	}
+	if req.TransportProfile != nil {
+		status.TransportProfile = cloneTransportProfileReference(req.TransportProfile)
+	}
+	if req.ApplicationRoutingPolicy != "" {
+		status.ApplicationRoutingPolicy = req.ApplicationRoutingPolicy
+	}
+	if req.UnderlayRoutePolicy != "" {
+		status.UnderlayRoutePolicy = req.UnderlayRoutePolicy
+	}
+	status.AllowedPackages = cloneStringSlice(req.AllowedPackages)
+	status.DisallowedPackages = cloneStringSlice(req.DisallowedPackages)
+}
+
+func applyPlatformTunnelStartResultToStatus(status *PlatformTunnelStatus, result PlatformTunnelStartResult) {
+	if result.Mode != "" {
+		status.Mode = result.Mode
+	}
+	if result.ExecutionPlan != nil {
+		status.ExecutionPlan = cloneRuntimeExecutionPlan(result.ExecutionPlan)
+	}
+	if result.TransportProfile != nil {
+		status.TransportProfile = cloneTransportProfileReference(result.TransportProfile)
+	}
+	if result.UnderlayRoutePolicy != "" {
+		status.UnderlayRoutePolicy = result.UnderlayRoutePolicy
+	}
+	status.Message = result.Message
+	status.Stage = result.Stage
+	status.MissingPrerequisite = result.MissingPrerequisite
+	status.StartupAttemptID = result.StartupAttemptID
+	status.SessionID = result.SessionID
+	status.Ready = result.Ready
+	switch {
+	case result.Ready:
+		status.State = PlatformTunnelLifecycleStateReady
+		status.MissingPrerequisite = ""
+		status.StartupAttemptID = ""
+	case result.Stage == PlatformTunnelStartupStagePermissionAcquire &&
+		result.MissingPrerequisite == PlatformTunnelPrerequisitePermission &&
+		strings.TrimSpace(result.StartupAttemptID) != "":
+		status.State = PlatformTunnelLifecycleStatePermission
+	case result.Stage == PlatformTunnelStartupStageProfileValidate ||
+		result.MissingPrerequisite == PlatformTunnelPrerequisiteTransportProfile:
+		status.State = PlatformTunnelLifecycleStateSetupNeeded
+	default:
+		status.State = PlatformTunnelLifecycleStateFailed
+	}
+}
+
+func applyPlatformTunnelSessionToStatus(status *PlatformTunnelStatus, session Session) {
+	status.SessionID = session.ID
+	status.SourceResolutionID = session.SourceResolutionID
+	status.UpdatedAt = session.UpdatedAt
+	status.StartupAttemptID = ""
+	switch session.State {
+	case SessionStateReady:
+		status.State = PlatformTunnelLifecycleStateReady
+		status.Ready = true
+		status.Stage = PlatformTunnelStartupStageRuntimeAttach
+		status.MissingPrerequisite = ""
+		status.Message = ""
+	case SessionStateStarting, SessionStateRetrying:
+		status.State = PlatformTunnelLifecycleStateStarting
+		status.Ready = false
+	case SessionStateStopping:
+		status.State = PlatformTunnelLifecycleStateStopping
+		status.Ready = false
+	case SessionStateStopped:
+		status.State = PlatformTunnelLifecycleStateStopped
+		status.Ready = false
+		status.Stage = ""
+		status.MissingPrerequisite = ""
+	case SessionStateFailed:
+		status.State = PlatformTunnelLifecycleStateFailed
+		status.Ready = false
+		if session.Failure != nil {
+			status.Message = session.Failure.Message
+			status.Stage = platformTunnelStartupStageFromString(session.Failure.Stage)
+		}
+		if status.MissingPrerequisite == "" {
+			status.MissingPrerequisite = PlatformTunnelPrerequisiteHostImplementation
+		}
+	}
+}
+
+func applyPlatformTunnelStopToStatus(status *PlatformTunnelStatus, result PlatformTunnelStopResult) {
+	if result.Mode != "" {
+		status.Mode = result.Mode
+	}
+	status.State = PlatformTunnelLifecycleStateStopped
+	status.Ready = false
+	status.Stage = ""
+	status.MissingPrerequisite = ""
+	status.StartupAttemptID = ""
+	if strings.TrimSpace(result.Message) != "" {
+		status.Message = result.Message
+	}
+}
+
+func clonePlatformTunnelStatus(status PlatformTunnelStatus) PlatformTunnelStatus {
+	status.ExecutionPlan = cloneRuntimeExecutionPlan(status.ExecutionPlan)
+	status.TransportProfile = cloneTransportProfileReference(status.TransportProfile)
+	status.AllowedPackages = cloneStringSlice(status.AllowedPackages)
+	status.DisallowedPackages = cloneStringSlice(status.DisallowedPackages)
+	return status
+}
+
+func clonePlatformTunnelStartRequest(req PlatformTunnelStartRequest) PlatformTunnelStartRequest {
+	req.ExecutionPlan = cloneRuntimeExecutionPlan(req.ExecutionPlan)
+	req.TransportProfile = cloneTransportProfileReference(req.TransportProfile)
+	if req.RuntimeDefaults != nil {
+		defaults := *req.RuntimeDefaults
+		req.RuntimeDefaults = &defaults
+	}
+	req.AllowedPackages = cloneStringSlice(req.AllowedPackages)
+	req.DisallowedPackages = cloneStringSlice(req.DisallowedPackages)
+	return req
+}
+
+func clonePlatformTunnelStartResult(result PlatformTunnelStartResult) PlatformTunnelStartResult {
+	result.ExecutionPlan = cloneRuntimeExecutionPlan(result.ExecutionPlan)
+	result.TransportProfile = cloneTransportProfileReference(result.TransportProfile)
+	result.UnderlayRouteExclusions = cloneStringSlice(result.UnderlayRouteExclusions)
+	return result
+}
+
+func clonePlatformTunnelStopResult(result PlatformTunnelStopResult) PlatformTunnelStopResult {
+	return result
+}
+
+func cloneStringSlice(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	return append([]string(nil), values...)
+}
+
+func platformTunnelStartupStageFromString(raw string) PlatformTunnelStartupStage {
+	stage := PlatformTunnelStartupStage(strings.TrimSpace(raw))
+	switch stage {
+	case PlatformTunnelStartupStageCapabilityCheck,
+		PlatformTunnelStartupStagePermissionAcquire,
+		PlatformTunnelStartupStageEntitlementAcquire,
+		PlatformTunnelStartupStageDriverCheck,
+		PlatformTunnelStartupStageProfileValidate,
+		PlatformTunnelStartupStageRouteValidate,
+		PlatformTunnelStartupStageHostBringup,
+		PlatformTunnelStartupStageRuntimeAttach:
+		return stage
+	default:
+		return ""
 	}
 }
 

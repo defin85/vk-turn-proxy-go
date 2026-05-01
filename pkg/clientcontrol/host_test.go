@@ -1008,6 +1008,95 @@ func TestHostStartPlatformTunnelRejectsStartupResultWithoutMissingPrerequisite(t
 	}
 }
 
+func TestHostPlatformTunnelStatusReportsMissingTransportProfileSetup(t *testing.T) {
+	host := New(
+		WithBuildIdentity(BuildIdentity{Target: "android/embedded"}),
+		WithVPNTransportProfileStore(),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{supportedTestAndroidVPNCapability()}),
+	)
+
+	status := platformTunnelStatusForTest(t, host, PlatformTunnelModeAndroidVPNService)
+	if status.State != PlatformTunnelLifecycleStateSetupNeeded {
+		t.Fatalf("platform tunnel status state = %q, want %q", status.State, PlatformTunnelLifecycleStateSetupNeeded)
+	}
+	if status.Stage != PlatformTunnelStartupStageProfileValidate {
+		t.Fatalf("platform tunnel status stage = %q, want %q", status.Stage, PlatformTunnelStartupStageProfileValidate)
+	}
+	if status.MissingPrerequisite != PlatformTunnelPrerequisiteTransportProfile {
+		t.Fatalf(
+			"platform tunnel status missing_prerequisite = %q, want %q",
+			status.MissingPrerequisite,
+			PlatformTunnelPrerequisiteTransportProfile,
+		)
+	}
+	if status.ExecutionPlan == nil {
+		t.Fatal("platform tunnel status execution_plan = nil, want selected plan context")
+	}
+}
+
+func TestHostPlatformTunnelStatusReportsPermissionAttempt(t *testing.T) {
+	host := New(
+		WithBuildIdentity(BuildIdentity{Target: "android/embedded"}),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{{
+			Mode:      PlatformTunnelModeAndroidVPNService,
+			Available: true,
+			SatisfiedPrerequisites: []PlatformTunnelPrerequisite{
+				PlatformTunnelPrerequisiteRouteExclusion,
+			},
+		}}),
+		WithPlatformTunnelStarter(func(_ context.Context, req PlatformTunnelStartRequest) (PlatformTunnelStartResult, error) {
+			return PlatformTunnelStartResult{
+				Mode:                req.Mode,
+				Ready:               false,
+				Stage:               PlatformTunnelStartupStagePermissionAcquire,
+				MissingPrerequisite: PlatformTunnelPrerequisitePermission,
+				StartupAttemptID:    "attempt-android-1",
+				Message:             "Android VPN permission is required.",
+			}, nil
+		}),
+	)
+
+	result, err := host.StartPlatformTunnel(context.Background(), PlatformTunnelStartRequest{
+		Mode:                     PlatformTunnelModeAndroidVPNService,
+		ApplicationRoutingPolicy: PlatformTunnelApplicationRoutingPolicyAllowedPackages,
+		AllowedPackages:          []string{"com.example.video"},
+	})
+	if err != nil {
+		t.Fatalf("StartPlatformTunnel() error = %v", err)
+	}
+	if result.StartupAttemptID != "attempt-android-1" {
+		t.Fatalf("startup_attempt_id = %q, want attempt-android-1", result.StartupAttemptID)
+	}
+
+	status := platformTunnelStatusForTest(t, host, PlatformTunnelModeAndroidVPNService)
+	if status.State != PlatformTunnelLifecycleStatePermission {
+		t.Fatalf("platform tunnel status state = %q, want %q", status.State, PlatformTunnelLifecycleStatePermission)
+	}
+	if status.Stage != PlatformTunnelStartupStagePermissionAcquire {
+		t.Fatalf("platform tunnel status stage = %q, want %q", status.Stage, PlatformTunnelStartupStagePermissionAcquire)
+	}
+	if status.MissingPrerequisite != PlatformTunnelPrerequisitePermission {
+		t.Fatalf(
+			"platform tunnel status missing_prerequisite = %q, want %q",
+			status.MissingPrerequisite,
+			PlatformTunnelPrerequisitePermission,
+		)
+	}
+	if status.StartupAttemptID != "attempt-android-1" {
+		t.Fatalf("platform tunnel status startup_attempt_id = %q, want attempt-android-1", status.StartupAttemptID)
+	}
+	if status.ApplicationRoutingPolicy != PlatformTunnelApplicationRoutingPolicyAllowedPackages {
+		t.Fatalf(
+			"platform tunnel status application_routing_policy = %q, want %q",
+			status.ApplicationRoutingPolicy,
+			PlatformTunnelApplicationRoutingPolicyAllowedPackages,
+		)
+	}
+	if len(status.AllowedPackages) != 1 || status.AllowedPackages[0] != "com.example.video" {
+		t.Fatalf("platform tunnel status allowed_packages = %+v, want [com.example.video]", status.AllowedPackages)
+	}
+}
+
 func TestHostStartPlatformTunnelDefaultsAndroidAppRoutingPolicyToAllApps(t *testing.T) {
 	var captured PlatformTunnelStartRequest
 	host := New(
@@ -1225,6 +1314,110 @@ func TestHostStartPlatformTunnelPublishesReadySession(t *testing.T) {
 	}
 	if strings.Contains(sessionState.Profile.Link, "turn-user:turn-pass@") {
 		t.Fatalf("session profile leaked secret link: %q", sessionState.Profile.Link)
+	}
+}
+
+func TestHostStopPlatformTunnelStopsPublishedPlatformSession(t *testing.T) {
+	build := testBuildIdentity()
+	build.Target = "android/embedded"
+	stopCalls := 0
+	host := New(
+		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+		WithBuildIdentity(build),
+		WithSessionIDSource(func() string { return "session-platform-stop-1" }),
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name: "vk",
+			resolve: func(context.Context, string) (provider.Resolution, error) {
+				return provider.Resolution{
+					Credentials: provider.Credentials{
+						Username: "turn-user",
+						Password: "turn-pass",
+						Address:  "turn.example.test:3478",
+					},
+				}, nil
+			},
+		})),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{{
+			Mode:      PlatformTunnelModeAndroidVPNService,
+			Available: true,
+			SatisfiedPrerequisites: []PlatformTunnelPrerequisite{
+				PlatformTunnelPrerequisiteRouteExclusion,
+			},
+		}}),
+		WithPlatformTunnelStarter(func(_ context.Context, req PlatformTunnelStartRequest) (PlatformTunnelStartResult, error) {
+			return PlatformTunnelStartResult{
+				Mode:          req.Mode,
+				ExecutionPlan: cloneRuntimeExecutionPlan(req.ExecutionPlan),
+				Ready:         true,
+			}, nil
+		}),
+		WithPlatformTunnelStopper(func(_ context.Context, req PlatformTunnelStopRequest) (PlatformTunnelStopResult, error) {
+			stopCalls++
+			return PlatformTunnelStopResult{
+				Mode:    req.Mode,
+				Stopped: true,
+			}, nil
+		}),
+	)
+
+	resolutionState, err := host.StartResolution(context.Background(), StartResolutionRequest{
+		Provider: "vk",
+		Input: &ProviderInputEnvelope{
+			Kind: ProviderInputKindLink,
+			Link: "https://vk.com/call/join/test-token",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartResolution() error = %v", err)
+	}
+	resolved := waitForResolutionState(t, host, resolutionState.ID, ResolutionStateResolved)
+
+	startResult, err := host.StartPlatformTunnel(context.Background(), PlatformTunnelStartRequest{
+		Mode:         PlatformTunnelModeAndroidVPNService,
+		ResolutionID: resolved.ID,
+		RuntimeDefaults: &RuntimeDefaults{
+			ListenAddr:  reserveUDPAddr(t),
+			PeerAddr:    "127.0.0.1:56000",
+			Connections: 1,
+			Mode:        TransportModeAuto,
+			UseDTLS:     boolRef(true),
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartPlatformTunnel() error = %v", err)
+	}
+	if startResult.SessionID != "session-platform-stop-1" {
+		t.Fatalf("session_id = %q, want session-platform-stop-1", startResult.SessionID)
+	}
+
+	stopResult, err := host.StopPlatformTunnel(context.Background(), PlatformTunnelStopRequest{
+		Mode: PlatformTunnelModeAndroidVPNService,
+	})
+	if err != nil {
+		t.Fatalf("StopPlatformTunnel() error = %v", err)
+	}
+	if !stopResult.Stopped {
+		t.Fatalf("StopPlatformTunnel().Stopped = false, want true")
+	}
+	if stopCalls != 1 {
+		t.Fatalf("stop calls = %d, want 1", stopCalls)
+	}
+	sessionState, err := host.Session(startResult.SessionID)
+	if err != nil {
+		t.Fatalf("Session() error = %v", err)
+	}
+	if sessionState.State != SessionStateStopped {
+		t.Fatalf("session state = %q, want %q", sessionState.State, SessionStateStopped)
+	}
+	if sessionState.StoppedAt == nil {
+		t.Fatalf("session stopped_at = nil, want stop timestamp")
+	}
+	status := platformTunnelStatusForTest(t, host, PlatformTunnelModeAndroidVPNService)
+	if status.State != PlatformTunnelLifecycleStateStopped {
+		t.Fatalf("platform tunnel status state = %q, want %q", status.State, PlatformTunnelLifecycleStateStopped)
+	}
+	if status.SessionID != startResult.SessionID {
+		t.Fatalf("platform tunnel status session_id = %q, want %q", status.SessionID, startResult.SessionID)
 	}
 }
 
@@ -3479,6 +3672,17 @@ func waitForSessionState(t *testing.T, host *Host, sessionID string, want Sessio
 		case <-time.After(10 * time.Millisecond):
 		}
 	}
+}
+
+func platformTunnelStatusForTest(t *testing.T, host *Host, mode PlatformTunnelMode) PlatformTunnelStatus {
+	t.Helper()
+	for _, status := range host.PlatformTunnelStatuses() {
+		if status.Mode == mode {
+			return status
+		}
+	}
+	t.Fatalf("PlatformTunnelStatuses() did not include mode %q", mode)
+	return PlatformTunnelStatus{}
 }
 
 func reserveUDPAddr(t *testing.T) string {

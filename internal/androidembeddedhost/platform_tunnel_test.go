@@ -3,6 +3,7 @@ package androidembeddedhost
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/defin85/vk-turn-proxy-go/internal/provider"
 	"github.com/defin85/vk-turn-proxy-go/pkg/clientcontrol"
 )
 
@@ -136,6 +138,52 @@ func TestManagerPersistsTransportProfileStoreAcrossRestarts(t *testing.T) {
 	}
 	if strings.Contains(string(body), storePath) {
 		t.Fatalf("ordinary profile read leaked store path: %s", body)
+	}
+}
+
+func TestManagerPersistsStructuredTransportProfileStoreAcrossRestarts(t *testing.T) {
+	t.Parallel()
+
+	storePath := filepath.Join(t.TempDir(), "no-backup", "vpn-transport-profiles", "store.json")
+	manager := New(
+		WithTransportProfileStorePath(storePath),
+		withPlatformTunnelController(newAndroidVPNServiceController(
+			supportedAndroidVPNServiceCapability(""),
+			&fakeAndroidVPNServiceLifecycle{},
+		)),
+	)
+	baseURL := ensureStartedManager(t, manager)
+	status := createAndroidStructuredWireGuardTransportProfile(t, baseURL)
+	if err := manager.Stop(); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+
+	restored := New(
+		WithTransportProfileStorePath(storePath),
+		withPlatformTunnelController(newAndroidVPNServiceController(
+			supportedAndroidVPNServiceCapability(""),
+			&fakeAndroidVPNServiceLifecycle{},
+		)),
+	)
+	restoredURL := ensureStartedManager(t, restored)
+	profiles := getAndroidTransportProfiles(t, restoredURL)
+	if len(profiles) != 1 || profiles[0].ID != status.ID {
+		t.Fatalf("restored structured profiles = %+v, want %s", profiles, status.ID)
+	}
+	if profiles[0].SecretMaterialRef.Kind != clientcontrol.TransportProfileMaterialSourceStructured {
+		t.Fatalf(
+			"secret material source = %q, want %q",
+			profiles[0].SecretMaterialRef.Kind,
+			clientcontrol.TransportProfileMaterialSourceStructured,
+		)
+	}
+	body, err := json.Marshal(profiles)
+	if err != nil {
+		t.Fatalf("Marshal(profiles) error = %v", err)
+	}
+	if strings.Contains(string(body), androidWireGuardStructuredKey(3)) ||
+		strings.Contains(string(body), storePath) {
+		t.Fatalf("ordinary structured profile read leaked secret/store details: %s", body)
 	}
 }
 
@@ -349,6 +397,317 @@ func TestAndroidShellDoesNotExposeLegacyWireGuardProfilePathBridge(t *testing.T)
 	}
 }
 
+func TestAndroidNativeVPNPrimitivesStayBehindHostBoundary(t *testing.T) {
+	t.Parallel()
+
+	servicePath := filepath.Join(
+		"..",
+		"..",
+		"mobile",
+		"gui_shell",
+		"android",
+		"app",
+		"src",
+		"main",
+		"kotlin",
+		"com",
+		"defin85",
+		"relaydock",
+		"AndroidPlatformTunnelService.kt",
+	)
+	serviceData, err := os.ReadFile(servicePath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", servicePath, err)
+	}
+	service := string(serviceData)
+	for _, required := range []string{
+		"class AndroidPlatformTunnelService : VpnService()",
+		"Builder()",
+		"builder.establish()",
+		"startForeground(NOTIFICATION_ID, buildNotification())",
+		"service.protect(fd)",
+		"activeTun",
+	} {
+		if !strings.Contains(service, required) {
+			t.Fatalf("AndroidPlatformTunnelService.kt is missing native boundary primitive %q", required)
+		}
+	}
+
+	bridgePath := filepath.Join(
+		"..",
+		"..",
+		"mobile",
+		"gui_shell",
+		"android",
+		"app",
+		"src",
+		"main",
+		"kotlin",
+		"com",
+		"defin85",
+		"relaydock",
+		"AndroidPlatformTunnelBridge.kt",
+	)
+	bridgeData, err := os.ReadFile(bridgePath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", bridgePath, err)
+	}
+	bridge := string(bridgeData)
+	for _, required := range []string{
+		"AndroidPlatformTunnelService.bringup",
+		"AndroidPlatformTunnelService.protectSocket",
+		"AndroidPlatformTunnelService.duplicateTunFd",
+		"AndroidPlatformTunnelService.cleanup",
+	} {
+		if !strings.Contains(bridge, required) {
+			t.Fatalf("AndroidPlatformTunnelBridge.kt is missing host/native bridge call %q", required)
+		}
+	}
+
+	dartSources := []string{
+		filepath.Join(
+			"..",
+			"..",
+			"mobile",
+			"gui_shell",
+			"lib",
+			"src",
+			"control",
+			"mobile_host_bridge.dart",
+		),
+		filepath.Join(
+			"..",
+			"..",
+			"mobile",
+			"gui_shell",
+			"lib",
+			"src",
+			"control",
+			"mobile_shell_controller.dart",
+		),
+	}
+	for _, sourcePath := range dartSources {
+		data, err := os.ReadFile(sourcePath)
+		if err != nil {
+			t.Fatalf("ReadFile(%s): %v", sourcePath, err)
+		}
+		source := string(data)
+		for _, forbidden := range []string{
+			"android.net.VpnService",
+			": VpnService",
+			"Builder.establish",
+			"bringupAndroidVpnHost",
+			"protectAndroidVpnSocket",
+			"duplicateAndroidVpnTunFd",
+			"cleanupAndroidVpnHost",
+		} {
+			if strings.Contains(source, forbidden) {
+				t.Fatalf("%s owns native VPN primitive %q outside the host/native boundary", sourcePath, forbidden)
+			}
+		}
+	}
+}
+
+func TestAndroidVPNServiceHandlesSystemLifecycleHooksFailClosed(t *testing.T) {
+	t.Parallel()
+
+	servicePath := filepath.Join(
+		"..",
+		"..",
+		"mobile",
+		"gui_shell",
+		"android",
+		"app",
+		"src",
+		"main",
+		"kotlin",
+		"com",
+		"defin85",
+		"relaydock",
+		"AndroidPlatformTunnelService.kt",
+	)
+	serviceData, err := os.ReadFile(servicePath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", servicePath, err)
+	}
+	service := string(serviceData)
+	for _, required := range []string{
+		"override fun onRevoke()",
+		"override fun onDestroy()",
+		"cleanupTunnelLocked()",
+		"activeService = null",
+		"Android VpnService.Builder.establish() returned null.",
+	} {
+		if !strings.Contains(service, required) {
+			t.Fatalf("AndroidPlatformTunnelService.kt is missing system lifecycle handling %q", required)
+		}
+	}
+
+	manifestPath := filepath.Join(
+		"..",
+		"..",
+		"mobile",
+		"gui_shell",
+		"android",
+		"app",
+		"src",
+		"main",
+		"AndroidManifest.xml",
+	)
+	manifestData, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", manifestPath, err)
+	}
+	manifest := string(manifestData)
+	for _, required := range []string{
+		`android:name="android.net.VpnService.SUPPORTS_ALWAYS_ON"`,
+		`android:value="false"`,
+	} {
+		if !strings.Contains(manifest, required) {
+			t.Fatalf("AndroidManifest.xml is missing always-on opt-out %q", required)
+		}
+	}
+}
+
+func TestProductNativeVPNPathDoesNotDependOnExternalWireGuardApp(t *testing.T) {
+	t.Parallel()
+
+	sourceRoots := []string{
+		filepath.Join("..", "..", "internal", "androidembeddedhost"),
+		filepath.Join("..", "..", "mobile", "gui_shell", "android", "app", "src", "main"),
+		filepath.Join("..", "..", "mobile", "gui_shell", "lib"),
+	}
+	for _, root := range sourceRoots {
+		err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if entry.IsDir() {
+				return nil
+			}
+			if strings.HasSuffix(path, "_test.go") {
+				return nil
+			}
+			switch filepath.Ext(path) {
+			case ".go", ".kt", ".kts", ".cpp", ".h", ".dart", ".xml":
+			default:
+				return nil
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			source := string(data)
+			for _, forbidden := range []string{
+				"com.wireguard.android",
+				"wireguard.android",
+			} {
+				if strings.Contains(source, forbidden) {
+					t.Fatalf("%s depends on external WireGuard app token %q", path, forbidden)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("WalkDir(%s): %v", root, err)
+		}
+	}
+}
+
+func TestAndroidPermissionBridgeRepresentsDenialAndCancellation(t *testing.T) {
+	t.Parallel()
+
+	sourcePath := filepath.Join(
+		"..",
+		"..",
+		"mobile",
+		"gui_shell",
+		"android",
+		"app",
+		"src",
+		"main",
+		"kotlin",
+		"com",
+		"defin85",
+		"relaydock",
+		"MainActivity.kt",
+	)
+	data, err := os.ReadFile(sourcePath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", sourcePath, err)
+	}
+	source := string(data)
+	for _, required := range []string{
+		"finishPlatformTunnelPermissionRequest(resultCode == Activity.RESULT_OK)",
+		"finishPlatformTunnelPermissionRequest(null)",
+		"platform_tunnel_permission_cancelled",
+		"pending.success(granted)",
+	} {
+		if !strings.Contains(source, required) {
+			t.Fatalf("MainActivity.kt is missing Android VPN permission outcome handling %q", required)
+		}
+	}
+}
+
+func TestAndroidManifestUsesNarrowPackageVisibilityForVPNAppScope(t *testing.T) {
+	t.Parallel()
+
+	manifestPath := filepath.Join(
+		"..",
+		"..",
+		"mobile",
+		"gui_shell",
+		"android",
+		"app",
+		"src",
+		"main",
+		"AndroidManifest.xml",
+	)
+	manifestData, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", manifestPath, err)
+	}
+	manifest := string(manifestData)
+	if strings.Contains(manifest, "android.permission.QUERY_ALL_PACKAGES") {
+		t.Fatalf("AndroidManifest.xml requests QUERY_ALL_PACKAGES; native VPN app-scope release strategy must stay narrow")
+	}
+	for _, required := range []string{
+		"<queries>",
+		"android.intent.action.VIEW",
+		"android.intent.action.PROCESS_TEXT",
+		`android:name="android.net.VpnService.SUPPORTS_ALWAYS_ON"`,
+		`android:value="false"`,
+	} {
+		if !strings.Contains(manifest, required) {
+			t.Fatalf("AndroidManifest.xml is missing narrow package visibility declaration %q", required)
+		}
+	}
+
+	bridgePath := filepath.Join(
+		"..",
+		"..",
+		"mobile",
+		"gui_shell",
+		"android",
+		"app",
+		"src",
+		"main",
+		"kotlin",
+		"com",
+		"defin85",
+		"relaydock",
+		"AndroidPlatformTunnelBridge.kt",
+	)
+	bridgeData, err := os.ReadFile(bridgePath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", bridgePath, err)
+	}
+	bridge := string(bridgeData)
+	if !strings.Contains(bridge, "packageManager.getApplicationInfo(packageName, 0)") {
+		t.Fatalf("AndroidPlatformTunnelBridge.kt no longer validates operator-provided package names")
+	}
+}
+
 func TestManagerPlatformTunnelStartPermissionAcquireFailureStaysFailClosed(t *testing.T) {
 	t.Parallel()
 
@@ -386,6 +745,56 @@ func TestManagerPlatformTunnelStartPermissionAcquireFailureStaysFailClosed(t *te
 		t.Fatalf("lifecycle calls = %q, want %q", got, "acquire_permission")
 	}
 	assertAndroidVPNExecutionPlan(t, result.ExecutionPlan)
+}
+
+func TestManagerPlatformTunnelResumePermissionDenialStaysFailClosed(t *testing.T) {
+	t.Parallel()
+
+	lifecycle := &fakeAndroidVPNServiceLifecycle{
+		acquirePermissionErr: newAndroidPermissionPendingError("android vpn permission prompt launched"),
+		resumePermissionErr:  errors.New("operator denied Android VpnService permission"),
+	}
+	manager := New(withPlatformTunnelController(newAndroidVPNServiceController(
+		supportedAndroidVPNServiceCapability(""),
+		lifecycle,
+	)))
+	baseURL := ensureStartedManager(t, manager)
+	importAndroidWireGuardTransportProfile(t, baseURL)
+
+	startResult := startPlatformTunnel(t, baseURL, clientcontrol.PlatformTunnelStartRequest{
+		Mode: clientcontrol.PlatformTunnelModeAndroidVPNService,
+	})
+	if strings.TrimSpace(startResult.StartupAttemptID) == "" {
+		t.Fatal("startup attempt id = empty, want resumable attempt")
+	}
+
+	resumeResult := resumePlatformTunnel(t, baseURL, clientcontrol.PlatformTunnelResumeRequest{
+		StartupAttemptID: startResult.StartupAttemptID,
+	})
+	if resumeResult.Ready {
+		t.Fatalf("platform tunnel resume result ready = true, want false: %+v", resumeResult)
+	}
+	if resumeResult.Stage != clientcontrol.PlatformTunnelStartupStagePermissionAcquire {
+		t.Fatalf("platform tunnel resume stage = %q, want %q", resumeResult.Stage, clientcontrol.PlatformTunnelStartupStagePermissionAcquire)
+	}
+	if resumeResult.MissingPrerequisite != clientcontrol.PlatformTunnelPrerequisitePermission {
+		t.Fatalf(
+			"platform tunnel resume missing_prerequisite = %q, want %q",
+			resumeResult.MissingPrerequisite,
+			clientcontrol.PlatformTunnelPrerequisitePermission,
+		)
+	}
+	if lifecycle.cleanupCalls != 0 {
+		t.Fatalf("cleanup calls = %d, want 0 before native resources are acquired", lifecycle.cleanupCalls)
+	}
+	if got := strings.Join(lifecycle.calls, ","); got != "acquire_permission,resume_after_permission" {
+		t.Fatalf(
+			"lifecycle calls = %q, want %q",
+			got,
+			"acquire_permission,resume_after_permission",
+		)
+	}
+	assertAndroidVPNExecutionPlan(t, resumeResult.ExecutionPlan)
 }
 
 func TestManagerPlatformTunnelStartReturnsResumablePermissionAttempt(t *testing.T) {
@@ -842,6 +1251,122 @@ func TestAndroidVPNServiceControllerPassesMaterializedLeaseToRuntimeAttach(t *te
 	}
 }
 
+func TestAndroidVPNServiceControllerAttachesStructuredProfileThroughResolvedArtifact(t *testing.T) {
+	t.Parallel()
+
+	lifecycle := &fakeAndroidVPNServiceLifecycle{}
+	controller, ok := newAndroidVPNServiceController(
+		supportedAndroidVPNServiceCapability(""),
+		lifecycle,
+	).(*androidVPNServiceController)
+	if !ok {
+		t.Fatal("newAndroidVPNServiceController() type assertion failed")
+	}
+	host := clientcontrol.New(
+		clientcontrol.WithBuildIdentity(currentBuildIdentity()),
+		clientcontrol.WithRegistry(provider.NewRegistry(fakeAndroidProviderAdapter{})),
+		clientcontrol.WithVPNTransportProfileStore(),
+		clientcontrol.WithPlatformTunnelCapabilities([]clientcontrol.PlatformTunnelCapability{
+			controller.Capability(),
+		}),
+	)
+	profile := createAndroidStructuredWireGuardTransportProfileOnHost(t, host)
+	controller.setWireGuardTurnLeaseProvider(func(
+		ctx context.Context,
+		req clientcontrol.PlatformTunnelStartRequest,
+		plan *clientcontrol.RuntimeExecutionPlan,
+	) (*clientcontrol.WireGuardTurnExecutionLease, error) {
+		if req.RuntimeDefaults == nil {
+			t.Fatal("RuntimeDefaults = nil, want explicit startup defaults")
+		}
+		return host.MaterializeWireGuardTurnExecutionLeaseForProfile(
+			ctx,
+			req.ResolutionID,
+			*req.RuntimeDefaults,
+			plan,
+			req.TransportProfile,
+		)
+	})
+
+	started, err := host.StartResolution(context.Background(), clientcontrol.StartResolutionRequest{
+		Provider: "android-test",
+		Input: &clientcontrol.ProviderInputEnvelope{
+			Kind: clientcontrol.ProviderInputKindLink,
+			Link: "https://calls.example.test/join/native-vpn",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartResolution() error = %v", err)
+	}
+	resolved, err := host.WaitResolution(context.Background(), started.ID)
+	if err != nil {
+		t.Fatalf("WaitResolution() error = %v", err)
+	}
+	if resolved.State != clientcontrol.ResolutionStateResolved {
+		t.Fatalf("resolution state = %q, want %q", resolved.State, clientcontrol.ResolutionStateResolved)
+	}
+
+	result, err := controller.Start(context.Background(), clientcontrol.PlatformTunnelStartRequest{
+		Mode:         clientcontrol.PlatformTunnelModeAndroidVPNService,
+		ResolutionID: resolved.ID,
+		RuntimeDefaults: &clientcontrol.RuntimeDefaults{
+			ListenAddr: "127.0.0.1:7777",
+		},
+		TransportProfile: &clientcontrol.TransportProfileReference{
+			ProfileID: profile.ID,
+		},
+	})
+	if err != nil {
+		t.Fatalf("controller.Start() error = %v", err)
+	}
+	if !result.Ready {
+		t.Fatalf("controller.Start() ready = false, want true: %+v", result)
+	}
+	if got := strings.Join(lifecycle.calls, ","); got != "acquire_permission,validate_route_policy,bringup_host,attach_runtime" {
+		t.Fatalf(
+			"lifecycle calls = %q, want %q",
+			got,
+			"acquire_permission,validate_route_policy,bringup_host,attach_runtime",
+		)
+	}
+	if len(lifecycle.attachedLeases) != 1 {
+		t.Fatalf("attached leases len = %d, want 1", len(lifecycle.attachedLeases))
+	}
+	lease := lifecycle.attachedLeases[0]
+	if lease.ResolutionID != resolved.ID {
+		t.Fatalf("lease resolution_id = %q, want %q", lease.ResolutionID, resolved.ID)
+	}
+	if lease.TURNServerAddress != "turn.example.test:3478" ||
+		lease.TURNUsername != "turn-user" ||
+		lease.TURNPassword != "turn-pass" {
+		t.Fatalf("lease TURN credentials = %+v, want fake provider credentials", lease)
+	}
+	if lease.PeerEndpointAddress != "relay.example.test:51820" {
+		t.Fatalf("lease peer endpoint = %q, want profile endpoint", lease.PeerEndpointAddress)
+	}
+	if strings.TrimSpace(lease.ClientPrivateKey) == "" {
+		t.Fatal("lease client private key = empty, want generated host-owned key")
+	}
+	if !stringSlicesEqual(lease.ClientAddresses, []string{"10.88.0.2/32"}) {
+		t.Fatalf("lease client addresses = %+v, want [10.88.0.2/32]", lease.ClientAddresses)
+	}
+	if lease.PeerPublicKey != androidWireGuardStructuredKey(2) {
+		t.Fatalf("lease peer public key = %q, want structured profile peer key", lease.PeerPublicKey)
+	}
+	if lease.PresharedKey != androidWireGuardStructuredKey(3) {
+		t.Fatalf("lease preshared key = %q, want structured profile PSK", lease.PresharedKey)
+	}
+	if !stringSlicesEqual(lease.AllowedIPs, []string{"10.88.0.0/16"}) {
+		t.Fatalf("lease allowed IPs = %+v, want [10.88.0.0/16]", lease.AllowedIPs)
+	}
+	if !stringSlicesEqual(lease.DNSServers, []string{"9.9.9.9"}) {
+		t.Fatalf("lease DNS servers = %+v, want [9.9.9.9]", lease.DNSServers)
+	}
+	if lease.MTU != 1420 || lease.PersistentKeepaliveSeconds != 23 {
+		t.Fatalf("lease mtu/keepalive = %d/%d, want 1420/23", lease.MTU, lease.PersistentKeepaliveSeconds)
+	}
+}
+
 type fakeAndroidVPNServiceLifecycle struct {
 	acquirePermissionErr error
 	resumePermissionErr  error
@@ -854,6 +1379,7 @@ type fakeAndroidVPNServiceLifecycle struct {
 	cleanupCalls          int
 	attachedLeaseIDs      []string
 	attachedLeasePresence []bool
+	attachedLeases        []clientcontrol.WireGuardTurnExecutionLease
 }
 
 func (f *fakeAndroidVPNServiceLifecycle) AcquirePermission(_ context.Context, _ clientcontrol.PlatformTunnelStartRequest) error {
@@ -881,6 +1407,7 @@ func (f *fakeAndroidVPNServiceLifecycle) AttachRuntime(_ context.Context, _ clie
 	f.attachedLeasePresence = append(f.attachedLeasePresence, lease != nil)
 	if lease != nil {
 		f.attachedLeaseIDs = append(f.attachedLeaseIDs, lease.ResolutionID)
+		f.attachedLeases = append(f.attachedLeases, cloneTestWireGuardTurnExecutionLease(*lease))
 	} else {
 		f.attachedLeaseIDs = append(f.attachedLeaseIDs, "")
 	}
@@ -916,6 +1443,110 @@ func testWireGuardTurnLeaseProvider() androidVPNServiceLeaseProvider {
 			AllowedIPs:           []string{"0.0.0.0/0"},
 		}, nil
 	}
+}
+
+type fakeAndroidProviderAdapter struct{}
+
+func (fakeAndroidProviderAdapter) Name() string {
+	return "android-test"
+}
+
+func (fakeAndroidProviderAdapter) Descriptor() provider.ProviderDescriptor {
+	return provider.ProviderDescriptor{
+		ID:            "android-test",
+		DisplayName:   "Android test provider",
+		InputKind:     provider.ProviderInputKindLink,
+		AuthPosture:   provider.ProviderAuthPostureNotApplicable,
+		BrowserPolicy: provider.ProviderBrowserPolicyNotRequired,
+		ArtifactFamilies: []provider.ArtifactFamily{
+			provider.ArtifactFamilyGenericTURN,
+		},
+		CapabilityHints: provider.ProviderCapabilityHints{
+			PotentialActions: []provider.ArtifactAction{
+				provider.ArtifactActionStartOnThisDevice,
+			},
+			RedactionPolicy: provider.SummaryOnlyArtifactRedactionPolicy(),
+		},
+	}
+}
+
+func (fakeAndroidProviderAdapter) Resolve(_ context.Context, _ string) (provider.Resolution, error) {
+	return provider.Resolution{
+		Credentials: provider.Credentials{
+			Username: "turn-user",
+			Password: "turn-pass",
+			Address:  "turn.example.test:3478",
+			TTL:      30 * time.Minute,
+		},
+		Metadata: map[string]string{
+			"provider": "android-test",
+		},
+	}, nil
+}
+
+func cloneTestWireGuardTurnExecutionLease(lease clientcontrol.WireGuardTurnExecutionLease) clientcontrol.WireGuardTurnExecutionLease {
+	lease.ClientAddresses = append([]string(nil), lease.ClientAddresses...)
+	lease.AllowedIPs = append([]string(nil), lease.AllowedIPs...)
+	lease.DNSServers = append([]string(nil), lease.DNSServers...)
+	if lease.ExpiresAt != nil {
+		expiresAt := lease.ExpiresAt.UTC()
+		lease.ExpiresAt = &expiresAt
+	}
+	return lease
+}
+
+func createAndroidStructuredWireGuardTransportProfileOnHost(
+	t *testing.T,
+	host *clientcontrol.Host,
+) clientcontrol.TransportProfileStatus {
+	t.Helper()
+
+	info := host.Info()
+	if info.TransportProfileStore == nil || len(info.TransportProfileStore.EditableKinds) == 0 {
+		t.Fatalf("transport_profile_store = %+v, want editable structured schema", info.TransportProfileStore)
+	}
+	if len(info.PlatformTunnels) == 0 || len(info.PlatformTunnels[0].ExecutionPlans) == 0 {
+		t.Fatalf("platform_tunnels = %+v, want Android VPN service execution plan", info.PlatformTunnels)
+	}
+	schema := info.TransportProfileStore.EditableKinds[0]
+	plan := info.PlatformTunnels[0].ExecutionPlans[0].Plan
+	result, err := host.CreateStructuredTransportProfile(clientcontrol.TransportProfileStructuredCreateRequest{
+		Draft: clientcontrol.TransportProfileStructuredDraft{
+			Kind:                       clientcontrol.TransportProfileKindWireGuardNativeV1,
+			SchemaVersion:              schema.SchemaVersion,
+			DisplayName:                "Structured Android WireGuard profile",
+			InterfacePrivateKeyAction:  clientcontrol.TransportProfileSecretUpdateActionGenerateHost,
+			InterfaceAddresses:         []string{"10.88.0.2/32"},
+			DNSServers:                 []string{"9.9.9.9"},
+			MTU:                        1420,
+			PeerPublicKey:              androidWireGuardStructuredKey(2),
+			PeerPresharedKey:           androidWireGuardStructuredKey(3),
+			PeerPresharedKeyAction:     clientcontrol.TransportProfileSecretUpdateActionReplaceSubmitted,
+			AllowedIPs:                 []string{"10.88.0.0/16"},
+			Endpoint:                   "relay.example.test:51820",
+			PersistentKeepaliveSeconds: 23,
+			DefaultFor:                 &plan,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateStructuredTransportProfile() error = %v", err)
+	}
+	if result.Profile.ID == "" {
+		t.Fatal("structured transport profile id = empty")
+	}
+	return result.Profile
+}
+
+func stringSlicesEqual(left []string, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func testHostFactory(
@@ -1005,6 +1636,68 @@ func importAndroidWireGuardTransportProfile(t *testing.T, baseURL string) client
 		t.Fatal("transport profile id = empty")
 	}
 	return status
+}
+
+func createAndroidStructuredWireGuardTransportProfile(t *testing.T, baseURL string) clientcontrol.TransportProfileStatus {
+	t.Helper()
+
+	info := getAndroidHostInfo(t, baseURL)
+	if info.TransportProfileStore == nil || len(info.TransportProfileStore.EditableKinds) == 0 {
+		t.Fatalf("transport_profile_store = %+v, want editable structured schema", info.TransportProfileStore)
+	}
+	schema := info.TransportProfileStore.EditableKinds[0]
+	if len(info.PlatformTunnels) == 0 || len(info.PlatformTunnels[0].ExecutionPlans) == 0 {
+		t.Fatalf("platform_tunnels = %+v, want Android VPN service execution plan", info.PlatformTunnels)
+	}
+	plan := info.PlatformTunnels[0].ExecutionPlans[0].Plan
+	req := clientcontrol.TransportProfileStructuredCreateRequest{
+		Draft: clientcontrol.TransportProfileStructuredDraft{
+			Kind:                       clientcontrol.TransportProfileKindWireGuardNativeV1,
+			SchemaVersion:              schema.SchemaVersion,
+			DisplayName:                "Structured Android WireGuard profile",
+			InterfacePrivateKeyAction:  clientcontrol.TransportProfileSecretUpdateActionGenerateHost,
+			InterfaceAddresses:         []string{"10.88.0.2/32"},
+			DNSServers:                 []string{"9.9.9.9"},
+			MTU:                        1420,
+			PeerPublicKey:              androidWireGuardStructuredKey(2),
+			PeerPresharedKey:           androidWireGuardStructuredKey(3),
+			PeerPresharedKeyAction:     clientcontrol.TransportProfileSecretUpdateActionReplaceSubmitted,
+			AllowedIPs:                 []string{"10.88.0.0/16"},
+			Endpoint:                   "relay.example.test:51820",
+			PersistentKeepaliveSeconds: 23,
+			DefaultFor:                 &plan,
+		},
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Post(baseURL+"/v1/transport-profiles:structured", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST /v1/transport-profiles:structured error = %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("POST /v1/transport-profiles:structured status = %d, want %d: %s", resp.StatusCode, http.StatusOK, body)
+	}
+	var result clientcontrol.TransportProfileStructuredSaveResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode structured transport profile result: %v", err)
+	}
+	if result.Profile.ID == "" {
+		t.Fatal("structured transport profile id = empty")
+	}
+	if len(result.GeneratedKeys) != 1 || strings.TrimSpace(result.GeneratedKeys[0].PublicKey) == "" {
+		t.Fatalf("generated keys = %+v, want public-key metadata", result.GeneratedKeys)
+	}
+	return result.Profile
+}
+
+func androidWireGuardStructuredKey(value byte) string {
+	return base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{value}, 32))
 }
 
 func getAndroidHostInfo(t *testing.T, baseURL string) clientcontrol.HostInfo {

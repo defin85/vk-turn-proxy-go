@@ -129,6 +129,8 @@ class MobileShellController extends ChangeNotifier {
   List<EventRecord> events = const <EventRecord>[];
   List<TransportProfileStatus> transportProfiles =
       const <TransportProfileStatus>[];
+  List<PlatformTunnelStatus> platformTunnelStatuses =
+      const <PlatformTunnelStatus>[];
   ProfileDraft draft = ProfileDraft.defaults();
   ManagedProviderDraft managedProviderDraft = ManagedProviderDraft.defaults();
   ProviderTemplateDraft providerTemplateDraft =
@@ -299,16 +301,100 @@ class MobileShellController extends ChangeNotifier {
         _activeTransportProfileImportAdapter() != null;
   }
 
+  bool canConfigureVPNTransportProfileForMode(PlatformTunnelMode mode) {
+    return _hostSupportsTransportProfileStore &&
+        _transportProfilePrerequisiteForMode(mode) != null &&
+        _transportProfileImportAdapterForMode(mode) != null;
+  }
+
+  bool get canEditVPNTransportProfile {
+    final schema = activeVPNTransportProfileEditorSchema;
+    if (schema == null) {
+      return false;
+    }
+    return activeVPNTransportProfileConfigured
+        ? schema.supportsStructuredUpdate
+        : schema.supportsStructuredCreate;
+  }
+
+  bool canEditVPNTransportProfileForMode(PlatformTunnelMode mode) {
+    final schema = vpnTransportProfileEditorSchemaForMode(mode);
+    if (schema == null) {
+      return false;
+    }
+    final configured = vpnTransportProfileStatusForMode(mode) != null;
+    return configured
+        ? schema.supportsStructuredUpdate
+        : schema.supportsStructuredCreate;
+  }
+
+  TransportProfileEditableKindSchema?
+  get activeVPNTransportProfileEditorSchema {
+    final mode = activePlatformTunnelMode;
+    if (mode == null) {
+      return null;
+    }
+    return vpnTransportProfileEditorSchemaForMode(mode);
+  }
+
+  TransportProfileEditableKindSchema? vpnTransportProfileEditorSchemaForMode(
+    PlatformTunnelMode mode,
+  ) {
+    final prerequisite = _transportProfilePrerequisiteForMode(mode);
+    final kind =
+        prerequisite?.missingKind ??
+        _firstTransportProfileKind(prerequisite?.requiredKinds);
+    if (kind == null) {
+      return null;
+    }
+    final capability = hostConnection?.info?.transportProfileStore;
+    if (capability == null) {
+      return null;
+    }
+    for (final schema in capability.editableKinds) {
+      if (schema.kind == kind) {
+        return schema;
+      }
+    }
+    return null;
+  }
+
+  RuntimeExecutionPlan? get activeVPNTransportProfileExecutionPlan {
+    final mode = activePlatformTunnelMode;
+    if (mode == null) {
+      return null;
+    }
+    return vpnTransportProfileExecutionPlanForMode(mode);
+  }
+
+  RuntimeExecutionPlan? vpnTransportProfileExecutionPlanForMode(
+    PlatformTunnelMode mode,
+  ) {
+    return _transportProfileExecutionPlanDescriptorForMode(mode)?.plan;
+  }
+
   bool get activeVPNTransportProfileConfigured {
     return activeVPNTransportProfileStatus != null;
   }
 
+  bool activeVPNTransportProfileConfiguredForMode(PlatformTunnelMode mode) {
+    return vpnTransportProfileStatusForMode(mode) != null;
+  }
+
   String? get activeVPNTransportProfileStatusSummary {
-    final prerequisite = activeTransportProfilePrerequisite;
+    final mode = activePlatformTunnelMode;
+    if (mode == null) {
+      return null;
+    }
+    return vpnTransportProfileStatusSummaryForMode(mode);
+  }
+
+  String? vpnTransportProfileStatusSummaryForMode(PlatformTunnelMode mode) {
+    final prerequisite = _transportProfilePrerequisiteForMode(mode);
     if (prerequisite == null) {
       return null;
     }
-    final profile = activeVPNTransportProfileStatus;
+    final profile = vpnTransportProfileStatusForMode(mode);
     if (profile == null) {
       return _copy.vpnTransportProfileStatusNotConfigured;
     }
@@ -324,8 +410,39 @@ class MobileShellController extends ChangeNotifier {
     return _copy.vpnTransportProfileStatusConfigured(kindLabel);
   }
 
+  String? vpnTransportProfileImportAdapterLabelForMode(
+    PlatformTunnelMode mode,
+  ) {
+    final adapter = _transportProfileImportAdapterForMode(mode);
+    if (adapter == null) {
+      return null;
+    }
+    final capability = hostConnection?.info?.transportProfileStore;
+    if (capability != null) {
+      for (final descriptor in capability.importAdapters) {
+        if (descriptor.id == adapter) {
+          final label = descriptor.displayName.trim();
+          if (label.isNotEmpty) {
+            return label;
+          }
+        }
+      }
+    }
+    return adapter.value;
+  }
+
   TransportProfileStatus? get activeVPNTransportProfileStatus {
-    final prerequisite = activeTransportProfilePrerequisite;
+    final mode = activePlatformTunnelMode;
+    if (mode == null) {
+      return null;
+    }
+    return vpnTransportProfileStatusForMode(mode);
+  }
+
+  TransportProfileStatus? vpnTransportProfileStatusForMode(
+    PlatformTunnelMode mode,
+  ) {
+    final prerequisite = _transportProfilePrerequisiteForMode(mode);
     final profileId =
         prerequisite?.selectedProfile?.profileId.trim().isNotEmpty == true
         ? prerequisite!.selectedProfile!.profileId.trim()
@@ -343,6 +460,32 @@ class MobileShellController extends ChangeNotifier {
       }
     }
     return null;
+  }
+
+  List<TransportProfileKind> vpnTransportProfileRequiredKindsForMode(
+    PlatformTunnelMode mode,
+  ) {
+    final descriptor = _transportProfileExecutionPlanDescriptorForMode(mode);
+    final prerequisite = descriptor?.transportProfile;
+    if (prerequisite != null && prerequisite.requiredKinds.isNotEmpty) {
+      return prerequisite.requiredKinds;
+    }
+    return descriptor?.requiredTransportProfileKinds ??
+        const <TransportProfileKind>[];
+  }
+
+  List<TransportProfileStatus> vpnTransportProfilesForMode(
+    PlatformTunnelMode mode,
+  ) {
+    final requiredKinds = vpnTransportProfileRequiredKindsForMode(mode);
+    if (requiredKinds.isEmpty) {
+      return transportProfiles;
+    }
+    return transportProfiles
+        .where((TransportProfileStatus profile) {
+          return requiredKinds.contains(profile.kind);
+        })
+        .toList(growable: false);
   }
 
   TransportProfilePrerequisiteStatus? get activeTransportProfilePrerequisite {
@@ -403,6 +546,15 @@ class MobileShellController extends ChangeNotifier {
 
   PlatformTunnelStartResult? platformTunnelResultFor(PlatformTunnelMode mode) {
     return _platformTunnelResults[mode];
+  }
+
+  PlatformTunnelStatus? platformTunnelStatusFor(PlatformTunnelMode mode) {
+    for (final status in platformTunnelStatuses) {
+      if (status.mode == mode) {
+        return status;
+      }
+    }
+    return null;
   }
 
   ResolutionRecord? get selectedResolutionRecord => _selectedResolutionRecord();
@@ -550,26 +702,37 @@ class MobileShellController extends ChangeNotifier {
   }
 
   Future<void> importVPNTransportProfile() async {
+    final mode = activePlatformTunnelMode;
+    if (mode == null) {
+      notice = _copy.noMobileTunnelModeSelected;
+      _notify();
+      return;
+    }
+    await importVPNTransportProfileForMode(mode);
+  }
+
+  Future<void> importVPNTransportProfileForMode(PlatformTunnelMode mode) async {
     await _runBridgeMutation(() async {
+      final descriptor = _transportProfileExecutionPlanDescriptorForMode(mode);
+      final prerequisite = descriptor?.transportProfile;
+      final adapter = _transportProfileImportAdapterForMode(mode);
+      if (adapter == null) {
+        notice = _copy.vpnTransportProfileRequiredBeforeStarting;
+        return;
+      }
       final contents = await _transportProfileContentPicker();
       if (contents == null) {
         return;
       }
-      final mode = activePlatformTunnelMode;
-      if (mode == null) {
-        notice = _copy.noMobileTunnelModeSelected;
-        return;
-      }
-      final descriptor = _transportProfileExecutionPlanDescriptorForMode(mode);
-      final prerequisite = descriptor?.transportProfile;
-      final adapter =
-          _activeTransportProfileImportAdapter() ??
-          TransportProfileImportAdapter.wireGuardConf;
       final kind =
           prerequisite?.missingKind ??
           _firstTransportProfileKind(prerequisite?.requiredKinds) ??
-          TransportProfileKind.wireGuardNativeV1;
-      final existing = activeVPNTransportProfileStatus;
+          _profileKindForImportAdapter(adapter);
+      if (kind == null) {
+        notice = _copy.vpnTransportProfileRequiredBeforeStarting;
+        return;
+      }
+      final existing = vpnTransportProfileStatusForMode(mode);
       await bridge.importTransportProfile(
         TransportProfileImportRequest(
           adapter: adapter,
@@ -586,9 +749,88 @@ class MobileShellController extends ChangeNotifier {
     });
   }
 
+  Future<TransportProfileStructuredValidationResult>
+  validateStructuredVPNTransportProfile(
+    TransportProfileStructuredValidationRequest request,
+  ) {
+    final mode = activePlatformTunnelMode;
+    if (mode == null) {
+      throw StateError('No mobile tunnel mode selected.');
+    }
+    return validateStructuredVPNTransportProfileForMode(mode, request);
+  }
+
+  Future<TransportProfileStructuredValidationResult>
+  validateStructuredVPNTransportProfileForMode(
+    PlatformTunnelMode mode,
+    TransportProfileStructuredValidationRequest request,
+  ) {
+    final schema = vpnTransportProfileEditorSchemaForMode(mode);
+    if (schema == null || !schema.supportsDraftValidation) {
+      throw StateError('Structured VPN profile editing is unavailable.');
+    }
+    return bridge.validateStructuredTransportProfileDraft(request);
+  }
+
+  Future<TransportProfileStructuredSaveResult>
+  saveStructuredVPNTransportProfile(
+    TransportProfileStructuredDraft draft,
+  ) async {
+    final mode = activePlatformTunnelMode;
+    if (mode == null) {
+      throw StateError('No mobile tunnel mode selected.');
+    }
+    return saveStructuredVPNTransportProfileForMode(mode, draft);
+  }
+
+  Future<TransportProfileStructuredSaveResult>
+  saveStructuredVPNTransportProfileForMode(
+    PlatformTunnelMode mode,
+    TransportProfileStructuredDraft draft, {
+    TransportProfileStatus? existingProfile,
+    bool createNew = false,
+  }) async {
+    final schema = vpnTransportProfileEditorSchemaForMode(mode);
+    if (schema == null) {
+      throw StateError('Structured VPN profile editing is unavailable.');
+    }
+    final existing = createNew
+        ? null
+        : existingProfile ?? vpnTransportProfileStatusForMode(mode);
+    if (existing == null && !schema.supportsStructuredCreate) {
+      throw StateError('Structured VPN profile creation is unavailable.');
+    }
+    if (existing != null && !schema.supportsStructuredUpdate) {
+      throw StateError('Structured VPN profile update is unavailable.');
+    }
+    final result = existing == null
+        ? await bridge.createStructuredTransportProfile(
+            TransportProfileStructuredCreateRequest(draft: draft),
+          )
+        : await bridge.updateStructuredTransportProfile(
+            existing.id,
+            TransportProfileStructuredUpdateRequest(draft: draft),
+          );
+    await _refreshHostInfo();
+    await refresh();
+    notice = _copy.vpnTransportProfileConfigured;
+    _notify();
+    return result;
+  }
+
   Future<void> forgetVPNTransportProfile() async {
+    final mode = activePlatformTunnelMode;
+    if (mode == null) {
+      notice = _copy.noMobileTunnelModeSelected;
+      _notify();
+      return;
+    }
+    await forgetVPNTransportProfileForMode(mode);
+  }
+
+  Future<void> forgetVPNTransportProfileForMode(PlatformTunnelMode mode) async {
     await _runBridgeMutation(() async {
-      final profile = activeVPNTransportProfileStatus;
+      final profile = vpnTransportProfileStatusForMode(mode);
       if (profile == null) {
         notice = _copy.vpnTransportProfileRequiredBeforeStarting;
         return;
@@ -597,6 +839,49 @@ class MobileShellController extends ChangeNotifier {
       await _refreshHostInfo();
       await refresh();
       notice = _copy.vpnTransportProfileCleared;
+    });
+  }
+
+  Future<void> forgetVPNTransportProfileRecord(
+    TransportProfileStatus profile,
+  ) async {
+    await _runBridgeMutation(() async {
+      await bridge.forgetTransportProfile(profile.id);
+      await _refreshHostInfo();
+      await refresh();
+      notice = _copy.vpnTransportProfileCleared;
+    });
+  }
+
+  Future<void> validateVPNTransportProfileRecord(
+    TransportProfileStatus profile,
+  ) async {
+    await _runBridgeMutation(() async {
+      await bridge.validateTransportProfile(profile.id);
+      await _refreshHostInfo();
+      await refresh();
+      notice = _copy.vpnTransportProfileConfigured;
+      _notify();
+    });
+  }
+
+  Future<void> selectVPNTransportProfileForMode(
+    PlatformTunnelMode mode,
+    TransportProfileStatus profile,
+  ) async {
+    await _runBridgeMutation(() async {
+      final plan = vpnTransportProfileExecutionPlanForMode(mode);
+      if (plan == null) {
+        notice = _copy.vpnTransportProfileRequiredBeforeStarting;
+        return;
+      }
+      await bridge.selectTransportProfileForStartup(
+        profile.id,
+        TransportProfileSelectForStartupRequest(plan: plan),
+      );
+      await _refreshHostInfo();
+      await refresh();
+      notice = _copy.vpnTransportProfileConfigured;
     });
   }
 
@@ -679,6 +964,9 @@ class MobileShellController extends ChangeNotifier {
       final nextTransportProfiles = _hostSupportsTransportProfileStore
           ? await bridge.transportProfiles()
           : const <TransportProfileStatus>[];
+      final nextPlatformTunnelStatuses = platformTunnels.isNotEmpty
+          ? await bridge.platformTunnelStatuses()
+          : const <PlatformTunnelStatus>[];
       final nextResolutions = _orderedResolutions(await bridge.resolutions());
       final nextSessions = _orderedSessions(await bridge.sessions());
       final nextChallenges = await _loadActiveChallenges(
@@ -689,6 +977,7 @@ class MobileShellController extends ChangeNotifier {
       managedProviders = _overlayManagedProviders(managedProviders);
       providerTemplates = _overlayProviderTemplates(providerTemplates);
       transportProfiles = nextTransportProfiles;
+      _replacePlatformTunnelStatuses(nextPlatformTunnelStatuses);
       resolutions = nextResolutions;
       draft = _normalizeDraft(draft);
       managedProviderDraft = _normalizeManagedProviderDraft(
@@ -2129,6 +2418,7 @@ class MobileShellController extends ChangeNotifier {
     await _runBridgeMutation(() async {
       final result = await bridge.stopPlatformTunnel(mode: mode);
       _platformTunnelResults.remove(mode);
+      await refresh();
       final message = result.message.trim();
       notice = message.isEmpty
           ? _copy.platformTunnelDisconnected(mode.label)
@@ -3093,6 +3383,58 @@ class MobileShellController extends ChangeNotifier {
 
   void _clearPlatformTunnelResults() {
     _platformTunnelResults.clear();
+    platformTunnelStatuses = const <PlatformTunnelStatus>[];
+  }
+
+  void _replacePlatformTunnelStatuses(List<PlatformTunnelStatus> nextStatuses) {
+    platformTunnelStatuses = nextStatuses;
+    final seenModes = <PlatformTunnelMode>{};
+    for (final status in nextStatuses) {
+      seenModes.add(status.mode);
+      final result = _platformTunnelResultFromStatus(status);
+      if (result == null) {
+        _platformTunnelResults.remove(status.mode);
+      } else {
+        _platformTunnelResults[status.mode] = result;
+      }
+    }
+    _platformTunnelResults.removeWhere(
+      (PlatformTunnelMode mode, PlatformTunnelStartResult _) =>
+          !seenModes.contains(mode),
+    );
+  }
+
+  PlatformTunnelStartResult? _platformTunnelResultFromStatus(
+    PlatformTunnelStatus status,
+  ) {
+    if (status.state == PlatformTunnelLifecycleState.stopped) {
+      return null;
+    }
+    if (status.state == PlatformTunnelLifecycleState.ready || status.ready) {
+      return PlatformTunnelStartResult(
+        mode: status.mode,
+        ready: true,
+        executionPlan: status.executionPlan,
+        transportProfile: status.transportProfile,
+        sessionId: status.sessionId,
+        underlayRoutePolicy: status.underlayRoutePolicy,
+        message: status.message,
+      );
+    }
+    if (status.stage == null || status.missingPrerequisite == null) {
+      return null;
+    }
+    return PlatformTunnelStartResult(
+      mode: status.mode,
+      ready: false,
+      executionPlan: status.executionPlan,
+      transportProfile: status.transportProfile,
+      stage: status.stage,
+      missingPrerequisite: status.missingPrerequisite,
+      startupAttemptId: status.startupAttemptId,
+      underlayRoutePolicy: status.underlayRoutePolicy,
+      message: status.message,
+    );
   }
 
   bool _requiresPlatformTunnelPermissionResume(
@@ -3659,15 +4001,69 @@ class MobileShellController extends ChangeNotifier {
   }
 
   TransportProfileImportAdapter? _activeTransportProfileImportAdapter() {
-    final prerequisite = activeTransportProfilePrerequisite;
-    if (prerequisite != null && prerequisite.importAdapters.isNotEmpty) {
-      return prerequisite.importAdapters.first;
+    final mode = activePlatformTunnelMode;
+    if (mode == null) {
+      return null;
     }
+    return _transportProfileImportAdapterForMode(mode);
+  }
+
+  TransportProfileImportAdapter? _transportProfileImportAdapterForMode(
+    PlatformTunnelMode mode,
+  ) {
     final capability = hostConnection?.info?.transportProfileStore;
     if (capability == null || capability.importAdapters.isEmpty) {
       return null;
     }
-    return capability.importAdapters.first.id;
+    final prerequisite = _transportProfilePrerequisiteForMode(mode);
+    final requiredKinds =
+        prerequisite?.requiredKinds ??
+        _transportProfileExecutionPlanDescriptorForMode(
+          mode,
+        )?.requiredTransportProfileKinds ??
+        const <TransportProfileKind>[];
+    final allowedAdapters =
+        prerequisite?.importAdapters ?? const <TransportProfileImportAdapter>[];
+    for (final descriptor in capability.importAdapters) {
+      if (allowedAdapters.isNotEmpty &&
+          !allowedAdapters.contains(descriptor.id)) {
+        continue;
+      }
+      if (!_transportProfileImportAdapterSupportedForKinds(
+        descriptor,
+        requiredKinds,
+      )) {
+        continue;
+      }
+      return descriptor.id;
+    }
+    return null;
+  }
+
+  bool _transportProfileImportAdapterSupportedForKinds(
+    TransportProfileImportAdapterDescriptor descriptor,
+    List<TransportProfileKind> requiredKinds,
+  ) {
+    if (requiredKinds.isNotEmpty &&
+        !requiredKinds.contains(descriptor.profileKind)) {
+      return false;
+    }
+    return descriptor.materialAcquisitionMethod?.canAcquireInShell == true;
+  }
+
+  TransportProfileKind? _profileKindForImportAdapter(
+    TransportProfileImportAdapter adapter,
+  ) {
+    final capability = hostConnection?.info?.transportProfileStore;
+    if (capability == null) {
+      return null;
+    }
+    for (final descriptor in capability.importAdapters) {
+      if (descriptor.id == adapter) {
+        return descriptor.profileKind;
+      }
+    }
+    return null;
   }
 
   TransportProfileReference? _transportProfileReferenceForPlan(
@@ -3704,9 +4100,10 @@ class MobileShellController extends ChangeNotifier {
   }
 
   String _transportProfileKindLabel(TransportProfileKind kind) {
-    return switch (kind) {
-      TransportProfileKind.wireGuardNativeV1 => 'WireGuard',
-    };
+    if (kind == TransportProfileKind.wireGuardNativeV1) {
+      return 'WireGuard';
+    }
+    return kind.value;
   }
 
   String? _platformTunnelRuntimeDefaultsBlockReason({

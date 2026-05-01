@@ -10,8 +10,9 @@ kinds that advertise editable schemas.
 
 - **GIVEN** a shell negotiates with a profile-store-capable host
 - **WHEN** the host supports structured editing for a profile kind
-- **THEN** the host capability metadata identifies the editable kind, supported
-  fields, lifecycle actions, and redaction guarantees
+- **THEN** the host capability metadata identifies the editable kind, schema
+  version, stable field descriptors, lifecycle actions, secret update actions,
+  and redaction guarantees
 - **AND** the shell suppresses structured editor actions for profile kinds or
   fields that the host does not advertise
 
@@ -20,6 +21,9 @@ kinds that advertise editable schemas.
 - **GIVEN** the host advertises structured editing for `wireguard_native_v1`
 - **WHEN** the shell submits a structured create or update request
 - **THEN** the request names the profile kind explicitly
+- **AND** each structured field uses host-advertised stable field ids and each
+  write-only secret field carries an explicit preserve, replace, or generate
+  action
 - **AND** the response returns a redacted `TransportProfileStatus`
 - **AND** the response does not include raw private keys, host-private storage
   paths, or generated config files
@@ -35,7 +39,8 @@ structured profile drafts without leaking secret-bearing submitted values.
   MTU, allowed IP, or unsupported optional field
 - **WHEN** validation fails
 - **THEN** the control plane returns a typed validation error that identifies
-  the affected field
+  the affected field and a stable violation code such as `required`, `unknown`,
+  `malformed`, `unsupported`, or `incompatible`
 - **AND** any message is redacted so it does not echo private keys, preshared
   keys, or equivalent secret-bearing values
 

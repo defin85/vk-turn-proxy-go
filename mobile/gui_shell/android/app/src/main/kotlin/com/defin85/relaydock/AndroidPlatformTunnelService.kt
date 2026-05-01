@@ -85,6 +85,23 @@ internal class AndroidPlatformTunnelService : VpnService() {
         super.onDestroy()
     }
 
+    override fun onRevoke() {
+        synchronized(lock) {
+            if (activeService === this) {
+                cleanupTunnelLocked()
+                activeService = null
+            }
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
+        stopSelf()
+        super.onRevoke()
+    }
+
     private fun buildNotification(): Notification {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

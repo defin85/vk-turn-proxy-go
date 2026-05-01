@@ -40,13 +40,15 @@ type transportProfileDiskRecord struct {
 }
 
 type transportProfileDiskWireGuard struct {
-	PrivateKey    string   `json:"private_key"`
-	Addresses     []string `json:"addresses,omitempty"`
-	DNSServers    []string `json:"dns_servers,omitempty"`
-	MTU           int      `json:"mtu,omitempty"`
-	PeerPublicKey string   `json:"peer_public_key"`
-	AllowedIPs    []string `json:"allowed_ips,omitempty"`
-	Endpoint      string   `json:"endpoint,omitempty"`
+	PrivateKey                 string   `json:"private_key"`
+	Addresses                  []string `json:"addresses,omitempty"`
+	DNSServers                 []string `json:"dns_servers,omitempty"`
+	MTU                        int      `json:"mtu,omitempty"`
+	PeerPublicKey              string   `json:"peer_public_key"`
+	PresharedKey               string   `json:"preshared_key,omitempty"`
+	AllowedIPs                 []string `json:"allowed_ips,omitempty"`
+	Endpoint                   string   `json:"endpoint,omitempty"`
+	PersistentKeepaliveSeconds int      `json:"persistent_keepalive_seconds,omitempty"`
 }
 
 func WithVPNTransportProfileStore() Option {
@@ -68,10 +70,11 @@ func defaultTransportProfileStoreCapability() TransportProfileStoreCapability {
 			TransportProfileKindWireGuardNativeV1,
 		},
 		ImportAdapters: []TransportProfileImportAdapterDescriptor{{
-			ID:          TransportProfileImportAdapterWireGuardConf,
-			ProfileKind: TransportProfileKindWireGuardNativeV1,
-			DisplayName: "WireGuard .conf",
-			Extensions:  []string{"conf"},
+			ID:                        TransportProfileImportAdapterWireGuardConf,
+			ProfileKind:               TransportProfileKindWireGuardNativeV1,
+			DisplayName:               "WireGuard .conf",
+			Extensions:                []string{"conf"},
+			MaterialAcquisitionMethod: TransportProfileMaterialAcquisitionMethodPlainText,
 		}},
 		LifecycleActions: []TransportProfileLifecycleAction{
 			TransportProfileLifecycleActionList,
@@ -80,12 +83,17 @@ func defaultTransportProfileStoreCapability() TransportProfileStoreCapability {
 			TransportProfileLifecycleActionForget,
 			TransportProfileLifecycleActionValidate,
 			TransportProfileLifecycleActionSelectForStartup,
+			TransportProfileLifecycleActionCreateStructured,
+			TransportProfileLifecycleActionUpdateStructured,
+			TransportProfileLifecycleActionValidateDraft,
+			TransportProfileLifecycleActionGenerateKey,
 		},
 		RedactionGuarantees: []string{
 			"ordinary_reads_exclude_raw_material",
 			"ordinary_reads_exclude_private_keys",
 			"ordinary_reads_exclude_host_private_paths",
 		},
+		EditableKinds: defaultTransportProfileEditableKindSchemas(),
 	}
 }
 
@@ -101,6 +109,7 @@ func cloneTransportProfileStoreCapability(capability *TransportProfileStoreCapab
 	}
 	clone.LifecycleActions = append([]TransportProfileLifecycleAction(nil), capability.LifecycleActions...)
 	clone.RedactionGuarantees = append([]string(nil), capability.RedactionGuarantees...)
+	clone.EditableKinds = cloneTransportProfileEditableKindSchemas(capability.EditableKinds)
 	return &clone
 }
 
@@ -203,7 +212,7 @@ func (h *Host) transportProfilePrerequisiteStatusLocked(
 		RequiredKinds:  append([]TransportProfileKind(nil), required...),
 		State:          TransportProfileCompatibilityStateIncompatible,
 		MissingKind:    required[0],
-		ImportAdapters: []TransportProfileImportAdapter{TransportProfileImportAdapterWireGuardConf},
+		ImportAdapters: h.importAdaptersForTransportProfileKindsLocked(required),
 		Message:        fmt.Sprintf("VPN transport profile %s is not configured.", required[0]),
 	}
 	scopeID := transportProfileDefaultScopeID(plan)
@@ -329,7 +338,7 @@ func (h *Host) SelectTransportProfileForStartup(
 	if !ok {
 		return TransportProfileStatus{}, ErrTransportProfileNotFound
 	}
-	requiredKinds := requiredTransportProfileKindsForPlan(req.Plan)
+	requiredKinds := h.requiredTransportProfileKindsForPlanLocked(req.Plan)
 	if len(requiredKinds) == 0 {
 		return TransportProfileStatus{}, fmt.Errorf("%w: selected execution plan does not require a VPN transport profile", ErrTransportProfileIncompatible)
 	}
@@ -471,6 +480,7 @@ func (h *Host) storeParsedTransportProfileLocked(
 	if profileID == "" {
 		profileID = h.newID()
 	}
+	previousProfile, hadPreviousProfile := h.transportProfiles[profileID]
 	importedAt := h.now().UTC()
 	if existing, ok := h.transportProfiles[profileID]; ok && !existing.status.ImportedAt.IsZero() {
 		importedAt = existing.status.ImportedAt.UTC()
@@ -500,16 +510,21 @@ func (h *Host) storeParsedTransportProfileLocked(
 		ImportedAt: importedAt,
 		UpdatedAt:  h.now().UTC(),
 	}
-	status.DefaultFor = h.defaultBindingsForImportedTransportProfileLocked(status, normalized.DefaultFor)
+	if normalized.DefaultFor != nil || !hadPreviousProfile {
+		status.DefaultFor = h.defaultBindingsForImportedTransportProfileLocked(status, normalized.DefaultFor)
+	} else {
+		status.DefaultFor = h.defaultBindingsForTransportProfileLocked(status)
+	}
 
-	previousProfile, hadPreviousProfile := h.transportProfiles[profileID]
 	previousDefaults := cloneTransportProfileDefaults(h.transportProfileDefaults)
 	h.transportProfiles[profileID] = managedTransportProfile{
 		status:    cloneTransportProfileStatus(status),
 		wireguard: cloneWireGuardProfile(parsed),
 	}
-	for _, binding := range status.DefaultFor {
-		h.transportProfileDefaults[binding.ScopeID] = profileID
+	if normalized.DefaultFor != nil || !hadPreviousProfile {
+		for _, binding := range status.DefaultFor {
+			h.transportProfileDefaults[binding.ScopeID] = profileID
+		}
 	}
 	h.refreshTransportProfileStatusesLocked()
 	status = h.transportProfiles[profileID].status
@@ -745,16 +760,22 @@ func transportProfileStatusActions() []TransportProfileLifecycleAction {
 		TransportProfileLifecycleActionReplace,
 		TransportProfileLifecycleActionForget,
 		TransportProfileLifecycleActionSelectForStartup,
+		TransportProfileLifecycleActionUpdateStructured,
+		TransportProfileLifecycleActionValidateDraft,
+		TransportProfileLifecycleActionGenerateKey,
 	}
 }
 
 func (h *Host) resolveTransportProfileForStartupLocked(
 	req PlatformTunnelStartRequest,
 	plan RuntimeExecutionPlan,
+	requiredKinds []TransportProfileKind,
 ) (*TransportProfileReference, error) {
-	requiredKinds := requiredTransportProfileKindsForPlan(plan)
 	if len(requiredKinds) == 0 {
-		return nil, nil
+		requiredKinds = requiredTransportProfileKindsForPlan(plan)
+		if len(requiredKinds) == 0 {
+			return nil, nil
+		}
 	}
 	if !h.transportProfileStoreEnabled {
 		return nil, fmt.Errorf("%w: host does not advertise VPN transport profile store support", ErrTransportProfileStoreUnavailable)
@@ -814,7 +835,7 @@ func (h *Host) attachTransportProfileToStartRequest(
 	if len(required) == 0 {
 		return req, PlatformTunnelStartResult{}, false
 	}
-	ref, err := h.resolveTransportProfileForStartupLocked(req, selectedPlan)
+	ref, err := h.resolveTransportProfileForStartupLocked(req, selectedPlan, required)
 	if err != nil {
 		return req, PlatformTunnelStartResult{
 			Mode:                req.Mode,
@@ -878,7 +899,7 @@ func (h *Host) materializeWireGuardTurnLeaseFromTransportProfile(
 	h.mu.Lock()
 	ref, err := h.resolveTransportProfileForStartupLocked(PlatformTunnelStartRequest{
 		TransportProfile: cloneTransportProfileReference(transportProfile),
-	}, descriptor.Plan)
+	}, descriptor.Plan, descriptor.RequiredTransportProfileKinds)
 	if err != nil {
 		h.mu.Unlock()
 		return nil, err
@@ -909,23 +930,25 @@ func (h *Host) materializeWireGuardTurnLeaseFromTransportProfile(
 		expiresAt = &value
 	}
 	return &WireGuardTurnExecutionLease{
-		ResolutionID:         resolutionID,
-		AccessMethod:         descriptor.Plan.AccessMethod,
-		CarrierFamily:        descriptor.Plan.CarrierFamily,
-		EngineFamily:         descriptor.Plan.EngineFamily,
-		RemoteEndpointFamily: descriptor.RemoteEndpointFamily,
-		RemoteEndpointRole:   WireGuardTurnRemoteEndpointRoleDatagramTermination,
-		TURNServerAddress:    turnServerAddress,
-		TURNUsername:         strings.TrimSpace(credentials.Username),
-		TURNPassword:         strings.TrimSpace(credentials.Password),
-		PeerEndpointAddress:  peerEndpointAddress,
-		ClientPrivateKey:     profile.PrivateKey,
-		ClientAddresses:      append([]string(nil), profile.Addresses...),
-		PeerPublicKey:        profile.PeerPublicKey,
-		AllowedIPs:           append([]string(nil), profile.AllowedIPs...),
-		DNSServers:           append([]string(nil), profile.DNSServers...),
-		MTU:                  profile.MTU,
-		ExpiresAt:            expiresAt,
+		ResolutionID:               resolutionID,
+		AccessMethod:               descriptor.Plan.AccessMethod,
+		CarrierFamily:              descriptor.Plan.CarrierFamily,
+		EngineFamily:               descriptor.Plan.EngineFamily,
+		RemoteEndpointFamily:       descriptor.RemoteEndpointFamily,
+		RemoteEndpointRole:         WireGuardTurnRemoteEndpointRoleDatagramTermination,
+		TURNServerAddress:          turnServerAddress,
+		TURNUsername:               strings.TrimSpace(credentials.Username),
+		TURNPassword:               strings.TrimSpace(credentials.Password),
+		PeerEndpointAddress:        peerEndpointAddress,
+		ClientPrivateKey:           profile.PrivateKey,
+		ClientAddresses:            append([]string(nil), profile.Addresses...),
+		PeerPublicKey:              profile.PeerPublicKey,
+		PresharedKey:               profile.PresharedKey,
+		AllowedIPs:                 append([]string(nil), profile.AllowedIPs...),
+		DNSServers:                 append([]string(nil), profile.DNSServers...),
+		MTU:                        profile.MTU,
+		PersistentKeepaliveSeconds: profile.PersistentKeepaliveSeconds,
+		ExpiresAt:                  expiresAt,
 	}, nil
 }
 
@@ -1003,6 +1026,40 @@ func requiredTransportProfileKindsForPlan(plan RuntimeExecutionPlan) []Transport
 		return []TransportProfileKind{TransportProfileKindWireGuardNativeV1}
 	}
 	return nil
+}
+
+func (h *Host) requiredTransportProfileKindsForPlanLocked(plan RuntimeExecutionPlan) []TransportProfileKind {
+	for _, capability := range h.platformTunnels {
+		for _, descriptor := range capability.ExecutionPlans {
+			if !runtimeExecutionPlanEquals(descriptor.Plan, plan) {
+				continue
+			}
+			if len(descriptor.RequiredTransportProfileKinds) > 0 {
+				return append([]TransportProfileKind(nil), descriptor.RequiredTransportProfileKinds...)
+			}
+		}
+	}
+	return requiredTransportProfileKindsForPlan(plan)
+}
+
+func (h *Host) importAdaptersForTransportProfileKindsLocked(required []TransportProfileKind) []TransportProfileImportAdapter {
+	capability := h.transportProfileStoreCapabilityLocked()
+	if capability == nil || len(required) == 0 {
+		return nil
+	}
+	out := make([]TransportProfileImportAdapter, 0, len(capability.ImportAdapters))
+	seen := make(map[TransportProfileImportAdapter]struct{}, len(capability.ImportAdapters))
+	for _, descriptor := range capability.ImportAdapters {
+		if !transportProfileKindAllowed(descriptor.ProfileKind, required) {
+			continue
+		}
+		if _, ok := seen[descriptor.ID]; ok {
+			continue
+		}
+		seen[descriptor.ID] = struct{}{}
+		out = append(out, descriptor.ID)
+	}
+	return out
 }
 
 func isKnownTransportProfileKind(kind TransportProfileKind) bool {
@@ -1094,13 +1151,15 @@ func wireGuardProfileToDisk(profile *wireguardprofile.Profile) *transportProfile
 		return nil
 	}
 	return &transportProfileDiskWireGuard{
-		PrivateKey:    profile.PrivateKey,
-		Addresses:     append([]string(nil), profile.Addresses...),
-		DNSServers:    append([]string(nil), profile.DNSServers...),
-		MTU:           profile.MTU,
-		PeerPublicKey: profile.PeerPublicKey,
-		AllowedIPs:    append([]string(nil), profile.AllowedIPs...),
-		Endpoint:      profile.Endpoint,
+		PrivateKey:                 profile.PrivateKey,
+		Addresses:                  append([]string(nil), profile.Addresses...),
+		DNSServers:                 append([]string(nil), profile.DNSServers...),
+		MTU:                        profile.MTU,
+		PeerPublicKey:              profile.PeerPublicKey,
+		PresharedKey:               profile.PresharedKey,
+		AllowedIPs:                 append([]string(nil), profile.AllowedIPs...),
+		Endpoint:                   profile.Endpoint,
+		PersistentKeepaliveSeconds: profile.PersistentKeepaliveSeconds,
 	}
 }
 
@@ -1109,13 +1168,15 @@ func wireGuardProfileFromDisk(profile *transportProfileDiskWireGuard) *wireguard
 		return nil
 	}
 	return &wireguardprofile.Profile{
-		PrivateKey:    strings.TrimSpace(profile.PrivateKey),
-		Addresses:     append([]string(nil), profile.Addresses...),
-		DNSServers:    append([]string(nil), profile.DNSServers...),
-		MTU:           profile.MTU,
-		PeerPublicKey: strings.TrimSpace(profile.PeerPublicKey),
-		AllowedIPs:    append([]string(nil), profile.AllowedIPs...),
-		Endpoint:      strings.TrimSpace(profile.Endpoint),
+		PrivateKey:                 strings.TrimSpace(profile.PrivateKey),
+		Addresses:                  append([]string(nil), profile.Addresses...),
+		DNSServers:                 append([]string(nil), profile.DNSServers...),
+		MTU:                        profile.MTU,
+		PeerPublicKey:              strings.TrimSpace(profile.PeerPublicKey),
+		PresharedKey:               strings.TrimSpace(profile.PresharedKey),
+		AllowedIPs:                 append([]string(nil), profile.AllowedIPs...),
+		Endpoint:                   strings.TrimSpace(profile.Endpoint),
+		PersistentKeepaliveSeconds: profile.PersistentKeepaliveSeconds,
 	}
 }
 

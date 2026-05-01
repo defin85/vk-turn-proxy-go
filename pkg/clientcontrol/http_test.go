@@ -1140,6 +1140,56 @@ func TestHandlerPlatformTunnelStopReturnsTypedResult(t *testing.T) {
 	}
 }
 
+func TestHandlerPlatformTunnelStatusReturnsLifecycleStatus(t *testing.T) {
+	host := New(
+		WithBuildIdentity(BuildIdentity{Target: "android/embedded"}),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{{
+			Mode:      PlatformTunnelModeAndroidVPNService,
+			Available: true,
+			SatisfiedPrerequisites: []PlatformTunnelPrerequisite{
+				PlatformTunnelPrerequisiteRouteExclusion,
+			},
+		}}),
+		WithPlatformTunnelStarter(func(_ context.Context, req PlatformTunnelStartRequest) (PlatformTunnelStartResult, error) {
+			return PlatformTunnelStartResult{
+				Mode:                req.Mode,
+				Ready:               false,
+				Stage:               PlatformTunnelStartupStagePermissionAcquire,
+				MissingPrerequisite: PlatformTunnelPrerequisitePermission,
+				StartupAttemptID:    "attempt-http-android-1",
+				Message:             "Android VPN permission is required.",
+			}, nil
+		}),
+	)
+	if _, err := host.StartPlatformTunnel(context.Background(), PlatformTunnelStartRequest{
+		Mode: PlatformTunnelModeAndroidVPNService,
+	}); err != nil {
+		t.Fatalf("StartPlatformTunnel() error = %v", err)
+	}
+	handler := Handler(host)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/platform-tunnels/status", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /v1/platform-tunnels/status code = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var statuses []PlatformTunnelStatus
+	if err := json.Unmarshal(rec.Body.Bytes(), &statuses); err != nil {
+		t.Fatalf("decode platform tunnel status response: %v", err)
+	}
+	if len(statuses) != 1 {
+		t.Fatalf("platform tunnel statuses len = %d, want 1: %+v", len(statuses), statuses)
+	}
+	if statuses[0].State != PlatformTunnelLifecycleStatePermission {
+		t.Fatalf("platform tunnel status state = %q, want %q", statuses[0].State, PlatformTunnelLifecycleStatePermission)
+	}
+	if statuses[0].StartupAttemptID != "attempt-http-android-1" {
+		t.Fatalf("platform tunnel status startup_attempt_id = %q, want attempt-http-android-1", statuses[0].StartupAttemptID)
+	}
+}
+
 func TestHandlerPlatformTunnelStartRejectsInvalidTypedFailureResult(t *testing.T) {
 	host := New(
 		WithBuildIdentity(testBuildIdentity()),
