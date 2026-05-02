@@ -798,3 +798,107 @@ in-canvas section switcher inside one workbench route.
 - **AND** switching does not discard the active draft or current selection of
   the workspace being left
 
+### Requirement: Desktop GUI uses the shared VPN transport profile workflow
+
+The desktop GUI SHALL use the shared VPN transport profile workflow for
+profile-backed desktop platform tunnel modes instead of exposing
+workstation-local WireGuard paths as the product configuration model.
+
+#### Scenario: Desktop WireGuard setup is profile-store driven
+
+- **GIVEN** a desktop host reports `windows_wintun` startup that requires a
+  `wireguard_native_v1` transport profile
+- **WHEN** the operator inspects the desktop VPN setup surface
+- **THEN** the GUI presents VPN transport profile setup, status, replace, and
+  forget actions
+- **AND** WireGuard `.conf` appears only as an import adapter for the
+  `wireguard_native_v1` profile kind
+
+#### Scenario: Desktop host lacks profile-store support
+
+- **GIVEN** a desktop host still relies on development env/default WireGuard
+  paths and does not advertise profile-store capability
+- **WHEN** the operator inspects product VPN setup
+- **THEN** the GUI does not present that path as configured product transport
+  profile state
+- **AND** startup remains unavailable or setup-needed until a profile-store
+  capable host reports compatible profile status
+
+### Requirement: Desktop GUI uses the shared structured VPN profile editor
+
+The desktop GUI SHALL use the shared structured VPN transport profile editor
+for profile-store-capable desktop hosts instead of requiring workstation-local
+WireGuard files as the only configuration path.
+
+#### Scenario: Desktop host advertises editable profile schema
+
+- **GIVEN** a desktop host reports a profile-backed platform tunnel mode
+- **AND** the host advertises structured editing for the required transport
+  profile kind
+- **WHEN** the operator opens the desktop Home or Routing setup surface
+- **THEN** the GUI offers create, edit, replace, import, and forget actions for
+  the VPN transport profile
+- **AND** startup remains profile-reference based
+- **AND** workstation-local environment/default WireGuard paths are not shown as
+  product profile state
+
+#### Scenario: Desktop host does not support structured editing
+
+- **GIVEN** a desktop host advertises profile-store support but not structured
+  editing for the required kind
+- **WHEN** the operator opens the desktop setup surface
+- **THEN** the GUI offers only the host-advertised actions such as import,
+  replace, forget, or select-for-startup
+- **AND** it does not render editable fields that the host has not advertised
+
+### Requirement: Desktop GUI renders VPN profile editors from host schemas
+
+The desktop GUI SHALL render VPN transport profile create and edit flows from
+host-advertised structured schemas instead of assuming every profile is a
+WireGuard profile.
+
+#### Scenario: Desktop shell renders host-advertised profile fields
+
+- **GIVEN** a desktop host advertises an editable VPN transport profile kind
+  with a structured schema
+- **WHEN** the operator opens the profile setup flow from Home or Routing
+- **THEN** the desktop shell renders fields, secret actions, validation errors,
+  and lifecycle actions from that schema
+- **AND** the shell does not expose workstation-local WireGuard paths,
+  WireGuard import, or WireGuard-only field labels unless those are advertised
+  for the required kind
+
+#### Scenario: Desktop shell fails closed on unsupported schema
+
+- **GIVEN** a desktop host reports a profile kind whose schema contains fields
+  or value kinds unsupported by the current shell
+- **WHEN** the operator opens the setup surface
+- **THEN** the shell reports structured editing as unsupported for that kind
+- **AND** it offers only host-advertised fallback lifecycle actions such as
+  import, replace, forget, or select-for-startup
+- **AND** it does not submit partial or guessed profile material
+
+### Requirement: Desktop GUI exposes a VPN transport profile manager
+
+The desktop GUI SHALL provide a workbench-native manager for multiple VPN
+transport profiles instead of assuming one implicit current transport profile.
+
+#### Scenario: Desktop manager lists and selects compatible profiles
+
+- **GIVEN** a desktop host reports multiple VPN transport profiles
+- **WHEN** the operator opens VPN transport setup from Home or Routing
+- **THEN** the desktop GUI lists profiles with redacted status, kind,
+  compatibility, and default/selected state
+- **AND** it filters or groups profiles by the active execution plan and
+  required kind
+- **AND** selecting a profile uses the host-advertised select-for-startup or
+  scoped-default action rather than mutating provider profile state
+
+#### Scenario: Desktop Profiles route links but does not own transport state
+
+- **GIVEN** a desktop product profile depends on native VPN transport material
+- **WHEN** the operator inspects that profile
+- **THEN** the profile view may link to the VPN transport profile manager
+- **AND** it does not expose raw transport material or become the primary
+  transport-profile library
+

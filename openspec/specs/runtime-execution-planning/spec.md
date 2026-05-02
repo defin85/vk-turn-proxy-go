@@ -46,14 +46,24 @@ Unsupported combinations SHALL fail closed.
 
 ### Requirement: The first packaged system-tunnel ready paths stay intentionally narrow
 
-The system SHALL keep the first packaged Android and desktop system-tunnel support claims scoped to documented TURN-backed `wireguard_native` execution plans until later changes add and verify additional engine families explicitly.
+The system SHALL keep the first packaged Android and desktop system-tunnel
+support claims scoped to documented TURN-backed `wireguard_native` execution
+plans until later changes add and verify additional engine families and their
+required transport profile kinds explicitly.
 
 #### Scenario: First packaged system-tunnel path remains `wireguard_native`
 
-- **GIVEN** a packaged host that reaches `ready=true` for one documented platform tunnel mode
-- **WHEN** the host reports the supported same-device execution plans for that mode
-- **THEN** the supported packaged system-tunnel plan is explicitly documented as TURN-backed and `wireguard_native`
-- **AND** the host does not imply that `webrtc_datachannel`, `proxy_core_adapter`, `trusttunnel_native`, or another engine family is also supported for that same mode
+- **GIVEN** a packaged host that reaches `ready=true` for one documented
+  platform tunnel mode
+- **WHEN** the host reports the supported same-device execution plans for that
+  mode
+- **THEN** the supported packaged system-tunnel plan is explicitly documented
+  as TURN-backed and `wireguard_native`
+- **AND** the host does not imply that `webrtc_datachannel`,
+  `proxy_core_adapter`, `trusttunnel_native`, or another engine family is also
+  supported for that same mode
+- **AND** the presence of an editable non-WireGuard transport profile schema
+  does not by itself make that profile kind a startable system-tunnel plan
 
 ### Requirement: Experimental and foreign-core execution plans are capability-gated
 
@@ -86,3 +96,89 @@ The system SHALL keep remote endpoint ownership explicit per carrier family inst
 - **THEN** the TURN-backed plan continues to name the documented TURN server family
 - **AND** the non-TURN plan requires its own documented remote endpoint family
 - **AND** the host does not imply that the current TURN server already satisfies that non-TURN role
+
+### Requirement: Runtime plans declare required transport profile material
+
+The system SHALL let runtime execution plans declare any required VPN transport
+profile kinds, material sources, and compatibility prerequisites separately
+from `access_method`, `carrier_family`, `engine_family`, and `host_adapter`.
+
+#### Scenario: WireGuard-native plan requires a compatible profile
+
+- **GIVEN** a packaged host advertises a strict `turn_datagram`
+  `wireguard_native` plan for a platform tunnel adapter
+- **WHEN** the shell reads the execution-plan metadata
+- **THEN** the plan declares that it requires a compatible
+  `wireguard_native_v1` transport profile or another explicitly documented
+  host-owned material source with equivalent redaction and lifecycle semantics
+- **AND** the shell does not infer that requirement from a hidden file name or
+  host-specific environment variable
+
+#### Scenario: Plan without transport profile prerequisite stays independent
+
+- **GIVEN** a future execution plan uses an engine family that does not require
+  app-owned VPN transport profile material
+- **WHEN** the host reports that plan
+- **THEN** the plan can declare no required transport profile kind
+- **AND** the shell does not force the WireGuard import workflow for that plan
+
+### Requirement: Execution planning reports profile prerequisite state
+
+The system SHALL expose missing, invalid, incompatible, and ready transport
+profile prerequisite state as part of plan support metadata so shells can
+render setup-needed states before startup.
+
+#### Scenario: Profile prerequisite is missing
+
+- **GIVEN** a host supports an adapter and engine in principle
+- **AND** the selected plan requires a transport profile that is not configured
+- **WHEN** the shell reads available execution plans
+- **THEN** the plan remains visible only with a setup-needed or unavailable
+  support state
+- **AND** the metadata identifies the missing transport profile kind
+- **AND** the metadata exposes the operator-visible setup action or import
+  adapter family needed to satisfy that prerequisite
+
+#### Scenario: Profile prerequisite is satisfied
+
+- **GIVEN** a compatible transport profile is configured for the selected host
+  and execution plan
+- **WHEN** the shell reads available execution plans
+- **THEN** the host may report that plan as startable with the selected or
+  default profile reference
+- **AND** startup still revalidates the profile before readiness is reported
+
+#### Scenario: Older host lacks profile-store capability
+
+- **GIVEN** a host reports a platform tunnel adapter but does not advertise the
+  VPN transport profile store capability
+- **WHEN** a plan requires profile-store material
+- **THEN** the plan is unavailable for that host
+- **AND** the shell does not render it as startable based on adapter support
+  alone
+
+### Requirement: Runtime plans bind transport profile kinds explicitly
+
+Runtime execution plans that require VPN transport material SHALL declare the
+specific transport profile kind or kinds they can materialize.
+
+#### Scenario: Non-WireGuard profile kind requires a matching plan
+
+- **GIVEN** a host advertises an editable profile kind other than
+  `wireguard_native_v1`
+- **WHEN** the host reports runtime execution plans
+- **THEN** that profile kind becomes startable only if a supported plan declares
+  it as a required profile kind for the selected access method, carrier family,
+  engine family, and host adapter
+- **AND** startup fails closed if the caller requests the profile kind through a
+  plan that does not declare that compatibility edge
+
+#### Scenario: Editable profile is not startable
+
+- **GIVEN** a host advertises structured editing for a future profile kind
+- **AND** the current build has no materializer or native adapter for that kind
+- **WHEN** the shell evaluates VPN startup readiness
+- **THEN** the shell reports setup or support state without enabling primary
+  connect
+- **AND** the host does not substitute a WireGuard plan or another engine family
+  implicitly

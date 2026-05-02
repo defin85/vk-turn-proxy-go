@@ -421,3 +421,144 @@ without inheriting one OS adapter's API names.
 - **AND** the shared contract does not require one OS adapter's API objects to
   appear outside the native adapter boundary
 
+### Requirement: Platform tunnel readiness includes transport profile prerequisites
+
+The system SHALL treat required VPN transport profile validation as a platform
+tunnel prerequisite, alongside native adapter bring-up, route policy, and
+runtime attach.
+
+#### Scenario: Native adapter exists but profile material is missing
+
+- **GIVEN** a packaged host can bring up a native tunnel adapter such as
+  `android_vpn_service` or `windows_wintun`
+- **AND** the requested execution plan requires a transport profile that is not
+  configured or compatible
+- **WHEN** startup validates platform tunnel prerequisites
+- **THEN** startup fails before `ready=true`
+- **AND** the failure identifies the missing or incompatible transport profile
+- **AND** the failure uses the typed `transport_profile` prerequisite rather
+  than a generic host implementation prerequisite
+- **AND** the host does not claim readiness from native adapter availability
+  alone
+
+#### Scenario: Transport profile is validated before runtime attach
+
+- **GIVEN** a selected platform tunnel mode, execution plan, and transport
+  profile reference
+- **WHEN** the host starts that mode
+- **THEN** it validates the profile against the plan before reporting readiness
+- **AND** readiness remains gated on native bring-up plus successful runtime
+  attach after profile validation
+
+#### Scenario: Profile validation failure does not trigger native cleanup
+
+- **GIVEN** a platform tunnel startup request fails during transport profile
+  validation
+- **WHEN** the host returns the startup failure
+- **THEN** the host has not yet created native tunnel resources that require
+  route or adapter cleanup
+- **AND** cleanup remains required only for failures after native bring-up or
+  route mutation begins
+
+### Requirement: Native Android VPN readiness requires RelayDock-owned evidence
+
+The system SHALL treat native Android VPN support as ready only when the
+packaged RelayDock app proves the direct `android_vpn_service` path without
+depending on the external WireGuard Android application.
+
+#### Scenario: Device smoke proves native RelayDock VPN readiness
+
+- **GIVEN** a packaged Android RelayDock build with native
+  `android_vpn_service` support
+- **AND** a structured `wireguard_native_v1` profile and resolved TURN artifact
+  are available
+- **WHEN** the repo-owned Android device or emulator smoke starts VPN inside
+  RelayDock
+- **THEN** the smoke grants or resumes Android VPN permission through the
+  RelayDock flow
+- **AND** it observes a ready `android_vpn_service` session from the embedded
+  host
+- **AND** it can disconnect the session through RelayDock
+- **AND** no step requires `com.wireguard.android`
+- **AND** the smoke verifies the active VPN is the packaged RelayDock
+  `VpnService` path rather than an external WireGuard tunnel
+
+#### Scenario: Android system revokes native VPN readiness
+
+- **GIVEN** RelayDock has reported a ready native `android_vpn_service` session
+- **WHEN** Android revokes the VPN grant, another VPN app becomes prepared, or
+  the service is stopped by the system
+- **THEN** the platform tunnel state transitions away from ready
+- **AND** runtime and native resources are cleaned up
+- **AND** the next status check reports stopped or failed state with diagnostics
+
+#### Scenario: External WireGuard compatibility does not satisfy native readiness
+
+- **GIVEN** the external WireGuard Android application can route traffic through
+  a RelayDock transport session
+- **WHEN** native Android VPN support is evaluated
+- **THEN** that compatibility result is recorded separately from native
+  `android_vpn_service` readiness
+- **AND** product readiness remains incomplete until RelayDock proves the direct
+  native path
+
+### Requirement: Library-backed native transport stays behind the platform tunnel boundary
+
+The system SHALL allow library-backed native WireGuard, TUN, crypto, and
+transport components only behind the platform tunnel host/native adapter
+boundary.
+
+#### Scenario: Native Android path uses a third-party transport library
+
+- **GIVEN** the `android_vpn_service` implementation uses a native library for
+  WireGuard, TUN, crypto, or packet transport
+- **WHEN** the platform tunnel reports lifecycle state to the shell
+- **THEN** the public contract remains the RelayDock platform-tunnel and
+  control-plane contract
+- **AND** the operator does not manage VPN through the library provider's own
+  application or UI
+
+### Requirement: Platform tunnel readiness is profile-kind specific
+
+Platform tunnel readiness SHALL be evaluated against the selected runtime
+execution plan and the concrete VPN transport profile kind required by that
+plan.
+
+#### Scenario: Future profile kind lacks native adapter evidence
+
+- **GIVEN** a host can store or edit a future VPN transport profile kind
+- **AND** the packaged native adapter has not proven startup for an execution
+  plan requiring that kind
+- **WHEN** platform tunnel readiness is evaluated
+- **THEN** readiness remains unavailable or setup-needed
+- **AND** the host does not claim that a WireGuard-ready adapter proves support
+  for the future kind
+
+#### Scenario: Concrete new transport proves readiness later
+
+- **GIVEN** a later change implements a concrete non-WireGuard VPN transport
+  profile kind
+- **WHEN** that change claims platform tunnel readiness
+- **THEN** it includes repo-owned host/native adapter evidence for start,
+  status recovery, diagnostics, and disconnect through RelayDock
+- **AND** it keeps external application workflows separate from RelayDock
+  native readiness claims
+
+### Requirement: Transport profile schemas do not own platform routing policy
+
+The system SHALL keep platform tunnel routing policy, app scope, underlay
+socket protection, and VPN permission lifecycle as platform-tunnel adapter
+responsibilities rather than implicit behavior hidden inside transport profile
+schemas.
+
+#### Scenario: Profile schema includes route-like material
+
+- **GIVEN** a transport profile schema includes engine material that resembles
+  route, allowed-app, DNS, MTU, or endpoint configuration
+- **WHEN** the host evaluates platform tunnel startup
+- **THEN** the host applies app scope, route scope, underlay socket protection,
+  and Android VPN permission state from the platform tunnel contract
+- **AND** it does not let profile material silently override RelayDock routing
+  or app-scope policy
+- **AND** conflicts fail closed with a typed prerequisite or policy error
+

@@ -1035,3 +1035,274 @@ into explicit create or detail flows.
 - **AND** dismissing or navigating back returns the operator to the saved-
   provider list-first root without making the template catalog the default root
 
+### Requirement: Store-target Android packages stay aligned with the production mobile-host slice
+
+The system SHALL keep Google Play-target Android packages aligned with the
+packaged-host production mobile slice rather than with debug-only local-device
+conveniences. Release package verification SHALL prove workstation-local
+packaged seed assets are absent from the staged store artifact.
+
+#### Scenario: Store-target Android package boots without debug-only local assets
+
+- **GIVEN** a Google Play-target Android package built through the documented
+  release workflow
+- **WHEN** the operator installs and launches that package
+- **THEN** the mobile GUI boots through the packaged mobile host bridge
+- **AND** it does not require a development bridge override or bundled
+  repo-local WireGuard development profile assets to start its supported
+  production slice
+
+#### Scenario: Store-target Android package excludes workstation-local packaged seed assets
+
+- **GIVEN** repo-local mobile debug assets or workstation-local seed files
+  exist while the Android release package is assembled for Google Play
+- **WHEN** the release packaging workflow stages the store-target artifact
+- **THEN** those local development assets are excluded from the packaged mobile
+  artifact
+- **AND** the release workflow does not read workstation-local WireGuard profile
+  environment or default local seed paths while producing the store-target
+  package
+- **AND** package content inspection fails the release if
+  `assets/wireguard/phone1.conf` or an equivalent packaged WireGuard seed is
+  present
+- **AND** the published package contents do not depend on one workstation's
+  local state
+
+### Requirement: Mobile GUI presents VPN transport profiles generically
+
+The mobile GUI SHALL present required local VPN transport material as VPN
+transport profiles, with WireGuard shown as the first supported profile type,
+instead of presenting the product workflow as a hidden or path-based
+WireGuard-only configuration prerequisite.
+
+#### Scenario: Missing profile blocks VPN startup with setup action
+
+- **GIVEN** the selected mobile mode is `android_vpn_service`
+- **AND** the selected execution plan requires a `wireguard_native_v1`
+  transport profile
+- **AND** no compatible profile is configured
+- **WHEN** the operator inspects the VPN home surface
+- **THEN** the VPN start action is setup-gated or disabled
+- **AND** the setup action names the missing VPN transport profile prerequisite
+  and offers the supported WireGuard import adapter
+- **AND** the UI does not instruct the operator to stage a hidden `phone1.conf`
+  file
+
+#### Scenario: Configured profile is visible without exposing secrets
+
+- **GIVEN** a compatible VPN transport profile is configured
+- **WHEN** the operator inspects the VPN home or settings surface
+- **THEN** the UI shows the profile kind, safe display metadata, and status
+- **AND** it offers replace and forget actions
+- **AND** it does not show raw private keys, peer secrets, or app-private
+  storage paths
+
+#### Scenario: Future profile kind does not reuse WireGuard copy
+
+- **GIVEN** a future host advertises a non-WireGuard transport profile kind
+- **WHEN** the mobile GUI renders profile setup for that plan
+- **THEN** the setup surface is driven by the advertised profile kind and
+  adapters
+- **AND** it does not force WireGuard `.conf` copy or validation for that
+  future engine
+
+### Requirement: Mobile GUI provides a structured VPN profile editor
+
+The mobile GUI SHALL let operators create and edit required VPN transport
+profiles through a structured product UI when the embedded host advertises an
+editable profile schema.
+
+#### Scenario: Missing profile offers create/edit path
+
+- **GIVEN** the active mobile VPN execution plan requires
+  `wireguard_native_v1`
+- **AND** no compatible profile is configured
+- **AND** the host advertises structured editing for that kind
+- **WHEN** the operator inspects the Home or Routing setup surface
+- **THEN** the primary setup path opens a VPN transport profile editor
+- **AND** WireGuard `.conf` import remains available as an alternate path
+- **AND** VPN startup stays disabled until a valid compatible profile is saved
+
+#### Scenario: Operator saves structured WireGuard profile
+
+- **GIVEN** the operator is editing a WireGuard transport profile
+- **WHEN** they provide valid required fields or request host-side key
+  generation and save
+- **THEN** the UI calls the structured profile-store operation
+- **AND** it returns to configured status with replace, edit, forget, and start
+  actions
+- **AND** it does not persist raw private-key material in shell state
+
+### Requirement: Mobile GUI handles profile editor errors inline
+
+The mobile GUI SHALL show structured profile validation errors near the fields
+that caused them and keep the previous profile state intact.
+
+#### Scenario: Invalid edit is rejected
+
+- **GIVEN** a compatible transport profile is already configured
+- **WHEN** the operator submits an invalid edit
+- **THEN** the UI shows field-level errors and a setup notice
+- **AND** the previous configured profile remains selected for startup
+- **AND** secret fields are cleared or redacted after the failed submit
+
+### Requirement: Mobile GUI provides RelayDock-native VPN management
+
+The mobile GUI SHALL let the operator manage the supported native Android VPN
+lifecycle inside RelayDock when the packaged host advertises
+`android_vpn_service`.
+
+#### Scenario: Operator starts the native VPN path inside RelayDock
+
+- **GIVEN** the packaged Android host advertises `android_vpn_service`
+- **AND** a structured `wireguard_native_v1` profile is configured
+- **AND** a resolved TURN artifact is available for startup
+- **WHEN** the operator starts VPN from the mobile shell
+- **THEN** the shell requests native startup through the control plane
+- **AND** the shell drives any required Android VPN permission and resume flow
+- **AND** the shell shows ready state only after the host reports a ready
+  `android_vpn_service` session
+- **AND** the shell shows state from host/control-plane lifecycle rather than
+  treating a local button result as permanent VPN truth
+- **AND** the shell does not redirect the operator to the external WireGuard
+  Android application
+
+#### Scenario: Missing native profile stays in RelayDock setup
+
+- **GIVEN** the packaged Android host advertises `android_vpn_service`
+- **AND** no startable structured VPN transport profile exists
+- **WHEN** the operator attempts to configure the native VPN path
+- **THEN** the shell opens the RelayDock profile setup/edit flow
+- **AND** `.conf` import remains an in-app adapter into the same structured
+  profile store
+- **AND** `Routing` may link to the native VPN profile setup flow but does not
+  embed the generic TURN/runtime profile editor as a routing control
+- **AND** `Routing` does not duplicate the primary VPN start or disconnect
+  action owned by `Home`
+- **AND** the shell does not require profile setup in an external WireGuard
+  Android application
+
+#### Scenario: Operator disconnects the native VPN path inside RelayDock
+
+- **GIVEN** the mobile shell shows a ready `android_vpn_service` session
+- **WHEN** the operator chooses the primary disconnect action
+- **THEN** the shell sends the stop request through the control plane
+- **AND** the shell updates to stopped or failed state from host lifecycle
+  events
+- **AND** the shell keeps session diagnostics reachable for the completed
+  attempt
+
+#### Scenario: Shell recovers native VPN state after foreground return
+
+- **GIVEN** the operator returns to RelayDock after Android or another VPN app
+  changed the active VPN state
+- **WHEN** the mobile shell refreshes native VPN status
+- **THEN** the shell queries the host/control-plane lifecycle state
+- **AND** it reflects ready, stopped, failed, revoked, or setup-needed state
+  from the host
+- **AND** it does not keep showing a stale ready state from a previous
+  shell-local action
+
+### Requirement: Mobile GUI excludes external WireGuard app evidence from native acceptance
+
+The mobile GUI SHALL NOT present the external WireGuard Android application as
+the product path for native VPN management.
+
+#### Scenario: External WireGuard app is installed
+
+- **GIVEN** `com.wireguard.android` is installed on the device
+- **AND** the packaged RelayDock host advertises `android_vpn_service`
+- **WHEN** the mobile shell presents native VPN setup or start controls
+- **THEN** the shell keeps controls inside RelayDock
+- **AND** any external WireGuard-app state is ignored for native VPN readiness
+  claims
+
+### Requirement: Mobile GUI renders VPN profile editors from host schemas
+
+The mobile GUI SHALL render VPN transport profile create and edit flows from
+host-advertised structured schemas instead of using a WireGuard-only form.
+
+#### Scenario: Mobile shell renders non-WireGuard profile setup
+
+- **GIVEN** the embedded host advertises an editable VPN transport profile kind
+  with a structured schema
+- **WHEN** the operator opens the RelayDock profile setup flow from Home or
+  Routing
+- **THEN** the mobile shell renders supported fields from the advertised schema
+- **AND** it labels the concrete profile kind from host or shell metadata
+- **AND** it does not show WireGuard-only controls such as `.conf` import,
+  private-key generation, peer public key, or allowed IPs unless the schema or
+  adapter metadata advertises those controls for the required kind
+
+#### Scenario: Mobile shell keeps startup disabled for editable-only kinds
+
+- **GIVEN** the mobile shell can render a profile editor for a future profile
+  kind
+- **AND** the host does not advertise a supported runtime execution plan for
+  that kind
+- **WHEN** the operator saves or views that profile
+- **THEN** the shell shows the profile as configured or unsupported according
+  to host status
+- **AND** the primary VPN connect action on Home remains unavailable with an
+  explicit support or prerequisite reason
+
+#### Scenario: Mobile shell rejects unsupported schema fields
+
+- **GIVEN** the embedded host advertises a VPN transport profile schema with a
+  field or value kind unsupported by the mobile shell
+- **WHEN** the operator opens the profile setup flow
+- **THEN** the mobile shell reports structured editing as unsupported for that
+  kind or field
+- **AND** it does not render a guessed WireGuard control or submit partial
+  profile material
+- **AND** it may offer only host-advertised fallback actions that the mobile
+  shell can execute
+
+### Requirement: Mobile GUI keeps VPN start ownership on Home
+
+The mobile GUI SHALL keep VPN connect and disconnect ownership on the Home
+primary action while non-Home surfaces provide status and setup only.
+
+#### Scenario: Routing links to setup without starting VPN
+
+- **GIVEN** a VPN transport profile kind requires setup or edit
+- **WHEN** the operator opens Routing
+- **THEN** Routing may show profile status and setup/edit/import/forget links
+- **AND** Routing does not duplicate Home's primary VPN connect or disconnect
+  action for WireGuard or any future profile kind
+
+### Requirement: Mobile GUI exposes a VPN transport profile manager
+
+The mobile GUI SHALL provide a native RelayDock manager for multiple VPN
+transport profiles when the host reports more than one configured or
+configurable profile.
+
+#### Scenario: Home opens transport profile manager from setup-needed state
+
+- **GIVEN** Home cannot start VPN because the selected execution plan needs a
+  VPN transport profile
+- **WHEN** the operator opens the setup action
+- **THEN** the mobile shell opens a VPN transport profile manager filtered to
+  the required kind and execution plan
+- **AND** the manager lists configured profiles with redacted status and
+  compatibility
+- **AND** it offers only host-advertised create, import, edit, forget,
+  validate, and select actions
+
+#### Scenario: Routing opens manager without owning startup
+
+- **GIVEN** multiple VPN transport profiles are configured or configurable
+- **WHEN** the operator opens Routing profile setup or status
+- **THEN** Routing may open the same transport profile manager filtered to the
+  active platform tunnel context
+- **AND** choosing or editing a profile updates setup/default selection state
+- **AND** VPN connect and disconnect remain Home primary actions
+
+#### Scenario: Provider profiles stay separate
+
+- **GIVEN** the operator is viewing product/provider Profiles
+- **WHEN** a selected product profile requires native VPN transport material
+- **THEN** Profiles may link to the VPN transport profile manager
+- **AND** Profiles does not store raw transport secrets, choose implicit
+  startup defaults, or become the primary transport-profile library
+

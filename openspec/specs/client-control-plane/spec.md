@@ -557,3 +557,252 @@ Apple-specific API objects.
 - **AND** it does not require Flutter shells or the Go control plane to speak
   one OS adapter's APIs directly
 
+### Requirement: Client control plane exposes VPN transport profile store capability
+
+The system SHALL expose VPN transport profile store support through versioned
+client-control-plane capability metadata and typed profile-store operations.
+
+#### Scenario: Updated shell negotiates profile-store support
+
+- **GIVEN** a shell build expects host-owned VPN transport profiles
+- **WHEN** it negotiates with a host
+- **THEN** the host advertises whether profile-store operations are supported
+- **AND** it reports supported profile kinds, import adapters, lifecycle
+  actions, and redaction guarantees
+- **AND** the shell fails closed or suppresses profile-store UX when the host
+  lacks that capability
+
+#### Scenario: Shell imports profile material through a typed action
+
+- **GIVEN** a compatible host advertises one or more profile import adapters
+- **WHEN** the shell imports material through a supported adapter
+- **THEN** the request names the adapter and target profile kind explicitly
+- **AND** the host returns a redacted profile status with a stable profile id
+- **AND** the response does not expose the stored raw material or platform path
+
+### Requirement: Client control plane reports transport profile failures with typed startup semantics
+
+The system SHALL represent missing or invalid VPN transport profile material
+with typed prerequisite and startup-stage values, such as
+`missing_prerequisite=transport_profile` and `stage=profile_validate`, instead
+of collapsing the failure into generic host implementation errors.
+
+#### Scenario: Startup fails because the profile is missing
+
+- **GIVEN** a selected execution plan requires a VPN transport profile
+- **AND** no compatible profile reference or scoped default is available
+- **WHEN** platform tunnel startup validation runs
+- **THEN** the startup result reports `missing_prerequisite=transport_profile`
+- **AND** the failure stage reports `profile_validate` rather than native
+  adapter bring-up or runtime attach
+
+#### Scenario: Startup fails because the profile reference is invalid
+
+- **GIVEN** the shell sends a stale, forgotten, or incompatible transport
+  profile reference
+- **WHEN** platform tunnel startup validation runs
+- **THEN** the startup result reports `missing_prerequisite=transport_profile`
+  with a redacted incompatibility message
+- **AND** the host does not remap that failure to `host_implementation`
+
+### Requirement: Platform tunnel startup uses transport profile references
+
+The system SHALL carry required VPN transport material into startup through a
+profile reference or a host-reported scoped default profile reference instead
+of raw config text, private keys, or shell-visible filesystem paths.
+
+#### Scenario: Shell starts a tunnel with a selected profile reference
+
+- **GIVEN** a runtime execution plan requires a configured transport profile
+- **AND** the shell has selected a compatible profile id reported by the host
+  or the host reports a scoped default profile reference for that exact plan
+- **WHEN** the shell requests platform tunnel startup through the control plane
+- **THEN** the request carries the selected profile reference
+- **AND** the host materializes any secret-bearing startup lease internally
+- **AND** ordinary startup responses remain redacted
+
+#### Scenario: Shell sends stale profile reference
+
+- **GIVEN** the shell requests startup with a profile id that was forgotten,
+  replaced incompatibly, or is no longer valid for the selected plan
+- **WHEN** the host validates startup
+- **THEN** startup fails closed with a typed profile prerequisite error
+- **AND** the host does not fall back to another profile or a hidden packaged
+  seed
+
+### Requirement: Client control plane exposes structured profile editing
+
+The client control plane SHALL expose versioned structured create, update,
+validation preview, and key-generation operations for VPN transport profile
+kinds that advertise editable schemas.
+
+#### Scenario: Shell discovers editable profile kinds
+
+- **GIVEN** a shell negotiates with a profile-store-capable host
+- **WHEN** the host supports structured editing for a profile kind
+- **THEN** the host capability metadata identifies the editable kind, schema
+  version, stable field descriptors, lifecycle actions, secret update actions,
+  and redaction guarantees
+- **AND** the shell suppresses structured editor actions for profile kinds or
+  fields that the host does not advertise
+
+#### Scenario: Shell creates or updates profile through structured payload
+
+- **GIVEN** the host advertises structured editing for `wireguard_native_v1`
+- **WHEN** the shell submits a structured create or update request
+- **THEN** the request names the profile kind explicitly
+- **AND** each structured field uses host-advertised stable field ids and each
+  write-only secret field carries an explicit preserve, replace, or generate
+  action
+- **AND** the response returns a redacted `TransportProfileStatus`
+- **AND** the response does not include raw private keys, host-private storage
+  paths, or generated config files
+
+### Requirement: Client control plane reports structured field errors safely
+
+The client control plane SHALL return field-aware validation failures for
+structured profile drafts without leaking secret-bearing submitted values.
+
+#### Scenario: Structured draft has invalid field values
+
+- **GIVEN** a structured WireGuard draft has an invalid address, key, endpoint,
+  MTU, allowed IP, or unsupported optional field
+- **WHEN** validation fails
+- **THEN** the control plane returns a typed validation error that identifies
+  the affected field and a stable violation code such as `required`, `unknown`,
+  `malformed`, `unsupported`, or `incompatible`
+- **AND** any message is redacted so it does not echo private keys, preshared
+  keys, or equivalent secret-bearing values
+
+#### Scenario: Validation preview does not mutate profile store
+
+- **GIVEN** the shell previews validation for a structured profile draft
+- **WHEN** the draft is invalid or incompatible
+- **THEN** the host returns validation diagnostics without creating or updating
+  a stored profile
+- **AND** existing profile status and startup defaults remain unchanged
+
+### Requirement: Control plane exposes RelayDock-owned native VPN lifecycle actions
+
+The client control plane SHALL expose native VPN setup, start, resume, status,
+and stop actions without leaking Android-specific APIs or raw profile secrets
+into Flutter shell state.
+
+#### Scenario: Shell starts native VPN through canonical control plane
+
+- **GIVEN** the shell has selected a structured VPN transport profile
+- **AND** a resolved TURN artifact is available for startup
+- **WHEN** the shell requests native VPN startup
+- **THEN** the control plane accepts profile and artifact references rather than
+  raw secret material
+- **AND** it returns a typed startup attempt, current lifecycle state, and any
+  required operator action
+- **AND** it fails before native bring-up when the referenced profile or
+  artifact is missing, expired, incompatible, or no longer authorized for the
+  selected runtime plan
+- **AND** it does not expose Android `VpnService` objects or platform-channel
+  details to the shell
+
+#### Scenario: Shell resumes after Android permission
+
+- **GIVEN** a native Android startup attempt is waiting for VPN permission
+- **WHEN** the operator grants permission and the shell resumes the attempt
+- **THEN** the control plane continues the same startup attempt
+- **AND** it reports ready only after the host completes native runtime attach
+- **AND** it reports a failed or blocked state if permission is denied or
+  cancelled
+
+#### Scenario: Shell stops native VPN through canonical control plane
+
+- **GIVEN** a native VPN attempt is starting or ready
+- **WHEN** the shell requests stop
+- **THEN** the control plane routes stop to the embedded host
+- **AND** it exposes the resulting stopped or failed lifecycle state
+- **AND** it keeps diagnostics associated with the attempt
+
+### Requirement: Control plane distinguishes native VPN lifecycle states
+
+The client control plane SHALL report lifecycle states precise enough for the
+mobile GUI to present setup, permission, starting, ready, stopping, stopped, and
+failed native VPN states.
+
+#### Scenario: Native lifecycle state is queryable
+
+- **GIVEN** the operator opens the mobile shell while a native VPN attempt
+  exists
+- **WHEN** the shell queries current control-plane state
+- **THEN** the response identifies whether setup is needed, permission is
+  pending, startup is in progress, VPN is ready, stop is in progress, the
+  attempt is stopped, or the attempt failed
+- **AND** the response identifies the selected profile, platform tunnel mode,
+  scope policy, session identity when available, and actionable diagnostics
+
+#### Scenario: Native lifecycle state survives shell restart
+
+- **GIVEN** the Flutter shell process restarts or returns to foreground while a
+  native VPN attempt is active, stopped, failed, or revoked
+- **WHEN** the shell queries the control plane
+- **THEN** the response is derived from host-owned lifecycle state
+- **AND** the shell can recover the current state without relying on a
+  previously cached local startup result
+
+### Requirement: Control-plane clients preserve unknown transport profile metadata
+
+The client control plane SHALL preserve host-advertised transport profile kind,
+schema, and import-adapter metadata even when a shell build does not have a
+compile-time case for that concrete kind.
+
+#### Scenario: Unknown profile kind is reported
+
+- **GIVEN** a host includes a transport profile kind unknown to the shell build
+- **WHEN** the shell negotiates host capabilities or reads profile status
+- **THEN** the client model keeps the raw kind value available for display,
+  setup decisions, diagnostics, and fail-closed validation
+- **AND** it does not coerce that value to `wireguard_native_v1`
+- **AND** it does not drop unrelated platform tunnel or profile-store
+  capability data from the same response
+
+#### Scenario: Unknown import adapter is reported
+
+- **GIVEN** a host advertises an import adapter unknown to the shell build
+- **WHEN** the shell evaluates profile setup actions
+- **THEN** the client model preserves the adapter id, target profile kind, and
+  display metadata
+- **AND** the shell uses the adapter only when the host advertises the adapter
+  for the required kind
+- **AND** the shell executes the adapter only when it supports the advertised
+  material acquisition method
+- **AND** otherwise startup and import fail closed with an explicit unsupported
+  action
+
+### Requirement: Structured save payloads follow advertised schemas
+
+The client control plane SHALL build structured create, update, validation, and
+key-generation requests from the advertised profile-kind schema instead of from
+WireGuard-specific request shapes.
+
+#### Scenario: Shell saves a schema-rendered profile
+
+- **GIVEN** a host advertises structured create or update for a profile kind
+- **AND** the shell renders the editor from that schema
+- **WHEN** the operator saves the draft
+- **THEN** the client sends the profile kind, schema version, a field-value map
+  keyed by stable field ids, and an explicit secret-action map required by that
+  schema
+- **AND** it does not include fields that the schema did not advertise as
+  supported
+- **AND** non-WireGuard kinds are not serialized through WireGuard-shaped draft
+  fields
+- **AND** it clears submitted secret field values from shell memory after the
+  request completes or fails
+
+#### Scenario: Shell receives untrusted presentation metadata
+
+- **GIVEN** a host schema includes labels, helper text, grouping hints, or
+  validation messages
+- **WHEN** a shell renders those values
+- **THEN** it treats them as inert display text
+- **AND** it does not execute host-provided links, markup, commands, or scripts
+- **AND** host-provided presentation metadata does not replace host-side
+  validation authority
+
