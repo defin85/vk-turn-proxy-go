@@ -332,6 +332,7 @@ void main() {
                 },
                 'support_state': 'supported',
                 'remote_endpoint_family': 'turn_server',
+                'remote_endpoint_role': 'turn_dtls_custom_overlay',
                 'default': true,
               },
               <String, dynamic>{
@@ -343,6 +344,7 @@ void main() {
                 },
                 'support_state': 'unavailable',
                 'remote_endpoint_family': 'turn_server',
+                'remote_endpoint_role': 'wireguard_raw_datagram',
                 'message': 'packaged host missing tunnel implementation',
               },
             ],
@@ -363,6 +365,20 @@ void main() {
             .first
             .isSelectable,
         isTrue,
+      );
+      expect(
+        artifact
+            .executionPlansForAction(ArtifactAction.startOnThisDevice)
+            .first
+            .remoteEndpointRole,
+        RuntimeRemoteEndpointRole.turnDtlsCustomOverlay,
+      );
+      expect(
+        artifact
+            .executionPlansForAction(ArtifactAction.startOnThisDevice)
+            .last
+            .remoteEndpointRole,
+        RuntimeRemoteEndpointRole.wireGuardRawDatagram,
       );
       expect(
         artifact

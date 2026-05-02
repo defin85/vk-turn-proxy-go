@@ -54,6 +54,7 @@ func TestValidateRuntimeExecutionPlanDescriptorAcceptsDocumentedCurrentOverlayPl
 		},
 		SupportState:         RuntimeExecutionPlanSupportStateSupported,
 		RemoteEndpointFamily: RuntimeRemoteEndpointFamilyTURNServer,
+		RemoteEndpointRole:   RuntimeRemoteEndpointRoleTURNDTLSCustomOverlay,
 		Default:              true,
 	}
 
@@ -72,10 +73,33 @@ func TestValidateRuntimeExecutionPlanDescriptorRejectsUndocumentedCompatibilityE
 		},
 		SupportState:         RuntimeExecutionPlanSupportStateSupported,
 		RemoteEndpointFamily: RuntimeRemoteEndpointFamilyTURNServer,
+		RemoteEndpointRole:   RuntimeRemoteEndpointRoleWireGuardRawDatagram,
 	}
 
 	if err := validateRuntimeExecutionPlanDescriptor(descriptor); err == nil {
 		t.Fatal("validateRuntimeExecutionPlanDescriptor() error = nil, want compatibility matrix failure")
+	}
+}
+
+func TestValidateRuntimeExecutionPlanDescriptorRejectsWireGuardPlanWithDTLSRole(t *testing.T) {
+	descriptor := RuntimeExecutionPlanDescriptor{
+		Plan: RuntimeExecutionPlan{
+			AccessMethod:  RuntimeAccessMethodTURNCredentials,
+			CarrierFamily: RuntimeCarrierFamilyTURNDatagram,
+			EngineFamily:  RuntimeEngineFamilyWireGuardNative,
+			HostAdapter:   RuntimeHostAdapterWindowsWintun,
+		},
+		SupportState:         RuntimeExecutionPlanSupportStateSupported,
+		RemoteEndpointFamily: RuntimeRemoteEndpointFamilyTURNServer,
+		RemoteEndpointRole:   RuntimeRemoteEndpointRoleTURNDTLSCustomOverlay,
+	}
+
+	err := validateRuntimeExecutionPlanDescriptor(descriptor)
+	if err == nil {
+		t.Fatal("validateRuntimeExecutionPlanDescriptor() error = nil, want protocol mismatch failure")
+	}
+	if !strings.Contains(err.Error(), "remote_endpoint_role") {
+		t.Fatalf("validateRuntimeExecutionPlanDescriptor() error = %v, want remote_endpoint_role detail", err)
 	}
 }
 
@@ -105,6 +129,7 @@ func TestSelectRuntimeExecutionPlanDescriptorDefaultsToSupportedPlan(t *testing.
 			},
 			SupportState:         RuntimeExecutionPlanSupportStateSupported,
 			RemoteEndpointFamily: RuntimeRemoteEndpointFamilyTURNServer,
+			RemoteEndpointRole:   RuntimeRemoteEndpointRoleTURNDTLSCustomOverlay,
 			Default:              true,
 		},
 		{
@@ -116,6 +141,7 @@ func TestSelectRuntimeExecutionPlanDescriptorDefaultsToSupportedPlan(t *testing.
 			},
 			SupportState:         RuntimeExecutionPlanSupportStateUnavailable,
 			RemoteEndpointFamily: RuntimeRemoteEndpointFamilyTURNServer,
+			RemoteEndpointRole:   RuntimeRemoteEndpointRoleWireGuardRawDatagram,
 		},
 	}, nil)
 	if err != nil {
@@ -137,6 +163,7 @@ func TestSelectRuntimeExecutionPlanDescriptorRejectsUnavailableRequestedPlan(t *
 		Plan:                 *requested,
 		SupportState:         RuntimeExecutionPlanSupportStateUnavailable,
 		RemoteEndpointFamily: RuntimeRemoteEndpointFamilyTURNServer,
+		RemoteEndpointRole:   RuntimeRemoteEndpointRoleWireGuardRawDatagram,
 	}}, requested)
 	if !errors.Is(err, errRuntimeExecutionPlanUnavailable) {
 		t.Fatalf("selectRuntimeExecutionPlanDescriptor() error = %v, want unavailable", err)
@@ -153,6 +180,7 @@ func TestSelectRuntimeExecutionPlanDescriptorRequiresSelectionForMultipleDefault
 			},
 			SupportState:         RuntimeExecutionPlanSupportStateSupported,
 			RemoteEndpointFamily: RuntimeRemoteEndpointFamilyTURNServer,
+			RemoteEndpointRole:   RuntimeRemoteEndpointRoleTURNDTLSCustomOverlay,
 			Default:              true,
 		},
 		{
@@ -164,6 +192,7 @@ func TestSelectRuntimeExecutionPlanDescriptorRequiresSelectionForMultipleDefault
 			},
 			SupportState:         RuntimeExecutionPlanSupportStateSupported,
 			RemoteEndpointFamily: RuntimeRemoteEndpointFamilyTURNServer,
+			RemoteEndpointRole:   RuntimeRemoteEndpointRoleWireGuardRawDatagram,
 			Default:              true,
 		},
 	}, nil)

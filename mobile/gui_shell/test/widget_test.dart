@@ -618,6 +618,32 @@ void main() {
     await tester.tap(find.text('Import VPN profile'));
     await tester.pumpAndSettle();
 
+    expect(
+      find.byKey(const ValueKey<String>('vpn-transport-profile-manager-route')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('mobile-vpn-transport-profiles-route')),
+      findsOneWidget,
+    );
+    expect(find.byType(BottomSheet), findsNothing);
+    expect(find.text('VPN transport profiles'), findsOneWidget);
+    expect(find.text('WireGuard required'), findsOneWidget);
+    expect(find.textContaining('wireguard_native_v1'), findsNothing);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Import'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(
+        const ValueKey<String>('vpn-profile-manager-row-transport-profile-1'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('wireguard_native_v1'), findsNothing);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
     expect(find.text('Turn on VPN'), findsOneWidget);
     expect(find.text('WireGuard profile: configured.'), findsOneWidget);
     expect(find.text('Replace VPN profile'), findsOneWidget);
@@ -5904,6 +5930,7 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       sessionId: result.sessionId,
       executionPlan: result.executionPlan,
       transportProfile: result.transportProfile,
+      remoteIngress: result.remoteIngress,
       underlayRoutePolicy: result.underlayRoutePolicy,
       stage: result.stage,
       missingPrerequisite: result.missingPrerequisite,

@@ -328,6 +328,7 @@ func (c *androidVPNServiceController) finishStartup(
 	return clientcontrol.PlatformTunnelStartResult{
 		Mode:                req.Mode,
 		ExecutionPlan:       selectedPlanPtr,
+		RemoteIngress:       clientcontrol.RemoteIngressDiagnosticsFromWireGuardTurnLease(lease),
 		Ready:               true,
 		UnderlayRoutePolicy: req.UnderlayRoutePolicy,
 	}, nil
@@ -460,6 +461,7 @@ func androidVPNServiceExecutionPlans(
 		},
 		SupportState:         supportState,
 		RemoteEndpointFamily: clientcontrol.RuntimeRemoteEndpointFamilyTURNServer,
+		RemoteEndpointRole:   clientcontrol.RuntimeRemoteEndpointRoleWireGuardRawDatagram,
 		Default:              true,
 		Message:              strings.TrimSpace(message),
 	}}

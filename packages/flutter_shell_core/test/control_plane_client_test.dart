@@ -149,6 +149,7 @@ void main() {
                         },
                         'support_state': 'unavailable',
                         'remote_endpoint_family': 'turn_server',
+                        'remote_endpoint_role': 'wireguard_raw_datagram',
                         'default': true,
                         'required_transport_profile_kinds': <String>[
                           'wireguard_native_v1',
@@ -559,6 +560,10 @@ void main() {
       expect(
         info.platformTunnels.single.executionPlans.single.supportState,
         RuntimeExecutionPlanSupportState.unavailable,
+      );
+      expect(
+        info.platformTunnels.single.executionPlans.single.remoteEndpointRole,
+        RuntimeRemoteEndpointRole.wireGuardRawDatagram,
       );
       expect(
         info
@@ -1357,6 +1362,13 @@ void main() {
             request.response.write(
               jsonEncode(<String, dynamic>{
                 'mode': 'android_vpn_service',
+                'remote_ingress': <String, dynamic>{
+                  'endpoint_family': 'turn_server',
+                  'endpoint_role': 'wireguard_raw_datagram',
+                  'protocol': 'raw_wireguard_datagram',
+                  'address': '176.109.104.105:56042',
+                  'isolation': 'dedicated',
+                },
                 'ready': true,
               }),
             );
@@ -1392,6 +1404,11 @@ void main() {
       expect(startResult.ready, isTrue);
       expect(startResult.sessionId, isEmpty);
       expect(startResult.startupAttemptId, isEmpty);
+      expect(
+        startResult.remoteIngress?.protocol,
+        RuntimeRemoteIngressProtocol.rawWireGuardDatagram,
+      );
+      expect(startResult.remoteIngress?.address, '176.109.104.105:56042');
     },
   );
 }

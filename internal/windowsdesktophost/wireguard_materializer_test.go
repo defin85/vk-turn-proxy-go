@@ -66,6 +66,7 @@ func TestDefaultWindowsWireGuardTurnMaterializerLoadsValidatedProfile(t *testing
 				HostAdapter:   clientcontrol.RuntimeHostAdapterWindowsWintun,
 			},
 			RemoteEndpointFamily: clientcontrol.RuntimeRemoteEndpointFamilyTURNServer,
+			RemoteEndpointRole:   clientcontrol.RuntimeRemoteEndpointRoleWireGuardRawDatagram,
 		},
 		Credentials: provider.Credentials{
 			Username: "turn-user",
@@ -97,6 +98,54 @@ func TestDefaultWindowsWireGuardTurnMaterializerLoadsValidatedProfile(t *testing
 	}
 	if lease.PersistentKeepaliveSeconds != 21 {
 		t.Fatalf("lease.PersistentKeepaliveSeconds = %d, want 21", lease.PersistentKeepaliveSeconds)
+	}
+}
+
+func TestDefaultWindowsWireGuardTurnMaterializerRejectsProfileWithoutRawIngressEndpoint(t *testing.T) {
+	profilePath := filepath.Join(t.TempDir(), "desktop1-windows.conf")
+	profileContents := strings.Join([]string{
+		"[Interface]",
+		"PrivateKey = client-private-key",
+		"Address = 10.10.0.2/32",
+		"",
+		"[Peer]",
+		"PublicKey = peer-public-key",
+		"AllowedIPs = 0.0.0.0/0",
+		"",
+	}, "\n")
+	if err := os.WriteFile(profilePath, []byte(profileContents), 0o600); err != nil {
+		t.Fatalf("write profile: %v", err)
+	}
+	t.Setenv(windowsWireGuardProfileEnv, profilePath)
+
+	materializer, err := defaultWindowsWireGuardTurnMaterializer()
+	if err != nil {
+		t.Fatalf("defaultWindowsWireGuardTurnMaterializer() error = %v", err)
+	}
+	_, err = materializer(context.Background(), clientcontrol.WireGuardTurnMaterializeRequest{
+		ResolutionID: "resolution-windows-1",
+		Descriptor: clientcontrol.RuntimeExecutionPlanDescriptor{
+			Plan: clientcontrol.RuntimeExecutionPlan{
+				AccessMethod:  clientcontrol.RuntimeAccessMethodTURNCredentials,
+				CarrierFamily: clientcontrol.RuntimeCarrierFamilyTURNDatagram,
+				EngineFamily:  clientcontrol.RuntimeEngineFamilyWireGuardNative,
+				HostAdapter:   clientcontrol.RuntimeHostAdapterWindowsWintun,
+			},
+			RemoteEndpointFamily: clientcontrol.RuntimeRemoteEndpointFamilyTURNServer,
+			RemoteEndpointRole:   clientcontrol.RuntimeRemoteEndpointRoleWireGuardRawDatagram,
+		},
+		Credentials: provider.Credentials{
+			Username: "turn-user",
+			Password: "turn-pass",
+			Address:  "turn.example.test:3478",
+		},
+		Defaults: clientcontrol.RuntimeDefaults{PeerAddr: "dtls-only.example.test:56040"},
+	})
+	if err == nil {
+		t.Fatal("materializer() error = nil, want explicit raw ingress endpoint failure")
+	}
+	if !strings.Contains(err.Error(), "explicit raw WireGuard ingress endpoint") {
+		t.Fatalf("materializer() error = %v, want raw-ingress endpoint detail", err)
 	}
 }
 

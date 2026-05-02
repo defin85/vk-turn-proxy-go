@@ -32,7 +32,7 @@ def default_adb_path() -> str:
 DEFAULT_ADB = default_adb_path()
 DEFAULT_APP_PACKAGE = "com.defin85.relaydock"
 DEFAULT_LISTEN_ADDR = "127.0.0.1:39000"
-DEFAULT_PEER_ADDR = "176.109.104.105:56040"
+DEFAULT_PEER_ADDR = "176.109.104.105:56042"
 DEFAULT_CLIENT_ADDRESS = "10.10.0.2/32"
 DEFAULT_DNS_SERVER = "1.1.1.1"
 DEFAULT_ALLOWED_IP = "0.0.0.0/0"
@@ -46,6 +46,30 @@ STRICT_ANDROID_VPN_PLAN = {
     "engine_family": "wireguard_native",
     "host_adapter": "android_vpn_service",
 }
+
+
+def require_raw_wireguard_ingress(
+    record: dict[str, Any],
+    expected_address: str,
+    context: str,
+) -> dict[str, Any]:
+    ingress = record.get("remote_ingress") or {}
+    if ingress.get("protocol") != "raw_wireguard_datagram":
+        raise ToolError(
+            f"{context} did not report raw WireGuard ingress: "
+            + json.dumps(ingress, sort_keys=True)
+        )
+    if str(ingress.get("address", "")).strip() != expected_address:
+        raise ToolError(
+            f"{context} remote_ingress.address {ingress.get('address')!r} "
+            f"does not match expected {expected_address!r}"
+        )
+    if ingress.get("isolation") != "dedicated":
+        raise ToolError(
+            f"{context} remote_ingress.isolation is not dedicated: "
+            + json.dumps(ingress, sort_keys=True)
+        )
+    return ingress
 
 
 class ToolError(RuntimeError):
@@ -441,6 +465,7 @@ def main() -> int:
                     "mode": "android_vpn_service",
                     "ready": True,
                     "session_id": ready_status.get("session_id", ""),
+                    "remote_ingress": ready_status.get("remote_ingress"),
                     "message": "start request closed before the JSON response; ready state verified via embedded host status and Android connectivity",
                     "request_error": start_request_error,
                 }
@@ -449,12 +474,23 @@ def main() -> int:
                     "android_vpn_service did not reach ready=true: "
                     + json.dumps(start_result, sort_keys=True)
                 )
+        expected_ingress = args.transport_profile_endpoint or args.peer_addr
+        require_raw_wireguard_ingress(
+            start_result,
+            expected_ingress,
+            "android_vpn_service start result",
+        )
 
         time.sleep(2.0)
         ensure_app_running(args.adb, serial, args.app_package)
         ensure_vpn_visible(args.adb, serial, app_uid)
         local_port, host_info = discover_host_bridge(args.adb, serial, args.app_package)
         ready_status = ready_platform_tunnel_status(local_port)
+        require_raw_wireguard_ingress(
+            ready_status,
+            expected_ingress,
+            "android_vpn_service ready status",
+        )
         try:
             stop_result = stop_platform_tunnel(local_port)
         except ToolError as exc:

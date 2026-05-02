@@ -44,6 +44,7 @@ func resolutionExecutionPlansForAction(
 			},
 			SupportState:         RuntimeExecutionPlanSupportStateSupported,
 			RemoteEndpointFamily: RuntimeRemoteEndpointFamilyTURNServer,
+			RemoteEndpointRole:   RuntimeRemoteEndpointRoleTURNDTLSCustomOverlay,
 			Default:              true,
 		},
 	}
@@ -73,6 +74,7 @@ func defaultRuntimeExecutionPlansForPlatformTunnel(capability PlatformTunnelCapa
 		},
 		SupportState:                  supportState,
 		RemoteEndpointFamily:          RuntimeRemoteEndpointFamilyTURNServer,
+		RemoteEndpointRole:            RuntimeRemoteEndpointRoleWireGuardRawDatagram,
 		Default:                       true,
 		RequiredTransportProfileKinds: []TransportProfileKind{TransportProfileKindWireGuardNativeV1},
 		Message:                       strings.TrimSpace(capability.Message),
@@ -120,6 +122,14 @@ func validateRuntimeExecutionPlanDescriptor(descriptor RuntimeExecutionPlanDescr
 	if !isKnownRuntimeRemoteEndpointFamily(descriptor.RemoteEndpointFamily) {
 		return fmt.Errorf("runtime execution plan remote_endpoint_family %q is unknown", descriptor.RemoteEndpointFamily)
 	}
+	if descriptor.Plan.AccessMethod == RuntimeAccessMethodTURNCredentials {
+		if !isKnownRuntimeRemoteEndpointRole(descriptor.RemoteEndpointRole) {
+			return fmt.Errorf("runtime execution plan remote_endpoint_role %q is unknown", descriptor.RemoteEndpointRole)
+		}
+	} else if strings.TrimSpace(string(descriptor.RemoteEndpointRole)) != "" &&
+		!isKnownRuntimeRemoteEndpointRole(descriptor.RemoteEndpointRole) {
+		return fmt.Errorf("runtime execution plan remote_endpoint_role %q is unknown", descriptor.RemoteEndpointRole)
+	}
 	for _, kind := range descriptor.RequiredTransportProfileKinds {
 		if !isKnownTransportProfileKind(kind) {
 			return fmt.Errorf("runtime execution plan requires unknown transport profile kind %q", kind)
@@ -136,6 +146,9 @@ func validateRuntimeExecutionPlanDescriptor(descriptor RuntimeExecutionPlanDescr
 		if descriptor.RemoteEndpointFamily != RuntimeRemoteEndpointFamilyTURNServer {
 			return fmt.Errorf("custom packet overlay runtime execution plan must use remote_endpoint_family %q", RuntimeRemoteEndpointFamilyTURNServer)
 		}
+		if descriptor.RemoteEndpointRole != RuntimeRemoteEndpointRoleTURNDTLSCustomOverlay {
+			return fmt.Errorf("custom packet overlay runtime execution plan must use remote_endpoint_role %q", RuntimeRemoteEndpointRoleTURNDTLSCustomOverlay)
+		}
 		if descriptor.SupportState != RuntimeExecutionPlanSupportStateSupported {
 			return fmt.Errorf("custom packet overlay runtime execution plan must be %q", RuntimeExecutionPlanSupportStateSupported)
 		}
@@ -148,6 +161,15 @@ func validateRuntimeExecutionPlanDescriptor(descriptor RuntimeExecutionPlanDescr
 		}
 		if descriptor.RemoteEndpointFamily != RuntimeRemoteEndpointFamilyTURNServer {
 			return fmt.Errorf("wireguard_native runtime execution plan must use remote_endpoint_family %q", RuntimeRemoteEndpointFamilyTURNServer)
+		}
+		switch descriptor.RemoteEndpointRole {
+		case RuntimeRemoteEndpointRoleWireGuardRawDatagram, RuntimeRemoteEndpointRoleUDPProtocolMultiplexer:
+		default:
+			return fmt.Errorf(
+				"wireguard_native runtime execution plan must use remote_endpoint_role %q or %q",
+				RuntimeRemoteEndpointRoleWireGuardRawDatagram,
+				RuntimeRemoteEndpointRoleUDPProtocolMultiplexer,
+			)
 		}
 		switch descriptor.SupportState {
 		case RuntimeExecutionPlanSupportStateSupported, RuntimeExecutionPlanSupportStateUnavailable:
@@ -351,6 +373,82 @@ func isKnownRuntimeRemoteEndpointFamily(family RuntimeRemoteEndpointFamily) bool
 	case RuntimeRemoteEndpointFamilyTURNServer,
 		RuntimeRemoteEndpointFamilyWebRTCCallEndpoint,
 		RuntimeRemoteEndpointFamilyHTTPSTunnelServer:
+		return true
+	default:
+		return false
+	}
+}
+
+func isKnownRuntimeRemoteEndpointRole(role RuntimeRemoteEndpointRole) bool {
+	switch role {
+	case RuntimeRemoteEndpointRoleTURNDTLSCustomOverlay,
+		RuntimeRemoteEndpointRoleWireGuardRawDatagram,
+		RuntimeRemoteEndpointRoleUDPProtocolMultiplexer:
+		return true
+	default:
+		return false
+	}
+}
+
+func validateRuntimeRemoteIngressDiagnostics(
+	diagnostics RuntimeRemoteIngressDiagnostics,
+) error {
+	if !isKnownRuntimeRemoteEndpointFamily(diagnostics.EndpointFamily) {
+		return fmt.Errorf("endpoint_family %q is unknown", diagnostics.EndpointFamily)
+	}
+	if !isKnownRuntimeRemoteEndpointRole(diagnostics.EndpointRole) {
+		return fmt.Errorf("endpoint_role %q is unknown", diagnostics.EndpointRole)
+	}
+	if !isKnownRuntimeRemoteIngressProtocol(diagnostics.Protocol) {
+		return fmt.Errorf("protocol %q is unknown", diagnostics.Protocol)
+	}
+	if !isKnownRuntimeRemoteIngressIsolation(diagnostics.Isolation) {
+		return fmt.Errorf("isolation %q is unknown", diagnostics.Isolation)
+	}
+	if strings.TrimSpace(diagnostics.Address) == "" {
+		return fmt.Errorf("address is missing")
+	}
+	switch diagnostics.EndpointRole {
+	case RuntimeRemoteEndpointRoleTURNDTLSCustomOverlay:
+		if diagnostics.Protocol != RuntimeRemoteIngressProtocolDTLSCustomOverlay {
+			return fmt.Errorf("endpoint_role %q requires protocol %q, got %q", diagnostics.EndpointRole, RuntimeRemoteIngressProtocolDTLSCustomOverlay, diagnostics.Protocol)
+		}
+		if diagnostics.Isolation != RuntimeRemoteIngressIsolationDedicated {
+			return fmt.Errorf("endpoint_role %q requires isolation %q, got %q", diagnostics.EndpointRole, RuntimeRemoteIngressIsolationDedicated, diagnostics.Isolation)
+		}
+	case RuntimeRemoteEndpointRoleWireGuardRawDatagram:
+		if diagnostics.Protocol != RuntimeRemoteIngressProtocolRawWireGuard {
+			return fmt.Errorf("endpoint_role %q requires protocol %q, got %q", diagnostics.EndpointRole, RuntimeRemoteIngressProtocolRawWireGuard, diagnostics.Protocol)
+		}
+		if diagnostics.Isolation != RuntimeRemoteIngressIsolationDedicated {
+			return fmt.Errorf("endpoint_role %q requires isolation %q, got %q", diagnostics.EndpointRole, RuntimeRemoteIngressIsolationDedicated, diagnostics.Isolation)
+		}
+	case RuntimeRemoteEndpointRoleUDPProtocolMultiplexer:
+		if diagnostics.Protocol != RuntimeRemoteIngressProtocolUDPProtocolMux {
+			return fmt.Errorf("endpoint_role %q requires protocol %q, got %q", diagnostics.EndpointRole, RuntimeRemoteIngressProtocolUDPProtocolMux, diagnostics.Protocol)
+		}
+		if diagnostics.Isolation != RuntimeRemoteIngressIsolationMuxBacked {
+			return fmt.Errorf("endpoint_role %q requires isolation %q, got %q", diagnostics.EndpointRole, RuntimeRemoteIngressIsolationMuxBacked, diagnostics.Isolation)
+		}
+	}
+	return nil
+}
+
+func isKnownRuntimeRemoteIngressProtocol(protocol RuntimeRemoteIngressProtocol) bool {
+	switch protocol {
+	case RuntimeRemoteIngressProtocolDTLSCustomOverlay,
+		RuntimeRemoteIngressProtocolRawWireGuard,
+		RuntimeRemoteIngressProtocolUDPProtocolMux:
+		return true
+	default:
+		return false
+	}
+}
+
+func isKnownRuntimeRemoteIngressIsolation(isolation RuntimeRemoteIngressIsolation) bool {
+	switch isolation {
+	case RuntimeRemoteIngressIsolationDedicated,
+		RuntimeRemoteIngressIsolationMuxBacked:
 		return true
 	default:
 		return false

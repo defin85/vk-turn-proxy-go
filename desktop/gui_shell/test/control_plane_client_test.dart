@@ -58,6 +58,7 @@ void main() {
                       },
                       'support_state': 'unavailable',
                       'remote_endpoint_family': 'turn_server',
+                      'remote_endpoint_role': 'wireguard_raw_datagram',
                       'default': true,
                       'message': 'packaged host missing tunnel implementation',
                     },

@@ -151,11 +151,20 @@ void main() {
         tester,
         'desktop-routing-replace-vpn-transport-profile-windows_wintun',
       );
+      await tester.pumpAndSettle();
+      expect(find.text('Replace VPN profile?'), findsOneWidget);
+      await tester.tap(
+        find.widgetWithText(FilledButton, 'Replace VPN profile'),
+      );
+      await tester.pumpAndSettle();
       await _tapRoutingAction(
         tester,
         'desktop-routing-forget-vpn-transport-profile-windows_wintun',
       );
-      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(find.text('Forget VPN profile?'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, 'Forget VPN profile'));
+      await tester.pumpAndSettle();
 
       expect(editCalls, 2);
       expect(importCalls, 2);
@@ -190,6 +199,15 @@ void main() {
                     mode: PlatformTunnelMode.androidVpnService,
                     ready: true,
                     sessionId: 'session-android-1',
+                    remoteIngress: RuntimeRemoteIngressDiagnostics(
+                      endpointFamily: RuntimeRemoteEndpointFamily.turnServer,
+                      endpointRole:
+                          RuntimeRemoteEndpointRole.wireGuardRawDatagram,
+                      protocol:
+                          RuntimeRemoteIngressProtocol.rawWireGuardDatagram,
+                      isolation: RuntimeRemoteIngressIsolation.dedicated,
+                      address: '176.109.104.105:56042',
+                    ),
                   ),
               platformTunnelStatusFor: (PlatformTunnelMode mode) =>
                   PlatformTunnelStatus(
@@ -205,6 +223,15 @@ void main() {
                     ],
                     underlayRoutePolicy:
                         PlatformTunnelUnderlayRoutePolicy.standard,
+                    remoteIngress: const RuntimeRemoteIngressDiagnostics(
+                      endpointFamily: RuntimeRemoteEndpointFamily.turnServer,
+                      endpointRole:
+                          RuntimeRemoteEndpointRole.wireGuardRawDatagram,
+                      protocol:
+                          RuntimeRemoteIngressProtocol.rawWireGuardDatagram,
+                      isolation: RuntimeRemoteIngressIsolation.dedicated,
+                      address: '176.109.104.105:56042',
+                    ),
                     updatedAt: DateTime.utc(2026, 4, 30, 12),
                   ),
             ),
@@ -230,6 +257,12 @@ void main() {
       expect(find.text(copy.disconnectVpn), findsNothing);
       expect(find.text(copy.requestStartup), findsNothing);
       expect(find.textContaining('Session: session-android-1'), findsOneWidget);
+      expect(
+        find.textContaining(
+          'Ingress: raw WireGuard at 176.109.104.105:56042 (dedicated)',
+        ),
+        findsWidgets,
+      );
       expect(
         find.textContaining(copy.scopeOnlySelectedApps(2)),
         findsOneWidget,

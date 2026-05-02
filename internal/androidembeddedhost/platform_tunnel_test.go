@@ -1233,6 +1233,14 @@ func TestAndroidVPNServiceControllerPassesMaterializedLeaseToRuntimeAttach(t *te
 	if !result.Ready {
 		t.Fatalf("controller.Start() ready = false, want true: %+v", result)
 	}
+	if result.RemoteIngress == nil {
+		t.Fatal("controller.Start().RemoteIngress = nil, want raw WireGuard ingress diagnostics")
+	}
+	if result.RemoteIngress.Protocol != clientcontrol.RuntimeRemoteIngressProtocolRawWireGuard ||
+		result.RemoteIngress.Address != "176.109.104.105:56042" ||
+		result.RemoteIngress.Isolation != clientcontrol.RuntimeRemoteIngressIsolationDedicated {
+		t.Fatalf("controller.Start().RemoteIngress = %+v, want raw WireGuard dedicated ingress", result.RemoteIngress)
+	}
 	if result.UnderlayRoutePolicy != clientcontrol.PlatformTunnelUnderlayRoutePolicyStandard {
 		t.Fatalf("controller.Start() underlay_route_policy = %q, want %q", result.UnderlayRoutePolicy, clientcontrol.PlatformTunnelUnderlayRoutePolicyStandard)
 	}
@@ -1344,6 +1352,11 @@ func TestAndroidVPNServiceControllerAttachesStructuredProfileThroughResolvedArti
 	if lease.PeerEndpointAddress != "relay.example.test:51820" {
 		t.Fatalf("lease peer endpoint = %q, want profile endpoint", lease.PeerEndpointAddress)
 	}
+	if result.RemoteIngress == nil ||
+		result.RemoteIngress.Protocol != clientcontrol.RuntimeRemoteIngressProtocolRawWireGuard ||
+		result.RemoteIngress.Address != "relay.example.test:51820" {
+		t.Fatalf("controller.Start().RemoteIngress = %+v, want profile endpoint ingress diagnostics", result.RemoteIngress)
+	}
 	if strings.TrimSpace(lease.ClientPrivateKey) == "" {
 		t.Fatal("lease client private key = empty, want generated host-owned key")
 	}
@@ -1436,7 +1449,7 @@ func testWireGuardTurnLeaseProvider() androidVPNServiceLeaseProvider {
 			TURNServerAddress:    "turn.example.test:3478",
 			TURNUsername:         "turn-user",
 			TURNPassword:         "turn-pass",
-			PeerEndpointAddress:  "176.109.104.105:51871",
+			PeerEndpointAddress:  "176.109.104.105:56042",
 			ClientPrivateKey:     "privkey-test-123",
 			ClientAddresses:      []string{"10.99.0.2/32"},
 			PeerPublicKey:        "peerpub-test-123",

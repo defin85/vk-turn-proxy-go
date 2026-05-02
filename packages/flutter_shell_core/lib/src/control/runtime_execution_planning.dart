@@ -113,6 +113,116 @@ enum RuntimeRemoteEndpointFamily {
   }
 }
 
+enum RuntimeRemoteEndpointRole {
+  turnDtlsCustomOverlay('turn_dtls_custom_overlay'),
+  wireGuardRawDatagram('wireguard_raw_datagram'),
+  udpProtocolMultiplexer('udp_protocol_multiplexer');
+
+  const RuntimeRemoteEndpointRole(this.value);
+
+  final String value;
+
+  static RuntimeRemoteEndpointRole? fromJson(String? raw) {
+    for (final role in values) {
+      if (role.value == raw) {
+        return role;
+      }
+    }
+    return null;
+  }
+}
+
+enum RuntimeRemoteIngressProtocol {
+  dtlsCustomOverlay('dtls_custom_overlay'),
+  rawWireGuardDatagram('raw_wireguard_datagram'),
+  udpProtocolMultiplexer('udp_protocol_multiplexer');
+
+  const RuntimeRemoteIngressProtocol(this.value);
+
+  final String value;
+
+  static RuntimeRemoteIngressProtocol? fromJson(String? raw) {
+    for (final protocol in values) {
+      if (protocol.value == raw) {
+        return protocol;
+      }
+    }
+    return null;
+  }
+}
+
+enum RuntimeRemoteIngressIsolation {
+  dedicated('dedicated'),
+  muxBacked('mux_backed');
+
+  const RuntimeRemoteIngressIsolation(this.value);
+
+  final String value;
+
+  static RuntimeRemoteIngressIsolation? fromJson(String? raw) {
+    for (final isolation in values) {
+      if (isolation.value == raw) {
+        return isolation;
+      }
+    }
+    return null;
+  }
+}
+
+class RuntimeRemoteIngressDiagnostics {
+  const RuntimeRemoteIngressDiagnostics({
+    required this.endpointFamily,
+    required this.endpointRole,
+    required this.protocol,
+    required this.isolation,
+    this.address = '',
+  });
+
+  factory RuntimeRemoteIngressDiagnostics.fromJson(Map<String, dynamic> json) {
+    final endpointFamily = RuntimeRemoteEndpointFamily.fromJson(
+      json['endpoint_family'] as String?,
+    );
+    final endpointRole = RuntimeRemoteEndpointRole.fromJson(
+      json['endpoint_role'] as String?,
+    );
+    final protocol = RuntimeRemoteIngressProtocol.fromJson(
+      json['protocol'] as String?,
+    );
+    final isolation = RuntimeRemoteIngressIsolation.fromJson(
+      json['isolation'] as String?,
+    );
+    if (endpointFamily == null ||
+        endpointRole == null ||
+        protocol == null ||
+        isolation == null) {
+      throw const FormatException('remote_ingress diagnostics are incomplete');
+    }
+    return RuntimeRemoteIngressDiagnostics(
+      endpointFamily: endpointFamily,
+      endpointRole: endpointRole,
+      protocol: protocol,
+      isolation: isolation,
+      address: json['address'] as String? ?? '',
+    );
+  }
+
+  final RuntimeRemoteEndpointFamily endpointFamily;
+  final RuntimeRemoteEndpointRole endpointRole;
+  final RuntimeRemoteIngressProtocol protocol;
+  final RuntimeRemoteIngressIsolation isolation;
+  final String address;
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'endpoint_family': endpointFamily.value,
+      'endpoint_role': endpointRole.value,
+      'protocol': protocol.value,
+      'isolation': isolation.value,
+      if (address.isNotEmpty) 'address': address,
+    };
+  }
+}
+
 class TransportProfileKind {
   const TransportProfileKind(this.value);
 
@@ -1300,6 +1410,7 @@ class RuntimeExecutionPlanDescriptor {
     required this.plan,
     required this.supportState,
     required this.remoteEndpointFamily,
+    this.remoteEndpointRole,
     this.isDefault = false,
     this.requiresCapability,
     this.requiredTransportProfileKinds = const <TransportProfileKind>[],
@@ -1329,10 +1440,14 @@ class RuntimeExecutionPlanDescriptor {
         'runtime execution plan descriptor missing remote_endpoint_family',
       );
     }
+    final remoteEndpointRole = RuntimeRemoteEndpointRole.fromJson(
+      json['remote_endpoint_role'] as String?,
+    );
     return RuntimeExecutionPlanDescriptor(
       plan: plan,
       supportState: supportState,
       remoteEndpointFamily: remoteEndpointFamily,
+      remoteEndpointRole: remoteEndpointRole,
       isDefault: json['default'] as bool? ?? false,
       requiresCapability: json['requires_capability'] as String?,
       requiredTransportProfileKinds: _readTransportProfileKinds(
@@ -1350,6 +1465,7 @@ class RuntimeExecutionPlanDescriptor {
   final RuntimeExecutionPlan plan;
   final RuntimeExecutionPlanSupportState supportState;
   final RuntimeRemoteEndpointFamily remoteEndpointFamily;
+  final RuntimeRemoteEndpointRole? remoteEndpointRole;
   final bool isDefault;
   final String? requiresCapability;
   final List<TransportProfileKind> requiredTransportProfileKinds;
@@ -1369,6 +1485,8 @@ class RuntimeExecutionPlanDescriptor {
       'plan': plan.toJson(),
       'support_state': supportState.value,
       'remote_endpoint_family': remoteEndpointFamily.value,
+      if (remoteEndpointRole != null)
+        'remote_endpoint_role': remoteEndpointRole!.value,
       if (isDefault) 'default': true,
       if (requiresCapability != null && requiresCapability!.isNotEmpty)
         'requires_capability': requiresCapability,

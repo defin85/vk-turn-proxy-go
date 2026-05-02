@@ -267,6 +267,11 @@ func validatePlatformTunnelStartResult(req PlatformTunnelStartRequest, result Pl
 			return fmt.Errorf("startup result for mode %s reports invalid execution_plan: %w", result.Mode, err)
 		}
 	}
+	if result.RemoteIngress != nil {
+		if err := validateRuntimeRemoteIngressDiagnostics(*result.RemoteIngress); err != nil {
+			return fmt.Errorf("startup result for mode %s reports invalid remote_ingress: %w", result.Mode, err)
+		}
+	}
 	if strings.TrimSpace(result.StartupAttemptID) != "" {
 		if result.Ready {
 			return fmt.Errorf("startup result for mode %s is ready but still reports startup_attempt_id", result.Mode)

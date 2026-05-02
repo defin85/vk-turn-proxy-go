@@ -201,6 +201,80 @@ func TestPlatformTunnelStartupAddsProfileReferenceToResultWhenStarterOmitsIt(t *
 	}
 }
 
+func TestTransportProfileStoreDoesNotInferStartupProfileFromCompatibleRecords(t *testing.T) {
+	starterCalls := 0
+	host := New(
+		WithBuildIdentity(BuildIdentity{Target: "android/embedded"}),
+		WithVPNTransportProfileStore(),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{supportedTestAndroidVPNCapability()}),
+		WithPlatformTunnelStarter(func(_ context.Context, req PlatformTunnelStartRequest) (PlatformTunnelStartResult, error) {
+			starterCalls++
+			return PlatformTunnelStartResult{
+				Mode:             req.Mode,
+				ExecutionPlan:    cloneRuntimeExecutionPlan(req.ExecutionPlan),
+				TransportProfile: cloneTransportProfileReference(req.TransportProfile),
+				Ready:            true,
+			}, nil
+		}),
+	)
+
+	status, err := host.ImportTransportProfile(testWireGuardTransportProfileImport("explicit-client-key"))
+	if err != nil {
+		t.Fatalf("ImportTransportProfile() error = %v", err)
+	}
+	host.mu.Lock()
+	host.transportProfileDefaults = make(map[string]string)
+	host.refreshTransportProfileStatusLocked(status.ID)
+	host.mu.Unlock()
+
+	info := host.Info()
+	transportProfile := info.PlatformTunnels[0].ExecutionPlans[0].TransportProfile
+	if transportProfile == nil {
+		t.Fatal("transport profile prerequisite = nil, want setup-needed status")
+	}
+	if transportProfile.SelectedProfile != nil || transportProfile.DefaultProfile != nil {
+		t.Fatalf("transport profile refs = selected %+v default %+v, want no implicit selection", transportProfile.SelectedProfile, transportProfile.DefaultProfile)
+	}
+	if info.PlatformTunnels[0].ExecutionPlans[0].SupportState != RuntimeExecutionPlanSupportStateUnavailable {
+		t.Fatalf("support_state without selected/default profile = %q, want unavailable", info.PlatformTunnels[0].ExecutionPlans[0].SupportState)
+	}
+
+	result, err := host.StartPlatformTunnel(context.Background(), PlatformTunnelStartRequest{
+		Mode: PlatformTunnelModeAndroidVPNService,
+	})
+	if err != nil {
+		t.Fatalf("StartPlatformTunnel() error = %v", err)
+	}
+	if result.Stage != PlatformTunnelStartupStageProfileValidate ||
+		result.MissingPrerequisite != PlatformTunnelPrerequisiteTransportProfile {
+		t.Fatalf("startup result without selection = %+v, want profile validation failure", result)
+	}
+	if starterCalls != 0 {
+		t.Fatalf("starter calls = %d, want no startup without explicit/default profile", starterCalls)
+	}
+
+	result, err = host.StartPlatformTunnel(context.Background(), PlatformTunnelStartRequest{
+		Mode: PlatformTunnelModeAndroidVPNService,
+		TransportProfile: &TransportProfileReference{
+			ProfileID: status.ID,
+			Kind:      status.Kind,
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartPlatformTunnel(explicit profile) error = %v", err)
+	}
+	if result.Stage == PlatformTunnelStartupStageProfileValidate ||
+		result.MissingPrerequisite == PlatformTunnelPrerequisiteTransportProfile {
+		t.Fatalf("startup result with explicit profile = %+v, want to pass profile validation", result)
+	}
+	if result.TransportProfile == nil || result.TransportProfile.ProfileID != status.ID {
+		t.Fatalf("startup result profile = %+v, want %s", result.TransportProfile, status.ID)
+	}
+	if starterCalls != 1 {
+		t.Fatalf("starter calls = %d, want one explicit startup", starterCalls)
+	}
+}
+
 func TestTransportProfileStorePersistsRedactedProfileWithPrivateFilePermissions(t *testing.T) {
 	storePath := filepath.Join(t.TempDir(), "no-backup", "vpn-transport-profiles", "store.json")
 	host := New(
@@ -499,6 +573,7 @@ func TestTransportProfileStoreFutureRequiredKindHasNoWireGuardImportFallback(t *
 			Plan:                          testStrictWireGuardTurnDescriptor().Plan,
 			SupportState:                  RuntimeExecutionPlanSupportStateSupported,
 			RemoteEndpointFamily:          RuntimeRemoteEndpointFamilyTURNServer,
+			RemoteEndpointRole:            RuntimeRemoteEndpointRoleWireGuardRawDatagram,
 			RequiredTransportProfileKinds: []TransportProfileKind{TransportProfileKind("future_native_v1")},
 		}},
 	}}
@@ -888,6 +963,65 @@ func TestTransportProfileStoreMaterializationDoesNotFallbackToLegacyMaterializer
 	}
 }
 
+func TestTransportProfileStoreMaterializationRequiresExplicitRawIngressEndpoint(t *testing.T) {
+	host := New(
+		WithBuildIdentity(BuildIdentity{Target: "android/embedded"}),
+		WithVPNTransportProfileStore(),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{supportedTestAndroidVPNCapability()}),
+	)
+	status, err := host.ImportTransportProfile(testWireGuardTransportProfileImportWithoutEndpoint("secret-client-key"))
+	if err != nil {
+		t.Fatalf("ImportTransportProfile() error = %v", err)
+	}
+
+	_, err = host.materializeWireGuardTurnLeaseFromTransportProfile(
+		"resolution-1",
+		testStrictWireGuardTurnDescriptor(),
+		provider.Credentials{
+			Username: "turn-user",
+			Password: "turn-pass",
+			Address:  "turn.example.test:3478",
+		},
+		RuntimeDefaults{PeerAddr: "dtls-only.example.test:56040"},
+		&TransportProfileReference{ProfileID: status.ID},
+	)
+	if err == nil {
+		t.Fatal("materializeWireGuardTurnLeaseFromTransportProfile() error = nil, want explicit raw ingress endpoint failure")
+	}
+	if !strings.Contains(err.Error(), "explicit raw WireGuard ingress endpoint") {
+		t.Fatalf("materializeWireGuardTurnLeaseFromTransportProfile() error = %v, want raw-ingress endpoint detail", err)
+	}
+}
+
+func TestWireGuardTurnMaterializationRejectsDTLSOnlyEndpointRole(t *testing.T) {
+	host := New(
+		WithBuildIdentity(BuildIdentity{Target: "android/embedded"}),
+		WithVPNTransportProfileStore(),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{supportedTestAndroidVPNCapability()}),
+	)
+	descriptor := testStrictWireGuardTurnDescriptor()
+	descriptor.RemoteEndpointRole = RuntimeRemoteEndpointRoleTURNDTLSCustomOverlay
+
+	_, err := host.materializeWireGuardTurnLease(
+		context.Background(),
+		"resolution-1",
+		descriptor,
+		provider.Credentials{
+			Username: "turn-user",
+			Password: "turn-pass",
+			Address:  "turn.example.test:3478",
+		},
+		RuntimeDefaults{},
+		nil,
+	)
+	if err == nil {
+		t.Fatal("materializeWireGuardTurnLease() error = nil, want protocol mismatch failure")
+	}
+	if !strings.Contains(err.Error(), "remote_endpoint_role") {
+		t.Fatalf("materializeWireGuardTurnLease() error = %v, want remote_endpoint_role detail", err)
+	}
+}
+
 func supportedTestAndroidVPNCapability() PlatformTunnelCapability {
 	return PlatformTunnelCapability{
 		Mode:      PlatformTunnelModeAndroidVPNService,
@@ -910,7 +1044,9 @@ func testStrictWireGuardTurnDescriptor() RuntimeExecutionPlanDescriptor {
 			EngineFamily:  RuntimeEngineFamilyWireGuardNative,
 			HostAdapter:   RuntimeHostAdapterAndroidVPNService,
 		},
+		SupportState:         RuntimeExecutionPlanSupportStateSupported,
 		RemoteEndpointFamily: RuntimeRemoteEndpointFamilyTURNServer,
+		RemoteEndpointRole:   RuntimeRemoteEndpointRoleWireGuardRawDatagram,
 	}
 }
 
@@ -932,6 +1068,12 @@ func testWireGuardTransportProfileImport(privateKey string) TransportProfileImpo
 			"",
 		}, "\n"),
 	}
+}
+
+func testWireGuardTransportProfileImportWithoutEndpoint(privateKey string) TransportProfileImportRequest {
+	req := testWireGuardTransportProfileImport(privateKey)
+	req.Material = strings.ReplaceAll(req.Material, "Endpoint = relay.example.test:51820\n", "")
+	return req
 }
 
 func testStructuredWireGuardDraft() TransportProfileStructuredDraft {

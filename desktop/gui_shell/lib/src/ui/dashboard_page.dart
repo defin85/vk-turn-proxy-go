@@ -31,6 +31,11 @@ class _DashboardPageState extends State<DashboardPage> {
     debugLabel: 'desktop-active-workbench',
   );
   bool? _lastCompactSupportDrawer;
+  PlatformTunnelMode? _vpnTransportProfileWorkbenchMode;
+  DesktopWorkbenchRoute _vpnTransportProfileReturnRoute =
+      DesktopWorkbenchRoute.routing;
+  TransportProfileStatus? _vpnTransportProfileEditorProfile;
+  bool _vpnTransportProfileEditorCreateNew = false;
 
   DesktopShellController get controller => widget.controller;
 
@@ -75,130 +80,81 @@ class _DashboardPageState extends State<DashboardPage> {
   Future<void> _openVPNTransportProfileEditorForMode(
     PlatformTunnelMode mode,
   ) async {
-    await _openVPNTransportProfileManagerForMode(mode);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _vpnTransportProfileWorkbenchMode = mode;
+      _vpnTransportProfileReturnRoute =
+          controller.activeWorkbenchRoute == DesktopWorkbenchRoute.home
+          ? DesktopWorkbenchRoute.home
+          : DesktopWorkbenchRoute.routing;
+      _vpnTransportProfileEditorProfile = null;
+      _vpnTransportProfileEditorCreateNew = false;
+    });
+    controller.showVPNTransportProfiles();
+    _restoreWorkflowFocus();
   }
 
-  Future<void> _openVPNTransportProfileManagerForMode(
+  Future<void> _openVPNTransportProfileCreateForMode(
     PlatformTunnelMode mode,
   ) async {
     if (!mounted) {
       return;
     }
-    await showDialog<void>(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        return Dialog(
-          clipBehavior: Clip.antiAlias,
-          child: VPNTransportProfileManagerSurface(
-            variant: VPNTransportProfileEditorVariant.desktop,
-            profiles: controller.vpnTransportProfilesForMode(mode),
-            requiredKinds: controller.vpnTransportProfileRequiredKindsForMode(
-              mode,
-            ),
-            executionPlan: controller.vpnTransportProfileExecutionPlanForMode(
-              mode,
-            ),
-            onCreate:
-                controller
-                        .vpnTransportProfileEditorSchemaForMode(mode)
-                        ?.supportsStructuredCreate ==
-                    true
-                ? () async {
-                    Navigator.of(dialogContext).pop();
-                    await _openVPNTransportProfileEditorDialogForMode(
-                      mode,
-                      createNew: true,
-                    );
-                  }
-                : null,
-            onImport: controller.canConfigureVPNTransportProfileForMode(mode)
-                ? () async {
-                    Navigator.of(dialogContext).pop();
-                    await controller.importVPNTransportProfileForMode(mode);
-                  }
-                : null,
-            onEdit: (TransportProfileStatus profile) async {
-              Navigator.of(dialogContext).pop();
-              await _openVPNTransportProfileEditorDialogForMode(
-                mode,
-                existingProfile: profile,
-              );
-            },
-            onValidate: (TransportProfileStatus profile) async {
-              Navigator.of(dialogContext).pop();
-              await controller.validateVPNTransportProfileRecord(profile);
-            },
-            onForget: (TransportProfileStatus profile) async {
-              Navigator.of(dialogContext).pop();
-              await controller.forgetVPNTransportProfileRecord(profile);
-            },
-            onSelect: (TransportProfileStatus profile) async {
-              Navigator.of(dialogContext).pop();
-              await controller.selectVPNTransportProfileForMode(mode, profile);
-            },
-            onClose: () => Navigator.of(dialogContext).pop(),
-          ),
-        );
-      },
-    );
+    setState(() {
+      _vpnTransportProfileWorkbenchMode = mode;
+      _vpnTransportProfileEditorProfile = null;
+      _vpnTransportProfileEditorCreateNew = true;
+    });
+    _restoreWorkflowFocus();
   }
 
-  Future<void> _openVPNTransportProfileEditorDialogForMode(
-    PlatformTunnelMode mode, {
-    TransportProfileStatus? existingProfile,
-    bool createNew = false,
-  }) async {
-    final schema = controller.vpnTransportProfileEditorSchemaForMode(mode);
-    if (schema == null || !mounted) {
+  Future<void> _openVPNTransportProfileEditForMode(
+    PlatformTunnelMode mode,
+    TransportProfileStatus profile,
+  ) async {
+    if (!mounted) {
       return;
     }
-    final existing = createNew
-        ? null
-        : existingProfile ?? controller.vpnTransportProfileStatusForMode(mode);
-    final editorMode = existing == null
-        ? VPNTransportProfileEditorMode.create
-        : VPNTransportProfileEditorMode.edit;
-    await showDialog<void>(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        return Dialog(
-          clipBehavior: Clip.antiAlias,
-          child: VPNTransportProfileEditorSurface(
-            variant: VPNTransportProfileEditorVariant.desktop,
-            mode: editorMode,
-            schema: schema,
-            existingProfile: existing,
-            defaultFor: controller.vpnTransportProfileExecutionPlanForMode(
-              mode,
-            ),
-            onValidate: (TransportProfileStructuredValidationRequest request) {
-              return controller.validateStructuredVPNTransportProfileForMode(
-                mode,
-                request,
-              );
-            },
-            onSave: (TransportProfileStructuredDraft draft) {
-              return controller.saveStructuredVPNTransportProfileForMode(
-                mode,
-                draft,
-                existingProfile: existingProfile,
-                createNew: createNew,
-              );
-            },
-            onCancel: () => Navigator.of(dialogContext).pop(),
-            onImportFallback:
-                controller.canConfigureVPNTransportProfileForMode(mode)
-                ? () {
-                    Navigator.of(dialogContext).pop();
-                    unawaited(
-                      controller.importVPNTransportProfileForMode(mode),
-                    );
-                  }
-                : null,
-          ),
-        );
-      },
-    );
+    setState(() {
+      _vpnTransportProfileWorkbenchMode = mode;
+      _vpnTransportProfileEditorProfile = profile;
+      _vpnTransportProfileEditorCreateNew = false;
+    });
+    _restoreWorkflowFocus();
+  }
+
+  void _showVPNTransportProfileManager() {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _vpnTransportProfileEditorProfile = null;
+      _vpnTransportProfileEditorCreateNew = false;
+    });
+    _restoreWorkflowFocus();
+  }
+
+  void _closeVPNTransportProfileWorkbench() {
+    switch (_vpnTransportProfileReturnRoute) {
+      case DesktopWorkbenchRoute.home:
+        controller.showHome();
+      case DesktopWorkbenchRoute.routing:
+      case DesktopWorkbenchRoute.vpnTransportProfiles:
+        controller.showRouting();
+      case DesktopWorkbenchRoute.profiles:
+        controller.showProfiles();
+      case DesktopWorkbenchRoute.providers:
+        controller.showProviders();
+      case DesktopWorkbenchRoute.activity:
+        controller.showActivityRoute();
+      case DesktopWorkbenchRoute.diagnostics:
+        controller.showDiagnosticsRoute();
+      case DesktopWorkbenchRoute.settings:
+        controller.showSettings();
+    }
+    _restoreWorkflowFocus();
   }
 
   void _showActivityRoute() {
@@ -440,6 +396,20 @@ class _DashboardPageState extends State<DashboardPage> {
                           onShowSettings: _showSettingsRoute,
                           onOpenVPNTransportProfileEditor:
                               _openVPNTransportProfileEditorForMode,
+                          vpnTransportProfileMode:
+                              _vpnTransportProfileWorkbenchMode,
+                          vpnTransportProfileEditorProfile:
+                              _vpnTransportProfileEditorProfile,
+                          vpnTransportProfileEditorCreateNew:
+                              _vpnTransportProfileEditorCreateNew,
+                          onReturnFromVPNTransportProfiles:
+                              _closeVPNTransportProfileWorkbench,
+                          onShowVPNTransportProfileManager:
+                              _showVPNTransportProfileManager,
+                          onCreateVPNTransportProfile:
+                              _openVPNTransportProfileCreateForMode,
+                          onEditVPNTransportProfile:
+                              _openVPNTransportProfileEditForMode,
                           onClosePersistentInspector: () {
                             controller.closeInspector();
                             _restoreWorkflowFocus();
@@ -471,6 +441,13 @@ class _ShellBody extends StatelessWidget {
     required this.onShowDiagnostics,
     required this.onShowSettings,
     required this.onOpenVPNTransportProfileEditor,
+    required this.vpnTransportProfileMode,
+    required this.vpnTransportProfileEditorProfile,
+    required this.vpnTransportProfileEditorCreateNew,
+    required this.onReturnFromVPNTransportProfiles,
+    required this.onShowVPNTransportProfileManager,
+    required this.onCreateVPNTransportProfile,
+    required this.onEditVPNTransportProfile,
     required this.onClosePersistentInspector,
   });
 
@@ -486,6 +463,18 @@ class _ShellBody extends StatelessWidget {
   final VoidCallback onShowSettings;
   final Future<void> Function(PlatformTunnelMode mode)
   onOpenVPNTransportProfileEditor;
+  final PlatformTunnelMode? vpnTransportProfileMode;
+  final TransportProfileStatus? vpnTransportProfileEditorProfile;
+  final bool vpnTransportProfileEditorCreateNew;
+  final VoidCallback onReturnFromVPNTransportProfiles;
+  final VoidCallback onShowVPNTransportProfileManager;
+  final Future<void> Function(PlatformTunnelMode mode)
+  onCreateVPNTransportProfile;
+  final Future<void> Function(
+    PlatformTunnelMode mode,
+    TransportProfileStatus profile,
+  )
+  onEditVPNTransportProfile;
   final VoidCallback onClosePersistentInspector;
 
   @override
@@ -533,6 +522,18 @@ class _ShellBody extends StatelessWidget {
                         controller: controller,
                         onOpenVPNTransportProfileEditor:
                             onOpenVPNTransportProfileEditor,
+                        vpnTransportProfileMode: vpnTransportProfileMode,
+                        vpnTransportProfileEditorProfile:
+                            vpnTransportProfileEditorProfile,
+                        vpnTransportProfileEditorCreateNew:
+                            vpnTransportProfileEditorCreateNew,
+                        onReturnFromVPNTransportProfiles:
+                            onReturnFromVPNTransportProfiles,
+                        onShowVPNTransportProfileManager:
+                            onShowVPNTransportProfileManager,
+                        onCreateVPNTransportProfile:
+                            onCreateVPNTransportProfile,
+                        onEditVPNTransportProfile: onEditVPNTransportProfile,
                       ),
                     ),
                   ),
@@ -1049,9 +1050,9 @@ class _ExpandedNavigationPad extends StatelessWidget {
               key: const ValueKey<String>('desktop-section-routing'),
               icon: Icons.route_outlined,
               title: t.commonRouting,
-              selected:
-                  controller.activeWorkbenchRoute ==
-                  DesktopWorkbenchRoute.routing,
+              selected: _isRoutingWorkbenchRoute(
+                controller.activeWorkbenchRoute,
+              ),
               onTap: onShowRouting,
             ),
             const SizedBox(height: 12),
@@ -1102,11 +1103,30 @@ class _CanvasSurface extends StatelessWidget {
   const _CanvasSurface({
     required this.controller,
     required this.onOpenVPNTransportProfileEditor,
+    required this.vpnTransportProfileMode,
+    required this.vpnTransportProfileEditorProfile,
+    required this.vpnTransportProfileEditorCreateNew,
+    required this.onReturnFromVPNTransportProfiles,
+    required this.onShowVPNTransportProfileManager,
+    required this.onCreateVPNTransportProfile,
+    required this.onEditVPNTransportProfile,
   });
 
   final DesktopShellController controller;
   final Future<void> Function(PlatformTunnelMode mode)
   onOpenVPNTransportProfileEditor;
+  final PlatformTunnelMode? vpnTransportProfileMode;
+  final TransportProfileStatus? vpnTransportProfileEditorProfile;
+  final bool vpnTransportProfileEditorCreateNew;
+  final VoidCallback onReturnFromVPNTransportProfiles;
+  final VoidCallback onShowVPNTransportProfileManager;
+  final Future<void> Function(PlatformTunnelMode mode)
+  onCreateVPNTransportProfile;
+  final Future<void> Function(
+    PlatformTunnelMode mode,
+    TransportProfileStatus profile,
+  )
+  onEditVPNTransportProfile;
 
   @override
   Widget build(BuildContext context) {
@@ -1127,6 +1147,17 @@ class _CanvasSurface extends StatelessWidget {
             return _RoutingWorkbenchSurface(
               controller: controller,
               onOpenVPNTransportProfileEditor: onOpenVPNTransportProfileEditor,
+            );
+          case DesktopWorkbenchRoute.vpnTransportProfiles:
+            return _VPNTransportProfilesWorkbenchSurface(
+              controller: controller,
+              mode: vpnTransportProfileMode,
+              editorProfile: vpnTransportProfileEditorProfile,
+              editorCreateNew: vpnTransportProfileEditorCreateNew,
+              onBack: onReturnFromVPNTransportProfiles,
+              onShowManager: onShowVPNTransportProfileManager,
+              onCreate: onCreateVPNTransportProfile,
+              onEdit: onEditVPNTransportProfile,
             );
           case DesktopWorkbenchRoute.activity:
             return _WorkbenchSupportRoute(
@@ -1428,6 +1459,139 @@ class _RoutingWorkbenchSurface extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _VPNTransportProfilesWorkbenchSurface extends StatelessWidget {
+  const _VPNTransportProfilesWorkbenchSurface({
+    required this.controller,
+    required this.mode,
+    required this.editorProfile,
+    required this.editorCreateNew,
+    required this.onBack,
+    required this.onShowManager,
+    required this.onCreate,
+    required this.onEdit,
+  });
+
+  final DesktopShellController controller;
+  final PlatformTunnelMode? mode;
+  final TransportProfileStatus? editorProfile;
+  final bool editorCreateNew;
+  final VoidCallback onBack;
+  final VoidCallback onShowManager;
+  final Future<void> Function(PlatformTunnelMode mode) onCreate;
+  final Future<void> Function(
+    PlatformTunnelMode mode,
+    TransportProfileStatus profile,
+  )
+  onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final activeMode = mode;
+    if (activeMode == null) {
+      return _CanvasRouteFrame(
+        title: 'VPN transport profiles',
+        detail: 'Select a platform tunnel mode before managing profiles.',
+        onBack: onBack,
+        child: const SizedBox.shrink(),
+      );
+    }
+
+    final schema = controller.vpnTransportProfileEditorSchemaForMode(
+      activeMode,
+    );
+    final editing = editorCreateNew || editorProfile != null;
+    if (editing && schema != null) {
+      final existing = editorCreateNew
+          ? null
+          : editorProfile ??
+                controller.vpnTransportProfileStatusForMode(activeMode);
+      final editorMode = existing == null
+          ? VPNTransportProfileEditorMode.create
+          : VPNTransportProfileEditorMode.edit;
+      return _CanvasRouteFrame(
+        title: editorMode == VPNTransportProfileEditorMode.create
+            ? 'Create VPN profile'
+            : 'Edit VPN profile',
+        detail: activeMode.label,
+        onBack: onShowManager,
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: VPNTransportProfileEditorSurface(
+            variant: VPNTransportProfileEditorVariant.desktop,
+            layout: VPNTransportProfileSurfaceLayout.page,
+            mode: editorMode,
+            schema: schema,
+            existingProfile: existing,
+            defaultFor: controller.vpnTransportProfileExecutionPlanForMode(
+              activeMode,
+            ),
+            onValidate: (TransportProfileStructuredValidationRequest request) {
+              return controller.validateStructuredVPNTransportProfileForMode(
+                activeMode,
+                request,
+              );
+            },
+            onSave: (TransportProfileStructuredDraft draft) {
+              return controller.saveStructuredVPNTransportProfileForMode(
+                activeMode,
+                draft,
+                existingProfile: editorProfile,
+                createNew: editorCreateNew,
+              );
+            },
+            onCancel: onShowManager,
+            onImportFallback:
+                controller.canConfigureVPNTransportProfileForMode(activeMode)
+                ? () {
+                    onShowManager();
+                    unawaited(
+                      controller.importVPNTransportProfileForMode(activeMode),
+                    );
+                  }
+                : null,
+          ),
+        ),
+      );
+    }
+
+    return _CanvasRouteFrame(
+      title: 'VPN transport profiles',
+      detail: activeMode.label,
+      onBack: onBack,
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: VPNTransportProfileManagerSurface(
+          key: const ValueKey<String>(
+            'desktop-vpn-transport-profiles-workbench',
+          ),
+          variant: VPNTransportProfileEditorVariant.desktop,
+          layout: VPNTransportProfileSurfaceLayout.page,
+          profiles: controller.vpnTransportProfilesForMode(activeMode),
+          requiredKinds: controller.vpnTransportProfileRequiredKindsForMode(
+            activeMode,
+          ),
+          executionPlan: controller.vpnTransportProfileExecutionPlanForMode(
+            activeMode,
+          ),
+          onCreate: schema?.supportsStructuredCreate == true
+              ? () => onCreate(activeMode)
+              : null,
+          onImport:
+              controller.canConfigureVPNTransportProfileForMode(activeMode)
+              ? () => controller.importVPNTransportProfileForMode(activeMode)
+              : null,
+          onEdit: (TransportProfileStatus profile) =>
+              onEdit(activeMode, profile),
+          onValidate: controller.validateVPNTransportProfileRecord,
+          onForget: controller.forgetVPNTransportProfileRecord,
+          onSelect: (TransportProfileStatus profile) =>
+              controller.selectVPNTransportProfileForMode(activeMode, profile),
         ),
       ),
     );
@@ -2577,10 +2741,16 @@ int _workbenchIndex(DesktopWorkbenchRoute route) {
     DesktopWorkbenchRoute.profiles => 1,
     DesktopWorkbenchRoute.providers => 2,
     DesktopWorkbenchRoute.routing => 3,
+    DesktopWorkbenchRoute.vpnTransportProfiles => 3,
     DesktopWorkbenchRoute.activity => 4,
     DesktopWorkbenchRoute.diagnostics => 5,
     DesktopWorkbenchRoute.settings => 6,
   };
+}
+
+bool _isRoutingWorkbenchRoute(DesktopWorkbenchRoute route) {
+  return route == DesktopWorkbenchRoute.routing ||
+      route == DesktopWorkbenchRoute.vpnTransportProfiles;
 }
 
 String _workflowAssuranceSummary(
@@ -2773,9 +2943,7 @@ HomeWorkflowPrimaryActionData _desktopHomePrimaryActionData(
                 )
               : setupActionEnabled && canConfigure && !configured
               ? () => unawaited(
-                  controller.importVPNTransportProfileForMode(
-                    primaryTunnelMode,
-                  ),
+                  onOpenVPNTransportProfileEditor(primaryTunnelMode),
                 )
               : null,
         ),

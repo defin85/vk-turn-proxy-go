@@ -34,7 +34,7 @@ func TestWindowsWintunControllerDefaultsUnderlayPolicyAndPublishesExclusions(t *
 			TURNServerAddress:    "203.0.113.10:3478",
 			TURNUsername:         "user",
 			TURNPassword:         "pass",
-			PeerEndpointAddress:  "relay.example.test:3478",
+			PeerEndpointAddress:  "raw-wg.example.test:56042",
 			ClientPrivateKey:     "key",
 			ClientAddresses:      []string{"10.10.0.2/32"},
 			PeerPublicKey:        "peer",
@@ -55,6 +55,14 @@ func TestWindowsWintunControllerDefaultsUnderlayPolicyAndPublishesExclusions(t *
 	}
 	if !result.Ready {
 		t.Fatalf("Start().Ready = false, want true: %+v", result)
+	}
+	if result.RemoteIngress == nil {
+		t.Fatal("Start().RemoteIngress = nil, want raw WireGuard ingress diagnostics")
+	}
+	if result.RemoteIngress.Protocol != clientcontrol.RuntimeRemoteIngressProtocolRawWireGuard ||
+		result.RemoteIngress.Address != "raw-wg.example.test:56042" ||
+		result.RemoteIngress.Isolation != clientcontrol.RuntimeRemoteIngressIsolationDedicated {
+		t.Fatalf("Start().RemoteIngress = %+v, want raw WireGuard dedicated ingress", result.RemoteIngress)
 	}
 	if result.UnderlayRoutePolicy != clientcontrol.PlatformTunnelUnderlayRoutePolicyPreserveActiveLocalNetwork {
 		t.Fatalf(
@@ -371,7 +379,7 @@ func fakeLeaseProvider(
 		TURNServerAddress:    "203.0.113.10:3478",
 		TURNUsername:         "user",
 		TURNPassword:         "pass",
-		PeerEndpointAddress:  "relay.example.test:3478",
+		PeerEndpointAddress:  "raw-wg.example.test:56042",
 		ClientPrivateKey:     "key",
 		ClientAddresses:      []string{"10.10.0.2/32"},
 		PeerPublicKey:        "peer",

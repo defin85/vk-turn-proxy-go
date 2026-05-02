@@ -9,6 +9,8 @@ enum VPNTransportProfileEditorVariant { mobile, desktop }
 
 enum VPNTransportProfileEditorMode { create, edit }
 
+enum VPNTransportProfileSurfaceLayout { modal, page }
+
 class VPNTransportProfileEditorSurface extends StatefulWidget {
   const VPNTransportProfileEditorSurface({
     super.key,
@@ -22,6 +24,9 @@ class VPNTransportProfileEditorSurface extends StatefulWidget {
     this.onSaved,
     this.onCancel,
     this.onImportFallback,
+    this.layout = VPNTransportProfileSurfaceLayout.modal,
+    this.contentPadding,
+    this.maxWidth,
   });
 
   final VPNTransportProfileEditorVariant variant;
@@ -40,6 +45,9 @@ class VPNTransportProfileEditorSurface extends StatefulWidget {
   final ValueChanged<TransportProfileStructuredSaveResult>? onSaved;
   final VoidCallback? onCancel;
   final VoidCallback? onImportFallback;
+  final VPNTransportProfileSurfaceLayout layout;
+  final EdgeInsetsGeometry? contentPadding;
+  final double? maxWidth;
 
   @override
   State<VPNTransportProfileEditorSurface> createState() =>
@@ -65,6 +73,8 @@ class _VPNTransportProfileEditorSurfaceState
 
   bool get _desktop =>
       widget.variant == VPNTransportProfileEditorVariant.desktop;
+
+  bool get _page => widget.layout == VPNTransportProfileSurfaceLayout.page;
 
   List<TransportProfileStructuredFieldDescriptor> get _fields {
     final fields = widget.schema.fields.toList(growable: false);
@@ -112,15 +122,16 @@ class _VPNTransportProfileEditorSurfaceState
     final theme = Theme.of(context);
     final savedResult = _savedResult;
     final unsupportedFields = _unsupportedFields;
-    return ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: _desktop ? 660 : 560),
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: EdgeInsets.all(_desktop ? 24 : 18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
+    final content = SingleChildScrollView(
+      child: Padding(
+        padding:
+            widget.contentPadding ??
+            EdgeInsets.all(_page ? 0 : (_desktop ? 24 : 18)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            if (!_page) ...<Widget>[
               Row(
                 children: <Widget>[
                   Expanded(
@@ -154,77 +165,84 @@ class _VPNTransportProfileEditorSurfaceState
                 ],
               ),
               const SizedBox(height: 16),
-              if (unsupportedFields.isNotEmpty) ...<Widget>[
-                _UnsupportedSchemaNotice(fields: unsupportedFields),
-                const SizedBox(height: 14),
-              ],
-              ..._fields
-                  .where(
-                    (TransportProfileStructuredFieldDescriptor field) =>
-                        field.supportedByShell,
-                  )
-                  .map(
-                    (TransportProfileStructuredFieldDescriptor field) =>
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: _buildField(context, field),
-                        ),
-                  ),
-              if (_formError?.trim().isNotEmpty == true) ...<Widget>[
-                const SizedBox(height: 4),
-                Text(
-                  _formError!.trim(),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.error,
+            ],
+            if (unsupportedFields.isNotEmpty) ...<Widget>[
+              _UnsupportedSchemaNotice(fields: unsupportedFields),
+              const SizedBox(height: 14),
+            ],
+            ..._fields
+                .where(
+                  (TransportProfileStructuredFieldDescriptor field) =>
+                      field.supportedByShell,
+                )
+                .map(
+                  (TransportProfileStructuredFieldDescriptor field) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _buildField(context, field),
                   ),
                 ),
-              ],
-              if (savedResult != null) ...<Widget>[
-                const SizedBox(height: 16),
-                _SavedProfileResult(result: savedResult),
-              ],
-              const SizedBox(height: 18),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: <Widget>[
-                  FilledButton.icon(
-                    key: const ValueKey<String>('vpn-profile-editor-save'),
-                    onPressed: _saving || unsupportedFields.isNotEmpty
-                        ? null
-                        : () => unawaited(_save()),
-                    icon: _saving
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.save_rounded),
-                    label: Text(
-                      widget.mode == VPNTransportProfileEditorMode.create
-                          ? 'Save profile'
-                          : 'Save changes',
-                    ),
-                  ),
-                  if (widget.onImportFallback != null)
-                    OutlinedButton.icon(
-                      key: const ValueKey<String>(
-                        'vpn-profile-editor-import-fallback',
-                      ),
-                      onPressed: _saving ? null : widget.onImportFallback,
-                      icon: const Icon(Icons.upload_file_rounded),
-                      label: const Text('Import'),
-                    ),
-                  if (savedResult != null && widget.onCancel != null)
-                    TextButton(
-                      onPressed: _saving ? null : widget.onCancel,
-                      child: const Text('Done'),
-                    ),
-                ],
+            if (_formError?.trim().isNotEmpty == true) ...<Widget>[
+              const SizedBox(height: 4),
+              Text(
+                _formError!.trim(),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
               ),
             ],
-          ),
+            if (savedResult != null) ...<Widget>[
+              const SizedBox(height: 16),
+              _SavedProfileResult(result: savedResult),
+            ],
+            const SizedBox(height: 18),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: <Widget>[
+                FilledButton.icon(
+                  key: const ValueKey<String>('vpn-profile-editor-save'),
+                  onPressed: _saving || unsupportedFields.isNotEmpty
+                      ? null
+                      : () => unawaited(_save()),
+                  icon: _saving
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.save_rounded),
+                  label: Text(
+                    widget.mode == VPNTransportProfileEditorMode.create
+                        ? 'Save profile'
+                        : 'Save changes',
+                  ),
+                ),
+                if (widget.onImportFallback != null)
+                  OutlinedButton.icon(
+                    key: const ValueKey<String>(
+                      'vpn-profile-editor-import-fallback',
+                    ),
+                    onPressed: _saving ? null : widget.onImportFallback,
+                    icon: const Icon(Icons.upload_file_rounded),
+                    label: const Text('Import'),
+                  ),
+                if (savedResult != null && widget.onCancel != null)
+                  TextButton(
+                    onPressed: _saving ? null : widget.onCancel,
+                    child: const Text('Done'),
+                  ),
+              ],
+            ),
+          ],
         ),
       ),
+    );
+    final maxWidth = widget.maxWidth ?? (_page ? null : (_desktop ? 660 : 560));
+    if (maxWidth == null) {
+      return content;
+    }
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      child: content,
     );
   }
 
@@ -555,10 +573,7 @@ class _VPNTransportProfileEditorSurfaceState
   }
 
   String _kindLabel(TransportProfileKind kind) {
-    if (kind == TransportProfileKind.wireGuardNativeV1) {
-      return 'WireGuard';
-    }
-    return kind.value;
+    return _transportProfileKindLabel(kind);
   }
 
   String _secretActionLabel(TransportProfileSecretUpdateAction action) {
@@ -692,6 +707,9 @@ class VPNTransportProfileManagerSurface extends StatelessWidget {
     this.onForget,
     this.onSelect,
     this.onClose,
+    this.layout = VPNTransportProfileSurfaceLayout.modal,
+    this.contentPadding,
+    this.maxWidth,
   });
 
   final VPNTransportProfileEditorVariant variant;
@@ -705,21 +723,69 @@ class VPNTransportProfileManagerSurface extends StatelessWidget {
   final Future<void> Function(TransportProfileStatus profile)? onForget;
   final Future<void> Function(TransportProfileStatus profile)? onSelect;
   final VoidCallback? onClose;
+  final VPNTransportProfileSurfaceLayout layout;
+  final EdgeInsetsGeometry? contentPadding;
+  final double? maxWidth;
 
   bool get _desktop => variant == VPNTransportProfileEditorVariant.desktop;
+
+  bool get _page => layout == VPNTransportProfileSurfaceLayout.page;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final visibleProfiles = _visibleProfiles();
-    return ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: _desktop ? 720 : 580),
-      child: Padding(
-        padding: EdgeInsets.all(_desktop ? 24 : 18),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
+    final rows = visibleProfiles
+        .map(
+          (TransportProfileStatus profile) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _TransportProfileManagerRow(
+              variant: variant,
+              pageLayout: _page,
+              profile: profile,
+              selected: _selectedForPlan(profile),
+              selectable: _selectable(profile),
+              kindLabel: _kindLabel(profile.kind),
+              onEdit:
+                  onEdit == null ||
+                      !profile.actions.contains(
+                        TransportProfileLifecycleAction.updateStructured,
+                      )
+                  ? null
+                  : () => onEdit!(profile),
+              onValidate:
+                  onValidate == null ||
+                      !profile.actions.contains(
+                        TransportProfileLifecycleAction.validate,
+                      )
+                  ? null
+                  : () => onValidate!(profile),
+              onForget:
+                  onForget == null ||
+                      !profile.actions.contains(
+                        TransportProfileLifecycleAction.forget,
+                      )
+                  ? null
+                  : () => onForget!(profile),
+              onSelect:
+                  onSelect == null ||
+                      !profile.actions.contains(
+                        TransportProfileLifecycleAction.selectForStartup,
+                      )
+                  ? null
+                  : () => onSelect!(profile),
+            ),
+          ),
+        )
+        .toList(growable: false);
+    final content = Padding(
+      padding:
+          contentPadding ?? EdgeInsets.all(_page ? 0 : (_desktop ? 24 : 18)),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          if (!_page) ...<Widget>[
             Row(
               children: <Widget>[
                 Expanded(
@@ -745,79 +811,36 @@ class VPNTransportProfileManagerSurface extends StatelessWidget {
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: <Widget>[
-                if (onCreate != null)
-                  FilledButton.icon(
-                    key: const ValueKey<String>('vpn-profile-manager-create'),
-                    onPressed: () => unawaited(onCreate!()),
-                    icon: const Icon(Icons.add_rounded),
-                    label: const Text('Create'),
-                  ),
-                if (onImport != null)
-                  OutlinedButton.icon(
-                    key: const ValueKey<String>('vpn-profile-manager-import'),
-                    onPressed: () => unawaited(onImport!()),
-                    icon: const Icon(Icons.upload_file_rounded),
-                    label: const Text('Import'),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            if (visibleProfiles.isEmpty)
-              _EmptyTransportProfileList(requiredKinds: requiredKinds)
-            else
-              ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: _desktop ? 460 : 420),
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: visibleProfiles
-                        .map(
-                          (TransportProfileStatus profile) => Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: _TransportProfileManagerRow(
-                              profile: profile,
-                              selected: _selectedForPlan(profile),
-                              selectable: _selectable(profile),
-                              onEdit:
-                                  onEdit == null ||
-                                      !profile.actions.contains(
-                                        TransportProfileLifecycleAction
-                                            .updateStructured,
-                                      )
-                                  ? null
-                                  : () => onEdit!(profile),
-                              onValidate:
-                                  onValidate == null ||
-                                      !profile.actions.contains(
-                                        TransportProfileLifecycleAction
-                                            .validate,
-                                      )
-                                  ? null
-                                  : () => onValidate!(profile),
-                              onForget:
-                                  onForget == null ||
-                                      !profile.actions.contains(
-                                        TransportProfileLifecycleAction.forget,
-                                      )
-                                  ? null
-                                  : () => onForget!(profile),
-                              onSelect: onSelect == null
-                                  ? null
-                                  : () => onSelect!(profile),
-                            ),
-                          ),
-                        )
-                        .toList(growable: false),
-                  ),
-                ),
-              ),
           ],
-        ),
+          if (!_page) const SizedBox(height: 14),
+          _ManagerActionStrip(
+            pageLayout: _page,
+            requiredKinds: requiredKinds,
+            kindLabelFor: _kindLabel,
+            onCreate: onCreate,
+            onImport: onImport,
+          ),
+          const SizedBox(height: 14),
+          if (visibleProfiles.isEmpty)
+            _EmptyTransportProfileList(requiredKinds: requiredKinds)
+          else if (_page)
+            Column(children: rows)
+          else
+            ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: _desktop ? 460 : 420),
+              child: SingleChildScrollView(child: Column(children: rows)),
+            ),
+        ],
       ),
+    );
+    final effectiveMaxWidth =
+        maxWidth ?? (_page ? null : (_desktop ? 720 : 580));
+    if (effectiveMaxWidth == null) {
+      return content;
+    }
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: effectiveMaxWidth),
+      child: content,
     );
   }
 
@@ -876,7 +899,96 @@ class VPNTransportProfileManagerSurface extends StatelessWidget {
     if (requiredKinds.isEmpty) {
       return 'Host-owned transport material, redacted on ordinary reads.';
     }
-    return 'Required kind: ${requiredKinds.map((kind) => kind.value).join(', ')}';
+    return 'Required kind: ${requiredKinds.map(_kindLabel).join(', ')}';
+  }
+
+  String _kindLabel(TransportProfileKind kind) {
+    return _transportProfileKindLabel(kind);
+  }
+}
+
+class _ManagerActionStrip extends StatelessWidget {
+  const _ManagerActionStrip({
+    required this.pageLayout,
+    required this.requiredKinds,
+    required this.kindLabelFor,
+    this.onCreate,
+    this.onImport,
+  });
+
+  final bool pageLayout;
+  final List<TransportProfileKind> requiredKinds;
+  final String Function(TransportProfileKind kind) kindLabelFor;
+  final Future<void> Function()? onCreate;
+  final Future<void> Function()? onImport;
+
+  @override
+  Widget build(BuildContext context) {
+    final actions = <Widget>[
+      if (onCreate != null)
+        FilledButton.icon(
+          key: const ValueKey<String>('vpn-profile-manager-create'),
+          onPressed: () => unawaited(onCreate!()),
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('Create'),
+        ),
+      if (onImport != null)
+        OutlinedButton.icon(
+          key: const ValueKey<String>('vpn-profile-manager-import'),
+          onPressed: () => unawaited(onImport!()),
+          icon: const Icon(Icons.upload_file_rounded),
+          label: const Text('Import'),
+        ),
+    ];
+    if (!pageLayout) {
+      return Wrap(spacing: 8, runSpacing: 8, children: actions);
+    }
+    final filter = ShellToneBadge(
+      label: _requiredKindsLabel(),
+      icon: Icons.filter_alt_rounded,
+      tone: ShellSemanticTone.info,
+    );
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final actionWrap = Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          alignment: WrapAlignment.end,
+          children: actions,
+        );
+        if (constraints.maxWidth < 640) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              filter,
+              if (actions.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 12),
+                actionWrap,
+              ],
+            ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: <Widget>[
+            Expanded(
+              child: Align(alignment: Alignment.centerLeft, child: filter),
+            ),
+            if (actions.isNotEmpty) actionWrap,
+          ],
+        );
+      },
+    );
+  }
+
+  String _requiredKindsLabel() {
+    if (requiredKinds.isEmpty) {
+      return 'All transport profiles';
+    }
+    if (requiredKinds.length == 1) {
+      return '${kindLabelFor(requiredKinds.single)} required';
+    }
+    return '${requiredKinds.map(kindLabelFor).join(', ')} required';
   }
 }
 
@@ -908,32 +1020,41 @@ class _EmptyTransportProfileList extends StatelessWidget {
 
 class _TransportProfileManagerRow extends StatelessWidget {
   const _TransportProfileManagerRow({
+    required this.variant,
+    required this.pageLayout,
     required this.profile,
     required this.selected,
     required this.selectable,
+    required this.kindLabel,
     this.onEdit,
     this.onValidate,
     this.onForget,
     this.onSelect,
   });
 
+  final VPNTransportProfileEditorVariant variant;
+  final bool pageLayout;
   final TransportProfileStatus profile;
   final bool selected;
   final bool selectable;
+  final String kindLabel;
   final Future<void> Function()? onEdit;
   final Future<void> Function()? onValidate;
   final Future<void> Function()? onForget;
   final Future<void> Function()? onSelect;
 
+  bool get _compactActions =>
+      pageLayout && variant == VPNTransportProfileEditorVariant.mobile;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final displayName = firstNonEmpty(profile.displayName, profile.kind.value);
+    final displayName = firstNonEmpty(profile.displayName, kindLabel);
     final status = _profileStatusText();
     return Container(
       key: ValueKey<String>('vpn-profile-manager-row-${profile.id}'),
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: EdgeInsets.all(pageLayout ? 16 : 12),
       decoration: shellSurfaceDecoration(
         context,
         style: ShellSurfaceStyle.highlight,
@@ -957,7 +1078,7 @@ class _TransportProfileManagerRow extends StatelessWidget {
                 ),
               ),
               ShellToneBadge(
-                label: selected ? 'Selected' : profile.kind.value,
+                label: selected ? 'Selected' : kindLabel,
                 tone: selected
                     ? ShellSemanticTone.ready
                     : ShellSemanticTone.info,
@@ -972,53 +1093,115 @@ class _TransportProfileManagerRow extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: <Widget>[
-              if (onSelect != null)
-                FilledButton.tonalIcon(
-                  key: ValueKey<String>(
-                    'vpn-profile-manager-select-${profile.id}',
-                  ),
-                  onPressed: selectable && !selected
-                      ? () => unawaited(onSelect!())
-                      : null,
-                  icon: const Icon(Icons.check_circle_outline_rounded),
-                  label: const Text('Select'),
-                ),
-              if (onEdit != null)
-                OutlinedButton.icon(
-                  key: ValueKey<String>(
-                    'vpn-profile-manager-edit-${profile.id}',
-                  ),
-                  onPressed: () => unawaited(onEdit!()),
-                  icon: const Icon(Icons.edit_rounded),
-                  label: const Text('Edit'),
-                ),
-              if (onValidate != null)
-                OutlinedButton.icon(
-                  key: ValueKey<String>(
-                    'vpn-profile-manager-validate-${profile.id}',
-                  ),
-                  onPressed: () => unawaited(onValidate!()),
-                  icon: const Icon(Icons.fact_check_rounded),
-                  label: const Text('Validate'),
-                ),
-              if (onForget != null)
-                TextButton.icon(
-                  key: ValueKey<String>(
-                    'vpn-profile-manager-forget-${profile.id}',
-                  ),
-                  onPressed: () => unawaited(onForget!()),
-                  icon: const Icon(Icons.delete_outline_rounded),
-                  label: const Text('Forget'),
-                ),
-            ],
-          ),
+          _buildActions(context),
         ],
       ),
     );
+  }
+
+  Widget _buildActions(BuildContext context) {
+    final inlineActions = <Widget>[
+      if (onSelect != null && !selected)
+        FilledButton.tonalIcon(
+          key: ValueKey<String>('vpn-profile-manager-select-${profile.id}'),
+          onPressed: selectable ? () => unawaited(onSelect!()) : null,
+          icon: const Icon(Icons.check_circle_outline_rounded),
+          label: const Text('Select'),
+        ),
+      if (onEdit != null)
+        OutlinedButton.icon(
+          key: ValueKey<String>('vpn-profile-manager-edit-${profile.id}'),
+          onPressed: () => unawaited(onEdit!()),
+          icon: const Icon(Icons.edit_rounded),
+          label: const Text('Edit'),
+        ),
+    ];
+    final overflowActions = <PopupMenuEntry<String>>[
+      if (onValidate != null)
+        PopupMenuItem<String>(
+          key: ValueKey<String>('vpn-profile-manager-validate-${profile.id}'),
+          value: 'validate',
+          child: const Text('Validate'),
+        ),
+      if (onForget != null)
+        PopupMenuItem<String>(
+          key: ValueKey<String>('vpn-profile-manager-forget-${profile.id}'),
+          value: 'forget',
+          child: const Text('Forget'),
+        ),
+    ];
+    if (_compactActions) {
+      return Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: <Widget>[
+          ...inlineActions,
+          if (overflowActions.isNotEmpty)
+            PopupMenuButton<String>(
+              key: ValueKey<String>('vpn-profile-manager-more-${profile.id}'),
+              tooltip: 'More actions',
+              icon: const Icon(Icons.more_horiz_rounded),
+              itemBuilder: (BuildContext context) => overflowActions,
+              onSelected: (String action) {
+                if (action == 'validate') {
+                  unawaited(onValidate!());
+                } else if (action == 'forget') {
+                  unawaited(_confirmForget(context));
+                }
+              },
+            ),
+        ],
+      );
+    }
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: <Widget>[
+        ...inlineActions,
+        if (onValidate != null)
+          OutlinedButton.icon(
+            key: ValueKey<String>('vpn-profile-manager-validate-${profile.id}'),
+            onPressed: () => unawaited(onValidate!()),
+            icon: const Icon(Icons.fact_check_rounded),
+            label: const Text('Validate'),
+          ),
+        if (onForget != null)
+          TextButton.icon(
+            key: ValueKey<String>('vpn-profile-manager-forget-${profile.id}'),
+            onPressed: () => unawaited(_confirmForget(context)),
+            icon: const Icon(Icons.delete_outline_rounded),
+            label: const Text('Forget'),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _confirmForget(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('Forget VPN profile?'),
+          content: Text(
+            'Remove "${profile.displayName}" from saved VPN transport profiles.',
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.tonal(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Forget'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed == true) {
+      await onForget!();
+    }
   }
 
   String _profileStatusText() {
@@ -1039,4 +1222,11 @@ String firstNonEmpty(String first, String second) {
     return first.trim();
   }
   return second.trim();
+}
+
+String _transportProfileKindLabel(TransportProfileKind kind) {
+  if (kind == TransportProfileKind.wireGuardNativeV1) {
+    return 'WireGuard';
+  }
+  return kind.value;
 }

@@ -1424,6 +1424,7 @@ class PlatformTunnelStartResult {
     required this.ready,
     this.executionPlan,
     this.transportProfile,
+    this.remoteIngress,
     this.sessionId = '',
     this.stage,
     this.missingPrerequisite,
@@ -1491,6 +1492,11 @@ class PlatformTunnelStartResult {
               json['transport_profile'] as Map<String, dynamic>,
             )
           : null,
+      remoteIngress: json['remote_ingress'] is Map<String, dynamic>
+          ? RuntimeRemoteIngressDiagnostics.fromJson(
+              json['remote_ingress'] as Map<String, dynamic>,
+            )
+          : null,
       sessionId: sessionId,
       stage: stage,
       missingPrerequisite: missingPrerequisite,
@@ -1507,6 +1513,7 @@ class PlatformTunnelStartResult {
   final bool ready;
   final RuntimeExecutionPlan? executionPlan;
   final TransportProfileReference? transportProfile;
+  final RuntimeRemoteIngressDiagnostics? remoteIngress;
   final String sessionId;
   final PlatformTunnelStartupStage? stage;
   final PlatformTunnelPrerequisite? missingPrerequisite;
@@ -1520,6 +1527,7 @@ class PlatformTunnelStartResult {
       'ready': ready,
       'execution_plan': executionPlan?.toJson(),
       'transport_profile': transportProfile?.toJson(),
+      'remote_ingress': remoteIngress?.toJson(),
       'session_id': sessionId.isEmpty ? null : sessionId,
       'stage': stage?.value,
       'missing_prerequisite': missingPrerequisite?.value,
@@ -1540,6 +1548,7 @@ class PlatformTunnelStatus {
     this.sourceResolutionId = '',
     this.executionPlan,
     this.transportProfile,
+    this.remoteIngress,
     this.applicationRoutingPolicy,
     this.underlayRoutePolicy,
     this.allowedPackages = const <String>[],
@@ -1568,6 +1577,11 @@ class PlatformTunnelStatus {
       transportProfile: json['transport_profile'] is Map<String, dynamic>
           ? TransportProfileReference.fromJson(
               json['transport_profile'] as Map<String, dynamic>,
+            )
+          : null,
+      remoteIngress: json['remote_ingress'] is Map<String, dynamic>
+          ? RuntimeRemoteIngressDiagnostics.fromJson(
+              json['remote_ingress'] as Map<String, dynamic>,
             )
           : null,
       applicationRoutingPolicy: _readOptionalApplicationRoutingPolicy(
@@ -1601,6 +1615,7 @@ class PlatformTunnelStatus {
   final String sourceResolutionId;
   final RuntimeExecutionPlan? executionPlan;
   final TransportProfileReference? transportProfile;
+  final RuntimeRemoteIngressDiagnostics? remoteIngress;
   final PlatformTunnelApplicationRoutingPolicy? applicationRoutingPolicy;
   final PlatformTunnelUnderlayRoutePolicy? underlayRoutePolicy;
   final List<String> allowedPackages;
@@ -1622,6 +1637,7 @@ class PlatformTunnelStatus {
           : sourceResolutionId,
       'execution_plan': executionPlan?.toJson(),
       'transport_profile': transportProfile?.toJson(),
+      'remote_ingress': remoteIngress?.toJson(),
       'application_routing_policy': applicationRoutingPolicy?.value,
       'underlay_route_policy': underlayRoutePolicy?.value,
       'allowed_packages': allowedPackages.isEmpty ? null : allowedPackages,

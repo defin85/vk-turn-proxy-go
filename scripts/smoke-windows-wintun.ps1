@@ -2,7 +2,8 @@ param(
     [string]$BundleRoot = 'C:\Users\codex\vk-turn-lab\bundle\windows-gui',
     [string]$HostListenAddress = '127.0.0.1:17779',
     [string]$RuntimeListenAddr = '127.0.0.1:39010',
-    [string]$PeerAddr = '176.109.104.105:56040',
+    [string]$PeerAddr = '176.109.104.105:56042',
+    [string]$ExpectedRawIngressAddr = '176.109.104.105:56042',
     [string]$TurnLink = '',
     [string]$ResolutionId = '',
     [string]$ProfileId = 'desktop-generic-turn',
@@ -120,10 +121,11 @@ function Select-WindowsExecutionPlan {
         $_.plan.access_method -eq 'turn_credentials' -and
         $_.plan.carrier_family -eq 'turn_datagram' -and
         $_.plan.engine_family -eq 'wireguard_native' -and
-        $_.plan.host_adapter -eq 'windows_wintun'
+        $_.plan.host_adapter -eq 'windows_wintun' -and
+        $_.remote_endpoint_role -eq 'wireguard_raw_datagram'
     })
     if ($candidates.Count -eq 0) {
-        throw 'windows_wintun capability is missing a supported turn_credentials/turn_datagram/wireguard_native/windows_wintun execution plan'
+        throw 'windows_wintun capability is missing a supported raw-WireGuard turn_credentials/turn_datagram/wireguard_native/windows_wintun execution plan'
     }
     $default = @($candidates | Where-Object { $_.default -eq $true }) | Select-Object -First 1
     if ($null -ne $default) {
@@ -314,6 +316,18 @@ try {
     if ([string]::IsNullOrWhiteSpace([string]$startResult.session_id)) {
         throw 'windows_wintun ready result did not include session_id'
     }
+    if ($null -eq $startResult.remote_ingress) {
+        throw 'windows_wintun ready result did not include remote_ingress diagnostics'
+    }
+    if ([string]$startResult.remote_ingress.protocol -ne 'raw_wireguard_datagram') {
+        throw 'windows_wintun remote_ingress.protocol is not raw_wireguard_datagram: ' + ($startResult.remote_ingress | ConvertTo-Json -Depth 8 -Compress)
+    }
+    if ([string]$startResult.remote_ingress.address -ne $ExpectedRawIngressAddr) {
+        throw "windows_wintun remote_ingress.address $($startResult.remote_ingress.address) does not match expected $ExpectedRawIngressAddr"
+    }
+    if ([string]$startResult.remote_ingress.isolation -ne 'dedicated') {
+        throw 'windows_wintun remote_ingress.isolation is not dedicated: ' + ($startResult.remote_ingress | ConvertTo-Json -Depth 8 -Compress)
+    }
 
     $session = Wait-SessionState -SessionId ([string]$startResult.session_id) -ExpectedState 'ready' -TimeoutSeconds 10
     if ([string]$session.source_resolution_id -ne $resolvedId) {
@@ -326,6 +340,7 @@ try {
         resolution_id = $resolvedId
         session_id = [string]$startResult.session_id
         execution_plan = $startResult.execution_plan
+        remote_ingress = $startResult.remote_ingress
         underlay_route_policy = [string]$startResult.underlay_route_policy
         host_build = $hostInfo.build
         session_state = [string]$session.state

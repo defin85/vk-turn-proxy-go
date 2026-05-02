@@ -341,10 +341,175 @@ void main() {
     );
     await tester.pump();
 
+    expect(forgottenProfile, isEmpty);
+    expect(find.text('Forget VPN profile?'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Forget'));
+    await tester.pumpAndSettle();
+
     expect(selectedProfile, 'wg-profile');
     expect(editedProfile, 'wg-profile');
     expect(validatedProfile, 'wg-profile');
     expect(forgottenProfile, 'wg-profile');
+  });
+
+  testWidgets('manager offers select only when host advertises the action', (
+    WidgetTester tester,
+  ) async {
+    var selectedProfile = '';
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: VPNTransportProfileManagerSurface(
+            variant: VPNTransportProfileEditorVariant.desktop,
+            profiles: <TransportProfileStatus>[
+              _status(
+                id: 'selectable-profile',
+                displayName: 'Selectable WireGuard',
+                actions: const <TransportProfileLifecycleAction>[
+                  TransportProfileLifecycleAction.selectForStartup,
+                ],
+              ),
+              _status(
+                id: 'status-only-profile',
+                displayName: 'Status only WireGuard',
+              ),
+            ],
+            requiredKinds: const <TransportProfileKind>[
+              TransportProfileKind.wireGuardNativeV1,
+            ],
+            executionPlan: _androidVPNServicePlan,
+            onSelect: (TransportProfileStatus profile) async {
+              selectedProfile = profile.id;
+            },
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Selectable WireGuard'), findsOneWidget);
+    expect(find.text('Status only WireGuard'), findsOneWidget);
+    expect(
+      find.byKey(
+        const ValueKey<String>('vpn-profile-manager-select-selectable-profile'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(
+        const ValueKey<String>(
+          'vpn-profile-manager-select-status-only-profile',
+        ),
+      ),
+      findsNothing,
+    );
+
+    await tester.tap(
+      find.byKey(
+        const ValueKey<String>('vpn-profile-manager-select-selectable-profile'),
+      ),
+    );
+    await tester.pump();
+
+    expect(selectedProfile, 'selectable-profile');
+  });
+
+  testWidgets('page layout removes modal chrome and compacts selected rows', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          appBar: AppBar(title: const Text('VPN transport profiles')),
+          body: VPNTransportProfileManagerSurface(
+            variant: VPNTransportProfileEditorVariant.mobile,
+            layout: VPNTransportProfileSurfaceLayout.page,
+            profiles: <TransportProfileStatus>[
+              _status(
+                id: 'selected-profile',
+                displayName: 'Tablet WireGuard',
+                actions: const <TransportProfileLifecycleAction>[
+                  TransportProfileLifecycleAction.selectForStartup,
+                  TransportProfileLifecycleAction.validate,
+                  TransportProfileLifecycleAction.forget,
+                ],
+                defaultFor: const <TransportProfileDefaultBinding>[
+                  TransportProfileDefaultBinding(
+                    profileId: 'selected-profile',
+                    kind: TransportProfileKind.wireGuardNativeV1,
+                    hostAdapter: RuntimeHostAdapter.androidVpnService,
+                    plan: _androidVPNServicePlan,
+                    scopeId: 'android-vpn',
+                  ),
+                ],
+              ),
+            ],
+            requiredKinds: const <TransportProfileKind>[
+              TransportProfileKind.wireGuardNativeV1,
+            ],
+            executionPlan: _androidVPNServicePlan,
+            onCreate: () async {},
+            onImport: () async {},
+            onSelect: (_) async {},
+            onValidate: (_) async {},
+            onForget: (_) async {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('VPN transport profiles'), findsOneWidget);
+    expect(find.textContaining('wireguard_native_v1'), findsNothing);
+    expect(find.text('WireGuard required'), findsOneWidget);
+    expect(find.text('Selected'), findsOneWidget);
+    expect(
+      find.byKey(
+        const ValueKey<String>('vpn-profile-manager-select-selected-profile'),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.byKey(
+        const ValueKey<String>('vpn-profile-manager-more-selected-profile'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('page layout editor removes duplicate route title', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          appBar: AppBar(title: const Text('Edit VPN profile')),
+          body: VPNTransportProfileEditorSurface(
+            variant: VPNTransportProfileEditorVariant.mobile,
+            layout: VPNTransportProfileSurfaceLayout.page,
+            mode: VPNTransportProfileEditorMode.edit,
+            schema: _schema(),
+            existingProfile: _status(displayName: 'Tablet WireGuard'),
+            onValidate: (_) async {
+              return const TransportProfileStructuredValidationResult(
+                valid: true,
+              );
+            },
+            onSave: (_) async {
+              return TransportProfileStructuredSaveResult(
+                profile: _status(displayName: 'Tablet WireGuard'),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Edit VPN profile'), findsOneWidget);
+    expect(find.text('WireGuard'), findsNothing);
+    expect(
+      find.byKey(const ValueKey<String>('vpn-profile-editor-save')),
+      findsOneWidget,
+    );
   });
 }
 

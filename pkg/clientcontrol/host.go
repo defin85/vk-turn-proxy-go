@@ -858,6 +858,7 @@ func (h *Host) platformTunnelPublicationFailure(
 	return PlatformTunnelStartResult{
 		Mode:                result.Mode,
 		ExecutionPlan:       cloneRuntimeExecutionPlan(result.ExecutionPlan),
+		RemoteIngress:       cloneRuntimeRemoteIngressDiagnostics(result.RemoteIngress),
 		Ready:               false,
 		Stage:               PlatformTunnelStartupStageRuntimeAttach,
 		MissingPrerequisite: PlatformTunnelPrerequisiteHostImplementation,
@@ -1199,6 +1200,9 @@ func applyPlatformTunnelStartResultToStatus(status *PlatformTunnelStatus, result
 	if result.TransportProfile != nil {
 		status.TransportProfile = cloneTransportProfileReference(result.TransportProfile)
 	}
+	if result.RemoteIngress != nil {
+		status.RemoteIngress = cloneRuntimeRemoteIngressDiagnostics(result.RemoteIngress)
+	}
 	if result.UnderlayRoutePolicy != "" {
 		status.UnderlayRoutePolicy = result.UnderlayRoutePolicy
 	}
@@ -1278,6 +1282,7 @@ func applyPlatformTunnelStopToStatus(status *PlatformTunnelStatus, result Platfo
 func clonePlatformTunnelStatus(status PlatformTunnelStatus) PlatformTunnelStatus {
 	status.ExecutionPlan = cloneRuntimeExecutionPlan(status.ExecutionPlan)
 	status.TransportProfile = cloneTransportProfileReference(status.TransportProfile)
+	status.RemoteIngress = cloneRuntimeRemoteIngressDiagnostics(status.RemoteIngress)
 	status.AllowedPackages = cloneStringSlice(status.AllowedPackages)
 	status.DisallowedPackages = cloneStringSlice(status.DisallowedPackages)
 	return status
@@ -1298,6 +1303,7 @@ func clonePlatformTunnelStartRequest(req PlatformTunnelStartRequest) PlatformTun
 func clonePlatformTunnelStartResult(result PlatformTunnelStartResult) PlatformTunnelStartResult {
 	result.ExecutionPlan = cloneRuntimeExecutionPlan(result.ExecutionPlan)
 	result.TransportProfile = cloneTransportProfileReference(result.TransportProfile)
+	result.RemoteIngress = cloneRuntimeRemoteIngressDiagnostics(result.RemoteIngress)
 	result.UnderlayRouteExclusions = cloneStringSlice(result.UnderlayRouteExclusions)
 	return result
 }

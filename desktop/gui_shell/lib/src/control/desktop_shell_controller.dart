@@ -28,6 +28,7 @@ enum DesktopWorkbenchRoute {
   profiles,
   providers,
   routing,
+  vpnTransportProfiles,
   activity,
   diagnostics,
   settings,
@@ -480,6 +481,10 @@ class DesktopShellController extends ChangeNotifier {
 
   void showRouting() {
     _showWorkbenchRoute(DesktopWorkbenchRoute.routing);
+  }
+
+  void showVPNTransportProfiles() {
+    _showWorkbenchRoute(DesktopWorkbenchRoute.vpnTransportProfiles);
   }
 
   void showActivityRoute() {

@@ -16,6 +16,7 @@ The host must not infer support from provider identifiers, platform names, or on
 - `engine_family`: `custom_packet_overlay`
 - `host_adapter`: none
 - `remote_endpoint_family`: `turn_server`
+- `remote_endpoint_role`: `turn_dtls_custom_overlay`
 - `support_state`: `supported`
 
 This is the current repo-owned same-device runtime path behind `Start on this device`.
@@ -28,6 +29,9 @@ It remains distinct from packaged system-tunnel work.
 - `engine_family`: `wireguard_native`
 - `host_adapter`: one of `android_vpn_service`, `windows_wintun`, `linux_tun`, or `apple_network_extension`
 - `remote_endpoint_family`: `turn_server`
+- `remote_endpoint_role`: `wireguard_raw_datagram` for the first dedicated
+  raw-WireGuard ingress, or `udp_protocol_multiplexer` only after a repo-owned
+  demux contract is implemented and verified
 - `support_state`: adapter-specific and fail-closed
 
 Current support claims are:
@@ -53,9 +57,9 @@ The planning contract says which packaged path is in scope; it does not authoriz
   not enough on its own. If the strict carrier/materializer is absent, packaged
   host modes must keep that execution plan unavailable.
 - The explicit remote role for this path remains under the `turn_server`
-  endpoint family, but it is a distinct WireGuard-over-TURN datagram role, not
-  proof that the current DTLS overlay server already satisfies the packaged
-  path.
+  endpoint family, but it is `wireguard_raw_datagram` for the current dedicated
+  ingress. That role is not proof that the current DTLS overlay server already
+  satisfies the packaged path.
 
 ## Evidence bar for support claims
 

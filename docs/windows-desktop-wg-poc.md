@@ -17,6 +17,8 @@ This runbook proves:
 - the packaged host keeps `windows_wintun` fail-closed until its documented
   prerequisites are satisfied
 - the packaged host can return `ready=true` for `windows_wintun`
+- the ready result reports the selected raw-WireGuard remote ingress through
+  `remote_ingress`
 - the packaged host tears the tunnel down again through the same typed control
   plane
 
@@ -44,6 +46,24 @@ This runbook does not claim:
 The local profile is a packaged-host prerequisite for the strict
 `turn_datagram + wireguard_native + windows_wintun` path.
 It is not the older external `WireGuard for Windows` client workflow.
+
+## Remote ingress contract
+
+The first productized strict WireGuard contour uses a dedicated raw-WireGuard
+datagram ingress on the VPS:
+
+- DTLS/custom-overlay remains on `176.109.104.105:56040/udp`,
+  `peer_mode=dtls`
+- strict `wireguard_native` uses `176.109.104.105:56042/udp`,
+  `peer_mode=plain`, forwarding to the VPS WireGuard UDP listener on
+  `127.0.0.1:51871`
+- the local WireGuard materializer profile `Endpoint` MUST point at the raw
+  ingress, for example `Endpoint = 176.109.104.105:56042`
+- a shared UDP port is not supported until an explicit UDP protocol multiplexer
+  exists and is verified
+
+See `docs/wireguard-native-ingress.md` for the repo-owned VPS service and
+firewall runbook.
 
 ## Safe VMware execution cell
 
@@ -101,6 +121,9 @@ That smoke:
 - starts `/v1/platform-tunnels/start`
 - requires `ready=true`
 - requires `session_id`
+- requires `remote_ingress.protocol=raw_wireguard_datagram`
+- requires `remote_ingress.address=176.109.104.105:56042`
+- requires `remote_ingress.isolation=dedicated`
 - stops `/v1/platform-tunnels/stop` again before exit
 
 If the operator does not pass `-TurnLink`, the smoke first looks for the saved
@@ -138,6 +161,10 @@ You may override that path with `VKTP_WINDOWS_WIREGUARD_PROFILE`.
 
 The packaged host loads that file to materialize the strict WireGuard carrier
 lease.
+The profile's peer `Endpoint` is the source of truth for the raw-WireGuard
+remote ingress. `runtime_defaults.peer_addr` in smoke payloads is ordinary
+session publication metadata and must not be used as a fallback for strict
+WireGuard materialization.
 If the file is missing or invalid, `/v1/host` keeps `windows_wintun`
 fail-closed and the desktop shell must not offer the repo-owned system tunnel
 workflow.

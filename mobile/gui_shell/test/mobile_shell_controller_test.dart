@@ -4036,6 +4036,7 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       sessionId: result.sessionId,
       executionPlan: result.executionPlan,
       transportProfile: result.transportProfile,
+      remoteIngress: result.remoteIngress,
       underlayRoutePolicy: result.underlayRoutePolicy,
       stage: result.stage,
       missingPrerequisite: result.missingPrerequisite,

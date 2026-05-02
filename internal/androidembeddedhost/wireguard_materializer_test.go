@@ -79,6 +79,35 @@ func TestDefaultAndroidWireGuardTurnMaterializerLoadsExplicitProfilePath(t *test
 	}
 }
 
+func TestDefaultAndroidWireGuardTurnMaterializerRejectsProfileWithoutRawIngressEndpoint(t *testing.T) {
+	profilePath := filepath.Join(t.TempDir(), "android-vpn-service.conf")
+	profileContents := strings.Join([]string{
+		"[Interface]",
+		"PrivateKey = client-private-key",
+		"Address = 10.10.0.2/32",
+		"",
+		"[Peer]",
+		"PublicKey = peer-public-key",
+		"AllowedIPs = 0.0.0.0/0",
+		"",
+	}, "\n")
+	if err := os.WriteFile(profilePath, []byte(profileContents), 0o600); err != nil {
+		t.Fatalf("write profile: %v", err)
+	}
+	SetAndroidWireGuardProfilePath(profilePath)
+	t.Cleanup(func() { SetAndroidWireGuardProfilePath("") })
+
+	req := androidWireGuardMaterializeRequest()
+	req.Defaults = clientcontrol.RuntimeDefaults{PeerAddr: "dtls-only.example.test:56040"}
+	_, err := defaultAndroidWireGuardTurnMaterializer()(context.Background(), req)
+	if err == nil {
+		t.Fatal("materializer() error = nil, want explicit raw ingress endpoint failure")
+	}
+	if !strings.Contains(err.Error(), "explicit raw WireGuard ingress endpoint") {
+		t.Fatalf("materializer() error = %v, want raw-ingress endpoint detail", err)
+	}
+}
+
 func androidWireGuardMaterializeRequest() clientcontrol.WireGuardTurnMaterializeRequest {
 	return clientcontrol.WireGuardTurnMaterializeRequest{
 		ResolutionID: "resolution-android-1",
@@ -90,6 +119,7 @@ func androidWireGuardMaterializeRequest() clientcontrol.WireGuardTurnMaterialize
 				HostAdapter:   clientcontrol.RuntimeHostAdapterAndroidVPNService,
 			},
 			RemoteEndpointFamily: clientcontrol.RuntimeRemoteEndpointFamilyTURNServer,
+			RemoteEndpointRole:   clientcontrol.RuntimeRemoteEndpointRoleWireGuardRawDatagram,
 		},
 		Credentials: provider.Credentials{
 			Username: "turn-user",

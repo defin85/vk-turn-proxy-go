@@ -49,6 +49,37 @@ const (
 	RuntimeRemoteEndpointFamilyHTTPSTunnelServer  RuntimeRemoteEndpointFamily = "https_tunnel_server"
 )
 
+type RuntimeRemoteEndpointRole string
+
+const (
+	RuntimeRemoteEndpointRoleTURNDTLSCustomOverlay  RuntimeRemoteEndpointRole = "turn_dtls_custom_overlay"
+	RuntimeRemoteEndpointRoleWireGuardRawDatagram   RuntimeRemoteEndpointRole = "wireguard_raw_datagram"
+	RuntimeRemoteEndpointRoleUDPProtocolMultiplexer RuntimeRemoteEndpointRole = "udp_protocol_multiplexer"
+)
+
+type RuntimeRemoteIngressProtocol string
+
+const (
+	RuntimeRemoteIngressProtocolDTLSCustomOverlay RuntimeRemoteIngressProtocol = "dtls_custom_overlay"
+	RuntimeRemoteIngressProtocolRawWireGuard      RuntimeRemoteIngressProtocol = "raw_wireguard_datagram"
+	RuntimeRemoteIngressProtocolUDPProtocolMux    RuntimeRemoteIngressProtocol = "udp_protocol_multiplexer"
+)
+
+type RuntimeRemoteIngressIsolation string
+
+const (
+	RuntimeRemoteIngressIsolationDedicated RuntimeRemoteIngressIsolation = "dedicated"
+	RuntimeRemoteIngressIsolationMuxBacked RuntimeRemoteIngressIsolation = "mux_backed"
+)
+
+type RuntimeRemoteIngressDiagnostics struct {
+	EndpointFamily RuntimeRemoteEndpointFamily   `json:"endpoint_family,omitempty"`
+	EndpointRole   RuntimeRemoteEndpointRole     `json:"endpoint_role,omitempty"`
+	Protocol       RuntimeRemoteIngressProtocol  `json:"protocol,omitempty"`
+	Address        string                        `json:"address,omitempty"`
+	Isolation      RuntimeRemoteIngressIsolation `json:"isolation,omitempty"`
+}
+
 type RuntimeExecutionPlan struct {
 	AccessMethod  RuntimeAccessMethod  `json:"access_method"`
 	CarrierFamily RuntimeCarrierFamily `json:"carrier_family"`
@@ -60,6 +91,7 @@ type RuntimeExecutionPlanDescriptor struct {
 	Plan                          RuntimeExecutionPlan                `json:"plan"`
 	SupportState                  RuntimeExecutionPlanSupportState    `json:"support_state"`
 	RemoteEndpointFamily          RuntimeRemoteEndpointFamily         `json:"remote_endpoint_family"`
+	RemoteEndpointRole            RuntimeRemoteEndpointRole           `json:"remote_endpoint_role,omitempty"`
 	Default                       bool                                `json:"default,omitempty"`
 	RequiresCapability            Capability                          `json:"requires_capability,omitempty"`
 	RequiredTransportProfileKinds []TransportProfileKind              `json:"required_transport_profile_kinds,omitempty"`
@@ -91,6 +123,16 @@ func cloneRuntimeExecutionPlanDescriptors(descriptors []RuntimeExecutionPlanDesc
 		out = append(out, clone)
 	}
 	return out
+}
+
+func cloneRuntimeRemoteIngressDiagnostics(
+	diagnostics *RuntimeRemoteIngressDiagnostics,
+) *RuntimeRemoteIngressDiagnostics {
+	if diagnostics == nil {
+		return nil
+	}
+	clone := *diagnostics
+	return &clone
 }
 
 func runtimeExecutionPlanEquals(left, right RuntimeExecutionPlan) bool {

@@ -76,6 +76,7 @@ func newWindowsWintunController(
 			},
 			SupportState:         supportStateForCapability(normalized.Available),
 			RemoteEndpointFamily: clientcontrol.RuntimeRemoteEndpointFamilyTURNServer,
+			RemoteEndpointRole:   clientcontrol.RuntimeRemoteEndpointRoleWireGuardRawDatagram,
 			Default:              true,
 			Message:              strings.TrimSpace(normalized.Message),
 		}}
@@ -292,6 +293,7 @@ func (c *windowsWintunController) Start(
 	result := clientcontrol.PlatformTunnelStartResult{
 		Mode:                    req.Mode,
 		ExecutionPlan:           cloneRuntimeExecutionPlan(selectedPlan),
+		RemoteIngress:           clientcontrol.RemoteIngressDiagnosticsFromWireGuardTurnLease(lease),
 		Ready:                   true,
 		UnderlayRoutePolicy:     req.UnderlayRoutePolicy,
 		UnderlayRouteExclusions: append([]string(nil), routeState.Exclusions...),

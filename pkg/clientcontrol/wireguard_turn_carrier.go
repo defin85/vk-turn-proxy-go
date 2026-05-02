@@ -10,7 +10,7 @@ import (
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
 )
 
-const WireGuardTurnRemoteEndpointRoleDatagramTermination = "wireguard_turn_datagram_termination"
+const WireGuardTurnRemoteEndpointRoleDatagramTermination = RuntimeRemoteEndpointRoleWireGuardRawDatagram
 
 var errWireGuardTurnCarrierLeaseInvalid = errors.New("strict TURN datagram WireGuard carrier lease is invalid")
 
@@ -28,7 +28,7 @@ type WireGuardTurnExecutionLease struct {
 	CarrierFamily              RuntimeCarrierFamily
 	EngineFamily               RuntimeEngineFamily
 	RemoteEndpointFamily       RuntimeRemoteEndpointFamily
-	RemoteEndpointRole         string
+	RemoteEndpointRole         RuntimeRemoteEndpointRole
 	TURNServerAddress          string
 	TURNUsername               string
 	TURNPassword               string
@@ -71,6 +71,27 @@ func cloneWireGuardTurnExecutionLease(lease *WireGuardTurnExecutionLease) *WireG
 		clone.ExpiresAt = &expiresAt
 	}
 	return &clone
+}
+
+func RemoteIngressDiagnosticsFromWireGuardTurnLease(
+	lease *WireGuardTurnExecutionLease,
+) *RuntimeRemoteIngressDiagnostics {
+	if lease == nil {
+		return nil
+	}
+	protocol := RuntimeRemoteIngressProtocolRawWireGuard
+	isolation := RuntimeRemoteIngressIsolationDedicated
+	if lease.RemoteEndpointRole == RuntimeRemoteEndpointRoleUDPProtocolMultiplexer {
+		protocol = RuntimeRemoteIngressProtocolUDPProtocolMux
+		isolation = RuntimeRemoteIngressIsolationMuxBacked
+	}
+	return &RuntimeRemoteIngressDiagnostics{
+		EndpointFamily: lease.RemoteEndpointFamily,
+		EndpointRole:   lease.RemoteEndpointRole,
+		Protocol:       protocol,
+		Address:        strings.TrimSpace(lease.PeerEndpointAddress),
+		Isolation:      isolation,
+	}
 }
 
 func isStrictWireGuardTurnExecutionPlan(plan RuntimeExecutionPlan) bool {
@@ -164,8 +185,16 @@ func validateWireGuardTurnExecutionLease(
 			req.Descriptor.RemoteEndpointFamily,
 		)
 	}
-	if strings.TrimSpace(lease.RemoteEndpointRole) == "" {
+	if strings.TrimSpace(string(lease.RemoteEndpointRole)) == "" {
 		return fmt.Errorf("%w: remote_endpoint_role is missing", errWireGuardTurnCarrierLeaseInvalid)
+	}
+	if lease.RemoteEndpointRole != req.Descriptor.RemoteEndpointRole {
+		return fmt.Errorf(
+			"%w: remote_endpoint_role %q does not match %q",
+			errWireGuardTurnCarrierLeaseInvalid,
+			lease.RemoteEndpointRole,
+			req.Descriptor.RemoteEndpointRole,
+		)
 	}
 	if strings.TrimSpace(lease.TURNServerAddress) == "" {
 		return fmt.Errorf("%w: turn_server_address is missing", errWireGuardTurnCarrierLeaseInvalid)
@@ -199,6 +228,9 @@ func (h *Host) materializeWireGuardTurnLease(
 	defaults RuntimeDefaults,
 	transportProfile *TransportProfileReference,
 ) (*WireGuardTurnExecutionLease, error) {
+	if err := validateRuntimeExecutionPlanDescriptor(descriptor); err != nil {
+		return nil, err
+	}
 	if h.transportProfileStoreEnabled {
 		lease, err := h.materializeWireGuardTurnLeaseFromTransportProfile(
 			resolutionID,

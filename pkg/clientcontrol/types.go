@@ -729,6 +729,7 @@ type PlatformTunnelStatus struct {
 	SourceResolutionID       string                                 `json:"source_resolution_id,omitempty"`
 	ExecutionPlan            *RuntimeExecutionPlan                  `json:"execution_plan,omitempty"`
 	TransportProfile         *TransportProfileReference             `json:"transport_profile,omitempty"`
+	RemoteIngress            *RuntimeRemoteIngressDiagnostics       `json:"remote_ingress,omitempty"`
 	ApplicationRoutingPolicy PlatformTunnelApplicationRoutingPolicy `json:"application_routing_policy,omitempty"`
 	UnderlayRoutePolicy      PlatformTunnelUnderlayRoutePolicy      `json:"underlay_route_policy,omitempty"`
 	AllowedPackages          []string                               `json:"allowed_packages,omitempty"`
@@ -744,6 +745,7 @@ type PlatformTunnelStartResult struct {
 	Mode                    PlatformTunnelMode                `json:"mode"`
 	ExecutionPlan           *RuntimeExecutionPlan             `json:"execution_plan,omitempty"`
 	TransportProfile        *TransportProfileReference        `json:"transport_profile,omitempty"`
+	RemoteIngress           *RuntimeRemoteIngressDiagnostics  `json:"remote_ingress,omitempty"`
 	Ready                   bool                              `json:"ready"`
 	SessionID               string                            `json:"session_id,omitempty"`
 	Stage                   PlatformTunnelStartupStage        `json:"stage,omitempty"`

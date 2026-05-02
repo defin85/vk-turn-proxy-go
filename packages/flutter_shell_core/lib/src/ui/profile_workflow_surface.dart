@@ -945,20 +945,14 @@ class _ProfileWorkflowBodyState extends State<ProfileWorkflowBody> {
                 ? _desktopField(
                     controller: _connectionsController,
                     label: context.shellText.connections,
-                    onChanged: (String value) => _pushDraft(
-                      spec: widget.draft.spec.copyWith(
-                        connections: int.tryParse(value.trim()) ?? 1,
-                      ),
-                    ),
+                    keyboardType: TextInputType.number,
+                    onChanged: _updateConnections,
                   )
                 : _field(
                     controller: _connectionsController,
                     label: context.shellText.connections,
-                    onChanged: (String value) => _pushDraft(
-                      spec: widget.draft.spec.copyWith(
-                        connections: int.tryParse(value.trim()) ?? 1,
-                      ),
-                    ),
+                    keyboardType: TextInputType.number,
+                    onChanged: _updateConnections,
                   ),
           ),
           const SizedBox(width: 12),
@@ -1363,6 +1357,18 @@ class _ProfileWorkflowBodyState extends State<ProfileWorkflowBody> {
         spec: spec ?? widget.draft.spec,
       ),
     );
+  }
+
+  void _updateConnections(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return;
+    }
+    final connections = int.tryParse(trimmed);
+    if (connections == null) {
+      return;
+    }
+    _pushDraft(spec: widget.draft.spec.copyWith(connections: connections));
   }
 
   void _syncFromDraft() {

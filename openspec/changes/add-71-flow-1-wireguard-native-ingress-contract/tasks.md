@@ -1,30 +1,30 @@
 ## 1. Contract and Planning
 
-- [ ] 1.1 Decide whether the first implementation uses a dedicated plain
+- [x] 1.1 Decide whether the first implementation uses a dedicated plain
   WireGuard ingress or an explicit UDP multiplexer, and record the decision in
   deployment docs.
-- [ ] 1.2 Extend runtime execution planning/materialization so
+- [x] 1.2 Extend runtime execution planning/materialization so
   `turn_datagram + wireguard_native` selects a raw-WireGuard ingress instead of
   reusing the DTLS overlay peer endpoint by default.
-- [ ] 1.3 Add diagnostics that show the selected ingress protocol, advertised
+- [x] 1.3 Add diagnostics that show the selected ingress protocol, advertised
   address, and whether the endpoint is dedicated or mux-backed.
 
 ## 2. VPS and Runtime
 
-- [ ] 2.1 Add repo-owned VPS service/runbook support for the selected
+- [x] 2.1 Add repo-owned VPS service/runbook support for the selected
   raw-WireGuard ingress, including firewall requirements.
-- [ ] 2.2 Keep the existing DTLS/custom-overlay listener on its documented DTLS
+- [x] 2.2 Keep the existing DTLS/custom-overlay listener on its documented DTLS
   endpoint and verify it is not silently repurposed.
-- [ ] 2.3 Add fail-closed runtime validation when a strict `wireguard_native`
+- [x] 2.3 Add fail-closed runtime validation when a strict `wireguard_native`
   plan points at a DTLS-only endpoint without an explicit multiplexer.
 
 ## 3. Windows Host and UI
 
-- [ ] 3.1 Update Windows host defaults or provider materialization so
+- [x] 3.1 Update Windows host defaults or provider materialization so
   `windows_wintun` starts against the selected raw-WireGuard ingress.
 - [ ] 3.2 Make readiness and diagnostics distinguish host attach, WireGuard
   handshake, and bidirectional data-plane evidence.
-- [ ] 3.3 Keep the desktop one-button flow intact: users should not manually edit
+- [x] 3.3 Keep the desktop one-button flow intact: users should not manually edit
   peer, DTLS, or raw ingress settings in the normal path.
 
 ## 4. Android Host and UI
@@ -37,16 +37,16 @@
 - [x] 4.3 Keep the mobile Home action fail-closed when the selected strict
   Android WireGuard path has no supported execution plan or no explicit
   imported profile.
-- [ ] 4.4 Add a richer Android settings surface for profile metadata,
+- [x] 4.4 Add a richer Android settings surface for profile metadata,
   validation detail, and replace/forget confirmation before production rollout.
 
 ## 5. Verification
 
-- [ ] 5.1 Add focused Go tests for endpoint selection and fail-closed protocol
+- [x] 5.1 Add focused Go tests for endpoint selection and fail-closed protocol
   mismatch handling.
 - [ ] 5.2 Add or update Windows VM smoke coverage to prove fresh WireGuard
   handshake, Wintun received bytes, and egress IP through the VPS.
-- [ ] 5.3 Verify the existing DTLS/custom-overlay contour still targets the DTLS
+- [x] 5.3 Verify the existing DTLS/custom-overlay contour still targets the DTLS
   endpoint after the WireGuard-native ingress change.
 - [x] 5.4 Verify Android debug APK contents reject packaged WireGuard seed
   assets.

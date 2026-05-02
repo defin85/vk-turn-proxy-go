@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 
 import '../control/control_plane_models.dart';
+import '../control/runtime_execution_planning.dart';
 import 'shell_visuals.dart';
 
 enum RoutingContentSurfaceVariant { desktop, mobile }
@@ -648,7 +649,20 @@ class _RoutingTransportProfileStatus extends StatelessWidget {
           key: ValueKey<String>(
             '${variant.name}-routing-${configured ? 'replace' : 'import'}-vpn-transport-profile-${mode.value}',
           ),
-          onPressed: busy || !hostReady ? null : () => unawaited(onImport!()),
+          onPressed: busy || !hostReady
+              ? null
+              : () => unawaited(
+                  configured
+                      ? _confirmAction(
+                          context,
+                          title: 'Replace VPN profile?',
+                          message:
+                              'Importing a new WireGuard profile will replace the current VPN transport profile for this mode.',
+                          confirmLabel: copy.replaceVPNTransportProfile,
+                          onConfirmed: onImport!,
+                        )
+                      : onImport!(),
+                ),
           icon: Icon(
             configured ? Icons.upload_file_rounded : Icons.vpn_key_rounded,
           ),
@@ -663,7 +677,18 @@ class _RoutingTransportProfileStatus extends StatelessWidget {
           key: ValueKey<String>(
             '${variant.name}-routing-forget-vpn-transport-profile-${mode.value}',
           ),
-          onPressed: busy || !hostReady ? null : () => unawaited(onForget!()),
+          onPressed: busy || !hostReady
+              ? null
+              : () => unawaited(
+                  _confirmAction(
+                    context,
+                    title: 'Forget VPN profile?',
+                    message:
+                        'Remove the current VPN transport profile for this mode.',
+                    confirmLabel: copy.forgetVPNTransportProfile,
+                    onConfirmed: onForget!,
+                  ),
+                ),
           icon: const Icon(Icons.delete_outline_rounded),
           label: Text(copy.forgetVPNTransportProfile),
         ),
@@ -706,6 +731,37 @@ class _RoutingTransportProfileStatus extends StatelessWidget {
       ),
     );
   }
+
+  Future<void> _confirmAction(
+    BuildContext context, {
+    required String title,
+    required String message,
+    required String confirmLabel,
+    required Future<void> Function() onConfirmed,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.tonal(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(confirmLabel),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed == true) {
+      await onConfirmed();
+    }
+  }
 }
 
 String _platformTunnelCapabilitySummary(
@@ -745,17 +801,20 @@ String _platformTunnelResultSummary(
 ) {
   final copy = context.shellText;
   if (result.ready) {
+    final ingress = _remoteIngressSummary(result.remoteIngress);
     if (result.underlayRoutePolicy ==
         PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork) {
-      return copy.platformTunnelReadyWithRoutingProfile(
+      final summary = copy.platformTunnelReadyWithRoutingProfile(
         modeLabel: result.mode.label,
         profileLabel: _underlayRoutePolicyLabel(
           copy,
           result.underlayRoutePolicy!,
         ),
       );
+      return ingress == null ? summary : '$summary · $ingress';
     }
-    return copy.platformTunnelReady(result.mode.label);
+    final summary = copy.platformTunnelReady(result.mode.label);
+    return ingress == null ? summary : '$summary · $ingress';
   }
   return copy.desktopPlatformTunnelResultSummary(
     modeLabel: result.mode.label,
@@ -784,7 +843,31 @@ String _platformTunnelStatusDetails(
   if (status.underlayRoutePolicy != null) {
     parts.add(_underlayRoutePolicyLabel(copy, status.underlayRoutePolicy!));
   }
+  final ingress = _remoteIngressSummary(status.remoteIngress);
+  if (ingress != null) {
+    parts.add(ingress);
+  }
   return parts.join(' · ');
+}
+
+String? _remoteIngressSummary(RuntimeRemoteIngressDiagnostics? ingress) {
+  if (ingress == null) {
+    return null;
+  }
+  final protocol = switch (ingress.protocol) {
+    RuntimeRemoteIngressProtocol.dtlsCustomOverlay => 'DTLS overlay',
+    RuntimeRemoteIngressProtocol.rawWireGuardDatagram => 'raw WireGuard',
+    RuntimeRemoteIngressProtocol.udpProtocolMultiplexer => 'UDP mux',
+  };
+  final isolation = switch (ingress.isolation) {
+    RuntimeRemoteIngressIsolation.dedicated => 'dedicated',
+    RuntimeRemoteIngressIsolation.muxBacked => 'mux-backed',
+  };
+  final address = ingress.address.trim();
+  if (address.isEmpty) {
+    return 'Ingress: $protocol ($isolation)';
+  }
+  return 'Ingress: $protocol at $address ($isolation)';
 }
 
 String? _platformTunnelScopeSummary(

@@ -36,12 +36,9 @@ func defaultAndroidWireGuardTurnMaterializer() clientcontrol.WireGuardTurnMateri
 		if turnServerAddress == "" {
 			return nil, fmt.Errorf("strict Android WireGuard materializer requires a TURN server address")
 		}
-		peerEndpointAddress := strings.TrimSpace(req.Defaults.PeerAddr)
+		peerEndpointAddress := strings.TrimSpace(profile.Endpoint)
 		if peerEndpointAddress == "" {
-			peerEndpointAddress = strings.TrimSpace(profile.Endpoint)
-		}
-		if peerEndpointAddress == "" {
-			return nil, fmt.Errorf("strict Android WireGuard materializer requires a peer endpoint address")
+			return nil, fmt.Errorf("strict Android WireGuard materializer requires an explicit raw WireGuard ingress endpoint in the WireGuard profile")
 		}
 		var expiresAt *time.Time
 		if req.Credentials.TTL > 0 {
@@ -54,7 +51,7 @@ func defaultAndroidWireGuardTurnMaterializer() clientcontrol.WireGuardTurnMateri
 			CarrierFamily:              req.Descriptor.Plan.CarrierFamily,
 			EngineFamily:               req.Descriptor.Plan.EngineFamily,
 			RemoteEndpointFamily:       req.Descriptor.RemoteEndpointFamily,
-			RemoteEndpointRole:         clientcontrol.WireGuardTurnRemoteEndpointRoleDatagramTermination,
+			RemoteEndpointRole:         req.Descriptor.RemoteEndpointRole,
 			TURNServerAddress:          turnServerAddress,
 			TURNUsername:               strings.TrimSpace(req.Credentials.Username),
 			TURNPassword:               strings.TrimSpace(req.Credentials.Password),

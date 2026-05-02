@@ -236,13 +236,8 @@ func (h *Host) transportProfilePrerequisiteStatusLocked(
 		}
 		if transportProfileCompatibleWithPlan(managed.status.Kind, plan) &&
 			managed.status.Validation.State == TransportProfileValidationStateValid {
-			status.State = TransportProfileCompatibilityStateCompatible
-			status.SelectedProfile = &TransportProfileReference{
-				ProfileID: managed.status.ID,
-				Kind:      managed.status.Kind,
-			}
 			status.MissingKind = ""
-			status.Message = ""
+			status.Message = "Select a VPN transport profile for this execution plan before startup."
 			return status
 		}
 		status.State = TransportProfileCompatibilityStateIncompatible
@@ -917,12 +912,9 @@ func (h *Host) materializeWireGuardTurnLeaseFromTransportProfile(
 	if turnServerAddress == "" {
 		return nil, fmt.Errorf("%w: strict WireGuard profile materialization requires a TURN server address", ErrTransportProfileInvalid)
 	}
-	peerEndpointAddress := strings.TrimSpace(defaults.PeerAddr)
+	peerEndpointAddress := strings.TrimSpace(profile.Endpoint)
 	if peerEndpointAddress == "" {
-		peerEndpointAddress = strings.TrimSpace(profile.Endpoint)
-	}
-	if peerEndpointAddress == "" {
-		return nil, fmt.Errorf("%w: strict WireGuard profile materialization requires a peer endpoint address", ErrTransportProfileInvalid)
+		return nil, fmt.Errorf("%w: strict WireGuard profile materialization requires an explicit raw WireGuard ingress endpoint in the transport profile", ErrTransportProfileInvalid)
 	}
 	var expiresAt *time.Time
 	if credentials.TTL > 0 {
@@ -935,7 +927,7 @@ func (h *Host) materializeWireGuardTurnLeaseFromTransportProfile(
 		CarrierFamily:              descriptor.Plan.CarrierFamily,
 		EngineFamily:               descriptor.Plan.EngineFamily,
 		RemoteEndpointFamily:       descriptor.RemoteEndpointFamily,
-		RemoteEndpointRole:         WireGuardTurnRemoteEndpointRoleDatagramTermination,
+		RemoteEndpointRole:         descriptor.RemoteEndpointRole,
 		TURNServerAddress:          turnServerAddress,
 		TURNUsername:               strings.TrimSpace(credentials.Username),
 		TURNPassword:               strings.TrimSpace(credentials.Password),

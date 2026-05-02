@@ -164,4 +164,61 @@ void main() {
     expect(find.text('Desktop trailing slot'), findsOneWidget);
     expect(find.text('Runtime defaults'), findsOneWidget);
   });
+
+  testWidgets('connections field can be cleared before entering a new value', (
+    WidgetTester tester,
+  ) async {
+    var draft = ProfileDraft.defaults();
+
+    await pumpShellCoreLocalizedTestApp(
+      tester,
+      child: StatefulBuilder(
+        builder: (BuildContext context, StateSetter setState) {
+          return SingleChildScrollView(
+            child: SizedBox(
+              width: 900,
+              child: ProfileWorkflowBody(
+                variant: ProfileWorkflowVariant.mobile,
+                providerDescriptors: const <ProviderDescriptor>[],
+                managedProviders: const <ManagedProviderRecord>[],
+                draft: draft,
+                busy: false,
+                onDraftChanged: (ProfileDraft next) {
+                  setState(() {
+                    draft = next;
+                  });
+                },
+                onActivateManagedProviderMode: ({String? managedProviderId}) {},
+                onUseCustomProvider: () {},
+              ),
+            ),
+          );
+        },
+      ),
+    );
+
+    await tester.ensureVisible(find.text('Advanced runtime controls'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Advanced runtime controls'));
+    await tester.pumpAndSettle();
+
+    final connectionsField = find.byWidgetPredicate((Widget widget) {
+      return widget is TextField &&
+          widget.decoration?.labelText == 'Connections';
+    });
+    expect(connectionsField, findsOneWidget);
+    expect(tester.widget<TextField>(connectionsField).controller?.text, '1');
+
+    await tester.enterText(connectionsField, '');
+    await tester.pump();
+
+    expect(tester.widget<TextField>(connectionsField).controller?.text, '');
+    expect(draft.spec.connections, 1);
+
+    await tester.enterText(connectionsField, '4');
+    await tester.pump();
+
+    expect(tester.widget<TextField>(connectionsField).controller?.text, '4');
+    expect(draft.spec.connections, 4);
+  });
 }

@@ -507,6 +507,28 @@ void main() {
         findsOneWidget,
       );
 
+      await tester.tap(find.text('Import VPN profile'));
+      await tester.pumpAndSettle();
+
+      expect(
+        controller.activeWorkbenchRoute,
+        DesktopWorkbenchRoute.vpnTransportProfiles,
+      );
+      expect(
+        find.byKey(
+          const ValueKey<String>('desktop-vpn-transport-profiles-workbench'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byType(Dialog), findsNothing);
+      expect(api.importTransportProfileCalls, isEmpty);
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('desktop-canvas-route-back-button')),
+      );
+      await tester.pumpAndSettle();
+      expect(controller.activeWorkbenchRoute, DesktopWorkbenchRoute.home);
+
       await tester.tap(
         find.byKey(const ValueKey<String>('desktop-section-routing')),
       );
