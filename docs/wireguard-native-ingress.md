@@ -80,3 +80,8 @@ Acceptance evidence for this runbook:
   `remote_ingress.protocol=raw_wireguard_datagram`,
   `remote_ingress.address=176.109.104.105:56042`, and
   `remote_ingress.isolation=dedicated`.
+- Windows `ready=true` for `windows_wintun` also requires `dataplane`
+  evidence: `host_attached=true`, `wireguard_handshake_fresh=true`, positive
+  WireGuard RX/TX deltas, positive Wintun received-byte delta,
+  `remote_egress_ip=176.109.104.105`, and
+  `bidirectional_traffic_verified=true`.

@@ -124,6 +124,13 @@ That smoke:
 - requires `remote_ingress.protocol=raw_wireguard_datagram`
 - requires `remote_ingress.address=176.109.104.105:56042`
 - requires `remote_ingress.isolation=dedicated`
+- requires `dataplane.host_attached=true`
+- requires `dataplane.wireguard_handshake_fresh=true`
+- requires positive `dataplane.wireguard_rx_bytes_delta`,
+  `dataplane.wireguard_tx_bytes_delta`, and
+  `dataplane.wintun_received_bytes_delta`
+- requires `dataplane.remote_egress_ip=176.109.104.105`
+- requires `dataplane.bidirectional_traffic_verified=true`
 - stops `/v1/platform-tunnels/stop` again before exit
 
 If the operator does not pass `-TurnLink`, the smoke first looks for the saved

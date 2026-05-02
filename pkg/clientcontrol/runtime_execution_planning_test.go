@@ -101,6 +101,11 @@ func TestValidateRuntimeExecutionPlanDescriptorRejectsWireGuardPlanWithDTLSRole(
 	if !strings.Contains(err.Error(), "remote_endpoint_role") {
 		t.Fatalf("validateRuntimeExecutionPlanDescriptor() error = %v, want remote_endpoint_role detail", err)
 	}
+	if !strings.Contains(err.Error(), string(RuntimeRemoteEndpointRoleTURNDTLSCustomOverlay)) ||
+		!strings.Contains(err.Error(), string(RuntimeRemoteIngressProtocolDTLSCustomOverlay)) ||
+		!strings.Contains(err.Error(), string(RuntimeRemoteIngressProtocolRawWireGuard)) {
+		t.Fatalf("validateRuntimeExecutionPlanDescriptor() error = %v, want actual and expected protocol detail", err)
+	}
 }
 
 func TestValidateRuntimeExecutionPlanDescriptorRejectsExperimentalWebRTCPlanWithoutCapabilityGate(t *testing.T) {

@@ -22,7 +22,7 @@
 
 - [x] 3.1 Update Windows host defaults or provider materialization so
   `windows_wintun` starts against the selected raw-WireGuard ingress.
-- [ ] 3.2 Make readiness and diagnostics distinguish host attach, WireGuard
+- [x] 3.2 Make readiness and diagnostics distinguish host attach, WireGuard
   handshake, and bidirectional data-plane evidence.
 - [x] 3.3 Keep the desktop one-button flow intact: users should not manually edit
   peer, DTLS, or raw ingress settings in the normal path.
@@ -44,10 +44,19 @@
 
 - [x] 5.1 Add focused Go tests for endpoint selection and fail-closed protocol
   mismatch handling.
-- [ ] 5.2 Add or update Windows VM smoke coverage to prove fresh WireGuard
+- [x] 5.2 Add or update Windows VM smoke coverage to prove fresh WireGuard
   handshake, Wintun received bytes, and egress IP through the VPS.
 - [x] 5.3 Verify the existing DTLS/custom-overlay contour still targets the DTLS
   endpoint after the WireGuard-native ingress change.
 - [x] 5.4 Verify Android debug APK contents reject packaged WireGuard seed
   assets.
 - [x] 5.5 Run `openspec validate add-71-flow-1-wireguard-native-ingress-contract --strict --no-interactive`.
+
+## Verification Notes
+
+- Windows VM smoke coverage now fails closed unless the ready result includes
+  `dataplane.host_attached=true`, a fresh WireGuard handshake, positive
+  WireGuard RX/TX deltas, positive Wintun received bytes,
+  `remote_egress_ip=176.109.104.105`, and bidirectional data-plane evidence.
+- Live Windows VM execution was not rerun in this pass because
+  `codex@192.168.32.142` was unreachable from WSL (`No route to host`).

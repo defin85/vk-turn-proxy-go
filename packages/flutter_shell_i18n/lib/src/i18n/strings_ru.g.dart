@@ -227,6 +227,9 @@ class TranslationsRu extends Translations
   String get sharedPlatformTunnelPrerequisiteTransportProfile =>
       'VPN transport profile';
   @override
+  String get sharedPlatformTunnelPrerequisiteDataplaneEvidence =>
+      'доказательство data-plane';
+  @override
   String get sharedPlatformTunnelStartupStageCapabilityCheck =>
       'Проверка возможностей';
   @override
@@ -248,6 +251,9 @@ class TranslationsRu extends Translations
   @override
   String get sharedPlatformTunnelStartupStageRuntimeAttach =>
       'Подключение рантайма';
+  @override
+  String get sharedPlatformTunnelStartupStageDataplaneVerify =>
+      'Проверка data-plane';
   @override
   String get sharedProviderConfigAvailabilityStateAvailable => 'Доступно';
   @override
@@ -2306,6 +2312,8 @@ extension on TranslationsRu {
             'реализация хоста',
           'sharedPlatformTunnelPrerequisiteTransportProfile' =>
             'VPN transport profile',
+          'sharedPlatformTunnelPrerequisiteDataplaneEvidence' =>
+            'доказательство data-plane',
           'sharedPlatformTunnelStartupStageCapabilityCheck' =>
             'Проверка возможностей',
           'sharedPlatformTunnelStartupStagePermissionAcquire' =>
@@ -2320,6 +2328,8 @@ extension on TranslationsRu {
           'sharedPlatformTunnelStartupStageHostBringup' => 'Подъем хоста',
           'sharedPlatformTunnelStartupStageRuntimeAttach' =>
             'Подключение рантайма',
+          'sharedPlatformTunnelStartupStageDataplaneVerify' =>
+            'Проверка data-plane',
           'sharedProviderConfigAvailabilityStateAvailable' => 'Доступно',
           'sharedProviderConfigAvailabilityStateProviderUnavailable' =>
             'Провайдер недоступен',
@@ -3145,13 +3155,13 @@ extension on TranslationsRu {
             'Используйте Диагностика -> Детали туннеля, чтобы просмотреть этапы запуска и fail-closed результаты для объявленных режимов.',
           'shellTextDesktopAllModesFailClosedLatestEvidence' =>
             'Все объявленные туннельные режимы все еще остаются fail-closed; откройте Диагностика -> Детали туннеля для просмотра последних данных о запуске.',
+          _ => null,
+        } ??
+        switch (path) {
           'shellTextDesktopAllModesFailClosedTestStartup' =>
             'Все объявленные туннельные режимы сейчас находятся в fail-closed состоянии. Используйте Диагностика -> Детали туннеля, когда захотите явно проверить запуск.',
           'shellTextDesktopHostModeAvailable' =>
             'Хост сообщает, что этот режим доступен.',
-          _ => null,
-        } ??
-        switch (path) {
           'shellTextDesktopHostModeUnavailable' =>
             'Хост сообщает, что этот режим недоступен.',
           'shellTextDesktopNoStartupRequestYet' =>

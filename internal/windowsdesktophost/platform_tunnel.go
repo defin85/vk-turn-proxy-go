@@ -32,6 +32,7 @@ type WindowsWintunLifecycle interface {
 	ValidateRoutePolicy(context.Context, clientcontrol.PlatformTunnelStartRequest, *clientcontrol.RuntimeExecutionPlan, *clientcontrol.WireGuardTurnExecutionLease) (*windowsRoutePolicyState, error)
 	BringupHost(context.Context, clientcontrol.PlatformTunnelStartRequest, *clientcontrol.RuntimeExecutionPlan, *clientcontrol.WireGuardTurnExecutionLease, *windowsRoutePolicyState) error
 	AttachRuntime(context.Context, clientcontrol.PlatformTunnelStartRequest, *clientcontrol.RuntimeExecutionPlan, *clientcontrol.WireGuardTurnExecutionLease, *windowsRoutePolicyState) error
+	VerifyDataplane(context.Context, clientcontrol.PlatformTunnelStartRequest, *clientcontrol.RuntimeExecutionPlan, *clientcontrol.WireGuardTurnExecutionLease, *windowsRoutePolicyState) (*clientcontrol.PlatformTunnelDataplaneEvidence, error)
 	Cleanup(context.Context) error
 }
 
@@ -290,11 +291,37 @@ func (c *windowsWintunController) Start(
 			err.Error(),
 		)
 	}
+	dataplane, err := c.lifecycle.VerifyDataplane(ctx, req, selectedPlan, lease, routeState)
+	if err != nil {
+		return startFailureResult(
+			req.Mode,
+			selectedPlan,
+			clientcontrol.PlatformTunnelStartupStageDataplaneVerify,
+			clientcontrol.PlatformTunnelPrerequisiteDataplaneEvidence,
+			req.UnderlayRoutePolicy,
+			err.Error(),
+		)
+	}
+	if dataplane == nil ||
+		!dataplane.HostAttached ||
+		!dataplane.WireGuardHandshakeFresh ||
+		!dataplane.BidirectionalTrafficVerified {
+		return startFailureResult(
+			req.Mode,
+			selectedPlan,
+			clientcontrol.PlatformTunnelStartupStageDataplaneVerify,
+			clientcontrol.PlatformTunnelPrerequisiteDataplaneEvidence,
+			req.UnderlayRoutePolicy,
+			"windows_wintun dataplane verification did not produce fresh WireGuard handshake and bidirectional traffic evidence",
+		)
+	}
 	result := clientcontrol.PlatformTunnelStartResult{
 		Mode:                    req.Mode,
 		ExecutionPlan:           cloneRuntimeExecutionPlan(selectedPlan),
 		RemoteIngress:           clientcontrol.RemoteIngressDiagnosticsFromWireGuardTurnLease(lease),
+		Dataplane:               dataplane,
 		Ready:                   true,
+		Stage:                   clientcontrol.PlatformTunnelStartupStageDataplaneVerify,
 		UnderlayRoutePolicy:     req.UnderlayRoutePolicy,
 		UnderlayRouteExclusions: append([]string(nil), routeState.Exclusions...),
 	}

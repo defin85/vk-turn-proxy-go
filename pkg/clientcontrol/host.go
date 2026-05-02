@@ -749,6 +749,14 @@ func (h *Host) finalizePlatformTunnelStart(
 	if !result.Ready {
 		return h.finalizePlatformTunnelFailure(ctx, req, result), nil
 	}
+	if err := validateReadyPlatformTunnelDataplaneEvidence(req.Mode, result.Dataplane); err != nil {
+		result.Ready = false
+		result.SessionID = ""
+		result.Stage = PlatformTunnelStartupStageDataplaneVerify
+		result.MissingPrerequisite = PlatformTunnelPrerequisiteDataplaneEvidence
+		result.Message = err.Error()
+		return h.finalizePlatformTunnelFailure(ctx, req, result), nil
+	}
 	return h.publishReadyPlatformTunnelResult(ctx, req, result)
 }
 
@@ -783,6 +791,14 @@ func (h *Host) finalizeResumedPlatformTunnel(
 			result,
 			fmt.Errorf("platform tunnel resume %s lost startup request context before session publication", req.StartupAttemptID),
 		), nil
+	}
+	if err := validateReadyPlatformTunnelDataplaneEvidence(startReq.Mode, result.Dataplane); err != nil {
+		result.Ready = false
+		result.SessionID = ""
+		result.Stage = PlatformTunnelStartupStageDataplaneVerify
+		result.MissingPrerequisite = PlatformTunnelPrerequisiteDataplaneEvidence
+		result.Message = err.Error()
+		return h.finalizeResumedPlatformTunnelFailure(ctx, startReq, haveStartReq, result), nil
 	}
 	return h.publishReadyPlatformTunnelResult(ctx, startReq, result)
 }
@@ -859,6 +875,7 @@ func (h *Host) platformTunnelPublicationFailure(
 		Mode:                result.Mode,
 		ExecutionPlan:       cloneRuntimeExecutionPlan(result.ExecutionPlan),
 		RemoteIngress:       cloneRuntimeRemoteIngressDiagnostics(result.RemoteIngress),
+		Dataplane:           clonePlatformTunnelDataplaneEvidence(result.Dataplane),
 		Ready:               false,
 		Stage:               PlatformTunnelStartupStageRuntimeAttach,
 		MissingPrerequisite: PlatformTunnelPrerequisiteHostImplementation,
@@ -886,11 +903,34 @@ func platformTunnelFailureNeedsCleanup(result PlatformTunnelStartResult) bool {
 	switch result.Stage {
 	case PlatformTunnelStartupStageRouteValidate,
 		PlatformTunnelStartupStageHostBringup,
-		PlatformTunnelStartupStageRuntimeAttach:
+		PlatformTunnelStartupStageRuntimeAttach,
+		PlatformTunnelStartupStageDataplaneVerify:
 		return true
 	default:
 		return false
 	}
+}
+
+func validateReadyPlatformTunnelDataplaneEvidence(
+	mode PlatformTunnelMode,
+	evidence *PlatformTunnelDataplaneEvidence,
+) error {
+	if mode != PlatformTunnelModeWindowsWintun {
+		return nil
+	}
+	if evidence == nil {
+		return fmt.Errorf("windows_wintun ready requires dataplane evidence")
+	}
+	if !evidence.HostAttached {
+		return fmt.Errorf("windows_wintun ready requires host_attached dataplane evidence")
+	}
+	if !evidence.WireGuardHandshakeFresh {
+		return fmt.Errorf("windows_wintun ready requires fresh WireGuard handshake evidence")
+	}
+	if !evidence.BidirectionalTrafficVerified {
+		return fmt.Errorf("windows_wintun ready requires bidirectional dataplane traffic evidence")
+	}
+	return nil
 }
 
 func (h *Host) cleanupPlatformTunnelRuntime(ctx context.Context, mode PlatformTunnelMode) error {
@@ -1203,6 +1243,9 @@ func applyPlatformTunnelStartResultToStatus(status *PlatformTunnelStatus, result
 	if result.RemoteIngress != nil {
 		status.RemoteIngress = cloneRuntimeRemoteIngressDiagnostics(result.RemoteIngress)
 	}
+	if result.Dataplane != nil {
+		status.Dataplane = clonePlatformTunnelDataplaneEvidence(result.Dataplane)
+	}
 	if result.UnderlayRoutePolicy != "" {
 		status.UnderlayRoutePolicy = result.UnderlayRoutePolicy
 	}
@@ -1238,7 +1281,11 @@ func applyPlatformTunnelSessionToStatus(status *PlatformTunnelStatus, session Se
 	case SessionStateReady:
 		status.State = PlatformTunnelLifecycleStateReady
 		status.Ready = true
-		status.Stage = PlatformTunnelStartupStageRuntimeAttach
+		if status.Dataplane != nil && status.Dataplane.BidirectionalTrafficVerified {
+			status.Stage = PlatformTunnelStartupStageDataplaneVerify
+		} else {
+			status.Stage = PlatformTunnelStartupStageRuntimeAttach
+		}
 		status.MissingPrerequisite = ""
 		status.Message = ""
 	case SessionStateStarting, SessionStateRetrying:
@@ -1283,6 +1330,7 @@ func clonePlatformTunnelStatus(status PlatformTunnelStatus) PlatformTunnelStatus
 	status.ExecutionPlan = cloneRuntimeExecutionPlan(status.ExecutionPlan)
 	status.TransportProfile = cloneTransportProfileReference(status.TransportProfile)
 	status.RemoteIngress = cloneRuntimeRemoteIngressDiagnostics(status.RemoteIngress)
+	status.Dataplane = clonePlatformTunnelDataplaneEvidence(status.Dataplane)
 	status.AllowedPackages = cloneStringSlice(status.AllowedPackages)
 	status.DisallowedPackages = cloneStringSlice(status.DisallowedPackages)
 	return status
@@ -1304,8 +1352,17 @@ func clonePlatformTunnelStartResult(result PlatformTunnelStartResult) PlatformTu
 	result.ExecutionPlan = cloneRuntimeExecutionPlan(result.ExecutionPlan)
 	result.TransportProfile = cloneTransportProfileReference(result.TransportProfile)
 	result.RemoteIngress = cloneRuntimeRemoteIngressDiagnostics(result.RemoteIngress)
+	result.Dataplane = clonePlatformTunnelDataplaneEvidence(result.Dataplane)
 	result.UnderlayRouteExclusions = cloneStringSlice(result.UnderlayRouteExclusions)
 	return result
+}
+
+func clonePlatformTunnelDataplaneEvidence(evidence *PlatformTunnelDataplaneEvidence) *PlatformTunnelDataplaneEvidence {
+	if evidence == nil {
+		return nil
+	}
+	clone := *evidence
+	return &clone
 }
 
 func clonePlatformTunnelStopResult(result PlatformTunnelStopResult) PlatformTunnelStopResult {
@@ -1329,7 +1386,8 @@ func platformTunnelStartupStageFromString(raw string) PlatformTunnelStartupStage
 		PlatformTunnelStartupStageProfileValidate,
 		PlatformTunnelStartupStageRouteValidate,
 		PlatformTunnelStartupStageHostBringup,
-		PlatformTunnelStartupStageRuntimeAttach:
+		PlatformTunnelStartupStageRuntimeAttach,
+		PlatformTunnelStartupStageDataplaneVerify:
 		return stage
 	default:
 		return ""

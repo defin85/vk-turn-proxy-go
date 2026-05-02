@@ -123,6 +123,7 @@ const (
 	PlatformTunnelPrerequisiteAppRoutingPolicy    PlatformTunnelPrerequisite = "app_routing_policy"
 	PlatformTunnelPrerequisiteHostImplementation  PlatformTunnelPrerequisite = "host_implementation"
 	PlatformTunnelPrerequisiteTransportProfile    PlatformTunnelPrerequisite = "transport_profile"
+	PlatformTunnelPrerequisiteDataplaneEvidence   PlatformTunnelPrerequisite = "dataplane_evidence"
 )
 
 type PlatformTunnelStartupStage string
@@ -136,6 +137,7 @@ const (
 	PlatformTunnelStartupStageRouteValidate      PlatformTunnelStartupStage = "route_validate"
 	PlatformTunnelStartupStageHostBringup        PlatformTunnelStartupStage = "host_bringup"
 	PlatformTunnelStartupStageRuntimeAttach      PlatformTunnelStartupStage = "runtime_attach"
+	PlatformTunnelStartupStageDataplaneVerify    PlatformTunnelStartupStage = "dataplane_verify"
 )
 
 type PlatformTunnelApplicationRoutingPolicy string
@@ -721,6 +723,17 @@ type PlatformTunnelStopRequest struct {
 	Mode PlatformTunnelMode `json:"mode"`
 }
 
+type PlatformTunnelDataplaneEvidence struct {
+	HostAttached                 bool   `json:"host_attached"`
+	WireGuardHandshakeFresh      bool   `json:"wireguard_handshake_fresh"`
+	WireGuardRxBytesDelta        int64  `json:"wireguard_rx_bytes_delta,omitempty"`
+	WireGuardTxBytesDelta        int64  `json:"wireguard_tx_bytes_delta,omitempty"`
+	WintunReceivedBytesDelta     int64  `json:"wintun_received_bytes_delta,omitempty"`
+	RemoteEgressIP               string `json:"remote_egress_ip,omitempty"`
+	ExpectedRemoteEgressIP       string `json:"expected_remote_egress_ip,omitempty"`
+	BidirectionalTrafficVerified bool   `json:"bidirectional_traffic_verified"`
+}
+
 type PlatformTunnelStatus struct {
 	Mode                     PlatformTunnelMode                     `json:"mode"`
 	State                    PlatformTunnelLifecycleState           `json:"state"`
@@ -730,6 +743,7 @@ type PlatformTunnelStatus struct {
 	ExecutionPlan            *RuntimeExecutionPlan                  `json:"execution_plan,omitempty"`
 	TransportProfile         *TransportProfileReference             `json:"transport_profile,omitempty"`
 	RemoteIngress            *RuntimeRemoteIngressDiagnostics       `json:"remote_ingress,omitempty"`
+	Dataplane                *PlatformTunnelDataplaneEvidence       `json:"dataplane,omitempty"`
 	ApplicationRoutingPolicy PlatformTunnelApplicationRoutingPolicy `json:"application_routing_policy,omitempty"`
 	UnderlayRoutePolicy      PlatformTunnelUnderlayRoutePolicy      `json:"underlay_route_policy,omitempty"`
 	AllowedPackages          []string                               `json:"allowed_packages,omitempty"`
@@ -746,6 +760,7 @@ type PlatformTunnelStartResult struct {
 	ExecutionPlan           *RuntimeExecutionPlan             `json:"execution_plan,omitempty"`
 	TransportProfile        *TransportProfileReference        `json:"transport_profile,omitempty"`
 	RemoteIngress           *RuntimeRemoteIngressDiagnostics  `json:"remote_ingress,omitempty"`
+	Dataplane               *PlatformTunnelDataplaneEvidence  `json:"dataplane,omitempty"`
 	Ready                   bool                              `json:"ready"`
 	SessionID               string                            `json:"session_id,omitempty"`
 	Stage                   PlatformTunnelStartupStage        `json:"stage,omitempty"`

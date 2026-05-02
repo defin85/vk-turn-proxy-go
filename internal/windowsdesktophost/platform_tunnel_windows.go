@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/defin85/vk-turn-proxy-go/internal/wireguardturnruntime"
 	"github.com/defin85/vk-turn-proxy-go/pkg/clientcontrol"
@@ -47,6 +48,12 @@ type powershellQueryResult struct {
 	InterfaceAlias string   `json:"interface_alias"`
 	NextHop        string   `json:"next_hop"`
 	DNSServers     []string `json:"dns_servers"`
+}
+
+type windowsDataplaneProbeResult struct {
+	RemoteEgressIP            string `json:"remote_egress_ip"`
+	WintunReceivedBytesBefore int64  `json:"wintun_received_bytes_before"`
+	WintunReceivedBytesAfter  int64  `json:"wintun_received_bytes_after"`
 }
 
 func newWindowsWintunLifecycle(logger *slog.Logger) WindowsWintunLifecycle {
@@ -261,6 +268,63 @@ func (l *windowsWintunLifecycle) AttachRuntime(
 	return nil
 }
 
+func (l *windowsWintunLifecycle) VerifyDataplane(
+	ctx context.Context,
+	_ clientcontrol.PlatformTunnelStartRequest,
+	_ *clientcontrol.RuntimeExecutionPlan,
+	lease *clientcontrol.WireGuardTurnExecutionLease,
+	_ *windowsRoutePolicyState,
+) (*clientcontrol.PlatformTunnelDataplaneEvidence, error) {
+	state, err := l.currentState()
+	if err != nil {
+		return nil, err
+	}
+	if state.runtime == nil {
+		return nil, fmt.Errorf("windows_wintun dataplane verification requires an attached WireGuard runtime")
+	}
+	beforeStats, err := state.runtime.PeerStats()
+	if err != nil {
+		return nil, fmt.Errorf("query WireGuard runtime stats before dataplane probe: %w", err)
+	}
+	probe, err := queryWindowsWintunDataplaneProbe(ctx, state.interfaceAlias)
+	if err != nil {
+		return nil, fmt.Errorf("run Wintun data-plane probe: %w", err)
+	}
+	afterStats, err := state.runtime.PeerStats()
+	if err != nil {
+		return nil, fmt.Errorf("query WireGuard runtime stats after dataplane probe: %w", err)
+	}
+
+	expectedEgressIP := expectedEgressIPFromEndpoint(lease.PeerEndpointAddress)
+	wgRxDelta := afterStats.RxBytes - beforeStats.RxBytes
+	wgTxDelta := afterStats.TxBytes - beforeStats.TxBytes
+	wintunRxDelta := probe.WintunReceivedBytesAfter - probe.WintunReceivedBytesBefore
+	handshakeFresh := wireGuardHandshakeIsFresh(afterStats.LastHandshakeTime, time.Now().UTC())
+	egressMatches := expectedEgressIP == "" || strings.TrimSpace(probe.RemoteEgressIP) == expectedEgressIP
+	evidence := &clientcontrol.PlatformTunnelDataplaneEvidence{
+		HostAttached:                 true,
+		WireGuardHandshakeFresh:      handshakeFresh,
+		WireGuardRxBytesDelta:        wgRxDelta,
+		WireGuardTxBytesDelta:        wgTxDelta,
+		WintunReceivedBytesDelta:     wintunRxDelta,
+		RemoteEgressIP:               strings.TrimSpace(probe.RemoteEgressIP),
+		ExpectedRemoteEgressIP:       expectedEgressIP,
+		BidirectionalTrafficVerified: handshakeFresh && wgRxDelta > 0 && wgTxDelta > 0 && wintunRxDelta > 0 && egressMatches,
+	}
+	if !evidence.BidirectionalTrafficVerified {
+		return evidence, fmt.Errorf(
+			"windows_wintun dataplane evidence incomplete: handshake_fresh=%t wireguard_rx_delta=%d wireguard_tx_delta=%d wintun_received_bytes_delta=%d remote_egress_ip=%q expected_remote_egress_ip=%q",
+			evidence.WireGuardHandshakeFresh,
+			evidence.WireGuardRxBytesDelta,
+			evidence.WireGuardTxBytesDelta,
+			evidence.WintunReceivedBytesDelta,
+			evidence.RemoteEgressIP,
+			evidence.ExpectedRemoteEgressIP,
+		)
+	}
+	return evidence, nil
+}
+
 func (l *windowsWintunLifecycle) Cleanup(ctx context.Context) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -364,6 +428,72 @@ $dns = @(Get-DnsClientServerAddress -InterfaceIndex $route.InterfaceIndex -Addre
 		return nil, fmt.Errorf("default underlay route is missing next hop")
 	}
 	return &result, nil
+}
+
+func queryWindowsWintunDataplaneProbe(ctx context.Context, interfaceAlias string) (*windowsDataplaneProbeResult, error) {
+	payload := map[string]any{
+		"interface_alias": strings.TrimSpace(interfaceAlias),
+		"probe_url":       "https://api.ipify.org",
+		"timeout_seconds": 15,
+	}
+	script := `
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Net.Http
+$req = $env:VKTP_PS_REQUEST | ConvertFrom-Json
+function Get-WintunReceivedBytes {
+  $stats = Get-NetAdapterStatistics -Name $req.interface_alias -ErrorAction Stop
+  return [int64]$stats.ReceivedBytes
+}
+$before = Get-WintunReceivedBytes
+$client = [System.Net.Http.HttpClient]::new()
+try {
+  $client.Timeout = [TimeSpan]::FromSeconds([int]$req.timeout_seconds)
+  $remoteEgressIp = $client.GetStringAsync([string]$req.probe_url).GetAwaiter().GetResult().Trim()
+} finally {
+  $client.Dispose()
+}
+Start-Sleep -Milliseconds 250
+$after = Get-WintunReceivedBytes
+[pscustomobject]@{
+  remote_egress_ip = [string]$remoteEgressIp
+  wintun_received_bytes_before = [int64]$before
+  wintun_received_bytes_after = [int64]$after
+} | ConvertTo-Json -Compress
+`
+	output, err := runPowerShellJSON(ctx, payload, script)
+	if err != nil {
+		return nil, err
+	}
+	var result windowsDataplaneProbeResult
+	if err := json.Unmarshal(output, &result); err != nil {
+		return nil, fmt.Errorf("decode Wintun data-plane probe: %w", err)
+	}
+	if strings.TrimSpace(result.RemoteEgressIP) == "" {
+		return nil, fmt.Errorf("Wintun data-plane probe returned empty remote egress IP")
+	}
+	return &result, nil
+}
+
+func expectedEgressIPFromEndpoint(endpoint string) string {
+	host := strings.TrimSpace(endpoint)
+	if parsedHost, _, err := net.SplitHostPort(host); err == nil {
+		host = parsedHost
+	}
+	if parsed := net.ParseIP(host); parsed != nil && parsed.To4() != nil {
+		return parsed.String()
+	}
+	return ""
+}
+
+func wireGuardHandshakeIsFresh(handshake time.Time, now time.Time) bool {
+	if handshake.IsZero() {
+		return false
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	age := now.Sub(handshake.UTC())
+	return age >= -5*time.Second && age <= 2*time.Minute
 }
 
 func resolveUnderlayRouteExclusions(ctx context.Context, turnServerAddress string, dnsServers []string) ([]string, error) {

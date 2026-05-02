@@ -41,6 +41,9 @@ handshake, and bidirectional data-plane traffic through the selected ingress.
 - **THEN** the system does not claim end-to-end strict `wireguard_native` support
 - **AND** diagnostics identify the missing remote data-plane evidence separately
   from local adapter attach
+- **AND** failure uses the `dataplane_verify` stage with the
+  `dataplane_evidence` prerequisite when host attach succeeded but the
+  handshake, byte counters, or VPS egress proof is missing
 
 ### Requirement: WireGuard-native material is not sourced from hidden app seeds
 

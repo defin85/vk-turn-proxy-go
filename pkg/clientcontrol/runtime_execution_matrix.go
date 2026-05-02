@@ -166,9 +166,13 @@ func validateRuntimeExecutionPlanDescriptor(descriptor RuntimeExecutionPlanDescr
 		case RuntimeRemoteEndpointRoleWireGuardRawDatagram, RuntimeRemoteEndpointRoleUDPProtocolMultiplexer:
 		default:
 			return fmt.Errorf(
-				"wireguard_native runtime execution plan must use remote_endpoint_role %q or %q",
+				"wireguard_native runtime execution plan remote_endpoint_role %q maps to protocol %q; expected remote_endpoint_role %q (protocol %q) or %q (protocol %q)",
+				descriptor.RemoteEndpointRole,
+				runtimeRemoteIngressProtocolForEndpointRole(descriptor.RemoteEndpointRole),
 				RuntimeRemoteEndpointRoleWireGuardRawDatagram,
+				RuntimeRemoteIngressProtocolRawWireGuard,
 				RuntimeRemoteEndpointRoleUDPProtocolMultiplexer,
+				RuntimeRemoteIngressProtocolUDPProtocolMux,
 			)
 		}
 		switch descriptor.SupportState {
@@ -206,6 +210,19 @@ func validateRuntimeExecutionPlanDescriptor(descriptor RuntimeExecutionPlanDescr
 			descriptor.Plan.EngineFamily,
 			descriptor.Plan.HostAdapter,
 		)
+	}
+}
+
+func runtimeRemoteIngressProtocolForEndpointRole(role RuntimeRemoteEndpointRole) RuntimeRemoteIngressProtocol {
+	switch role {
+	case RuntimeRemoteEndpointRoleTURNDTLSCustomOverlay:
+		return RuntimeRemoteIngressProtocolDTLSCustomOverlay
+	case RuntimeRemoteEndpointRoleWireGuardRawDatagram:
+		return RuntimeRemoteIngressProtocolRawWireGuard
+	case RuntimeRemoteEndpointRoleUDPProtocolMultiplexer:
+		return RuntimeRemoteIngressProtocolUDPProtocolMux
+	default:
+		return ""
 	}
 }
 

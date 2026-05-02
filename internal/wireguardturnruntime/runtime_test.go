@@ -149,6 +149,39 @@ func TestDirectDatagramBindCarriesWireGuardTraffic(t *testing.T) {
 	}
 }
 
+func TestParseWireGuardPeerStats(t *testing.T) {
+	t.Parallel()
+
+	stats, err := parseWireGuardPeerStats(strings.Join([]string{
+		"private_key=(hidden)",
+		"listen_port=0",
+		"public_key=abc",
+		"protocol_version=1",
+		"last_handshake_time_sec=1714000000",
+		"last_handshake_time_nsec=123",
+		"tx_bytes=456",
+		"rx_bytes=789",
+		"persistent_keepalive_interval=25",
+	}, "\n"))
+	if err != nil {
+		t.Fatalf("parseWireGuardPeerStats() error = %v", err)
+	}
+	if stats.LastHandshakeTime.IsZero() {
+		t.Fatal("LastHandshakeTime is zero, want parsed timestamp")
+	}
+	if stats.TxBytes != 456 || stats.RxBytes != 789 {
+		t.Fatalf("stats bytes = tx:%d rx:%d, want tx:456 rx:789", stats.TxBytes, stats.RxBytes)
+	}
+}
+
+func TestParseWireGuardPeerStatsRejectsMissingPeer(t *testing.T) {
+	t.Parallel()
+
+	if _, err := parseWireGuardPeerStats("private_key=(hidden)\nlisten_port=0\n"); err == nil {
+		t.Fatal("parseWireGuardPeerStats() error = nil, want missing peer failure")
+	}
+}
+
 func TestBuildIPCConfigUsesStructuredPresharedKeyAndKeepalive(t *testing.T) {
 	clientPrivate := bytes32(1)
 	peerPublic := bytes32(2)

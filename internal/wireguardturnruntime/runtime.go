@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -41,6 +42,12 @@ type Runtime struct {
 	turnClient *turn.Client
 	baseConn   net.PacketConn
 	closed     bool
+}
+
+type PeerStats struct {
+	LastHandshakeTime time.Time
+	RxBytes           int64
+	TxBytes           int64
 }
 
 const defaultTURNClientRTO = 200 * time.Millisecond
@@ -223,6 +230,84 @@ func (r *Runtime) Close() error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func (r *Runtime) PeerStats() (PeerStats, error) {
+	if r == nil {
+		return PeerStats{}, fmt.Errorf("wireguard runtime is nil")
+	}
+	r.mu.Lock()
+	wgDevice := r.device
+	closed := r.closed
+	r.mu.Unlock()
+	if wgDevice == nil || closed {
+		return PeerStats{}, fmt.Errorf("wireguard runtime is not active")
+	}
+	raw, err := wgDevice.IpcGet()
+	if err != nil {
+		return PeerStats{}, err
+	}
+	return parseWireGuardPeerStats(raw)
+}
+
+func parseWireGuardPeerStats(raw string) (PeerStats, error) {
+	var stats PeerStats
+	var havePeer bool
+	var handshakeSec int64
+	var handshakeNSec int64
+
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if key == "public_key" {
+			havePeer = true
+			continue
+		}
+		if !havePeer {
+			continue
+		}
+		switch key {
+		case "last_handshake_time_sec":
+			parsed, err := strconv.ParseInt(value, 10, 64)
+			if err != nil {
+				return PeerStats{}, fmt.Errorf("parse last_handshake_time_sec: %w", err)
+			}
+			handshakeSec = parsed
+		case "last_handshake_time_nsec":
+			parsed, err := strconv.ParseInt(value, 10, 64)
+			if err != nil {
+				return PeerStats{}, fmt.Errorf("parse last_handshake_time_nsec: %w", err)
+			}
+			handshakeNSec = parsed
+		case "rx_bytes":
+			parsed, err := strconv.ParseInt(value, 10, 64)
+			if err != nil {
+				return PeerStats{}, fmt.Errorf("parse rx_bytes: %w", err)
+			}
+			stats.RxBytes = parsed
+		case "tx_bytes":
+			parsed, err := strconv.ParseInt(value, 10, 64)
+			if err != nil {
+				return PeerStats{}, fmt.Errorf("parse tx_bytes: %w", err)
+			}
+			stats.TxBytes = parsed
+		}
+	}
+	if !havePeer {
+		return PeerStats{}, fmt.Errorf("wireguard runtime reports no peers")
+	}
+	if handshakeSec != 0 || handshakeNSec != 0 {
+		stats.LastHandshakeTime = time.Unix(handshakeSec, handshakeNSec).UTC()
+	}
+	return stats, nil
 }
 
 type turnDatagramBind struct {

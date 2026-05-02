@@ -272,6 +272,11 @@ func validatePlatformTunnelStartResult(req PlatformTunnelStartRequest, result Pl
 			return fmt.Errorf("startup result for mode %s reports invalid remote_ingress: %w", result.Mode, err)
 		}
 	}
+	if result.Dataplane != nil {
+		if err := validatePlatformTunnelDataplaneEvidence(*result.Dataplane); err != nil {
+			return fmt.Errorf("startup result for mode %s reports invalid dataplane evidence: %w", result.Mode, err)
+		}
+	}
 	if strings.TrimSpace(result.StartupAttemptID) != "" {
 		if result.Ready {
 			return fmt.Errorf("startup result for mode %s is ready but still reports startup_attempt_id", result.Mode)
@@ -289,6 +294,16 @@ func validatePlatformTunnelStartResult(req PlatformTunnelStartRequest, result Pl
 		}
 		if strings.TrimSpace(result.SessionID) == "" {
 			return fmt.Errorf("startup result for mode %s is ready but session_id is empty", result.Mode)
+		}
+		if result.Mode == PlatformTunnelModeWindowsWintun {
+			if result.Dataplane == nil {
+				return fmt.Errorf("startup result for mode %s is ready but missing dataplane evidence", result.Mode)
+			}
+			if !result.Dataplane.HostAttached ||
+				!result.Dataplane.WireGuardHandshakeFresh ||
+				!result.Dataplane.BidirectionalTrafficVerified {
+				return fmt.Errorf("startup result for mode %s is ready but dataplane evidence is incomplete", result.Mode)
+			}
 		}
 		return nil
 	}
@@ -379,7 +394,8 @@ func isKnownPlatformTunnelPrerequisite(prerequisite PlatformTunnelPrerequisite) 
 		PlatformTunnelPrerequisiteDNSBypass,
 		PlatformTunnelPrerequisiteAppRoutingPolicy,
 		PlatformTunnelPrerequisiteHostImplementation,
-		PlatformTunnelPrerequisiteTransportProfile:
+		PlatformTunnelPrerequisiteTransportProfile,
+		PlatformTunnelPrerequisiteDataplaneEvidence:
 		return true
 	default:
 		return false
@@ -416,11 +432,36 @@ func isKnownPlatformTunnelStartupStage(stage PlatformTunnelStartupStage) bool {
 		PlatformTunnelStartupStageProfileValidate,
 		PlatformTunnelStartupStageRouteValidate,
 		PlatformTunnelStartupStageHostBringup,
-		PlatformTunnelStartupStageRuntimeAttach:
+		PlatformTunnelStartupStageRuntimeAttach,
+		PlatformTunnelStartupStageDataplaneVerify:
 		return true
 	default:
 		return false
 	}
+}
+
+func validatePlatformTunnelDataplaneEvidence(evidence PlatformTunnelDataplaneEvidence) error {
+	if evidence.WireGuardRxBytesDelta < 0 {
+		return fmt.Errorf("wireguard_rx_bytes_delta is negative")
+	}
+	if evidence.WireGuardTxBytesDelta < 0 {
+		return fmt.Errorf("wireguard_tx_bytes_delta is negative")
+	}
+	if evidence.WintunReceivedBytesDelta < 0 {
+		return fmt.Errorf("wintun_received_bytes_delta is negative")
+	}
+	if evidence.BidirectionalTrafficVerified {
+		if !evidence.HostAttached {
+			return fmt.Errorf("bidirectional evidence requires host_attached=true")
+		}
+		if !evidence.WireGuardHandshakeFresh {
+			return fmt.Errorf("bidirectional evidence requires wireguard_handshake_fresh=true")
+		}
+		if strings.TrimSpace(evidence.RemoteEgressIP) == "" {
+			return fmt.Errorf("bidirectional evidence requires remote_egress_ip")
+		}
+	}
+	return nil
 }
 
 func hostTargetLabel(build BuildIdentity) string {

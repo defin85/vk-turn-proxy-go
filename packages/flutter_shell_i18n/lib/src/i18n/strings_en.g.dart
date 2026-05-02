@@ -296,6 +296,10 @@ class Translations with BaseTranslations<AppLocale, Translations> {
   String get sharedPlatformTunnelPrerequisiteTransportProfile =>
       'VPN transport profile';
 
+  /// en: 'data-plane evidence'
+  String get sharedPlatformTunnelPrerequisiteDataplaneEvidence =>
+      'data-plane evidence';
+
   /// en: 'Capability check'
   String get sharedPlatformTunnelStartupStageCapabilityCheck =>
       'Capability check';
@@ -324,6 +328,10 @@ class Translations with BaseTranslations<AppLocale, Translations> {
 
   /// en: 'Runtime attach'
   String get sharedPlatformTunnelStartupStageRuntimeAttach => 'Runtime attach';
+
+  /// en: 'Data-plane verification'
+  String get sharedPlatformTunnelStartupStageDataplaneVerify =>
+      'Data-plane verification';
 
   /// en: 'Available'
   String get sharedProviderConfigAvailabilityStateAvailable => 'Available';
@@ -3010,6 +3018,8 @@ extension on Translations {
             'host implementation',
           'sharedPlatformTunnelPrerequisiteTransportProfile' =>
             'VPN transport profile',
+          'sharedPlatformTunnelPrerequisiteDataplaneEvidence' =>
+            'data-plane evidence',
           'sharedPlatformTunnelStartupStageCapabilityCheck' =>
             'Capability check',
           'sharedPlatformTunnelStartupStagePermissionAcquire' =>
@@ -3022,6 +3032,8 @@ extension on Translations {
           'sharedPlatformTunnelStartupStageRouteValidate' => 'Route validation',
           'sharedPlatformTunnelStartupStageHostBringup' => 'Host bring-up',
           'sharedPlatformTunnelStartupStageRuntimeAttach' => 'Runtime attach',
+          'sharedPlatformTunnelStartupStageDataplaneVerify' =>
+            'Data-plane verification',
           'sharedProviderConfigAvailabilityStateAvailable' => 'Available',
           'sharedProviderConfigAvailabilityStateProviderUnavailable' =>
             'Provider missing',
@@ -3828,13 +3840,13 @@ extension on Translations {
             'Use Diagnostics -> Tunnel detail to inspect startup stages and fail-closed results for the reported modes.',
           'shellTextDesktopAllModesFailClosedLatestEvidence' =>
             'All reported tunnel modes are still fail-closed; inspect Diagnostics -> Tunnel detail for the latest startup evidence.',
+          _ => null,
+        } ??
+        switch (path) {
           'shellTextDesktopAllModesFailClosedTestStartup' =>
             'All reported tunnel modes are currently fail-closed. Use Diagnostics -> Tunnel detail when you want to test startup explicitly.',
           'shellTextDesktopHostModeAvailable' =>
             'The host reports that this mode is available.',
-          _ => null,
-        } ??
-        switch (path) {
           'shellTextDesktopHostModeUnavailable' =>
             'The host reports that this mode is unavailable.',
           'shellTextDesktopNoStartupRequestYet' =>

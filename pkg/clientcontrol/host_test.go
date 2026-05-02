@@ -1600,6 +1600,12 @@ func TestHostStartPlatformTunnelCleansUpPreReadyFailureStages(t *testing.T) {
 			missingPrerequisite: PlatformTunnelPrerequisiteDriver,
 			message:             "desktop host bring-up could not attach the packaged wintun adapter",
 		},
+		{
+			name:                "dataplane verification failure",
+			stage:               PlatformTunnelStartupStageDataplaneVerify,
+			missingPrerequisite: PlatformTunnelPrerequisiteDataplaneEvidence,
+			message:             "desktop host attached Wintun but did not prove bidirectional data-plane traffic",
+		},
 	}
 
 	for _, tt := range tests {
@@ -1651,6 +1657,51 @@ func TestHostStartPlatformTunnelCleansUpPreReadyFailureStages(t *testing.T) {
 				t.Fatalf("platform tunnel cleanup calls = %d, want 1", stopCalls)
 			}
 		})
+	}
+}
+
+func TestHostStartPlatformTunnelRejectsWindowsReadyWithoutDataplaneEvidence(t *testing.T) {
+	build := testBuildIdentity()
+	build.Target = "windows/amd64"
+	stopCalls := 0
+	host := New(
+		WithBuildIdentity(build),
+		WithPlatformTunnelStarter(func(_ context.Context, req PlatformTunnelStartRequest) (PlatformTunnelStartResult, error) {
+			return PlatformTunnelStartResult{
+				Mode:  req.Mode,
+				Ready: true,
+			}, nil
+		}),
+		WithPlatformTunnelStopper(func(_ context.Context, req PlatformTunnelStopRequest) (PlatformTunnelStopResult, error) {
+			stopCalls++
+			return PlatformTunnelStopResult{
+				Mode:    req.Mode,
+				Stopped: true,
+			}, nil
+		}),
+	)
+
+	result, err := host.StartPlatformTunnel(context.Background(), PlatformTunnelStartRequest{
+		Mode: PlatformTunnelModeWindowsWintun,
+	})
+	if err != nil {
+		t.Fatalf("StartPlatformTunnel() error = %v", err)
+	}
+	if result.Ready {
+		t.Fatalf("StartPlatformTunnel().Ready = true, want false: %+v", result)
+	}
+	if result.Stage != PlatformTunnelStartupStageDataplaneVerify {
+		t.Fatalf("StartPlatformTunnel().Stage = %q, want %q", result.Stage, PlatformTunnelStartupStageDataplaneVerify)
+	}
+	if result.MissingPrerequisite != PlatformTunnelPrerequisiteDataplaneEvidence {
+		t.Fatalf(
+			"StartPlatformTunnel().MissingPrerequisite = %q, want %q",
+			result.MissingPrerequisite,
+			PlatformTunnelPrerequisiteDataplaneEvidence,
+		)
+	}
+	if stopCalls != 1 {
+		t.Fatalf("platform tunnel cleanup calls = %d, want 1", stopCalls)
 	}
 }
 

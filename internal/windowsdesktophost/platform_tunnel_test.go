@@ -64,6 +64,17 @@ func TestWindowsWintunControllerDefaultsUnderlayPolicyAndPublishesExclusions(t *
 		result.RemoteIngress.Isolation != clientcontrol.RuntimeRemoteIngressIsolationDedicated {
 		t.Fatalf("Start().RemoteIngress = %+v, want raw WireGuard dedicated ingress", result.RemoteIngress)
 	}
+	if result.Dataplane == nil {
+		t.Fatal("Start().Dataplane = nil, want verified data-plane evidence")
+	}
+	if !result.Dataplane.HostAttached ||
+		!result.Dataplane.WireGuardHandshakeFresh ||
+		!result.Dataplane.BidirectionalTrafficVerified {
+		t.Fatalf("Start().Dataplane = %+v, want attached fresh bidirectional evidence", result.Dataplane)
+	}
+	if result.Stage != clientcontrol.PlatformTunnelStartupStageDataplaneVerify {
+		t.Fatalf("Start().Stage = %q, want %q", result.Stage, clientcontrol.PlatformTunnelStartupStageDataplaneVerify)
+	}
 	if result.UnderlayRoutePolicy != clientcontrol.PlatformTunnelUnderlayRoutePolicyPreserveActiveLocalNetwork {
 		t.Fatalf(
 			"Start().UnderlayRoutePolicy = %q, want %q",
@@ -74,11 +85,11 @@ func TestWindowsWintunControllerDefaultsUnderlayPolicyAndPublishesExclusions(t *
 	if len(result.UnderlayRouteExclusions) != 2 {
 		t.Fatalf("Start().UnderlayRouteExclusions len = %d, want 2", len(result.UnderlayRouteExclusions))
 	}
-	if strings.Join(lifecycle.calls, ",") != "driver_check,route_validate,host_bringup,runtime_attach" {
+	if strings.Join(lifecycle.calls, ",") != "driver_check,route_validate,host_bringup,runtime_attach,dataplane_verify" {
 		t.Fatalf(
 			"lifecycle calls = %q, want %q",
 			strings.Join(lifecycle.calls, ","),
-			"driver_check,route_validate,host_bringup,runtime_attach",
+			"driver_check,route_validate,host_bringup,runtime_attach,dataplane_verify",
 		)
 	}
 }
@@ -301,12 +312,57 @@ func TestWindowsWintunControllerRuntimeAttachFailureCleansUp(t *testing.T) {
 	}
 }
 
+func TestWindowsWintunControllerDataplaneFailureIsTyped(t *testing.T) {
+	t.Parallel()
+
+	lifecycle := &fakeWindowsWintunLifecycle{
+		routeState: &windowsRoutePolicyState{
+			UnderlayRoutePolicy: clientcontrol.PlatformTunnelUnderlayRoutePolicyPreserveActiveLocalNetwork,
+			Exclusions:          []string{"203.0.113.10"},
+		},
+		dataplaneErr: errors.New("no fresh WireGuard handshake"),
+	}
+	controller := newWindowsWintunController(supportedWindowsWintunCapability(""), lifecycle)
+	controller.setWireGuardTurnLeaseProvider(fakeLeaseProvider)
+
+	_, err := controller.Start(context.Background(), clientcontrol.PlatformTunnelStartRequest{
+		Mode:         clientcontrol.PlatformTunnelModeWindowsWintun,
+		ResolutionID: "resolution-1",
+		RuntimeDefaults: &clientcontrol.RuntimeDefaults{
+			ListenAddr: "127.0.0.1:7777",
+			PeerAddr:   "relay.example.test:3478",
+		},
+	})
+	if err == nil {
+		t.Fatal("Start() error = nil, want typed dataplane_verify failure")
+	}
+	startErr := new(clientcontrol.PlatformTunnelStartError)
+	if !errors.As(err, &startErr) {
+		t.Fatalf("Start() error = %v, want PlatformTunnelStartError", err)
+	}
+	if startErr.Result.Stage != clientcontrol.PlatformTunnelStartupStageDataplaneVerify {
+		t.Fatalf("typed failure stage = %q, want %q", startErr.Result.Stage, clientcontrol.PlatformTunnelStartupStageDataplaneVerify)
+	}
+	if startErr.Result.MissingPrerequisite != clientcontrol.PlatformTunnelPrerequisiteDataplaneEvidence {
+		t.Fatalf(
+			"typed failure missing_prerequisite = %q, want %q",
+			startErr.Result.MissingPrerequisite,
+			clientcontrol.PlatformTunnelPrerequisiteDataplaneEvidence,
+		)
+	}
+	if lifecycle.cleanupCalls != 0 {
+		t.Fatalf("cleanupCalls = %d, want 0 before host-owned stop cleanup", lifecycle.cleanupCalls)
+	}
+}
+
 type fakeWindowsWintunLifecycle struct {
-	driverErr  error
-	routeErr   error
-	routeState *windowsRoutePolicyState
-	bringupErr error
-	attachErr  error
+	driverErr    error
+	routeErr     error
+	routeState   *windowsRoutePolicyState
+	bringupErr   error
+	attachErr    error
+	dataplane    *clientcontrol.PlatformTunnelDataplaneEvidence
+	dataplaneErr error
 
 	calls        []string
 	cleanupCalls int
@@ -356,6 +412,32 @@ func (f *fakeWindowsWintunLifecycle) AttachRuntime(
 ) error {
 	f.calls = append(f.calls, "runtime_attach")
 	return f.attachErr
+}
+
+func (f *fakeWindowsWintunLifecycle) VerifyDataplane(
+	context.Context,
+	clientcontrol.PlatformTunnelStartRequest,
+	*clientcontrol.RuntimeExecutionPlan,
+	*clientcontrol.WireGuardTurnExecutionLease,
+	*windowsRoutePolicyState,
+) (*clientcontrol.PlatformTunnelDataplaneEvidence, error) {
+	f.calls = append(f.calls, "dataplane_verify")
+	if f.dataplaneErr != nil {
+		return f.dataplane, f.dataplaneErr
+	}
+	if f.dataplane != nil {
+		return f.dataplane, nil
+	}
+	return &clientcontrol.PlatformTunnelDataplaneEvidence{
+		HostAttached:                 true,
+		WireGuardHandshakeFresh:      true,
+		WireGuardRxBytesDelta:        2048,
+		WireGuardTxBytesDelta:        1024,
+		WintunReceivedBytesDelta:     1536,
+		RemoteEgressIP:               "203.0.113.10",
+		ExpectedRemoteEgressIP:       "203.0.113.10",
+		BidirectionalTrafficVerified: true,
+	}, nil
 }
 
 func (f *fakeWindowsWintunLifecycle) Cleanup(context.Context) error {

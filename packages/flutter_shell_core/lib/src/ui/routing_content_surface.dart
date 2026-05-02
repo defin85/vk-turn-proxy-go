@@ -802,6 +802,7 @@ String _platformTunnelResultSummary(
   final copy = context.shellText;
   if (result.ready) {
     final ingress = _remoteIngressSummary(result.remoteIngress);
+    final dataplane = _dataplaneSummary(result.dataplane);
     if (result.underlayRoutePolicy ==
         PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork) {
       final summary = copy.platformTunnelReadyWithRoutingProfile(
@@ -811,10 +812,10 @@ String _platformTunnelResultSummary(
           result.underlayRoutePolicy!,
         ),
       );
-      return ingress == null ? summary : '$summary · $ingress';
+      return _joinNonEmpty(<String?>[summary, ingress, dataplane]);
     }
     final summary = copy.platformTunnelReady(result.mode.label);
-    return ingress == null ? summary : '$summary · $ingress';
+    return _joinNonEmpty(<String?>[summary, ingress, dataplane]);
   }
   return copy.desktopPlatformTunnelResultSummary(
     modeLabel: result.mode.label,
@@ -847,6 +848,10 @@ String _platformTunnelStatusDetails(
   if (ingress != null) {
     parts.add(ingress);
   }
+  final dataplane = _dataplaneSummary(status.dataplane);
+  if (dataplane != null) {
+    parts.add(dataplane);
+  }
   return parts.join(' · ');
 }
 
@@ -868,6 +873,36 @@ String? _remoteIngressSummary(RuntimeRemoteIngressDiagnostics? ingress) {
     return 'Ingress: $protocol ($isolation)';
   }
   return 'Ingress: $protocol at $address ($isolation)';
+}
+
+String? _dataplaneSummary(PlatformTunnelDataplaneEvidence? evidence) {
+  if (evidence == null) {
+    return null;
+  }
+  final parts = <String>[];
+  parts.add(evidence.hostAttached ? 'host attached' : 'host not attached');
+  parts.add(
+    evidence.wireGuardHandshakeFresh
+        ? 'fresh WG handshake'
+        : 'WG handshake missing',
+  );
+  if (evidence.bidirectionalTrafficVerified) {
+    parts.add('bidirectional traffic');
+  }
+  if (evidence.wintunReceivedBytesDelta > 0) {
+    parts.add('Wintun RX +${evidence.wintunReceivedBytesDelta} B');
+  }
+  if (evidence.remoteEgressIp.trim().isNotEmpty) {
+    parts.add('egress ${evidence.remoteEgressIp.trim()}');
+  }
+  return 'Dataplane: ${parts.join(', ')}';
+}
+
+String _joinNonEmpty(List<String?> parts) {
+  return parts
+      .whereType<String>()
+      .where((String part) => part.trim().isNotEmpty)
+      .join(' · ');
 }
 
 String? _platformTunnelScopeSummary(

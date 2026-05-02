@@ -1056,7 +1056,8 @@ enum PlatformTunnelPrerequisite {
   dnsBypass('dns_bypass'),
   appRoutingPolicy('app_routing_policy'),
   hostImplementation('host_implementation'),
-  transportProfile('transport_profile');
+  transportProfile('transport_profile'),
+  dataplaneEvidence('dataplane_evidence');
 
   const PlatformTunnelPrerequisite(this.value);
 
@@ -1092,6 +1093,8 @@ extension PlatformTunnelPrerequisiteDisplay on PlatformTunnelPrerequisite {
       t.sharedPlatformTunnelPrerequisiteHostImplementation,
     PlatformTunnelPrerequisite.transportProfile =>
       t.sharedPlatformTunnelPrerequisiteTransportProfile,
+    PlatformTunnelPrerequisite.dataplaneEvidence =>
+      t.sharedPlatformTunnelPrerequisiteDataplaneEvidence,
   };
 }
 
@@ -1140,7 +1143,8 @@ enum PlatformTunnelStartupStage {
   profileValidate('profile_validate'),
   routeValidate('route_validate'),
   hostBringup('host_bringup'),
-  runtimeAttach('runtime_attach');
+  runtimeAttach('runtime_attach'),
+  dataplaneVerify('dataplane_verify');
 
   const PlatformTunnelStartupStage(this.value);
 
@@ -1174,6 +1178,8 @@ extension PlatformTunnelStartupStageDisplay on PlatformTunnelStartupStage {
       t.sharedPlatformTunnelStartupStageHostBringup,
     PlatformTunnelStartupStage.runtimeAttach =>
       t.sharedPlatformTunnelStartupStageRuntimeAttach,
+    PlatformTunnelStartupStage.dataplaneVerify =>
+      t.sharedPlatformTunnelStartupStageDataplaneVerify,
   };
 }
 
@@ -1418,6 +1424,65 @@ class PlatformTunnelCapability {
   }
 }
 
+class PlatformTunnelDataplaneEvidence {
+  const PlatformTunnelDataplaneEvidence({
+    required this.hostAttached,
+    required this.wireGuardHandshakeFresh,
+    required this.bidirectionalTrafficVerified,
+    this.wireGuardRxBytesDelta = 0,
+    this.wireGuardTxBytesDelta = 0,
+    this.wintunReceivedBytesDelta = 0,
+    this.remoteEgressIp = '',
+    this.expectedRemoteEgressIp = '',
+  });
+
+  factory PlatformTunnelDataplaneEvidence.fromJson(Map<String, dynamic> json) {
+    return PlatformTunnelDataplaneEvidence(
+      hostAttached: json['host_attached'] as bool? ?? false,
+      wireGuardHandshakeFresh:
+          json['wireguard_handshake_fresh'] as bool? ?? false,
+      wireGuardRxBytesDelta: _readInt(json['wireguard_rx_bytes_delta']),
+      wireGuardTxBytesDelta: _readInt(json['wireguard_tx_bytes_delta']),
+      wintunReceivedBytesDelta: _readInt(json['wintun_received_bytes_delta']),
+      remoteEgressIp: json['remote_egress_ip'] as String? ?? '',
+      expectedRemoteEgressIp:
+          json['expected_remote_egress_ip'] as String? ?? '',
+      bidirectionalTrafficVerified:
+          json['bidirectional_traffic_verified'] as bool? ?? false,
+    );
+  }
+
+  final bool hostAttached;
+  final bool wireGuardHandshakeFresh;
+  final int wireGuardRxBytesDelta;
+  final int wireGuardTxBytesDelta;
+  final int wintunReceivedBytesDelta;
+  final String remoteEgressIp;
+  final String expectedRemoteEgressIp;
+  final bool bidirectionalTrafficVerified;
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{
+      'host_attached': hostAttached,
+      'wireguard_handshake_fresh': wireGuardHandshakeFresh,
+      'wireguard_rx_bytes_delta': wireGuardRxBytesDelta == 0
+          ? null
+          : wireGuardRxBytesDelta,
+      'wireguard_tx_bytes_delta': wireGuardTxBytesDelta == 0
+          ? null
+          : wireGuardTxBytesDelta,
+      'wintun_received_bytes_delta': wintunReceivedBytesDelta == 0
+          ? null
+          : wintunReceivedBytesDelta,
+      'remote_egress_ip': remoteEgressIp.isEmpty ? null : remoteEgressIp,
+      'expected_remote_egress_ip': expectedRemoteEgressIp.isEmpty
+          ? null
+          : expectedRemoteEgressIp,
+      'bidirectional_traffic_verified': bidirectionalTrafficVerified,
+    });
+  }
+}
+
 class PlatformTunnelStartResult {
   const PlatformTunnelStartResult({
     required this.mode,
@@ -1425,6 +1490,7 @@ class PlatformTunnelStartResult {
     this.executionPlan,
     this.transportProfile,
     this.remoteIngress,
+    this.dataplane,
     this.sessionId = '',
     this.stage,
     this.missingPrerequisite,
@@ -1497,6 +1563,11 @@ class PlatformTunnelStartResult {
               json['remote_ingress'] as Map<String, dynamic>,
             )
           : null,
+      dataplane: json['dataplane'] is Map<String, dynamic>
+          ? PlatformTunnelDataplaneEvidence.fromJson(
+              json['dataplane'] as Map<String, dynamic>,
+            )
+          : null,
       sessionId: sessionId,
       stage: stage,
       missingPrerequisite: missingPrerequisite,
@@ -1514,6 +1585,7 @@ class PlatformTunnelStartResult {
   final RuntimeExecutionPlan? executionPlan;
   final TransportProfileReference? transportProfile;
   final RuntimeRemoteIngressDiagnostics? remoteIngress;
+  final PlatformTunnelDataplaneEvidence? dataplane;
   final String sessionId;
   final PlatformTunnelStartupStage? stage;
   final PlatformTunnelPrerequisite? missingPrerequisite;
@@ -1528,6 +1600,7 @@ class PlatformTunnelStartResult {
       'execution_plan': executionPlan?.toJson(),
       'transport_profile': transportProfile?.toJson(),
       'remote_ingress': remoteIngress?.toJson(),
+      'dataplane': dataplane?.toJson(),
       'session_id': sessionId.isEmpty ? null : sessionId,
       'stage': stage?.value,
       'missing_prerequisite': missingPrerequisite?.value,
@@ -1549,6 +1622,7 @@ class PlatformTunnelStatus {
     this.executionPlan,
     this.transportProfile,
     this.remoteIngress,
+    this.dataplane,
     this.applicationRoutingPolicy,
     this.underlayRoutePolicy,
     this.allowedPackages = const <String>[],
@@ -1584,6 +1658,11 @@ class PlatformTunnelStatus {
               json['remote_ingress'] as Map<String, dynamic>,
             )
           : null,
+      dataplane: json['dataplane'] is Map<String, dynamic>
+          ? PlatformTunnelDataplaneEvidence.fromJson(
+              json['dataplane'] as Map<String, dynamic>,
+            )
+          : null,
       applicationRoutingPolicy: _readOptionalApplicationRoutingPolicy(
         json['application_routing_policy'],
         fieldName: 'application_routing_policy',
@@ -1616,6 +1695,7 @@ class PlatformTunnelStatus {
   final RuntimeExecutionPlan? executionPlan;
   final TransportProfileReference? transportProfile;
   final RuntimeRemoteIngressDiagnostics? remoteIngress;
+  final PlatformTunnelDataplaneEvidence? dataplane;
   final PlatformTunnelApplicationRoutingPolicy? applicationRoutingPolicy;
   final PlatformTunnelUnderlayRoutePolicy? underlayRoutePolicy;
   final List<String> allowedPackages;
@@ -1638,6 +1718,7 @@ class PlatformTunnelStatus {
       'execution_plan': executionPlan?.toJson(),
       'transport_profile': transportProfile?.toJson(),
       'remote_ingress': remoteIngress?.toJson(),
+      'dataplane': dataplane?.toJson(),
       'application_routing_policy': applicationRoutingPolicy?.value,
       'underlay_route_policy': underlayRoutePolicy?.value,
       'allowed_packages': allowedPackages.isEmpty ? null : allowedPackages,
@@ -3381,6 +3462,19 @@ DateTime _readTimestamp(dynamic raw) {
     return DateTime.parse(raw).toLocal();
   }
   return DateTime.fromMillisecondsSinceEpoch(0).toLocal();
+}
+
+int _readInt(dynamic raw) {
+  if (raw == null) {
+    return 0;
+  }
+  if (raw is int) {
+    return raw;
+  }
+  if (raw is num) {
+    return raw.toInt();
+  }
+  throw FormatException('expected integer value, got $raw');
 }
 
 Map<String, dynamic> _compact(Map<String, dynamic> values) {

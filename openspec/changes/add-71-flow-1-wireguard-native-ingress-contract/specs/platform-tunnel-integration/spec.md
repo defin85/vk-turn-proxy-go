@@ -18,3 +18,16 @@ ingress protocol, address, and isolation for strict
   dedicated or mux-backed
 - **AND** the shell can display those diagnostics without exposing WireGuard
   secret material
+
+#### Scenario: Ready strict Windows Wintun result names data-plane evidence
+
+- **GIVEN** a packaged Windows Wintun host reaches `ready=true` for a strict
+  `turn_datagram + wireguard_native` plan
+- **WHEN** the host returns the startup result or current platform tunnel status
+- **THEN** `dataplane.host_attached` is `true`
+- **AND** `dataplane.wireguard_handshake_fresh` is `true`
+- **AND** `dataplane.wireguard_rx_bytes_delta`,
+  `dataplane.wireguard_tx_bytes_delta`, and
+  `dataplane.wintun_received_bytes_delta` are positive
+- **AND** `dataplane.remote_egress_ip` identifies the public VPS egress IP
+- **AND** `dataplane.bidirectional_traffic_verified` is `true`

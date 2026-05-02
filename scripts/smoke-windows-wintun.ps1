@@ -4,6 +4,7 @@ param(
     [string]$RuntimeListenAddr = '127.0.0.1:39010',
     [string]$PeerAddr = '176.109.104.105:56042',
     [string]$ExpectedRawIngressAddr = '176.109.104.105:56042',
+    [string]$ExpectedEgressIp = '',
     [string]$TurnLink = '',
     [string]$ResolutionId = '',
     [string]$ProfileId = 'desktop-generic-turn',
@@ -24,6 +25,26 @@ function Test-IsAdmin {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = New-Object Security.Principal.WindowsPrincipal($identity)
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Get-EndpointHost {
+    param([string]$Endpoint)
+
+    $candidate = $Endpoint.Trim()
+    if ([string]::IsNullOrWhiteSpace($candidate)) {
+        return ''
+    }
+    if ($candidate.StartsWith('[')) {
+        $closing = $candidate.IndexOf(']')
+        if ($closing -gt 0) {
+            return $candidate.Substring(1, $closing - 1)
+        }
+    }
+    $separator = $candidate.LastIndexOf(':')
+    if ($separator -gt 0) {
+        return $candidate.Substring(0, $separator)
+    }
+    return $candidate
 }
 
 function Wait-HostReady {
@@ -328,6 +349,31 @@ try {
     if ([string]$startResult.remote_ingress.isolation -ne 'dedicated') {
         throw 'windows_wintun remote_ingress.isolation is not dedicated: ' + ($startResult.remote_ingress | ConvertTo-Json -Depth 8 -Compress)
     }
+    if ($null -eq $startResult.dataplane) {
+        throw 'windows_wintun ready result did not include dataplane evidence'
+    }
+    if ($startResult.dataplane.host_attached -ne $true) {
+        throw 'windows_wintun dataplane.host_attached is not true: ' + ($startResult.dataplane | ConvertTo-Json -Depth 8 -Compress)
+    }
+    if ($startResult.dataplane.wireguard_handshake_fresh -ne $true) {
+        throw 'windows_wintun dataplane did not prove a fresh WireGuard handshake: ' + ($startResult.dataplane | ConvertTo-Json -Depth 8 -Compress)
+    }
+    if ([int64]$startResult.dataplane.wireguard_rx_bytes_delta -le 0 -or [int64]$startResult.dataplane.wireguard_tx_bytes_delta -le 0) {
+        throw 'windows_wintun dataplane did not prove bidirectional WireGuard byte counters: ' + ($startResult.dataplane | ConvertTo-Json -Depth 8 -Compress)
+    }
+    if ([int64]$startResult.dataplane.wintun_received_bytes_delta -le 0) {
+        throw 'windows_wintun dataplane did not prove Wintun received bytes increased: ' + ($startResult.dataplane | ConvertTo-Json -Depth 8 -Compress)
+    }
+    $expectedEgress = $ExpectedEgressIp.Trim()
+    if ([string]::IsNullOrWhiteSpace($expectedEgress)) {
+        $expectedEgress = Get-EndpointHost -Endpoint $ExpectedRawIngressAddr
+    }
+    if (-not [string]::IsNullOrWhiteSpace($expectedEgress) -and [string]$startResult.dataplane.remote_egress_ip -ne $expectedEgress) {
+        throw "windows_wintun dataplane remote_egress_ip $($startResult.dataplane.remote_egress_ip) does not match expected $expectedEgress"
+    }
+    if ($startResult.dataplane.bidirectional_traffic_verified -ne $true) {
+        throw 'windows_wintun dataplane did not report bidirectional_traffic_verified=true: ' + ($startResult.dataplane | ConvertTo-Json -Depth 8 -Compress)
+    }
 
     $session = Wait-SessionState -SessionId ([string]$startResult.session_id) -ExpectedState 'ready' -TimeoutSeconds 10
     if ([string]$session.source_resolution_id -ne $resolvedId) {
@@ -341,6 +387,7 @@ try {
         session_id = [string]$startResult.session_id
         execution_plan = $startResult.execution_plan
         remote_ingress = $startResult.remote_ingress
+        dataplane = $startResult.dataplane
         underlay_route_policy = [string]$startResult.underlay_route_policy
         host_build = $hostInfo.build
         session_state = [string]$session.state
