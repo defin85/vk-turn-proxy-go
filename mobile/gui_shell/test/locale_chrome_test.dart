@@ -87,6 +87,14 @@ class _ReadyMobileHostBridge extends UnavailableMobileHostBridge {
 
   @override
   Future<List<SessionRecord>> sessions() async => const <SessionRecord>[];
+
+  @override
+  Future<List<PlatformTunnelStatus>> platformTunnelStatuses() async =>
+      const <PlatformTunnelStatus>[];
+
+  @override
+  Future<List<TransportProfileStatus>> transportProfiles() async =>
+      const <TransportProfileStatus>[];
 }
 
 class _LocalizedReadyMobileHostBridge extends UnavailableMobileHostBridge {
@@ -142,6 +150,14 @@ class _LocalizedReadyMobileHostBridge extends UnavailableMobileHostBridge {
 
   @override
   Future<List<SessionRecord>> sessions() async => const <SessionRecord>[];
+
+  @override
+  Future<List<PlatformTunnelStatus>> platformTunnelStatuses() async =>
+      const <PlatformTunnelStatus>[];
+
+  @override
+  Future<List<TransportProfileStatus>> transportProfiles() async =>
+      const <TransportProfileStatus>[];
 }
 
 class _InMemoryMobileShellStateStore implements MobileShellStateStore {
