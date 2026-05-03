@@ -3,6 +3,7 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED"/>
     <application
         android:label="RelayDock"
         android:name="${applicationName}"
@@ -53,6 +54,7 @@
         <service
             android:name=".AndroidPlatformTunnelService"
             android:exported="false"
+            android:foregroundServiceType="systemExempted"
             android:permission="android.permission.BIND_VPN_SERVICE">
             <meta-data
                 android:name="android.net.VpnService.SUPPORTS_ALWAYS_ON"

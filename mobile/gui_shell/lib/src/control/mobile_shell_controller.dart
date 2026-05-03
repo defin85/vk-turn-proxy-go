@@ -960,6 +960,14 @@ class MobileShellController extends ChangeNotifier {
       return;
     }
     try {
+      final currentConnection = hostConnection!;
+      final nextHostInfo = await bridge.hostInfo();
+      hostConnection = MobileHostConnectionResult(
+        state: currentConnection.state,
+        message: currentConnection.message,
+        info: nextHostInfo,
+        description: currentConnection.description,
+      );
       final nextProviders = await bridge.providers();
       final nextTransportProfiles = _hostSupportsTransportProfileStore
           ? await bridge.transportProfiles()

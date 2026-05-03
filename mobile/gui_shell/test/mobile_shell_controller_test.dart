@@ -2547,6 +2547,63 @@ void main() {
   );
 
   test(
+    'controller refreshes host info before re-evaluating VPN transport profile prerequisite',
+    () async {
+      final profile = ProfileRecord(
+        id: 'profile-1',
+        name: 'vk live',
+        spec: _profileSpec(),
+      );
+      final bridge = _FakeMobileHostBridge(
+        ensureReadyResult: const MobileHostConnectionResult(
+          state: MobileHostLifecycleState.ready,
+          message: 'Connected to embedded mobile host bridge',
+          info: _hostInfoMissingTransportProfile,
+          description: 'native bridge',
+        ),
+        transportProfilesList: const <TransportProfileStatus>[],
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[profile],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: profile.id,
+            draft: ProfileDraft.fromProfile(profile),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      expect(
+        controller.platformTunnelStartPreparationBlockReason(
+          PlatformTunnelMode.androidVpnService,
+        ),
+        contains('VPN transport profile'),
+      );
+
+      bridge._hostInfo = _readyHostInfo;
+      bridge._transportProfiles.addAll(_transportProfileStatuses());
+      await controller.refresh();
+
+      expect(bridge.hostInfoCalls, greaterThanOrEqualTo(1));
+      expect(
+        controller.activeVPNTransportProfileStatusSummary,
+        contains('WireGuard profile: configured'),
+      );
+      expect(
+        controller.platformTunnelStartPreparationBlockReason(
+          PlatformTunnelMode.androidVpnService,
+        ),
+        isNull,
+      );
+    },
+  );
+
+  test(
     'controller resolves the active draft before platform tunnel startup when no resolution is selected',
     () async {
       final profile = ProfileRecord(
@@ -3582,6 +3639,7 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   final List<PlatformTunnelMode> stoppedPlatformTunnels =
       <PlatformTunnelMode>[];
   int ensureReadyCalls = 0;
+  int hostInfoCalls = 0;
   int startSessionCalls = 0;
   final StreamController<EventRecord> _events =
       StreamController<EventRecord>.broadcast();
@@ -3787,7 +3845,10 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   Stream<EventRecord> events() => _events.stream;
 
   @override
-  Future<HostInfo> hostInfo() async => _hostInfo;
+  Future<HostInfo> hostInfo() async {
+    hostInfoCalls += 1;
+    return _hostInfo;
+  }
 
   @override
   Future<HostInfo> negotiate({
