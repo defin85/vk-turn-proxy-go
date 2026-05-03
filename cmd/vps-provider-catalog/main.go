@@ -49,11 +49,10 @@ func run(ctx context.Context, stdout io.Writer, stderr io.Writer, args []string)
 	}
 	defer listener.Close()
 
-	now := time.Now().UTC()
 	service := vpscatalog.NewService(vpscatalog.ServiceOptions{
-		Snapshot:   vpscatalog.AttachIntegrity(sampleSnapshot(now, cfg), "vps-provider-catalog"),
-		Authorizer: authorizerFromConfig(cfg),
-		Now:        time.Now,
+		SnapshotProvider: snapshotProviderFromConfig(cfg),
+		Authorizer:       authorizerFromConfig(cfg),
+		Now:              time.Now,
 	})
 	server := &http.Server{
 		Handler: service.Handler(),
@@ -167,6 +166,12 @@ func addScope(authorizer vpscatalog.TokenAuthorizer, token string, scope vpscata
 	authorizer[token] = append(authorizer[token], scope)
 }
 
+func snapshotProviderFromConfig(cfg config) func(time.Time) vpscatalog.CatalogSnapshot {
+	return func(now time.Time) vpscatalog.CatalogSnapshot {
+		return vpscatalog.AttachIntegrity(sampleSnapshot(now.UTC(), cfg), "vps-provider-catalog")
+	}
+}
+
 func sampleSnapshot(now time.Time, cfg config) vpscatalog.CatalogSnapshot {
 	evidenceExpires := now.Add(5 * time.Minute)
 	return vpscatalog.CatalogSnapshot{
@@ -184,14 +189,16 @@ func sampleSnapshot(now time.Time, cfg config) vpscatalog.CatalogSnapshot {
 			Description:  "VPS-managed TURN credential issuer",
 			SourceFamily: "managed_turn",
 			Health: vpscatalog.Health{
+				CheckedAt: nowPtr(now),
 				Status:    vpscatalog.HealthStatusHealthy,
 				ExpiresAt: &evidenceExpires,
 			},
 			Evidence: []vpscatalog.Evidence{{
-				Kind:      "synthetic_probe",
-				Subject:   "catalog_snapshot",
-				Status:    vpscatalog.EvidenceStatusFresh,
-				ExpiresAt: &evidenceExpires,
+				Kind:       "synthetic_probe",
+				Subject:    "catalog_snapshot",
+				Status:     vpscatalog.EvidenceStatusFresh,
+				ObservedAt: nowPtr(now),
+				ExpiresAt:  &evidenceExpires,
 			}},
 			ArtifactOffers: []vpscatalog.ArtifactOffer{{
 				ID:                     "turn-handoff",
@@ -203,17 +210,24 @@ func sampleSnapshot(now time.Time, cfg config) vpscatalog.CatalogSnapshot {
 				CompatibleProfileKinds: []string{"wireguard_native_v1"},
 				MaxTTLSeconds:          60,
 				Health: vpscatalog.Health{
+					CheckedAt: nowPtr(now),
 					Status:    vpscatalog.HealthStatusHealthy,
 					ExpiresAt: &evidenceExpires,
 				},
 				Evidence: []vpscatalog.Evidence{{
-					Kind:      "remote_ingress_probe",
-					Subject:   "turn_handoff",
-					Status:    vpscatalog.EvidenceStatusFresh,
-					ExpiresAt: &evidenceExpires,
+					Kind:       "remote_ingress_probe",
+					Subject:    "turn_handoff",
+					Status:     vpscatalog.EvidenceStatusFresh,
+					ObservedAt: nowPtr(now),
+					ExpiresAt:  &evidenceExpires,
 				}},
 				Redaction: vpscatalog.DefaultRedactionPolicy(),
 			}},
 		}},
 	}
+}
+
+func nowPtr(value time.Time) *time.Time {
+	normalized := value.UTC()
+	return &normalized
 }

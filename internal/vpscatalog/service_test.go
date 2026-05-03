@@ -126,6 +126,96 @@ func TestServiceArtifactIssueIsIdempotentAndRejectsStaleEvidence(t *testing.T) {
 	}
 }
 
+func TestServiceRefreshesSnapshotProviderBeforeCatalogReadAndIssue(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+	service := NewService(ServiceOptions{
+		SnapshotProvider: func(snapshotNow time.Time) CatalogSnapshot {
+			return AttachIntegrity(testSnapshot(snapshotNow), "test")
+		},
+		Now: func() time.Time { return now },
+		Authorizer: TokenAuthorizer{
+			"read-token":  {AuthScopeCatalogRead},
+			"issue-token": {AuthScopeArtifactIssue},
+		},
+	})
+	server := httptest.NewServer(service.Handler())
+	t.Cleanup(server.Close)
+
+	req, _ := http.NewRequest(http.MethodGet, server.URL+DefaultCatalogPath, nil)
+	req.Header.Set("Authorization", "Bearer read-token")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET catalog error = %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET catalog status = %d, want 200", resp.StatusCode)
+	}
+	var first CatalogSnapshot
+	if err := json.NewDecoder(resp.Body).Decode(&first); err != nil {
+		t.Fatalf("decode first snapshot: %v", err)
+	}
+
+	now = now.Add(6 * time.Minute)
+	req, _ = http.NewRequest(http.MethodGet, server.URL+DefaultCatalogPath, nil)
+	req.Header.Set("Authorization", "Bearer read-token")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET refreshed catalog error = %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET refreshed catalog status = %d, want 200", resp.StatusCode)
+	}
+	var refreshed CatalogSnapshot
+	if err := json.NewDecoder(resp.Body).Decode(&refreshed); err != nil {
+		t.Fatalf("decode refreshed snapshot: %v", err)
+	}
+	if !refreshed.GeneratedAt.After(first.GeneratedAt) {
+		t.Fatalf("refreshed generated_at = %s, want after %s", refreshed.GeneratedAt, first.GeneratedAt)
+	}
+
+	issued := issueArtifact(t, server.URL, "issue-token", ArtifactIssueRequest{
+		SourceID:    "managed-turn",
+		OfferID:     "turn-handoff",
+		OperationID: "op-refreshed",
+		TTLSeconds:  30,
+	})
+	if issued.Source.Generation != refreshed.Generation {
+		t.Fatalf("issued generation = %d, want refreshed generation %d", issued.Source.Generation, refreshed.Generation)
+	}
+}
+
+func TestServiceArtifactIssueCanReturnExplicitSecretExport(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+	service := NewService(ServiceOptions{
+		Snapshot: AttachIntegrity(testSnapshot(now), "test"),
+		Now:      func() time.Time { return now },
+		Authorizer: TokenAuthorizer{
+			"issue-token": {AuthScopeArtifactIssue},
+		},
+	})
+	server := httptest.NewServer(service.Handler())
+	t.Cleanup(server.Close)
+
+	issued := issueArtifact(t, server.URL, "issue-token", ArtifactIssueRequest{
+		SourceID:     "managed-turn",
+		OfferID:      "turn-handoff",
+		OperationID:  "op-secret-export",
+		TTLSeconds:   30,
+		ExportSecret: true,
+	})
+	if issued.Export == nil {
+		t.Fatal("issued export missing")
+	}
+	if issued.Export.PayloadRedacted || issued.Export.Payload == "" {
+		t.Fatalf("issued export = %+v, want explicit non-redacted payload", issued.Export)
+	}
+	if issued.Export.Kind == "redacted_reference" {
+		t.Fatalf("issued export kind = %q, want secret-bearing export kind", issued.Export.Kind)
+	}
+}
+
 func TestServiceAdminMetricsAndAuditRequireAdminScope(t *testing.T) {
 	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
 	service := NewService(ServiceOptions{

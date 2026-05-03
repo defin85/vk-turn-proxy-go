@@ -54,3 +54,31 @@ func TestSampleSnapshotValidatesAsSignedCatalog(t *testing.T) {
 		t.Fatalf("validation status = %q, want valid", result.Status)
 	}
 }
+
+func TestSnapshotProviderRefreshesCatalogFreshness(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+	cfg := config{
+		Issuer:     "issuer",
+		Audience:   "audience",
+		EndpointID: "endpoint",
+	}
+	provider := snapshotProviderFromConfig(cfg)
+	first := provider(now)
+	refreshed := provider(now.Add(6 * time.Minute))
+	if !refreshed.GeneratedAt.After(first.GeneratedAt) {
+		t.Fatalf("refreshed generated_at = %s, want after %s", refreshed.GeneratedAt, first.GeneratedAt)
+	}
+	result, err := vpscatalog.ValidateSnapshot(refreshed, vpscatalog.ValidationOptions{
+		Now:                now.Add(6 * time.Minute),
+		ExpectedIssuer:     "issuer",
+		ExpectedAudience:   "audience",
+		ExpectedEndpointID: "endpoint",
+		RequireSigned:      true,
+	})
+	if err != nil {
+		t.Fatalf("ValidateSnapshot(refreshed) error = %v", err)
+	}
+	if result.Status != vpscatalog.ValidationStatusValid {
+		t.Fatalf("refreshed validation status = %q, want valid", result.Status)
+	}
+}

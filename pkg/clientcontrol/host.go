@@ -98,6 +98,7 @@ type hostConfig struct {
 	resumeTunnel                 func(context.Context, PlatformTunnelResumeRequest) (PlatformTunnelStartResult, error)
 	stopTunnel                   func(context.Context, PlatformTunnelStopRequest) (PlatformTunnelStopResult, error)
 	vpsCatalogEndpoints          []VPSProviderCatalogEndpointConfig
+	vpsCatalogCachePath          string
 	vpsCatalogHTTPClient         *http.Client
 }
 
@@ -125,6 +126,7 @@ type Host struct {
 	resumeTunnel                 func(context.Context, PlatformTunnelResumeRequest) (PlatformTunnelStartResult, error)
 	stopTunnel                   func(context.Context, PlatformTunnelStopRequest) (PlatformTunnelStopResult, error)
 	vpsCatalogEndpoints          []VPSProviderCatalogEndpointConfig
+	vpsCatalogCachePath          string
 	vpsCatalogHTTPClient         *http.Client
 
 	profiles                    map[string]Profile
@@ -273,6 +275,7 @@ func New(opts ...Option) *Host {
 		resumeTunnel:                 cfg.resumeTunnel,
 		stopTunnel:                   cfg.stopTunnel,
 		vpsCatalogEndpoints:          cloneVPSEndpointConfigs(cfg.vpsCatalogEndpoints),
+		vpsCatalogCachePath:          strings.TrimSpace(cfg.vpsCatalogCachePath),
 		vpsCatalogHTTPClient:         cfg.vpsCatalogHTTPClient,
 		profiles:                     make(map[string]Profile),
 		transportProfiles:            make(map[string]managedTransportProfile),
@@ -290,6 +293,9 @@ func New(opts ...Option) *Host {
 	}
 	if err := host.loadTransportProfileStore(); err != nil {
 		host.logger.Warn("transport profile store load failed; continuing with empty store", "error", err)
+	}
+	if err := host.loadVPSProviderCatalogCache(); err != nil {
+		host.logger.Warn("vps provider catalog cache load failed; continuing with empty cache", "error", err)
 	}
 	return host
 }

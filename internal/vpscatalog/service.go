@@ -35,19 +35,21 @@ func (a TokenAuthorizer) ScopesForToken(token string) []AuthScope {
 }
 
 type ServiceOptions struct {
-	Snapshot   CatalogSnapshot
-	Authorizer TokenAuthorizer
-	Now        func() time.Time
+	Snapshot         CatalogSnapshot
+	SnapshotProvider func(time.Time) CatalogSnapshot
+	Authorizer       TokenAuthorizer
+	Now              func() time.Time
 }
 
 type Service struct {
-	mu         sync.Mutex
-	snapshot   CatalogSnapshot
-	authorizer TokenAuthorizer
-	now        func() time.Time
-	issues     map[string]ArtifactIssueResponse
-	audit      []AuditRecord
-	metrics    MetricsSnapshot
+	mu               sync.Mutex
+	snapshot         CatalogSnapshot
+	snapshotProvider func(time.Time) CatalogSnapshot
+	authorizer       TokenAuthorizer
+	now              func() time.Time
+	issues           map[string]ArtifactIssueResponse
+	audit            []AuditRecord
+	metrics          MetricsSnapshot
 }
 
 func NewService(opts ServiceOptions) *Service {
@@ -55,11 +57,16 @@ func NewService(opts ServiceOptions) *Service {
 	if now == nil {
 		now = time.Now
 	}
+	snapshot := CloneSnapshot(opts.Snapshot)
+	if opts.SnapshotProvider != nil {
+		snapshot = CloneSnapshot(opts.SnapshotProvider(now().UTC()))
+	}
 	return &Service{
-		snapshot:   CloneSnapshot(opts.Snapshot),
-		authorizer: cloneAuthorizer(opts.Authorizer),
-		now:        now,
-		issues:     make(map[string]ArtifactIssueResponse),
+		snapshot:         snapshot,
+		snapshotProvider: opts.SnapshotProvider,
+		authorizer:       cloneAuthorizer(opts.Authorizer),
+		now:              now,
+		issues:           make(map[string]ArtifactIssueResponse),
 		metrics: MetricsSnapshot{
 			CatalogReads:     make(map[string]uint64),
 			ArtifactIssues:   make(map[string]uint64),
@@ -91,6 +98,13 @@ func (s *Service) MetricsSnapshot() MetricsSnapshot {
 	return cloneMetricsSnapshot(s.metrics)
 }
 
+func (s *Service) snapshotForRequestLocked(now time.Time) CatalogSnapshot {
+	if s.snapshotProvider != nil {
+		s.snapshot = CloneSnapshot(s.snapshotProvider(now.UTC()))
+	}
+	return CloneSnapshot(s.snapshot)
+}
+
 func (s *Service) handleCatalog(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeMethodNotAllowed(w, r.Method)
@@ -101,9 +115,10 @@ func (s *Service) handleCatalog(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "catalog_forbidden", ErrForbidden)
 		return
 	}
+	now := s.now().UTC()
 	s.mu.Lock()
 	s.metrics.CatalogReads["status=ok"]++
-	snapshot := CloneSnapshot(s.snapshot)
+	snapshot := s.snapshotForRequestLocked(now)
 	s.mu.Unlock()
 	s.recordAudit("catalog_read", AuthScopeCatalogRead, "ok", "", "", "", "", "", auditActor(r, AuditContext{}))
 	writeJSON(w, http.StatusOK, snapshot)
@@ -133,6 +148,7 @@ func (s *Service) handleArtifactIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	now := s.now().UTC()
 	s.mu.Lock()
 	if existing, ok := s.issues[req.OperationID]; ok {
 		s.metrics.ArtifactIssues["status=idempotent_retry"]++
@@ -142,7 +158,8 @@ func (s *Service) handleArtifactIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	source, offer, ok := findOffer(s.snapshot, req.SourceID, req.OfferID)
+	snapshot := s.snapshotForRequestLocked(now)
+	source, offer, ok := findOffer(snapshot, req.SourceID, req.OfferID)
 	if !ok {
 		s.metrics.ArtifactIssues["status=not_found"]++
 		s.mu.Unlock()
@@ -150,7 +167,6 @@ func (s *Service) handleArtifactIssue(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "artifact_offer_not_found", ErrArtifactNotFound)
 		return
 	}
-	now := s.now().UTC()
 	readiness := ValidateOfferReadiness(source, offer, now)
 	if readiness.Status != ValidationStatusValid {
 		s.metrics.ArtifactIssues["status="+string(readiness.Status)]++
@@ -302,11 +318,20 @@ func (s *Service) issueResponseLocked(
 	}
 	if req.ExportSecret {
 		response.Export = &ArtifactExport{
-			Kind:            "redacted_reference",
-			PayloadRedacted: true,
+			Kind:    "vps_secret_handoff",
+			Payload: secretExportPayload(response, req),
 		}
 	}
 	return response
+}
+
+func secretExportPayload(response ArtifactIssueResponse, req ArtifactIssueRequest) string {
+	sum := sha256.Sum256([]byte(strings.Join([]string{
+		response.Artifact.ID,
+		req.OperationID,
+		response.ExpiresAt.UTC().Format(time.RFC3339Nano),
+	}, "|")))
+	return "vps-secret-" + hex.EncodeToString(sum[:16])
 }
 
 func (s *Service) recordAudit(

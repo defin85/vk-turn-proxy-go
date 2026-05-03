@@ -71,3 +71,16 @@
 - [x] 5.7 Run `openspec validate add-79-vps-provider-catalog-and-artifact-service --strict --no-interactive`.
 - [x] 5.8 Run `openspec validate --all --strict --no-interactive`.
 - [x] 5.9 Run `git diff --check`.
+
+## 6. Finish-to-100 residual closure
+- [x] 6.1 Refresh the first managed VPS catalog snapshot, generation, health, and
+      evidence on catalog read and artifact issue so the default VPS service does
+      not become stale merely from process uptime.
+- [x] 6.2 Persist non-secret remote catalog cache metadata and highest accepted
+      generation for configured host cache paths, preserving rollback detection
+      across host restarts.
+- [x] 6.3 Propagate explicit `export_secret=true` VPS export payloads through the
+      managed resolution export action while keeping ordinary reads, events, and
+      diagnostics redacted.
+- [x] 6.4 Accept newer monotonic artifact issue generations for the same
+      endpoint/source/offer while rejecting generations below the cached snapshot.

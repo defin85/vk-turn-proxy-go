@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -133,6 +134,48 @@ func TestVPSProviderCatalogIssueMapsRemoteArtifactAndCompatibility(t *testing.T)
 	}
 }
 
+func TestVPSProviderCatalogIssueMapsExplicitSecretExport(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+	server := testVPSCatalogServer(t, testClientVPSCatalogSnapshot(now), &now)
+	host := testVPSCatalogHost(t, server.URL, &now)
+	if _, err := host.SyncVPSProviderCatalogs(context.Background()); err != nil {
+		t.Fatalf("SyncVPSProviderCatalogs() error = %v", err)
+	}
+
+	result, err := host.IssueVPSProviderArtifact(context.Background(), VPSProviderArtifactIssueRequest{
+		EndpointID:   "vps-main",
+		SourceID:     "managed-turn",
+		OfferID:      "turn-handoff",
+		OperationID:  "op-clientcontrol-secret-export",
+		TTLSeconds:   45,
+		ExportSecret: true,
+	})
+	if err != nil {
+		t.Fatalf("IssueVPSProviderArtifact(export_secret) error = %v", err)
+	}
+	if !result.Resolution.Export.Supported {
+		t.Fatalf("resolution export = %+v, want supported explicit export", result.Resolution.Export)
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("Marshal(result) error = %v", err)
+	}
+	if strings.Contains(string(body), "vps-secret-") {
+		t.Fatalf("ordinary issue result leaked explicit export payload: %s", body)
+	}
+
+	exported, err := host.ExportResolution(result.Resolution.ID)
+	if err != nil {
+		t.Fatalf("ExportResolution() error = %v", err)
+	}
+	if !strings.Contains(exported.Link, "vps-secret-") {
+		t.Fatalf("exported link = %q, want explicit VPS secret-bearing payload", exported.Link)
+	}
+	if exported.ExpirySource != "vps_catalog_artifact_ttl" {
+		t.Fatalf("export expiry source = %q, want vps_catalog_artifact_ttl", exported.ExpirySource)
+	}
+}
+
 func TestVPSProviderCatalogHTTPExposesSyncSourcesAndIssue(t *testing.T) {
 	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
 	server := testVPSCatalogServer(t, testClientVPSCatalogSnapshot(now), &now)
@@ -196,6 +239,65 @@ func TestVPSProviderCatalogHTTPExposesSyncSourcesAndIssue(t *testing.T) {
 	}
 	if result.Resolution.RemoteVPS == nil || result.RemoteArtifact.SourceID != "managed-turn" {
 		t.Fatalf("issue result = %+v, want remote VPS artifact", result)
+	}
+}
+
+func TestVPSProviderCatalogPersistsGenerationFloorAcrossRestart(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+	handler := &mutableHTTPHandler{}
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	cachePath := filepath.Join(t.TempDir(), "vps-catalog-cache.json")
+
+	gen2 := testClientVPSCatalogSnapshot(now)
+	gen2.Generation = 2
+	handler.set(testVPSCatalogService(gen2, &now).Handler())
+	host := testVPSCatalogHostWithCache(t, server.URL, cachePath, &now)
+	if _, err := host.SyncVPSProviderCatalogs(context.Background()); err != nil {
+		t.Fatalf("initial SyncVPSProviderCatalogs() error = %v", err)
+	}
+
+	rollback := testClientVPSCatalogSnapshot(now)
+	rollback.Generation = 1
+	handler.set(testVPSCatalogService(rollback, &now).Handler())
+	restarted := testVPSCatalogHostWithCache(t, server.URL, cachePath, &now)
+	statuses, err := restarted.SyncVPSProviderCatalogs(context.Background())
+	if !errors.Is(err, vpscatalog.ErrValidationFailed) {
+		t.Fatalf("rollback after restart error = %v, want ErrValidationFailed", err)
+	}
+	if len(statuses) != 1 || statuses[0].ValidationStatus != string(vpscatalog.ValidationStatusRollback) {
+		t.Fatalf("rollback after restart statuses = %+v, want rollback", statuses)
+	}
+}
+
+func TestVPSProviderCatalogIssueAcceptsNewerMonotonicGeneration(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+	handler := &mutableHTTPHandler{}
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+
+	gen2 := testClientVPSCatalogSnapshot(now)
+	gen2.Generation = 2
+	handler.set(testVPSCatalogService(gen2, &now).Handler())
+	host := testVPSCatalogHost(t, server.URL, &now)
+	if _, err := host.SyncVPSProviderCatalogs(context.Background()); err != nil {
+		t.Fatalf("initial SyncVPSProviderCatalogs() error = %v", err)
+	}
+
+	gen3 := testClientVPSCatalogSnapshot(now.Add(time.Minute))
+	gen3.Generation = 3
+	handler.set(testVPSCatalogService(gen3, &now).Handler())
+	result, err := host.IssueVPSProviderArtifact(context.Background(), VPSProviderArtifactIssueRequest{
+		EndpointID:  "vps-main",
+		SourceID:    "managed-turn",
+		OfferID:     "turn-handoff",
+		OperationID: "op-newer-generation",
+	})
+	if err != nil {
+		t.Fatalf("IssueVPSProviderArtifact(newer generation) error = %v", err)
+	}
+	if result.RemoteArtifact.Generation != 3 {
+		t.Fatalf("issued generation = %d, want newer generation 3", result.RemoteArtifact.Generation)
 	}
 }
 
@@ -349,6 +451,26 @@ func testVPSCatalogHost(t *testing.T, baseURL string, now *time.Time) *Host {
 	)
 }
 
+func testVPSCatalogHostWithCache(t *testing.T, baseURL string, cachePath string, now *time.Time) *Host {
+	t.Helper()
+	return New(
+		withNow(func() time.Time { return *now }),
+		WithBuildIdentity(BuildIdentity{Target: "android/embedded"}),
+		WithVPNTransportProfileStore(),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{supportedTestAndroidVPNCapability()}),
+		WithVPSProviderCatalogEndpoints([]VPSProviderCatalogEndpointConfig{{
+			ID:         "vps-main",
+			URL:        baseURL,
+			Issuer:     "vk-turn-proxy-go",
+			Audience:   "relay-client",
+			ReadToken:  "read-token",
+			IssueToken: "issue-token",
+		}}),
+		WithVPSProviderCatalogCachePath(cachePath),
+		WithVPSProviderCatalogHTTPClient(http.DefaultClient),
+	)
+}
+
 func testVPSCatalogServer(
 	t *testing.T,
 	snapshot vpscatalog.CatalogSnapshot,
@@ -402,7 +524,7 @@ func testClientVPSCatalogSnapshot(now time.Time) vpscatalog.CatalogSnapshot {
 				ID:                     "turn-handoff",
 				Family:                 string(ArtifactFamilyGenericTURN),
 				AccessMethods:          []string{string(RuntimeAccessMethodTURNCredentials)},
-				Actions:                []string{string(ArtifactActionStartOnThisDevice)},
+				Actions:                []string{string(ArtifactActionStartOnThisDevice), string(ArtifactActionExportHandoff)},
 				RemoteEndpointFamily:   string(RuntimeRemoteEndpointFamilyTURNServer),
 				RemoteEndpointRole:     string(RuntimeRemoteEndpointRoleWireGuardRawDatagram),
 				CompatibleProfileKinds: []string{string(TransportProfileKindWireGuardNativeV1)},

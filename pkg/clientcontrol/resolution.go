@@ -63,15 +63,16 @@ func (e *ResolutionActionError) Unwrap() error {
 }
 
 type managedResolution struct {
-	snapshot           Resolution
-	secret             provider.Resolution
-	wireGuardTurnLease *WireGuardTurnExecutionLease
-	descriptor         ProviderDescriptor
-	cancel             context.CancelFunc
-	done               chan struct{}
-	input              StartResolutionRequest
-	events             []Event
-	challenges         []Challenge
+	snapshot            Resolution
+	secret              provider.Resolution
+	remoteExportPayload string
+	wireGuardTurnLease  *WireGuardTurnExecutionLease
+	descriptor          ProviderDescriptor
+	cancel              context.CancelFunc
+	done                chan struct{}
+	input               StartResolutionRequest
+	events              []Event
+	challenges          []Challenge
 }
 
 func (h *Host) StartResolution(ctx context.Context, req StartResolutionRequest) (Resolution, error) {
@@ -226,6 +227,7 @@ func (h *Host) ExportResolution(resolutionID string) (ResolutionExportResult, er
 	event := h.expireResolutionLocked(managed)
 	snapshot := managed.snapshot
 	secret := managed.secret
+	remoteExportPayload := managed.remoteExportPayload
 	h.mu.Unlock()
 
 	if event != nil {
@@ -246,6 +248,15 @@ func (h *Host) ExportResolution(resolutionID string) (ResolutionExportResult, er
 	}
 	if !snapshot.Export.Supported || snapshot.Export.ExpiresAt == nil {
 		return ResolutionExportResult{}, errResolutionExportUnavailable
+	}
+
+	if strings.TrimSpace(remoteExportPayload) != "" {
+		return ResolutionExportResult{
+			ResolutionID: snapshot.ID,
+			Link:         remoteExportPayload,
+			ExpiresAt:    snapshot.Export.ExpiresAt.UTC(),
+			ExpirySource: snapshot.Export.ExpirySource,
+		}, nil
 	}
 
 	link := genericturn.FormatLink(secret.Credentials)

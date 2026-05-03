@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -114,9 +117,27 @@ type cachedVPSProviderCatalog struct {
 	status   VPSProviderCatalogStatus
 }
 
+type vpsProviderCatalogCacheDisk struct {
+	Version           int                                 `json:"version"`
+	HighestGeneration map[string]uint64                   `json:"highest_generation,omitempty"`
+	Catalogs          []vpsProviderCatalogCacheDiskRecord `json:"catalogs,omitempty"`
+}
+
+type vpsProviderCatalogCacheDiskRecord struct {
+	EndpointID string                     `json:"endpoint_id"`
+	Status     VPSProviderCatalogStatus   `json:"status"`
+	Snapshot   vpscatalog.CatalogSnapshot `json:"snapshot,omitempty"`
+}
+
 func WithVPSProviderCatalogEndpoints(endpoints []VPSProviderCatalogEndpointConfig) Option {
 	return func(cfg *hostConfig) {
 		cfg.vpsCatalogEndpoints = cloneVPSEndpointConfigs(endpoints)
+	}
+}
+
+func WithVPSProviderCatalogCachePath(path string) Option {
+	return func(cfg *hostConfig) {
+		cfg.vpsCatalogCachePath = strings.TrimSpace(path)
 	}
 }
 
@@ -306,9 +327,11 @@ func (h *Host) IssueVPSProviderArtifact(
 	}
 	if response.Source.SourceID != req.SourceID ||
 		response.Artifact.OfferID != req.OfferID ||
-		response.Source.EndpointID != cache.snapshot.EndpointID ||
-		response.Source.Generation != cache.snapshot.Generation {
+		response.Source.EndpointID != cache.snapshot.EndpointID {
 		return VPSProviderArtifactIssueResult{}, fmt.Errorf("%w: remote artifact response does not match cached source", ErrVPSProviderCatalogInvalid)
+	}
+	if response.Source.Generation < cache.snapshot.Generation {
+		return VPSProviderArtifactIssueResult{}, fmt.Errorf("%w: remote artifact response rolled back below cached generation", ErrVPSProviderCatalogInvalid)
 	}
 	resolution, err := h.recordVPSIssuedResolution(req, response, source, offer, readiness)
 	if err != nil {
@@ -336,13 +359,13 @@ func (h *Host) syncVPSProviderCatalog(
 	}
 	if err := validateVPSEndpointConfig(endpoint); err != nil {
 		status.Message = err.Error()
-		h.storeVPSCatalogStatus(endpoint, status, nil)
+		_ = h.storeVPSCatalogStatus(endpoint, status, nil)
 		return status, err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, joinVPSCatalogURL(endpoint.URL, vpscatalog.DefaultCatalogPath), nil)
 	if err != nil {
 		status.Message = err.Error()
-		h.storeVPSCatalogStatus(endpoint, status, nil)
+		_ = h.storeVPSCatalogStatus(endpoint, status, nil)
 		return status, err
 	}
 	if endpoint.ReadToken != "" {
@@ -352,7 +375,7 @@ func (h *Host) syncVPSProviderCatalog(
 	if err != nil {
 		status.ValidationStatus = string(vpscatalog.ValidationStatusUnavailable)
 		status.Message = err.Error()
-		h.storeVPSCatalogStatus(endpoint, status, nil)
+		_ = h.storeVPSCatalogStatus(endpoint, status, nil)
 		return status, err
 	}
 	defer resp.Body.Close()
@@ -360,13 +383,13 @@ func (h *Host) syncVPSProviderCatalog(
 		err := fmt.Errorf("catalog endpoint returned status %d", resp.StatusCode)
 		status.ValidationStatus = string(vpscatalog.ValidationStatusUnavailable)
 		status.Message = err.Error()
-		h.storeVPSCatalogStatus(endpoint, status, nil)
+		_ = h.storeVPSCatalogStatus(endpoint, status, nil)
 		return status, err
 	}
 	var snapshot vpscatalog.CatalogSnapshot
 	if err := json.NewDecoder(resp.Body).Decode(&snapshot); err != nil {
 		status.Message = err.Error()
-		h.storeVPSCatalogStatus(endpoint, status, nil)
+		_ = h.storeVPSCatalogStatus(endpoint, status, nil)
 		return status, err
 	}
 	h.mu.Lock()
@@ -382,10 +405,12 @@ func (h *Host) syncVPSProviderCatalog(
 	})
 	status = vpsCatalogStatusFromSnapshot(endpoint, snapshot, now, result)
 	if validationErr != nil {
-		h.storeVPSCatalogStatus(endpoint, status, nil)
+		_ = h.storeVPSCatalogStatus(endpoint, status, nil)
 		return status, validationErr
 	}
-	h.storeVPSCatalogStatus(endpoint, status, &snapshot)
+	if err := h.storeVPSCatalogStatus(endpoint, status, &snapshot); err != nil {
+		return status, err
+	}
 	return status, nil
 }
 
@@ -393,7 +418,7 @@ func (h *Host) storeVPSCatalogStatus(
 	endpoint VPSProviderCatalogEndpointConfig,
 	status VPSProviderCatalogStatus,
 	snapshot *vpscatalog.CatalogSnapshot,
-) {
+) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	cache := h.vpsCatalogCache[endpoint.ID]
@@ -409,6 +434,143 @@ func (h *Host) storeVPSCatalogStatus(
 		cache.snapshot = vpscatalog.CatalogSnapshot{}
 	}
 	h.vpsCatalogCache[endpoint.ID] = cache
+	return h.persistVPSProviderCatalogCacheLocked()
+}
+
+func (h *Host) loadVPSProviderCatalogCache() error {
+	if strings.TrimSpace(h.vpsCatalogCachePath) == "" {
+		return nil
+	}
+	data, err := os.ReadFile(h.vpsCatalogCachePath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	var disk vpsProviderCatalogCacheDisk
+	if err := json.Unmarshal(data, &disk); err != nil {
+		return err
+	}
+	if disk.Version != 1 {
+		return fmt.Errorf("%w: unsupported vps provider catalog cache version %d", ErrVPSProviderCatalogInvalid, disk.Version)
+	}
+
+	endpoints := make(map[string]VPSProviderCatalogEndpointConfig, len(h.vpsCatalogEndpoints))
+	for _, endpoint := range h.vpsCatalogEndpoints {
+		endpoints[endpoint.ID] = endpoint
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.vpsCatalogCache = make(map[string]cachedVPSProviderCatalog)
+	h.vpsCatalogHighestGeneration = make(map[string]uint64)
+	for _, endpoint := range h.vpsCatalogEndpoints {
+		key := vpsCatalogGenerationKey(endpoint)
+		if generation := disk.HighestGeneration[key]; generation > 0 {
+			h.vpsCatalogHighestGeneration[key] = generation
+		}
+	}
+	for _, record := range disk.Catalogs {
+		endpoint, ok := endpoints[strings.TrimSpace(record.EndpointID)]
+		if !ok {
+			continue
+		}
+		cache := cachedVPSProviderCatalog{
+			endpoint: endpoint,
+			status:   record.Status,
+		}
+		if record.Snapshot.Version != "" {
+			cache.snapshot = vpscatalog.CloneSnapshot(record.Snapshot)
+			key := vpsCatalogGenerationKey(endpoint)
+			if record.Snapshot.Generation > h.vpsCatalogHighestGeneration[key] {
+				h.vpsCatalogHighestGeneration[key] = record.Snapshot.Generation
+			}
+		}
+		h.vpsCatalogCache[endpoint.ID] = cache
+	}
+	return nil
+}
+
+func (h *Host) persistVPSProviderCatalogCacheLocked() error {
+	if strings.TrimSpace(h.vpsCatalogCachePath) == "" {
+		return nil
+	}
+
+	highest := make(map[string]uint64, len(h.vpsCatalogHighestGeneration))
+	highestKeys := make([]string, 0, len(h.vpsCatalogHighestGeneration))
+	for key := range h.vpsCatalogHighestGeneration {
+		highestKeys = append(highestKeys, key)
+	}
+	sort.Strings(highestKeys)
+	for _, key := range highestKeys {
+		if h.vpsCatalogHighestGeneration[key] > 0 {
+			highest[key] = h.vpsCatalogHighestGeneration[key]
+		}
+	}
+
+	records := make([]vpsProviderCatalogCacheDiskRecord, 0, len(h.vpsCatalogCache))
+	endpoints := cloneVPSEndpointConfigs(h.vpsCatalogEndpoints)
+	sort.Slice(endpoints, func(i, j int) bool { return endpoints[i].ID < endpoints[j].ID })
+	for _, endpoint := range endpoints {
+		cache, ok := h.vpsCatalogCache[endpoint.ID]
+		if !ok {
+			continue
+		}
+		record := vpsProviderCatalogCacheDiskRecord{
+			EndpointID: endpoint.ID,
+			Status:     cache.status,
+		}
+		if cache.snapshot.Version != "" {
+			record.Snapshot = vpscatalog.CloneSnapshot(cache.snapshot)
+		}
+		records = append(records, record)
+	}
+	disk := vpsProviderCatalogCacheDisk{
+		Version:           1,
+		HighestGeneration: highest,
+		Catalogs:          records,
+	}
+	data, err := json.MarshalIndent(disk, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+
+	path := strings.TrimSpace(h.vpsCatalogCachePath)
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, ".vps-provider-catalog-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	closed := false
+	defer func() {
+		if !closed {
+			_ = tmp.Close()
+		}
+		_ = os.Remove(tmpPath)
+	}()
+	if err := tmp.Chmod(0o600); err != nil {
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		closed = true
+		return err
+	}
+	closed = true
+	if err := os.Rename(tmpPath, path); err != nil {
+		return err
+	}
+	return os.Chmod(path, 0o600)
 }
 
 func (h *Host) currentVPSCatalogStatusLocked(cache cachedVPSProviderCatalog) VPSProviderCatalogStatus {
@@ -484,6 +646,8 @@ func (h *Host) recordVPSIssuedResolution(
 	now := h.now().UTC()
 	expiresAt := response.ExpiresAt.UTC()
 	remoteSummary := remoteVPSArtifactSummary(response, readiness)
+	remoteExportPayload := remoteVPSExportPayload(response)
+	exportSupported := remoteExportPayload != ""
 	artifact := &ResolutionArtifact{
 		Family:        ArtifactFamily(response.Artifact.Family),
 		AccessMethods: runtimeAccessMethodsFromStrings(response.Artifact.AccessMethods),
@@ -497,6 +661,7 @@ func (h *Host) recordVPSIssuedResolution(
 	if !expiresAt.After(now) {
 		state = ResolutionStateExpired
 		expiredAt = &now
+		exportSupported = false
 		artifact.Actions = nil
 	}
 	snapshot := Resolution{
@@ -510,7 +675,7 @@ func (h *Host) recordVPSIssuedResolution(
 		},
 		Artifact:   artifact,
 		State:      state,
-		Export:     ResolutionExportStatus{Supported: false, ExpiresAt: &expiresAt, ExpirySource: "vps_catalog_artifact_ttl"},
+		Export:     ResolutionExportStatus{Supported: exportSupported, ExpiresAt: &expiresAt, ExpirySource: "vps_catalog_artifact_ttl"},
 		StartedAt:  now,
 		UpdatedAt:  now,
 		ResolvedAt: &now,
@@ -537,8 +702,9 @@ func (h *Host) recordVPSIssuedResolution(
 				PotentialActions: artifactActionsFromStrings(offer.Actions),
 			},
 		},
-		done:   done,
-		events: []Event{event},
+		done:                done,
+		remoteExportPayload: remoteExportPayload,
+		events:              []Event{event},
 		input: StartResolutionRequest{
 			Provider: source.ProviderID,
 			Input: &ProviderInputEnvelope{
@@ -604,6 +770,13 @@ func remoteVPSArtifactSummary(
 			Export:         string(response.Redaction.Export),
 		},
 	}
+}
+
+func remoteVPSExportPayload(response vpscatalog.ArtifactIssueResponse) string {
+	if response.Export == nil || response.Export.PayloadRedacted {
+		return ""
+	}
+	return strings.TrimSpace(response.Export.Payload)
 }
 
 func validateVPSEndpointConfig(endpoint VPSProviderCatalogEndpointConfig) error {
