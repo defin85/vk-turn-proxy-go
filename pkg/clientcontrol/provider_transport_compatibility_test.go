@@ -255,6 +255,12 @@ func TestProviderTransportCompatibilityUnknownStatusOrAxisIsNonStartable(t *test
 	}) {
 		t.Fatal("future failing axis was treated as startable")
 	}
+	if ProviderTransportCompatibilityCandidateStartable(ProviderTransportCompatibilityCandidate{
+		Status:      ProviderTransportCompatibilityStatusStartable,
+		FailingAxis: ProviderTransportCompatibilityAxisProviderArtifact,
+	}) {
+		t.Fatal("startable status with failing axis was treated as startable")
+	}
 }
 
 func TestProviderTransportCompatibilityDoesNotImplicitlySelectCompatibleProfile(t *testing.T) {
@@ -323,6 +329,107 @@ func TestProviderTransportCompatibilityStartupRequiresExplicitProfileRef(t *test
 	}
 	if starterCalls != 0 {
 		t.Fatalf("starter calls = %d, want no native startup", starterCalls)
+	}
+}
+
+func TestProviderTransportCompatibilityStartupRequiresExplicitSourceArtifactRefs(t *testing.T) {
+	starterCalls := 0
+	host, resolved := providerTransportCompatibilityHostWithResolvedTURN(t, nil,
+		WithPlatformTunnelStarter(func(context.Context, PlatformTunnelStartRequest) (PlatformTunnelStartResult, error) {
+			starterCalls++
+			return PlatformTunnelStartResult{Mode: PlatformTunnelModeAndroidVPNService, Ready: true}, nil
+		}),
+	)
+	profile, err := host.ImportTransportProfile(testWireGuardTransportProfileImport("missing-candidate-client-key"))
+	if err != nil {
+		t.Fatalf("ImportTransportProfile() error = %v", err)
+	}
+	descriptor := testStrictWireGuardTurnDescriptor()
+	sourceRef := &ProviderTransportSourceReference{
+		ProviderID:   "generic-turn",
+		ResolutionID: resolved.ID,
+	}
+	artifactRef := &ProviderTransportArtifactReference{
+		ProviderID:    "generic-turn",
+		ResolutionID:  resolved.ID,
+		Family:        ArtifactFamilyGenericTURN,
+		AccessMethods: []RuntimeAccessMethod{RuntimeAccessMethodTURNCredentials},
+	}
+
+	tests := []struct {
+		name       string
+		ref        *ProviderTransportCompatibilityStartupReference
+		wantAxis   ProviderTransportCompatibilityFailingAxis
+		wantReason ProviderTransportCompatibilityReasonCode
+	}{
+		{
+			name:       "missing compatibility ref",
+			ref:        nil,
+			wantAxis:   ProviderTransportCompatibilityAxisProviderArtifact,
+			wantReason: ProviderTransportCompatibilityReasonProviderArtifactMissing,
+		},
+		{
+			name: "missing source ref",
+			ref: &ProviderTransportCompatibilityStartupReference{
+				Artifact: artifactRef,
+			},
+			wantAxis:   ProviderTransportCompatibilityAxisProviderSource,
+			wantReason: ProviderTransportCompatibilityReasonProviderSourceRequired,
+		},
+		{
+			name: "missing artifact ref",
+			ref: &ProviderTransportCompatibilityStartupReference{
+				Source: sourceRef,
+			},
+			wantAxis:   ProviderTransportCompatibilityAxisProviderArtifact,
+			wantReason: ProviderTransportCompatibilityReasonProviderArtifactMissing,
+		},
+		{
+			name: "missing artifact access methods",
+			ref: &ProviderTransportCompatibilityStartupReference{
+				Source: sourceRef,
+				Artifact: &ProviderTransportArtifactReference{
+					ProviderID:   "generic-turn",
+					ResolutionID: resolved.ID,
+					Family:       ArtifactFamilyGenericTURN,
+				},
+			},
+			wantAxis:   ProviderTransportCompatibilityAxisProviderArtifact,
+			wantReason: ProviderTransportCompatibilityReasonProviderArtifactMissing,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := host.StartPlatformTunnel(context.Background(), PlatformTunnelStartRequest{
+				Mode:          PlatformTunnelModeAndroidVPNService,
+				ResolutionID:  resolved.ID,
+				ExecutionPlan: &descriptor.Plan,
+				TransportProfile: &TransportProfileReference{
+					ProfileID: profile.ID,
+					Kind:      profile.Kind,
+				},
+				ProviderTransportCompatibility: tt.ref,
+				RuntimeDefaults: &RuntimeDefaults{
+					ListenAddr: reserveUDPAddr(t),
+					PeerAddr:   "127.0.0.1:56000",
+				},
+			})
+			if err != nil {
+				t.Fatalf("StartPlatformTunnel() error = %v", err)
+			}
+			if result.ProviderTransportCompatibility == nil {
+				t.Fatalf("startup result = %+v, want typed compatibility failure", result)
+			}
+			if result.ProviderTransportCompatibility.FailingAxis != tt.wantAxis ||
+				result.ProviderTransportCompatibility.ReasonCode != tt.wantReason {
+				t.Fatalf("compatibility failure = %+v, want axis=%s reason=%s",
+					result.ProviderTransportCompatibility, tt.wantAxis, tt.wantReason)
+			}
+			if starterCalls != 0 {
+				t.Fatalf("starter calls = %d, want no native startup without source/artifact refs", starterCalls)
+			}
+		})
 	}
 }
 

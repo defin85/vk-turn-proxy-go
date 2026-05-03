@@ -269,8 +269,7 @@ func ProviderTransportCompatibilityCandidateStartable(
 	if !isKnownProviderTransportCompatibilityStatus(candidate.Status) {
 		return false
 	}
-	if strings.TrimSpace(string(candidate.FailingAxis)) != "" &&
-		!isKnownProviderTransportCompatibilityFailingAxis(candidate.FailingAxis) {
+	if strings.TrimSpace(string(candidate.FailingAxis)) != "" {
 		return false
 	}
 	return candidate.Status == ProviderTransportCompatibilityStatusStartable
@@ -661,6 +660,9 @@ func (h *Host) validateProviderTransportCompatibilityForStartup(
 			},
 		), true
 	}
+	if failure, failed := providerTransportStartupReferenceFailure(req); failed {
+		return providerTransportStartupFailure(req, failure), true
+	}
 
 	compatReq := ProviderTransportCompatibilityRequest{
 		ResolutionID:     req.ResolutionID,
@@ -695,6 +697,50 @@ func (h *Host) validateProviderTransportCompatibilityForStartup(
 		return providerTransportStartupFailure(req, providerTransportFailureFromCandidate(candidate)), true
 	}
 	return PlatformTunnelStartResult{}, false
+}
+
+func providerTransportStartupReferenceFailure(
+	req PlatformTunnelStartRequest,
+) (ProviderTransportCompatibilityFailure, bool) {
+	ref := req.ProviderTransportCompatibility
+	if ref == nil {
+		return providerTransportStartupReferenceProviderArtifactFailure(
+			"",
+			"provider/transport compatibility source and artifact references are required for combined startup",
+		), true
+	}
+	if ref.Source == nil || strings.TrimSpace(ref.Source.ResolutionID) == "" {
+		return ProviderTransportCompatibilityFailure{
+			CandidateID: strings.TrimSpace(ref.CandidateID),
+			Status:      ProviderTransportCompatibilityStatusSetupNeeded,
+			FailingAxis: ProviderTransportCompatibilityAxisProviderSource,
+			ReasonCode:  ProviderTransportCompatibilityReasonProviderSourceRequired,
+			Message:     "provider/transport compatibility source resolution reference is required for combined startup",
+		}, true
+	}
+	if ref.Artifact == nil ||
+		strings.TrimSpace(ref.Artifact.ResolutionID) == "" ||
+		strings.TrimSpace(string(ref.Artifact.Family)) == "" ||
+		len(ref.Artifact.AccessMethods) == 0 {
+		return providerTransportStartupReferenceProviderArtifactFailure(
+			ref.CandidateID,
+			"provider/transport compatibility artifact reference is required for combined startup",
+		), true
+	}
+	return ProviderTransportCompatibilityFailure{}, false
+}
+
+func providerTransportStartupReferenceProviderArtifactFailure(
+	candidateID string,
+	message string,
+) ProviderTransportCompatibilityFailure {
+	return ProviderTransportCompatibilityFailure{
+		CandidateID: strings.TrimSpace(candidateID),
+		Status:      ProviderTransportCompatibilityStatusSetupNeeded,
+		FailingAxis: ProviderTransportCompatibilityAxisProviderArtifact,
+		ReasonCode:  ProviderTransportCompatibilityReasonProviderArtifactMissing,
+		Message:     message,
+	}
 }
 
 func (h *Host) selectedStartupExecutionPlanDescriptorLocked(
