@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_shell_core/home_workflow_surface.dart';
+import 'package:flutter_shell_core/provider_source_catalog_surface.dart';
 import 'package:flutter_shell_core/routing_content_surface.dart' as routing;
 import 'package:flutter_shell_core/shell_visuals.dart';
 import 'package:flutter_shell_core/support_content_surface.dart' as support;
@@ -1328,16 +1329,27 @@ class _ProvidersWorkbenchSurface extends StatelessWidget {
           onBack: controller.canReturnFromCanvasRoute
               ? controller.returnFromCanvasRoute
               : null,
-          child: ManagedProvidersLibrarySurface(
-            managedProviders: controller.managedProviders,
-            selectedManagedProviderId: controller.selectedManagedProviderId,
-            onSelectManagedProvider: controller.selectManagedProvider,
-            onCreateManagedProvider: controller.startManagedProviderCreation,
-            onOpenPresetBootstrap: () {
-              controller.openPresetPicker(
-                returnTarget: DesktopCanvasRoute.managedProviderPicker,
-              );
-            },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              ProviderSourceCatalogSurface(sources: controller.providerSources),
+              const SizedBox(height: 12),
+              Expanded(
+                child: ManagedProvidersLibrarySurface(
+                  managedProviders: controller.managedProviders,
+                  selectedManagedProviderId:
+                      controller.selectedManagedProviderId,
+                  onSelectManagedProvider: controller.selectManagedProvider,
+                  onCreateManagedProvider:
+                      controller.startManagedProviderCreation,
+                  onOpenPresetBootstrap: () {
+                    controller.openPresetPicker(
+                      returnTarget: DesktopCanvasRoute.managedProviderPicker,
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
         );
       case DesktopCanvasRoute.presetPicker:
@@ -1379,26 +1391,35 @@ class _ProvidersWorkbenchSurface extends StatelessWidget {
         break;
     }
 
-    return ProviderConfigEditorPanel(
-      supportedProviders: controller.supportedProviderCatalog,
-      providerDescriptors: controller.providerDescriptors,
-      selectedManagedProviderId: controller.selectedManagedProviderId,
-      draft: controller.managedProviderDraft,
-      busy: busy,
-      onDraftChanged: controller.updateManagedProviderDraft,
-      onSave: controller.saveManagedProviderDraft,
-      onDelete: controller.deleteSelectedManagedProvider,
-      onReset: controller.resetManagedProviderDraft,
-      onApplyToProfileDraft: controller.useManagedProviderForDraft,
-      onChooseProviderFamily: () async {
-        controller.openProviderFamilyPicker();
-      },
-      onOpenPresetBootstrap: () async {
-        controller.openPresetPicker();
-      },
-      onBrowseManagedProviders: () async {
-        controller.openManagedProviderPicker();
-      },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        ProviderSourceCatalogSurface(sources: controller.providerSources),
+        const SizedBox(height: 12),
+        Expanded(
+          child: ProviderConfigEditorPanel(
+            supportedProviders: controller.supportedProviderCatalog,
+            providerDescriptors: controller.providerDescriptors,
+            selectedManagedProviderId: controller.selectedManagedProviderId,
+            draft: controller.managedProviderDraft,
+            busy: busy,
+            onDraftChanged: controller.updateManagedProviderDraft,
+            onSave: controller.saveManagedProviderDraft,
+            onDelete: controller.deleteSelectedManagedProvider,
+            onReset: controller.resetManagedProviderDraft,
+            onApplyToProfileDraft: controller.useManagedProviderForDraft,
+            onChooseProviderFamily: () async {
+              controller.openProviderFamilyPicker();
+            },
+            onOpenPresetBootstrap: () async {
+              controller.openPresetPicker();
+            },
+            onBrowseManagedProviders: () async {
+              controller.openManagedProviderPicker();
+            },
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1443,6 +1464,8 @@ class _RoutingWorkbenchSurface extends StatelessWidget {
                     controller.vpnTransportProfileStatusSummaryForMode,
                 transportProfileImportAdapterLabelForMode:
                     controller.vpnTransportProfileImportAdapterLabelForMode,
+                providerTransportCompatibilitySummaryForMode:
+                    controller.providerTransportCompatibilitySummaryForMode,
                 platformTunnelStartBlockReasonForMode:
                     controller.platformTunnelStartPreparationBlockReason,
                 canConfigureTransportProfileForMode:

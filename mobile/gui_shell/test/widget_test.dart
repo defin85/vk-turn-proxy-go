@@ -4387,6 +4387,64 @@ void main() {
     },
   );
 
+  testWidgets('mobile providers tab renders provider source catalog', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(430, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final controller = MobileShellController(
+      bridge: _FakeMobileHostBridge(
+        providerSourcesList: const <RemoteProviderSourceDescriptor>[
+          RemoteProviderSourceDescriptor(
+            endpointId: 'vps-176',
+            providerId: 'wb',
+            sourceId: 'wb-turn-vps',
+            displayName: 'WB TURN VPS',
+            sourceFamily: 'vps',
+            healthStatus: 'healthy',
+            evidenceStatus: 'fresh',
+            validationStatus: 'valid',
+            artifactOffers: <RemoteProviderArtifactOffer>[
+              RemoteProviderArtifactOffer(
+                offerId: 'wg-turn',
+                family: 'turn',
+                validationStatus: 'valid',
+                accessMethods: <String>['turn_credentials'],
+                compatibleProfileKinds: <TransportProfileKind>[
+                  TransportProfileKind.wireGuardNativeV1,
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+      stateStore: _InMemoryStateStore(
+        MobileShellState(
+          profiles: const <ProfileRecord>[],
+          providerConfigs: const <ProviderConfigRecord>[],
+          draft: ProfileDraft.defaults(),
+        ),
+      ),
+    );
+
+    await controller.initialize();
+    await tester.pumpWidget(MobileShellApp(controller: controller));
+    await tester.pumpAndSettle();
+    await _openProvidersTab(tester);
+
+    expect(
+      find.byKey(const ValueKey<String>('provider-source-catalog')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('provider-source-card-wb-turn-vps')),
+      findsOneWidget,
+    );
+    expect(find.text('WB TURN VPS'), findsOneWidget);
+  });
+
   testWidgets('mobile shell keeps unavailable managed providers explicit', (
     WidgetTester tester,
   ) async {
@@ -5410,6 +5468,7 @@ class _FakeMobileWindowSoftInputModeController
 class _FakeMobileHostBridge implements MobileHostBridge {
   _FakeMobileHostBridge({
     List<ProviderDescriptor>? providersList,
+    List<RemoteProviderSourceDescriptor>? providerSourcesList,
     List<ProviderConfigRecord>? providerConfigsList,
     List<ResolutionRecord>? resolutionsList,
     List<TransportProfileStatus>? transportProfilesList,
@@ -5442,6 +5501,9 @@ class _FakeMobileHostBridge implements MobileHostBridge {
        _providerConfigs = List<ProviderConfigRecord>.of(
          providerConfigsList ?? const <ProviderConfigRecord>[],
        ),
+       _providerSources = List<RemoteProviderSourceDescriptor>.of(
+         providerSourcesList ?? const <RemoteProviderSourceDescriptor>[],
+       ),
        _resolutions = List<ResolutionRecord>.of(
          resolutionsList ?? const <ResolutionRecord>[],
        ),
@@ -5453,6 +5515,7 @@ class _FakeMobileHostBridge implements MobileHostBridge {
        );
 
   final List<ProviderDescriptor> _providers;
+  final List<RemoteProviderSourceDescriptor> _providerSources;
   final List<ProviderConfigRecord> _providerConfigs;
   final MobileHostConnectionResult ensureReadyResult;
   final List<SessionRecord> sessionsList;
@@ -5709,6 +5772,8 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     RuntimeDefaults? runtimeDefaults,
     RuntimeExecutionPlan? executionPlan,
     TransportProfileReference? transportProfile,
+    ProviderTransportCompatibilityStartupReference?
+    providerTransportCompatibility,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
     List<String> allowedPackages = const <String>[],
@@ -5771,6 +5836,18 @@ class _FakeMobileHostBridge implements MobileHostBridge {
 
   @override
   Future<List<ProviderDescriptor>> providers() async => _providers;
+
+  @override
+  Future<List<RemoteProviderSourceDescriptor>> providerSources() async =>
+      _providerSources;
+
+  @override
+  Future<ProviderTransportCompatibilityResponse>
+  providerTransportCompatibilityCandidates(
+    ProviderTransportCompatibilityRequest request,
+  ) => Future<ProviderTransportCompatibilityResponse>.error(
+    UnimplementedError(),
+  );
 
   @override
   Future<List<ProviderConfigRecord>> providerConfigs() async =>
@@ -5930,6 +6007,7 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       sessionId: result.sessionId,
       executionPlan: result.executionPlan,
       transportProfile: result.transportProfile,
+      providerTransportCompatibility: result.providerTransportCompatibility,
       remoteIngress: result.remoteIngress,
       underlayRoutePolicy: result.underlayRoutePolicy,
       stage: result.stage,

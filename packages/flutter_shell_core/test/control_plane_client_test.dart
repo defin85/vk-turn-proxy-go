@@ -70,9 +70,39 @@ void main() {
                   'event_stream',
                   'desktop_sidecar',
                   'platform_tunnels',
+                  'provider-transport-compatibility',
                   'runtime-execution-planning',
                   'vpn-transport-profile-store',
+                  'vps-provider-catalogs',
                 ],
+                'provider_transport_compatibility': <String, dynamic>{
+                  'version': '1',
+                  'candidate_endpoint':
+                      '/v1/provider-transport-compatibility/candidates',
+                  'statuses': <String>['startable', 'setup_needed'],
+                  'failing_axes': <String>[
+                    'provider_source',
+                    'transport_profile',
+                  ],
+                  'reason_codes': <String>[
+                    'ready',
+                    'transport_profile_required',
+                  ],
+                  'redaction_guarantees': <String>[
+                    'provider_secrets_redacted',
+                    'transport_profile_secrets_redacted',
+                  ],
+                },
+                'vps_provider_catalogs': <String, dynamic>{
+                  'sync_endpoint': '/v1/vps-provider-catalogs:sync',
+                  'artifact_issue_endpoint': '/v1/vps-provider-artifacts:issue',
+                  'endpoints': <Map<String, dynamic>>[
+                    <String, dynamic>{
+                      'id': 'vps-default',
+                      'url': 'https://catalog.example.test',
+                    },
+                  ],
+                },
                 'transport_profile_store': <String, dynamic>{
                   'supported_kinds': <String>[
                     'wireguard_native_v1',
@@ -196,6 +226,25 @@ void main() {
                 payload['transport_profile'] as Map<String, dynamic>;
             expect(transportProfile['profile_id'], 'transport-profile-1');
             expect(transportProfile['kind'], 'wireguard_native_v1');
+            final compatibility =
+                payload['provider_transport_compatibility']
+                    as Map<String, dynamic>;
+            expect(compatibility['candidate_id'], 'candidate-1');
+            expect(
+              (compatibility['source']
+                  as Map<String, dynamic>)['resolution_id'],
+              'resolution-1',
+            );
+            expect(
+              (compatibility['artifact']
+                  as Map<String, dynamic>)['resolution_id'],
+              'resolution-1',
+            );
+            expect(
+              (compatibility['transport_profile']
+                  as Map<String, dynamic>)['profile_id'],
+              'transport-profile-1',
+            );
             expect(
               payload['underlay_route_policy'],
               'preserve_active_local_network',
@@ -217,10 +266,114 @@ void main() {
                   'profile_id': 'transport-profile-1',
                   'kind': 'wireguard_native_v1',
                 },
+                'provider_transport_compatibility': <String, dynamic>{
+                  'candidate_id': 'candidate-1',
+                  'status': 'setup_needed',
+                  'failing_axis': 'transport_profile',
+                  'reason_code': 'transport_profile_required',
+                  'message': 'explicit transport profile is required',
+                },
                 'ready': false,
                 'stage': 'profile_validate',
                 'missing_prerequisite': 'transport_profile',
                 'message': 'packaged host missing tunnel implementation',
+              }),
+            );
+            await request.response.close();
+            return;
+          case '/v1/provider-sources':
+            request.response.headers.contentType = ContentType.json;
+            request.response.write(
+              jsonEncode(<Map<String, dynamic>>[
+                <String, dynamic>{
+                  'endpoint_id': 'vps-default',
+                  'issuer': 'vk-turn-proxy-go',
+                  'audience': 'desktop-shell',
+                  'generation': 7,
+                  'provider_id': 'generic-turn',
+                  'source_id': 'source-turn-1',
+                  'display_name': 'Generic TURN VPS',
+                  'source_family': 'turn',
+                  'health_status': 'healthy',
+                  'evidence_status': 'fresh',
+                  'validation_status': 'valid',
+                  'artifact_offers': <Map<String, dynamic>>[
+                    <String, dynamic>{
+                      'offer_id': 'offer-turn-wg',
+                      'family': 'generic_turn',
+                      'access_methods': <String>['turn_credentials'],
+                      'actions': <String>['start_on_this_device'],
+                      'remote_endpoint_family': 'turn_server',
+                      'remote_endpoint_role': 'wireguard_raw_datagram',
+                      'compatible_profile_kinds': <String>[
+                        'wireguard_native_v1',
+                      ],
+                      'health_status': 'healthy',
+                      'evidence_status': 'fresh',
+                      'validation_status': 'valid',
+                    },
+                  ],
+                },
+              ]),
+            );
+            await request.response.close();
+            return;
+          case '/v1/provider-transport-compatibility/candidates':
+            final payload =
+                jsonDecode(await utf8.decoder.bind(request).join())
+                    as Map<String, dynamic>;
+            expect(payload['resolution_id'], 'resolution-1');
+            expect(
+              (payload['execution_plan']
+                  as Map<String, dynamic>)['engine_family'],
+              'wireguard_native',
+            );
+            expect(
+              (payload['transport_profile']
+                  as Map<String, dynamic>)['profile_id'],
+              'transport-profile-1',
+            );
+            request.response.headers.contentType = ContentType.json;
+            request.response.write(
+              jsonEncode(<String, dynamic>{
+                'version': '1',
+                'generated_at': DateTime.utc(2026, 5, 3, 12).toIso8601String(),
+                'candidates': <Map<String, dynamic>>[
+                  <String, dynamic>{
+                    'id': 'candidate-1',
+                    'source': <String, dynamic>{
+                      'provider_id': 'generic-turn',
+                      'resolution_id': 'resolution-1',
+                    },
+                    'artifact': <String, dynamic>{
+                      'provider_id': 'generic-turn',
+                      'resolution_id': 'resolution-1',
+                      'family': 'generic_turn',
+                      'access_methods': <String>['turn_credentials'],
+                    },
+                    'execution_plan': <String, dynamic>{
+                      'plan': <String, dynamic>{
+                        'access_method': 'turn_credentials',
+                        'carrier_family': 'turn_datagram',
+                        'engine_family': 'wireguard_native',
+                        'host_adapter': 'windows_wintun',
+                      },
+                      'support_state': 'supported',
+                      'remote_endpoint_family': 'turn_server',
+                      'remote_endpoint_role': 'wireguard_raw_datagram',
+                    },
+                    'required_transport_profile_kinds': <String>[
+                      'wireguard_native_v1',
+                    ],
+                    'selected_transport_profile': <String, dynamic>{
+                      'profile_id': 'transport-profile-1',
+                      'kind': 'wireguard_native_v1',
+                    },
+                    'status': 'startable',
+                    'startable': true,
+                    'reason_code': 'ready',
+                  },
+                ],
               }),
             );
             await request.response.close();
@@ -521,8 +674,25 @@ void main() {
       expect(info.contractVersion, '1');
       expect(info.build.version, '0.1.0');
       expect(info.capabilities, contains(Capability.desktopSidecar));
+      expect(
+        info.capabilities,
+        contains(Capability.providerTransportCompatibility),
+      );
       expect(info.capabilities, contains(Capability.runtimeExecutionPlanning));
       expect(info.capabilities, contains(Capability.vpnTransportProfileStore));
+      expect(info.capabilities, contains(Capability.vpsProviderCatalogs));
+      expect(
+        info.providerTransportCompatibility?.candidateEndpoint,
+        '/v1/provider-transport-compatibility/candidates',
+      );
+      expect(
+        info.providerTransportCompatibility?.redactionGuarantees,
+        contains('transport_profile_secrets_redacted'),
+      );
+      expect(
+        info.vpsProviderCatalogs?.artifactIssueEndpoint,
+        '/v1/vps-provider-artifacts:issue',
+      );
       expect(info.transportProfileStore?.supportedKinds, <TransportProfileKind>[
         TransportProfileKind.wireGuardNativeV1,
         const TransportProfileKind('future_native_v1'),
@@ -583,6 +753,35 @@ void main() {
             .transportProfile
             ?.missingKind,
         TransportProfileKind.wireGuardNativeV1,
+      );
+
+      final providerSources = await client.providerSources();
+      expect(providerSources.single.sourceId, 'source-turn-1');
+      expect(
+        providerSources.single.artifactOffers.single.compatibleProfileKinds,
+        <TransportProfileKind>[TransportProfileKind.wireGuardNativeV1],
+      );
+
+      final compatibility = await client
+          .providerTransportCompatibilityCandidates(
+            const ProviderTransportCompatibilityRequest(
+              resolutionId: 'resolution-1',
+              executionPlan: RuntimeExecutionPlan(
+                accessMethod: RuntimeAccessMethod.turnCredentials,
+                carrierFamily: RuntimeCarrierFamily.turnDatagram,
+                engineFamily: RuntimeEngineFamily.wireguardNative,
+                hostAdapter: RuntimeHostAdapter.windowsWintun,
+              ),
+              transportProfile: TransportProfileReference(
+                profileId: 'transport-profile-1',
+                kind: TransportProfileKind.wireGuardNativeV1,
+              ),
+            ),
+          );
+      expect(compatibility.candidates.single.isStartable, isTrue);
+      expect(
+        compatibility.candidates.single.artifact?.accessMethods,
+        <RuntimeAccessMethod>[RuntimeAccessMethod.turnCredentials],
       );
 
       final profiles = await client.transportProfiles();
@@ -714,6 +913,32 @@ void main() {
           profileId: 'transport-profile-1',
           kind: TransportProfileKind.wireGuardNativeV1,
         ),
+        providerTransportCompatibility:
+            const ProviderTransportCompatibilityStartupReference(
+              candidateId: 'candidate-1',
+              source: ProviderTransportSourceReference(
+                providerId: 'generic-turn',
+                resolutionId: 'resolution-1',
+              ),
+              artifact: ProviderTransportArtifactReference(
+                providerId: 'generic-turn',
+                resolutionId: 'resolution-1',
+                family: ArtifactFamily.genericTurn,
+                accessMethods: <RuntimeAccessMethod>[
+                  RuntimeAccessMethod.turnCredentials,
+                ],
+              ),
+              executionPlan: RuntimeExecutionPlan(
+                accessMethod: RuntimeAccessMethod.turnCredentials,
+                carrierFamily: RuntimeCarrierFamily.turnDatagram,
+                engineFamily: RuntimeEngineFamily.wireguardNative,
+                hostAdapter: RuntimeHostAdapter.windowsWintun,
+              ),
+              transportProfile: TransportProfileReference(
+                profileId: 'transport-profile-1',
+                kind: TransportProfileKind.wireGuardNativeV1,
+              ),
+            ),
         underlayRoutePolicy:
             PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork,
       );
@@ -727,6 +952,10 @@ void main() {
       expect(
         startResult.executionPlan?.engineFamily,
         RuntimeEngineFamily.wireguardNative,
+      );
+      expect(
+        startResult.providerTransportCompatibility?.reasonCode,
+        ProviderTransportCompatibilityReasonCode.transportProfileRequired,
       );
 
       final stopResult = await client.stopPlatformTunnel(

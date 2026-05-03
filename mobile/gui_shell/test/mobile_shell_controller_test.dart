@@ -146,6 +146,7 @@ const HostInfo _readyHostInfo = HostInfo(
     Capability.profiles,
     Capability.providerConfigs,
     Capability.providerRuntimeArtifacts,
+    Capability.providerTransportCompatibility,
     Capability.runtimeExecutionPlanning,
     Capability.vpnTransportProfileStore,
     Capability.sessions,
@@ -153,6 +154,10 @@ const HostInfo _readyHostInfo = HostInfo(
     Capability.diagnostics,
     Capability.eventStream,
   ],
+  providerTransportCompatibility: ProviderTransportCompatibilityCapability(
+    version: '1',
+    candidateEndpoint: '/v1/provider-transport-compatibility/candidates',
+  ),
   platformTunnels: <PlatformTunnelCapability>[
     PlatformTunnelCapability(
       mode: PlatformTunnelMode.androidVpnService,
@@ -180,6 +185,7 @@ const HostInfo _hostInfoWithoutSupportedAndroidExecutionPath = HostInfo(
     Capability.profiles,
     Capability.providerConfigs,
     Capability.providerRuntimeArtifacts,
+    Capability.providerTransportCompatibility,
     Capability.runtimeExecutionPlanning,
     Capability.vpnTransportProfileStore,
     Capability.sessions,
@@ -187,6 +193,10 @@ const HostInfo _hostInfoWithoutSupportedAndroidExecutionPath = HostInfo(
     Capability.diagnostics,
     Capability.eventStream,
   ],
+  providerTransportCompatibility: ProviderTransportCompatibilityCapability(
+    version: '1',
+    candidateEndpoint: '/v1/provider-transport-compatibility/candidates',
+  ),
   platformTunnels: <PlatformTunnelCapability>[
     PlatformTunnelCapability(
       mode: PlatformTunnelMode.androidVpnService,
@@ -2450,6 +2460,60 @@ void main() {
     },
   );
 
+  test('controller loads provider source catalog during refresh', () async {
+    final bridge = _FakeMobileHostBridge(
+      providerSourcesList: const <RemoteProviderSourceDescriptor>[
+        RemoteProviderSourceDescriptor(
+          endpointId: 'vps-1',
+          providerId: 'generic-turn',
+          sourceId: 'wb-turn-vps',
+          displayName: 'WB TURN VPS',
+          sourceFamily: 'turn',
+          healthStatus: 'ready',
+          evidenceStatus: 'fresh',
+          validationStatus: 'valid',
+          artifactOffers: <RemoteProviderArtifactOffer>[
+            RemoteProviderArtifactOffer(
+              offerId: 'turn-wg',
+              family: 'generic_turn',
+              accessMethods: <String>['turn_credentials'],
+              compatibleProfileKinds: <TransportProfileKind>[
+                TransportProfileKind.wireGuardNativeV1,
+              ],
+              validationStatus: 'valid',
+            ),
+          ],
+        ),
+      ],
+    );
+    final controller = MobileShellController(
+      bridge: bridge,
+      stateStore: _InMemoryStateStore(
+        MobileShellState(
+          profiles: const <ProfileRecord>[],
+          providerConfigs: const <ProviderConfigRecord>[],
+          draft: ProfileDraft.defaults(),
+        ),
+      ),
+      appBuild: _testGuiBuild,
+    );
+    addTearDown(controller.dispose);
+
+    await controller.initialize();
+
+    expect(controller.providerSources, hasLength(1));
+    expect(controller.providerSources.single.sourceId, 'wb-turn-vps');
+    expect(
+      controller
+          .providerSources
+          .single
+          .artifactOffers
+          .single
+          .compatibleProfileKinds,
+      <TransportProfileKind>[TransportProfileKind.wireGuardNativeV1],
+    );
+  });
+
   test(
     'controller uses VPN transport profile store before platform tunnel startup',
     () async {
@@ -2525,8 +2589,33 @@ void main() {
       expect(bridge.startedPlatformTunnels, <PlatformTunnelMode>[
         PlatformTunnelMode.androidVpnService,
       ]);
+      expect(bridge.providerTransportCompatibilityRequests, hasLength(2));
+      expect(
+        bridge
+            .providerTransportCompatibilityRequests
+            .last
+            .transportProfile
+            ?.profileId,
+        'transport-profile-1',
+      );
       expect(
         bridge.startedPlatformTunnelProfiles.single?.profileId,
+        'transport-profile-1',
+      );
+      expect(
+        bridge
+            .startedPlatformTunnelProviderTransportCompatibility
+            .single
+            ?.source
+            ?.resolutionId,
+        'resolution-1',
+      );
+      expect(
+        bridge
+            .startedPlatformTunnelProviderTransportCompatibility
+            .single
+            ?.transportProfile
+            ?.profileId,
         'transport-profile-1',
       );
 
@@ -2543,6 +2632,94 @@ void main() {
         ),
         contains('VPN transport profile'),
       );
+    },
+  );
+
+  test(
+    'controller blocks platform tunnel before host startup when provider transport compatibility is not startable',
+    () async {
+      final profile = ProfileRecord(
+        id: 'profile-1',
+        name: 'generic turn live',
+        spec: _profileSpec().copyWith(provider: 'generic-turn'),
+      );
+      final bridge = _FakeMobileHostBridge(
+        profilesList: <ProfileRecord>[profile],
+        resolutionsList: <ResolutionRecord>[
+          _resolutionRecord(provider: 'generic-turn'),
+        ],
+        providerTransportCompatibilityResponseBuilder:
+            (ProviderTransportCompatibilityRequest request) {
+              final executionPlan = request.executionPlan!;
+              return ProviderTransportCompatibilityResponse(
+                version: '1',
+                generatedAt: DateTime.utc(2026, 5, 3, 12),
+                candidates: <ProviderTransportCompatibilityCandidate>[
+                  ProviderTransportCompatibilityCandidate(
+                    id: 'candidate-blocked',
+                    source: ProviderTransportSourceReference(
+                      providerId: 'generic-turn',
+                      resolutionId: request.resolutionId,
+                    ),
+                    artifact: ProviderTransportArtifactReference(
+                      providerId: 'generic-turn',
+                      resolutionId: request.resolutionId,
+                      family: ArtifactFamily.genericTurn,
+                      accessMethods: <RuntimeAccessMethod>[
+                        executionPlan.accessMethod,
+                      ],
+                    ),
+                    executionPlan: RuntimeExecutionPlanDescriptor(
+                      plan: executionPlan,
+                      supportState: RuntimeExecutionPlanSupportState.supported,
+                      remoteEndpointFamily:
+                          RuntimeRemoteEndpointFamily.turnServer,
+                      remoteEndpointRole:
+                          RuntimeRemoteEndpointRole.wireGuardRawDatagram,
+                    ),
+                    selectedTransportProfile: request.transportProfile,
+                    status: ProviderTransportCompatibilityStatus.degraded,
+                    startable: false,
+                    failingAxis:
+                        ProviderTransportCompatibilityFailingAxis.evidence,
+                    reasonCode: ProviderTransportCompatibilityReasonCode
+                        .evidenceMissing,
+                    message:
+                        'provider artifact evidence is required before startup',
+                  ),
+                ],
+              );
+            },
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[profile],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: profile.id,
+            draft: ProfileDraft.fromProfile(profile),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(bridge.providerTransportCompatibilityRequests, hasLength(1));
+      expect(
+        controller.platformTunnelStartPreparationBlockReason(
+          PlatformTunnelMode.androidVpnService,
+        ),
+        contains('provider/transport compatibility'),
+      );
+
+      await controller.startPlatformTunnel(
+        PlatformTunnelMode.androidVpnService,
+      );
+
+      expect(bridge.startedPlatformTunnels, isEmpty);
     },
   );
 
@@ -3515,6 +3692,7 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       description: 'native bridge',
     ),
     List<ProviderDescriptor>? providersList,
+    List<RemoteProviderSourceDescriptor>? providerSourcesList,
     List<ProviderConfigRecord>? providerConfigsList,
     List<ProfileRecord>? profilesList,
     List<ResolutionRecord>? resolutionsList,
@@ -3543,6 +3721,10 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       stopped: true,
       message: 'Android VPN Service disconnected.',
     ),
+    ProviderTransportCompatibilityResponse Function(
+      ProviderTransportCompatibilityRequest request,
+    )?
+    providerTransportCompatibilityResponseBuilder,
     DiagnosticsBundle? diagnosticsBundle,
   }) : diagnosticsBundle =
            diagnosticsBundle ??
@@ -3567,6 +3749,9 @@ class _FakeMobileHostBridge implements MobileHostBridge {
        _providers = List<ProviderDescriptor>.of(
          providersList ?? _providerDescriptors,
        ),
+       _providerSources = List<RemoteProviderSourceDescriptor>.of(
+         providerSourcesList ?? const <RemoteProviderSourceDescriptor>[],
+       ),
        _providerConfigs = List<ProviderConfigRecord>.of(
          providerConfigsList ?? const <ProviderConfigRecord>[],
        ),
@@ -3582,11 +3767,14 @@ class _FakeMobileHostBridge implements MobileHostBridge {
        ),
        _platformTunnelStatuses = List<PlatformTunnelStatus>.of(
          platformTunnelStatusesList ?? const <PlatformTunnelStatus>[],
-       );
+       ),
+       _providerTransportCompatibilityResponseBuilder =
+           providerTransportCompatibilityResponseBuilder;
 
   final MobileHostConnectionResult ensureReadyResult;
   HostInfo _hostInfo;
   final List<ProviderDescriptor> _providers;
+  final List<RemoteProviderSourceDescriptor> _providerSources;
   final List<ProviderConfigRecord> _providerConfigs;
   final List<ProfileRecord> _profiles;
   final List<SessionRecord> sessionsList;
@@ -3599,6 +3787,10 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   final PlatformTunnelStopResult stopPlatformTunnelResult;
   final DiagnosticsBundle diagnosticsBundle;
   final List<ResolutionRecord> _resolutions;
+  final ProviderTransportCompatibilityResponse Function(
+    ProviderTransportCompatibilityRequest request,
+  )?
+  _providerTransportCompatibilityResponseBuilder;
 
   final List<ProfileRecord> upsertedProfiles = <ProfileRecord>[];
   final List<ProviderConfigRecord> upsertedProviderConfigs =
@@ -3623,6 +3815,12 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       <RuntimeExecutionPlan?>[];
   final List<TransportProfileReference?> startedPlatformTunnelProfiles =
       <TransportProfileReference?>[];
+  final List<ProviderTransportCompatibilityStartupReference?>
+  startedPlatformTunnelProviderTransportCompatibility =
+      <ProviderTransportCompatibilityStartupReference?>[];
+  final List<ProviderTransportCompatibilityRequest>
+  providerTransportCompatibilityRequests =
+      <ProviderTransportCompatibilityRequest>[];
   final List<PlatformTunnelApplicationRoutingPolicy>
   startedPlatformTunnelRoutingPolicies =
       <PlatformTunnelApplicationRoutingPolicy>[];
@@ -3883,6 +4081,8 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     RuntimeDefaults? runtimeDefaults,
     RuntimeExecutionPlan? executionPlan,
     TransportProfileReference? transportProfile,
+    ProviderTransportCompatibilityStartupReference?
+    providerTransportCompatibility,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
     List<String> allowedPackages = const <String>[],
@@ -3895,6 +4095,9 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     startedPlatformTunnelRuntimeDefaults.add(runtimeDefaults);
     startedPlatformTunnelExecutionPlans.add(executionPlan);
     startedPlatformTunnelProfiles.add(transportProfile);
+    startedPlatformTunnelProviderTransportCompatibility.add(
+      providerTransportCompatibility,
+    );
     startedPlatformTunnelRoutingPolicies.add(applicationRoutingPolicy);
     startedPlatformTunnelUnderlayRoutePolicies.add(underlayRoutePolicy);
     startedPlatformTunnelAllowedPackages.add(List<String>.of(allowedPackages));
@@ -3945,6 +4148,57 @@ class _FakeMobileHostBridge implements MobileHostBridge {
 
   @override
   Future<List<ProviderDescriptor>> providers() async => _providers;
+
+  @override
+  Future<List<RemoteProviderSourceDescriptor>> providerSources() async =>
+      _providerSources;
+
+  @override
+  Future<ProviderTransportCompatibilityResponse>
+  providerTransportCompatibilityCandidates(
+    ProviderTransportCompatibilityRequest request,
+  ) async {
+    providerTransportCompatibilityRequests.add(request);
+    final override = _providerTransportCompatibilityResponseBuilder;
+    if (override != null) {
+      return override(request);
+    }
+    final executionPlan = request.executionPlan;
+    return ProviderTransportCompatibilityResponse(
+      version: '1',
+      generatedAt: DateTime.utc(2026, 5, 3, 12),
+      candidates: executionPlan == null
+          ? const <ProviderTransportCompatibilityCandidate>[]
+          : <ProviderTransportCompatibilityCandidate>[
+              ProviderTransportCompatibilityCandidate(
+                id: 'candidate-1',
+                source: ProviderTransportSourceReference(
+                  providerId: 'generic-turn',
+                  resolutionId: request.resolutionId,
+                ),
+                artifact: ProviderTransportArtifactReference(
+                  providerId: 'generic-turn',
+                  resolutionId: request.resolutionId,
+                  family: ArtifactFamily.genericTurn,
+                  accessMethods: <RuntimeAccessMethod>[
+                    executionPlan.accessMethod,
+                  ],
+                ),
+                executionPlan: RuntimeExecutionPlanDescriptor(
+                  plan: executionPlan,
+                  supportState: RuntimeExecutionPlanSupportState.supported,
+                  remoteEndpointFamily: RuntimeRemoteEndpointFamily.turnServer,
+                  remoteEndpointRole:
+                      RuntimeRemoteEndpointRole.wireGuardRawDatagram,
+                ),
+                selectedTransportProfile: request.transportProfile,
+                status: ProviderTransportCompatibilityStatus.startable,
+                startable: true,
+                reasonCode: ProviderTransportCompatibilityReasonCode.ready,
+              ),
+            ],
+    );
+  }
 
   @override
   Future<List<ProviderConfigRecord>> providerConfigs() async =>
@@ -4097,6 +4351,7 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       sessionId: result.sessionId,
       executionPlan: result.executionPlan,
       transportProfile: result.transportProfile,
+      providerTransportCompatibility: result.providerTransportCompatibility,
       remoteIngress: result.remoteIngress,
       underlayRoutePolicy: result.underlayRoutePolicy,
       stage: result.stage,

@@ -1289,6 +1289,70 @@ void main() {
     unawaited(api.dispose());
   });
 
+  testWidgets('desktop providers route renders provider source catalog', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final api = _FakeControlPlaneApi(
+      providerSources: const <RemoteProviderSourceDescriptor>[
+        RemoteProviderSourceDescriptor(
+          endpointId: 'vps-176',
+          providerId: 'vk',
+          sourceId: 'vk-turn-vps',
+          displayName: 'VK TURN VPS',
+          sourceFamily: 'vps',
+          healthStatus: 'healthy',
+          evidenceStatus: 'fresh',
+          validationStatus: 'valid',
+          artifactOffers: <RemoteProviderArtifactOffer>[
+            RemoteProviderArtifactOffer(
+              offerId: 'wg-turn',
+              family: 'turn',
+              validationStatus: 'valid',
+              accessMethods: <String>['turn_credentials'],
+              compatibleProfileKinds: <TransportProfileKind>[
+                TransportProfileKind.wireGuardNativeV1,
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+    final controller = DesktopShellController(
+      api: api,
+      supervisor: _FakeHostSupervisor(),
+      stateStore: const _InMemoryShellStateStore(),
+      appBuild: _testGuiBuild,
+    );
+
+    await controller.initialize();
+    await tester.pumpWidget(
+      MaterialApp(home: DashboardPage(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+
+    controller.showProviders();
+    await tester.pumpAndSettle();
+
+    expect(controller.activeWorkbenchRoute, DesktopWorkbenchRoute.providers);
+    expect(
+      find.byKey(const ValueKey<String>('provider-source-catalog')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('provider-source-card-vk-turn-vps')),
+      findsOneWidget,
+    );
+    expect(find.text('VK TURN VPS'), findsOneWidget);
+
+    controller.dispose();
+    await tester.pumpWidget(const SizedBox.shrink());
+    unawaited(api.dispose());
+  });
+
   testWidgets('desktop shell bootstraps an available preset into a new draft', (
     WidgetTester tester,
   ) async {
@@ -2235,6 +2299,7 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   _FakeControlPlaneApi({
     List<ResolutionRecord> resolutionsList = const <ResolutionRecord>[],
     List<ProviderDescriptor>? providers,
+    List<RemoteProviderSourceDescriptor>? providerSources,
     List<ProviderConfigRecord>? providerConfigs,
     List<ProfileRecord>? profiles,
     HostInfo? hostInfo,
@@ -2251,6 +2316,9 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
        ),
        _providerConfigs = List<ProviderConfigRecord>.of(
          providerConfigs ?? const <ProviderConfigRecord>[],
+       ),
+       _providerSources = List<RemoteProviderSourceDescriptor>.of(
+         providerSources ?? const <RemoteProviderSourceDescriptor>[],
        ),
        _hostInfo = hostInfo ?? _readyHostInfo,
        _transportProfiles = List<TransportProfileStatus>.of(
@@ -2285,6 +2353,7 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
        );
 
   final List<ProviderDescriptor> _providers;
+  final List<RemoteProviderSourceDescriptor> _providerSources;
   final List<ProviderConfigRecord> _providerConfigs;
   HostInfo _hostInfo;
   final List<TransportProfileStatus> _transportProfiles;
@@ -2487,6 +2556,8 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
     RuntimeDefaults? runtimeDefaults,
     RuntimeExecutionPlan? executionPlan,
     TransportProfileReference? transportProfile,
+    ProviderTransportCompatibilityStartupReference?
+    providerTransportCompatibility,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
     PlatformTunnelUnderlayRoutePolicy underlayRoutePolicy =
@@ -2541,6 +2612,18 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
 
   @override
   Future<List<ProviderDescriptor>> providers() async => _providers;
+
+  @override
+  Future<List<RemoteProviderSourceDescriptor>> providerSources() async =>
+      _providerSources;
+
+  @override
+  Future<ProviderTransportCompatibilityResponse>
+  providerTransportCompatibilityCandidates(
+    ProviderTransportCompatibilityRequest request,
+  ) => Future<ProviderTransportCompatibilityResponse>.error(
+    UnimplementedError(),
+  );
 
   @override
   Future<List<ProfileRecord>> profiles() async => _profiles;

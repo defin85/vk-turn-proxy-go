@@ -220,6 +220,18 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
       ];
 
   @override
+  Future<List<RemoteProviderSourceDescriptor>> providerSources() async =>
+      const <RemoteProviderSourceDescriptor>[];
+
+  @override
+  Future<ProviderTransportCompatibilityResponse>
+  providerTransportCompatibilityCandidates(
+    ProviderTransportCompatibilityRequest request,
+  ) => Future<ProviderTransportCompatibilityResponse>.error(
+    UnimplementedError(),
+  );
+
+  @override
   Future<List<ResolutionRecord>> resolutions() async =>
       const <ResolutionRecord>[];
 
@@ -238,6 +250,8 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
     RuntimeDefaults? runtimeDefaults,
     RuntimeExecutionPlan? executionPlan,
     TransportProfileReference? transportProfile,
+    ProviderTransportCompatibilityStartupReference?
+    providerTransportCompatibility,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
     PlatformTunnelUnderlayRoutePolicy underlayRoutePolicy =

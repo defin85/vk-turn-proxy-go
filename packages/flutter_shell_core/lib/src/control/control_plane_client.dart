@@ -16,6 +16,8 @@ abstract class ControlPlaneApi {
     RuntimeDefaults? runtimeDefaults,
     RuntimeExecutionPlan? executionPlan,
     TransportProfileReference? transportProfile,
+    ProviderTransportCompatibilityStartupReference?
+    providerTransportCompatibility,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
     PlatformTunnelUnderlayRoutePolicy underlayRoutePolicy =
@@ -31,6 +33,11 @@ abstract class ControlPlaneApi {
   });
   Future<List<PlatformTunnelStatus>> platformTunnelStatuses();
   Future<List<ProviderDescriptor>> providers();
+  Future<List<RemoteProviderSourceDescriptor>> providerSources();
+  Future<ProviderTransportCompatibilityResponse>
+  providerTransportCompatibilityCandidates(
+    ProviderTransportCompatibilityRequest request,
+  );
   Future<List<ProviderConfigRecord>> providerConfigs();
   Future<ProviderConfigRecord> upsertProviderConfig(
     ProviderConfigRecord config,
@@ -149,6 +156,8 @@ class ControlPlaneClient implements ControlPlaneApi {
     RuntimeDefaults? runtimeDefaults,
     RuntimeExecutionPlan? executionPlan,
     TransportProfileReference? transportProfile,
+    ProviderTransportCompatibilityStartupReference?
+    providerTransportCompatibility,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
     PlatformTunnelUnderlayRoutePolicy underlayRoutePolicy =
@@ -168,6 +177,10 @@ class ControlPlaneClient implements ControlPlaneApi {
         if (executionPlan != null) 'execution_plan': executionPlan.toJson(),
         if (transportProfile != null && !transportProfile.isEmpty)
           'transport_profile': transportProfile.toJson(),
+        if (providerTransportCompatibility != null &&
+            !providerTransportCompatibility.isEmpty)
+          'provider_transport_compatibility': providerTransportCompatibility
+              .toJson(),
         if (_modeSupportsApplicationRouting(mode))
           'application_routing_policy': applicationRoutingPolicy.value,
         if (_modeSupportsUnderlayRoutePolicy(mode))
@@ -219,6 +232,27 @@ class ControlPlaneClient implements ControlPlaneApi {
   Future<List<ProviderDescriptor>> providers() async {
     final payload = await _jsonRequestList('GET', '/v1/providers');
     return payload.map(ProviderDescriptor.fromJson).toList(growable: false);
+  }
+
+  @override
+  Future<List<RemoteProviderSourceDescriptor>> providerSources() async {
+    final payload = await _jsonRequestList('GET', '/v1/provider-sources');
+    return payload
+        .map(RemoteProviderSourceDescriptor.fromJson)
+        .toList(growable: false);
+  }
+
+  @override
+  Future<ProviderTransportCompatibilityResponse>
+  providerTransportCompatibilityCandidates(
+    ProviderTransportCompatibilityRequest request,
+  ) async {
+    final payload = await _jsonRequest(
+      'POST',
+      '/v1/provider-transport-compatibility/candidates',
+      body: request.toJson(),
+    );
+    return ProviderTransportCompatibilityResponse.fromJson(payload);
   }
 
   @override

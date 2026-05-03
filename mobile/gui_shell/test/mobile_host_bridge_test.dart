@@ -111,6 +111,10 @@ void main() {
       );
       expect(
         api.negotiateCalls.single,
+        contains(Capability.providerTransportCompatibility),
+      );
+      expect(
+        api.negotiateCalls.single,
         contains(Capability.runtimeExecutionPlanning),
       );
       expect(
@@ -808,6 +812,7 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
       Capability.profiles,
       Capability.providerConfigs,
       Capability.providerRuntimeArtifacts,
+      Capability.providerTransportCompatibility,
       Capability.runtimeExecutionPlanning,
       Capability.vpnTransportProfileStore,
       Capability.sessions,
@@ -963,12 +968,26 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
   Future<List<ProviderDescriptor>> providers() async => _providers;
 
   @override
+  Future<List<RemoteProviderSourceDescriptor>> providerSources() async =>
+      const <RemoteProviderSourceDescriptor>[];
+
+  @override
+  Future<ProviderTransportCompatibilityResponse>
+  providerTransportCompatibilityCandidates(
+    ProviderTransportCompatibilityRequest request,
+  ) => Future<ProviderTransportCompatibilityResponse>.error(
+    UnimplementedError(),
+  );
+
+  @override
   Future<PlatformTunnelStartResult> startPlatformTunnel({
     required PlatformTunnelMode mode,
     String? resolutionId,
     RuntimeDefaults? runtimeDefaults,
     RuntimeExecutionPlan? executionPlan,
     TransportProfileReference? transportProfile,
+    ProviderTransportCompatibilityStartupReference?
+    providerTransportCompatibility,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
     List<String> allowedPackages = const <String>[],

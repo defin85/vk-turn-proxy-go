@@ -119,6 +119,8 @@ class MobileShellController extends ChangeNotifier {
   ShellStatus status = ShellStatus.booting;
   MobileHostConnectionResult? hostConnection;
   List<ProviderDescriptor> providerDescriptors = const <ProviderDescriptor>[];
+  List<RemoteProviderSourceDescriptor> providerSources =
+      const <RemoteProviderSourceDescriptor>[];
   List<ManagedProviderRecord> managedProviders =
       const <ManagedProviderRecord>[];
   List<ProviderTemplateRecord> providerTemplates =
@@ -152,6 +154,9 @@ class MobileShellController extends ChangeNotifier {
   String? installedAppsError;
   final Map<PlatformTunnelMode, PlatformTunnelStartResult>
   _platformTunnelResults = <PlatformTunnelMode, PlatformTunnelStartResult>{};
+  final Map<PlatformTunnelMode, ProviderTransportCompatibilityCandidate>
+  _providerTransportCompatibilityCandidates =
+      <PlatformTunnelMode, ProviderTransportCompatibilityCandidate>{};
   String? _notice;
   bool busy = false;
   bool _requiresLocalStateReset = false;
@@ -514,7 +519,7 @@ class MobileShellController extends ChangeNotifier {
     if (transportProfileBlockReason != null) {
       return transportProfileBlockReason;
     }
-    return null;
+    return _providerTransportCompatibilityBlockReasonForMode(mode);
   }
 
   bool get activeModeSupportsAppRouting =>
@@ -546,6 +551,24 @@ class MobileShellController extends ChangeNotifier {
 
   PlatformTunnelStartResult? platformTunnelResultFor(PlatformTunnelMode mode) {
     return _platformTunnelResults[mode];
+  }
+
+  ProviderTransportCompatibilityCandidate?
+  providerTransportCompatibilityCandidateForMode(PlatformTunnelMode mode) {
+    return _providerTransportCompatibilityCandidates[mode];
+  }
+
+  String? providerTransportCompatibilitySummaryForMode(
+    PlatformTunnelMode mode,
+  ) {
+    final candidate = providerTransportCompatibilityCandidateForMode(mode);
+    if (candidate == null) {
+      return null;
+    }
+    return _providerTransportCompatibilityMessage(
+      candidate,
+      prefix: 'Provider/transport compatibility',
+    );
   }
 
   PlatformTunnelStatus? platformTunnelStatusFor(PlatformTunnelMode mode) {
@@ -969,6 +992,7 @@ class MobileShellController extends ChangeNotifier {
         description: currentConnection.description,
       );
       final nextProviders = await bridge.providers();
+      final nextProviderSources = await bridge.providerSources();
       final nextTransportProfiles = _hostSupportsTransportProfileStore
           ? await bridge.transportProfiles()
           : const <TransportProfileStatus>[];
@@ -982,6 +1006,7 @@ class MobileShellController extends ChangeNotifier {
         nextResolutions,
       );
       providerDescriptors = nextProviders;
+      providerSources = nextProviderSources;
       managedProviders = _overlayManagedProviders(managedProviders);
       providerTemplates = _overlayProviderTemplates(providerTemplates);
       transportProfiles = nextTransportProfiles;
@@ -998,6 +1023,7 @@ class MobileShellController extends ChangeNotifier {
       selectedResolutionId = _resolveSelectedResolutionId(nextResolutions);
       _replaceSessions(nextSessions);
       _mergeChallenges(nextChallenges);
+      await _refreshProviderTransportCompatibilityCandidates();
       if (selectedManagedProviderId != null &&
           !managedProviders.any(
             (ManagedProviderRecord provider) =>
@@ -1694,6 +1720,7 @@ class MobileShellController extends ChangeNotifier {
       managedProviders = const <ManagedProviderRecord>[];
       providerTemplates = const <ProviderTemplateRecord>[];
       providerDescriptors = const <ProviderDescriptor>[];
+      providerSources = const <RemoteProviderSourceDescriptor>[];
       profiles = const <ProfileRecord>[];
       resolutions = const <ResolutionRecord>[];
       sessions = const <SessionRecord>[];
@@ -2378,15 +2405,34 @@ class MobileShellController extends ChangeNotifier {
       if (resolutionId == null) {
         return;
       }
+      await _refreshProviderTransportCompatibilityForMode(
+        mode,
+        resolutionId: resolutionId,
+      );
+      final compatibilityBlockReason =
+          _providerTransportCompatibilityBlockReasonForMode(mode);
+      if (compatibilityBlockReason != null) {
+        notice = compatibilityBlockReason;
+        return;
+      }
+      final transportProfile = _transportProfileReferenceForPlan(
+        mode,
+        executionPlan,
+      );
+      final providerTransportCompatibility =
+          await _providerTransportCompatibilityStartupReference(
+            mode: mode,
+            resolutionId: resolutionId,
+            executionPlan: executionPlan,
+            transportProfile: transportProfile,
+          );
       var result = await bridge.startPlatformTunnel(
         mode: mode,
         resolutionId: resolutionId,
         runtimeDefaults: runtimeDefaults,
         executionPlan: executionPlan,
-        transportProfile: _transportProfileReferenceForPlan(
-          mode,
-          executionPlan,
-        ),
+        transportProfile: transportProfile,
+        providerTransportCompatibility: providerTransportCompatibility,
         applicationRoutingPolicy: _effectiveRoutingPolicyForMode(
           mode,
           modePreferences,
@@ -2734,6 +2780,7 @@ class MobileShellController extends ChangeNotifier {
       } else {
         await _stopRuntimeMonitoring();
         _challengeCache.clear();
+        providerSources = const <RemoteProviderSourceDescriptor>[];
         transportProfiles = const <TransportProfileStatus>[];
         resolutions = const <ResolutionRecord>[];
         sessions = const <SessionRecord>[];
@@ -2753,6 +2800,7 @@ class MobileShellController extends ChangeNotifier {
     if (hostConnection?.isReady != true) {
       await _stopRuntimeMonitoring();
       _challengeCache.clear();
+      providerSources = const <RemoteProviderSourceDescriptor>[];
       transportProfiles = const <TransportProfileStatus>[];
       resolutions = const <ResolutionRecord>[];
       sessions = const <SessionRecord>[];
@@ -3299,6 +3347,7 @@ class MobileShellController extends ChangeNotifier {
     );
     _clearPlatformTunnelResults();
     transportProfiles = const <TransportProfileStatus>[];
+    providerSources = const <RemoteProviderSourceDescriptor>[];
     resolutions = const <ResolutionRecord>[];
     sessions = const <SessionRecord>[];
     selectedResolutionId = null;
@@ -3391,6 +3440,7 @@ class MobileShellController extends ChangeNotifier {
 
   void _clearPlatformTunnelResults() {
     _platformTunnelResults.clear();
+    _providerTransportCompatibilityCandidates.clear();
     platformTunnelStatuses = const <PlatformTunnelStatus>[];
   }
 
@@ -3424,6 +3474,7 @@ class MobileShellController extends ChangeNotifier {
         ready: true,
         executionPlan: status.executionPlan,
         transportProfile: status.transportProfile,
+        providerTransportCompatibility: status.providerTransportCompatibility,
         remoteIngress: status.remoteIngress,
         dataplane: status.dataplane,
         sessionId: status.sessionId,
@@ -3439,6 +3490,7 @@ class MobileShellController extends ChangeNotifier {
       ready: false,
       executionPlan: status.executionPlan,
       transportProfile: status.transportProfile,
+      providerTransportCompatibility: status.providerTransportCompatibility,
       remoteIngress: status.remoteIngress,
       dataplane: status.dataplane,
       stage: status.stage,
@@ -3954,6 +4006,17 @@ class MobileShellController extends ChangeNotifier {
         info.transportProfileStore != null;
   }
 
+  bool get _hostSupportsProviderTransportCompatibility {
+    final info = hostConnection?.info;
+    if (info == null) {
+      return false;
+    }
+    return info.capabilities.contains(
+          Capability.providerTransportCompatibility,
+        ) &&
+        info.providerTransportCompatibility != null;
+  }
+
   RuntimeExecutionPlanDescriptor?
   _transportProfileExecutionPlanDescriptorForMode(
     PlatformTunnelMode mode, {
@@ -4087,6 +4150,163 @@ class MobileShellController extends ChangeNotifier {
       return null;
     }
     return prerequisite.selectedProfile ?? prerequisite.defaultProfile;
+  }
+
+  Future<ProviderTransportCompatibilityStartupReference?>
+  _providerTransportCompatibilityStartupReference({
+    required PlatformTunnelMode mode,
+    required String? resolutionId,
+    required RuntimeExecutionPlan? executionPlan,
+    required TransportProfileReference? transportProfile,
+  }) async {
+    final selected =
+        _providerTransportCompatibilityCandidates[mode] ??
+        await _providerTransportCompatibilityCandidate(
+          resolutionId: resolutionId,
+          executionPlan: executionPlan,
+          transportProfile: transportProfile,
+        );
+    return selected?.toStartupReference(
+      fallbackTransportProfile: transportProfile,
+    );
+  }
+
+  Future<void> _refreshProviderTransportCompatibilityCandidates() async {
+    final next =
+        <PlatformTunnelMode, ProviderTransportCompatibilityCandidate>{};
+    if (!_hostSupportsProviderTransportCompatibility) {
+      _providerTransportCompatibilityCandidates
+        ..clear()
+        ..addAll(next);
+      return;
+    }
+    for (final capability in platformTunnels) {
+      final mode = capability.mode;
+      final candidate = await _providerTransportCompatibilityCandidateForMode(
+        mode,
+        resolutionId: _platformTunnelResolutionIdForMode(mode),
+      );
+      if (candidate != null) {
+        next[mode] = candidate;
+      }
+    }
+    _providerTransportCompatibilityCandidates
+      ..clear()
+      ..addAll(next);
+  }
+
+  Future<void> _refreshProviderTransportCompatibilityForMode(
+    PlatformTunnelMode mode, {
+    required String? resolutionId,
+  }) async {
+    final candidate = await _providerTransportCompatibilityCandidateForMode(
+      mode,
+      resolutionId: resolutionId,
+    );
+    if (candidate == null) {
+      _providerTransportCompatibilityCandidates.remove(mode);
+      return;
+    }
+    _providerTransportCompatibilityCandidates[mode] = candidate;
+  }
+
+  Future<ProviderTransportCompatibilityCandidate?>
+  _providerTransportCompatibilityCandidateForMode(
+    PlatformTunnelMode mode, {
+    required String? resolutionId,
+  }) {
+    final executionPlan = _resolvedExecutionPlanForMode(mode);
+    final transportProfile = executionPlan == null
+        ? null
+        : _transportProfileReferenceForPlan(mode, executionPlan);
+    return _providerTransportCompatibilityCandidate(
+      resolutionId: resolutionId,
+      executionPlan: executionPlan,
+      transportProfile: transportProfile,
+    );
+  }
+
+  Future<ProviderTransportCompatibilityCandidate?>
+  _providerTransportCompatibilityCandidate({
+    required String? resolutionId,
+    required RuntimeExecutionPlan? executionPlan,
+    required TransportProfileReference? transportProfile,
+  }) async {
+    final trimmedResolutionId = resolutionId?.trim() ?? '';
+    if (!_hostSupportsProviderTransportCompatibility ||
+        trimmedResolutionId.isEmpty ||
+        executionPlan == null ||
+        transportProfile == null ||
+        transportProfile.isEmpty) {
+      return null;
+    }
+    final response = await bridge.providerTransportCompatibilityCandidates(
+      ProviderTransportCompatibilityRequest(
+        resolutionId: trimmedResolutionId,
+        executionPlan: executionPlan,
+        transportProfile: transportProfile,
+      ),
+    );
+    ProviderTransportCompatibilityCandidate? selected;
+    for (final candidate in response.candidates) {
+      selected ??= candidate;
+      if (candidate.isStartable) {
+        selected = candidate;
+        break;
+      }
+    }
+    return selected;
+  }
+
+  String? _platformTunnelResolutionIdForMode(PlatformTunnelMode mode) {
+    if (mode != PlatformTunnelMode.androidVpnService) {
+      return null;
+    }
+    final resolutionId = selectedResolutionId?.trim() ?? '';
+    return resolutionId.isEmpty ? null : resolutionId;
+  }
+
+  String? _providerTransportCompatibilityBlockReasonForMode(
+    PlatformTunnelMode mode,
+  ) {
+    final candidate = _providerTransportCompatibilityCandidates[mode];
+    if (candidate == null || candidate.isStartable) {
+      return null;
+    }
+    return _providerTransportCompatibilityMessage(
+      candidate,
+      prefix: 'provider/transport compatibility',
+    );
+  }
+
+  String _providerTransportCompatibilityMessage(
+    ProviderTransportCompatibilityCandidate candidate, {
+    required String prefix,
+  }) {
+    final parts = <String>['$prefix: ${candidate.status.value}'];
+    final axis = candidate.failingAxis?.value.trim() ?? '';
+    if (axis.isNotEmpty) {
+      parts.add('axis $axis');
+    }
+    final reason = candidate.reasonCode?.value.trim() ?? '';
+    if (reason.isNotEmpty) {
+      parts.add('reason $reason');
+    }
+    final source = candidate.source;
+    if (source != null && !source.isEmpty) {
+      final sourceRef = source.sourceId.trim().isNotEmpty
+          ? source.sourceId.trim()
+          : source.resolutionId.trim();
+      if (sourceRef.isNotEmpty) {
+        parts.add('source $sourceRef');
+      }
+    }
+    final profile = candidate.selectedTransportProfile;
+    if (profile != null && !profile.isEmpty) {
+      parts.add('VPN transport ${profile.profileId}');
+    }
+    final message = candidate.message.trim();
+    return message.isEmpty ? parts.join('; ') : '${parts.join('; ')}. $message';
   }
 
   TransportProfileStatus? _transportProfileById(String rawProfileId) {

@@ -17,8 +17,10 @@ enum Capability {
   mobileHostBridge('mobile_host_bridge'),
   platformTunnels('platform_tunnels'),
   providerRuntimeArtifacts('provider-runtime-artifacts'),
+  providerTransportCompatibility('provider-transport-compatibility'),
   runtimeExecutionPlanning('runtime-execution-planning'),
-  vpnTransportProfileStore('vpn-transport-profile-store');
+  vpnTransportProfileStore('vpn-transport-profile-store'),
+  vpsProviderCatalogs('vps-provider-catalogs');
 
   const Capability(this.value);
 
@@ -35,7 +37,8 @@ enum Capability {
 }
 
 enum ProviderInputKind {
-  link('link');
+  link('link'),
+  remoteVpsCatalog('remote_vps_catalog');
 
   const ProviderInputKind(this.value);
 
@@ -1303,7 +1306,9 @@ class HostInfo {
     required this.build,
     required this.capabilities,
     this.platformTunnels = const <PlatformTunnelCapability>[],
+    this.providerTransportCompatibility,
     this.transportProfileStore,
+    this.vpsProviderCatalogs,
   });
 
   factory HostInfo.fromJson(Map<String, dynamic> json) {
@@ -1325,10 +1330,21 @@ class HostInfo {
           : BuildIdentity.unknown,
       capabilities: capabilities,
       platformTunnels: platformTunnels,
+      providerTransportCompatibility:
+          json['provider_transport_compatibility'] is Map<String, dynamic>
+          ? ProviderTransportCompatibilityCapability.fromJson(
+              json['provider_transport_compatibility'] as Map<String, dynamic>,
+            )
+          : null,
       transportProfileStore:
           json['transport_profile_store'] is Map<String, dynamic>
           ? TransportProfileStoreCapability.fromJson(
               json['transport_profile_store'] as Map<String, dynamic>,
+            )
+          : null,
+      vpsProviderCatalogs: json['vps_provider_catalogs'] is Map<String, dynamic>
+          ? VPSProviderCatalogCapability.fromJson(
+              json['vps_provider_catalogs'] as Map<String, dynamic>,
             )
           : null,
     );
@@ -1338,7 +1354,10 @@ class HostInfo {
   final BuildIdentity build;
   final List<Capability> capabilities;
   final List<PlatformTunnelCapability> platformTunnels;
+  final ProviderTransportCompatibilityCapability?
+  providerTransportCompatibility;
   final TransportProfileStoreCapability? transportProfileStore;
+  final VPSProviderCatalogCapability? vpsProviderCatalogs;
 
   String get version => contractVersion;
 }
@@ -1483,12 +1502,775 @@ class PlatformTunnelDataplaneEvidence {
   }
 }
 
+class ProviderTransportCompatibilityStatus {
+  const ProviderTransportCompatibilityStatus(this.value);
+
+  static const startable = ProviderTransportCompatibilityStatus('startable');
+  static const setupNeeded = ProviderTransportCompatibilityStatus(
+    'setup_needed',
+  );
+  static const unsupported = ProviderTransportCompatibilityStatus(
+    'unsupported',
+  );
+  static const stale = ProviderTransportCompatibilityStatus('stale');
+  static const degraded = ProviderTransportCompatibilityStatus('degraded');
+  static const missingEvidence = ProviderTransportCompatibilityStatus(
+    'missing_evidence',
+  );
+  static const unavailable = ProviderTransportCompatibilityStatus(
+    'unavailable',
+  );
+
+  final String value;
+
+  static ProviderTransportCompatibilityStatus? fromJson(String? raw) {
+    final value = raw?.trim() ?? '';
+    if (value.isEmpty) {
+      return null;
+    }
+    return ProviderTransportCompatibilityStatus(value);
+  }
+
+  bool get isStartable => this == startable;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ProviderTransportCompatibilityStatus && other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => value;
+}
+
+class ProviderTransportCompatibilityFailingAxis {
+  const ProviderTransportCompatibilityFailingAxis(this.value);
+
+  static const providerSource = ProviderTransportCompatibilityFailingAxis(
+    'provider_source',
+  );
+  static const providerArtifact = ProviderTransportCompatibilityFailingAxis(
+    'provider_artifact',
+  );
+  static const artifactAccessMethod = ProviderTransportCompatibilityFailingAxis(
+    'artifact_access_method',
+  );
+  static const carrierFamily = ProviderTransportCompatibilityFailingAxis(
+    'carrier_family',
+  );
+  static const engineFamily = ProviderTransportCompatibilityFailingAxis(
+    'engine_family',
+  );
+  static const hostAdapter = ProviderTransportCompatibilityFailingAxis(
+    'host_adapter',
+  );
+  static const transportProfile = ProviderTransportCompatibilityFailingAxis(
+    'transport_profile',
+  );
+  static const degradedPolicy = ProviderTransportCompatibilityFailingAxis(
+    'degraded_policy',
+  );
+  static const evidence = ProviderTransportCompatibilityFailingAxis('evidence');
+  static const hostCapability = ProviderTransportCompatibilityFailingAxis(
+    'host_capability',
+  );
+
+  final String value;
+
+  static ProviderTransportCompatibilityFailingAxis? fromJson(String? raw) {
+    final value = raw?.trim() ?? '';
+    if (value.isEmpty) {
+      return null;
+    }
+    return ProviderTransportCompatibilityFailingAxis(value);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is ProviderTransportCompatibilityFailingAxis &&
+      other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => value;
+}
+
+class ProviderTransportCompatibilityReasonCode {
+  const ProviderTransportCompatibilityReasonCode(this.value);
+
+  static const ready = ProviderTransportCompatibilityReasonCode('ready');
+  static const providerSourceRequired =
+      ProviderTransportCompatibilityReasonCode('provider_source_required');
+  static const providerSourceNotFound =
+      ProviderTransportCompatibilityReasonCode('provider_source_not_found');
+  static const providerSourceNotResolved =
+      ProviderTransportCompatibilityReasonCode('provider_source_not_resolved');
+  static const providerArtifactMissing =
+      ProviderTransportCompatibilityReasonCode('provider_artifact_missing');
+  static const providerArtifactStale = ProviderTransportCompatibilityReasonCode(
+    'provider_artifact_stale',
+  );
+  static const providerArtifactDegraded =
+      ProviderTransportCompatibilityReasonCode('provider_artifact_degraded');
+  static const providerArtifactUnavailable =
+      ProviderTransportCompatibilityReasonCode('provider_artifact_unavailable');
+  static const providerArtifactUnsupported =
+      ProviderTransportCompatibilityReasonCode('provider_artifact_unsupported');
+  static const artifactAccessMethodUnsupported =
+      ProviderTransportCompatibilityReasonCode(
+        'artifact_access_method_unsupported',
+      );
+  static const carrierFamilyUnsupported =
+      ProviderTransportCompatibilityReasonCode('carrier_family_unsupported');
+  static const engineFamilyUnsupported =
+      ProviderTransportCompatibilityReasonCode('engine_family_unsupported');
+  static const hostAdapterUnsupported =
+      ProviderTransportCompatibilityReasonCode('host_adapter_unsupported');
+  static const hostAdapterUnavailable =
+      ProviderTransportCompatibilityReasonCode('host_adapter_unavailable');
+  static const hostCapabilityMissing = ProviderTransportCompatibilityReasonCode(
+    'host_capability_missing',
+  );
+  static const runtimePlanRequired = ProviderTransportCompatibilityReasonCode(
+    'runtime_plan_required',
+  );
+  static const runtimePlanUnsupported =
+      ProviderTransportCompatibilityReasonCode('runtime_plan_unsupported');
+  static const runtimePlanUnavailable =
+      ProviderTransportCompatibilityReasonCode('runtime_plan_unavailable');
+  static const runtimePlanExperimental =
+      ProviderTransportCompatibilityReasonCode('runtime_plan_experimental');
+  static const transportProfileRequired =
+      ProviderTransportCompatibilityReasonCode('transport_profile_required');
+  static const transportProfileMissing =
+      ProviderTransportCompatibilityReasonCode('transport_profile_missing');
+  static const transportProfileUnselected =
+      ProviderTransportCompatibilityReasonCode('transport_profile_unselected');
+  static const transportProfileStale = ProviderTransportCompatibilityReasonCode(
+    'transport_profile_stale',
+  );
+  static const transportProfileInvalid =
+      ProviderTransportCompatibilityReasonCode('transport_profile_invalid');
+  static const transportProfileIncompatibleKind =
+      ProviderTransportCompatibilityReasonCode(
+        'transport_profile_incompatible_kind',
+      );
+  static const transportProfileStoreUnavailable =
+      ProviderTransportCompatibilityReasonCode(
+        'transport_profile_store_unavailable',
+      );
+  static const degradedPolicyRequired =
+      ProviderTransportCompatibilityReasonCode('degraded_policy_required');
+  static const evidenceMissing = ProviderTransportCompatibilityReasonCode(
+    'evidence_missing',
+  );
+
+  final String value;
+
+  static ProviderTransportCompatibilityReasonCode? fromJson(String? raw) {
+    final value = raw?.trim() ?? '';
+    if (value.isEmpty) {
+      return null;
+    }
+    return ProviderTransportCompatibilityReasonCode(value);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is ProviderTransportCompatibilityReasonCode && other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => value;
+}
+
+class ProviderTransportCompatibilityCapability {
+  const ProviderTransportCompatibilityCapability({
+    required this.version,
+    required this.candidateEndpoint,
+    this.statuses = const <ProviderTransportCompatibilityStatus>[],
+    this.failingAxes = const <ProviderTransportCompatibilityFailingAxis>[],
+    this.reasonCodes = const <ProviderTransportCompatibilityReasonCode>[],
+    this.redactionGuarantees = const <String>[],
+  });
+
+  factory ProviderTransportCompatibilityCapability.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return ProviderTransportCompatibilityCapability(
+      version: json['version'] as String? ?? '',
+      candidateEndpoint: json['candidate_endpoint'] as String? ?? '',
+      statuses: (json['statuses'] as List<dynamic>? ?? const <dynamic>[])
+          .map(
+            (dynamic raw) =>
+                ProviderTransportCompatibilityStatus.fromJson(raw as String?),
+          )
+          .whereType<ProviderTransportCompatibilityStatus>()
+          .toList(growable: false),
+      failingAxes: (json['failing_axes'] as List<dynamic>? ?? const <dynamic>[])
+          .map(
+            (dynamic raw) => ProviderTransportCompatibilityFailingAxis.fromJson(
+              raw as String?,
+            ),
+          )
+          .whereType<ProviderTransportCompatibilityFailingAxis>()
+          .toList(growable: false),
+      reasonCodes: (json['reason_codes'] as List<dynamic>? ?? const <dynamic>[])
+          .map(
+            (dynamic raw) => ProviderTransportCompatibilityReasonCode.fromJson(
+              raw as String?,
+            ),
+          )
+          .whereType<ProviderTransportCompatibilityReasonCode>()
+          .toList(growable: false),
+      redactionGuarantees: _readStringList(json['redaction_guarantees']),
+    );
+  }
+
+  final String version;
+  final String candidateEndpoint;
+  final List<ProviderTransportCompatibilityStatus> statuses;
+  final List<ProviderTransportCompatibilityFailingAxis> failingAxes;
+  final List<ProviderTransportCompatibilityReasonCode> reasonCodes;
+  final List<String> redactionGuarantees;
+}
+
+class ProviderTransportSourceReference {
+  const ProviderTransportSourceReference({
+    this.providerId = '',
+    this.sourceId = '',
+    this.resolutionId = '',
+  });
+
+  factory ProviderTransportSourceReference.fromJson(Map<String, dynamic> json) {
+    return ProviderTransportSourceReference(
+      providerId: json['provider_id'] as String? ?? '',
+      sourceId: json['source_id'] as String? ?? '',
+      resolutionId: json['resolution_id'] as String? ?? '',
+    );
+  }
+
+  final String providerId;
+  final String sourceId;
+  final String resolutionId;
+
+  bool get isEmpty =>
+      providerId.trim().isEmpty &&
+      sourceId.trim().isEmpty &&
+      resolutionId.trim().isEmpty;
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{
+      'provider_id': providerId.trim().isEmpty ? null : providerId.trim(),
+      'source_id': sourceId.trim().isEmpty ? null : sourceId.trim(),
+      'resolution_id': resolutionId.trim().isEmpty ? null : resolutionId.trim(),
+    });
+  }
+}
+
+class ProviderTransportArtifactReference {
+  const ProviderTransportArtifactReference({
+    this.providerId = '',
+    this.resolutionId = '',
+    this.family,
+    this.accessMethods = const <RuntimeAccessMethod>[],
+    this.expiresAt,
+  });
+
+  factory ProviderTransportArtifactReference.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return ProviderTransportArtifactReference(
+      providerId: json['provider_id'] as String? ?? '',
+      resolutionId: json['resolution_id'] as String? ?? '',
+      family: ArtifactFamily.fromJson(json['family'] as String?),
+      accessMethods:
+          (json['access_methods'] as List<dynamic>? ?? const <dynamic>[])
+              .map(
+                (dynamic raw) => RuntimeAccessMethod.fromJson(raw as String?),
+              )
+              .whereType<RuntimeAccessMethod>()
+              .toList(growable: false),
+      expiresAt: json['expires_at'] == null
+          ? null
+          : _readTimestamp(json['expires_at']),
+    );
+  }
+
+  final String providerId;
+  final String resolutionId;
+  final ArtifactFamily? family;
+  final List<RuntimeAccessMethod> accessMethods;
+  final DateTime? expiresAt;
+
+  bool get isEmpty =>
+      providerId.trim().isEmpty &&
+      resolutionId.trim().isEmpty &&
+      family == null &&
+      accessMethods.isEmpty &&
+      expiresAt == null;
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{
+      'provider_id': providerId.trim().isEmpty ? null : providerId.trim(),
+      'resolution_id': resolutionId.trim().isEmpty ? null : resolutionId.trim(),
+      'family': family?.value,
+      'access_methods': accessMethods.isEmpty
+          ? null
+          : accessMethods
+                .map((RuntimeAccessMethod method) => method.value)
+                .toList(growable: false),
+      'expires_at': expiresAt?.toUtc().toIso8601String(),
+    });
+  }
+}
+
+class ProviderTransportCompatibilityStartupReference {
+  const ProviderTransportCompatibilityStartupReference({
+    this.candidateId = '',
+    this.source,
+    this.artifact,
+    this.executionPlan,
+    this.transportProfile,
+  });
+
+  factory ProviderTransportCompatibilityStartupReference.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return ProviderTransportCompatibilityStartupReference(
+      candidateId: json['candidate_id'] as String? ?? '',
+      source: json['source'] is Map<String, dynamic>
+          ? ProviderTransportSourceReference.fromJson(
+              json['source'] as Map<String, dynamic>,
+            )
+          : null,
+      artifact: json['artifact'] is Map<String, dynamic>
+          ? ProviderTransportArtifactReference.fromJson(
+              json['artifact'] as Map<String, dynamic>,
+            )
+          : null,
+      executionPlan: json['execution_plan'] is Map<String, dynamic>
+          ? RuntimeExecutionPlan.fromJson(
+              json['execution_plan'] as Map<String, dynamic>,
+            )
+          : null,
+      transportProfile: json['transport_profile'] is Map<String, dynamic>
+          ? TransportProfileReference.fromJson(
+              json['transport_profile'] as Map<String, dynamic>,
+            )
+          : null,
+    );
+  }
+
+  final String candidateId;
+  final ProviderTransportSourceReference? source;
+  final ProviderTransportArtifactReference? artifact;
+  final RuntimeExecutionPlan? executionPlan;
+  final TransportProfileReference? transportProfile;
+
+  bool get isEmpty =>
+      candidateId.trim().isEmpty &&
+      (source == null || source!.isEmpty) &&
+      (artifact == null || artifact!.isEmpty) &&
+      executionPlan == null &&
+      (transportProfile == null || transportProfile!.isEmpty);
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{
+      'candidate_id': candidateId.trim().isEmpty ? null : candidateId.trim(),
+      'source': source == null || source!.isEmpty ? null : source!.toJson(),
+      'artifact': artifact == null || artifact!.isEmpty
+          ? null
+          : artifact!.toJson(),
+      'execution_plan': executionPlan?.toJson(),
+      'transport_profile': transportProfile == null || transportProfile!.isEmpty
+          ? null
+          : transportProfile!.toJson(),
+    });
+  }
+}
+
+class ProviderTransportCompatibilityRequest {
+  const ProviderTransportCompatibilityRequest({
+    this.resolutionId = '',
+    this.candidateId = '',
+    this.source,
+    this.artifact,
+    this.executionPlan,
+    this.transportProfile,
+    this.requireEvidence = false,
+    this.allowDegradedPlan = false,
+  });
+
+  final String resolutionId;
+  final String candidateId;
+  final ProviderTransportSourceReference? source;
+  final ProviderTransportArtifactReference? artifact;
+  final RuntimeExecutionPlan? executionPlan;
+  final TransportProfileReference? transportProfile;
+  final bool requireEvidence;
+  final bool allowDegradedPlan;
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{
+      'resolution_id': resolutionId.trim().isEmpty ? null : resolutionId.trim(),
+      'candidate_id': candidateId.trim().isEmpty ? null : candidateId.trim(),
+      'source': source == null || source!.isEmpty ? null : source!.toJson(),
+      'artifact': artifact == null || artifact!.isEmpty
+          ? null
+          : artifact!.toJson(),
+      'execution_plan': executionPlan?.toJson(),
+      'transport_profile': transportProfile == null || transportProfile!.isEmpty
+          ? null
+          : transportProfile!.toJson(),
+      'require_evidence': requireEvidence ? true : null,
+      'allow_degraded_plan': allowDegradedPlan ? true : null,
+    });
+  }
+}
+
+class ProviderTransportCompatibilityResponse {
+  const ProviderTransportCompatibilityResponse({
+    required this.version,
+    required this.generatedAt,
+    this.candidates = const <ProviderTransportCompatibilityCandidate>[],
+  });
+
+  factory ProviderTransportCompatibilityResponse.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return ProviderTransportCompatibilityResponse(
+      version: json['version'] as String? ?? '',
+      generatedAt: _readTimestamp(json['generated_at']),
+      candidates: (json['candidates'] as List<dynamic>? ?? const <dynamic>[])
+          .map(
+            (dynamic raw) => ProviderTransportCompatibilityCandidate.fromJson(
+              raw as Map<String, dynamic>,
+            ),
+          )
+          .toList(growable: false),
+    );
+  }
+
+  final String version;
+  final DateTime generatedAt;
+  final List<ProviderTransportCompatibilityCandidate> candidates;
+}
+
+class ProviderTransportCompatibilityCandidate {
+  const ProviderTransportCompatibilityCandidate({
+    required this.id,
+    required this.status,
+    required this.startable,
+    this.source,
+    this.artifact,
+    this.executionPlan,
+    this.requiredTransportProfileKinds = const <TransportProfileKind>[],
+    this.selectedTransportProfile,
+    this.failingAxis,
+    this.reasonCode,
+    this.message = '',
+  });
+
+  factory ProviderTransportCompatibilityCandidate.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return ProviderTransportCompatibilityCandidate(
+      id: json['id'] as String? ?? '',
+      source: json['source'] is Map<String, dynamic>
+          ? ProviderTransportSourceReference.fromJson(
+              json['source'] as Map<String, dynamic>,
+            )
+          : null,
+      artifact: json['artifact'] is Map<String, dynamic>
+          ? ProviderTransportArtifactReference.fromJson(
+              json['artifact'] as Map<String, dynamic>,
+            )
+          : null,
+      executionPlan: _readProviderTransportExecutionPlanDescriptor(
+        json['execution_plan'],
+      ),
+      requiredTransportProfileKinds:
+          (json['required_transport_profile_kinds'] as List<dynamic>? ??
+                  const <dynamic>[])
+              .map(
+                (dynamic raw) => TransportProfileKind.fromJson(raw as String?),
+              )
+              .whereType<TransportProfileKind>()
+              .toList(growable: false),
+      selectedTransportProfile:
+          json['selected_transport_profile'] is Map<String, dynamic>
+          ? TransportProfileReference.fromJson(
+              json['selected_transport_profile'] as Map<String, dynamic>,
+            )
+          : null,
+      status:
+          ProviderTransportCompatibilityStatus.fromJson(
+            json['status'] as String?,
+          ) ??
+          ProviderTransportCompatibilityStatus.unavailable,
+      startable: json['startable'] as bool? ?? false,
+      failingAxis: ProviderTransportCompatibilityFailingAxis.fromJson(
+        json['failing_axis'] as String?,
+      ),
+      reasonCode: ProviderTransportCompatibilityReasonCode.fromJson(
+        json['reason_code'] as String?,
+      ),
+      message: json['message'] as String? ?? '',
+    );
+  }
+
+  final String id;
+  final ProviderTransportSourceReference? source;
+  final ProviderTransportArtifactReference? artifact;
+  final RuntimeExecutionPlanDescriptor? executionPlan;
+  final List<TransportProfileKind> requiredTransportProfileKinds;
+  final TransportProfileReference? selectedTransportProfile;
+  final ProviderTransportCompatibilityStatus status;
+  final bool startable;
+  final ProviderTransportCompatibilityFailingAxis? failingAxis;
+  final ProviderTransportCompatibilityReasonCode? reasonCode;
+  final String message;
+
+  bool get isStartable =>
+      startable &&
+      status.isStartable &&
+      failingAxis == null &&
+      executionPlan != null;
+
+  ProviderTransportCompatibilityStartupReference toStartupReference({
+    TransportProfileReference? fallbackTransportProfile,
+  }) {
+    return ProviderTransportCompatibilityStartupReference(
+      candidateId: id,
+      source: source,
+      artifact: artifact,
+      executionPlan: executionPlan?.plan,
+      transportProfile: selectedTransportProfile ?? fallbackTransportProfile,
+    );
+  }
+}
+
+class ProviderTransportCompatibilityFailure {
+  const ProviderTransportCompatibilityFailure({
+    required this.status,
+    this.candidateId = '',
+    this.failingAxis,
+    this.reasonCode,
+    this.message = '',
+  });
+
+  factory ProviderTransportCompatibilityFailure.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return ProviderTransportCompatibilityFailure(
+      candidateId: json['candidate_id'] as String? ?? '',
+      status:
+          ProviderTransportCompatibilityStatus.fromJson(
+            json['status'] as String?,
+          ) ??
+          ProviderTransportCompatibilityStatus.unavailable,
+      failingAxis: ProviderTransportCompatibilityFailingAxis.fromJson(
+        json['failing_axis'] as String?,
+      ),
+      reasonCode: ProviderTransportCompatibilityReasonCode.fromJson(
+        json['reason_code'] as String?,
+      ),
+      message: json['message'] as String? ?? '',
+    );
+  }
+
+  final String candidateId;
+  final ProviderTransportCompatibilityStatus status;
+  final ProviderTransportCompatibilityFailingAxis? failingAxis;
+  final ProviderTransportCompatibilityReasonCode? reasonCode;
+  final String message;
+
+  bool get isBlocking => !status.isStartable || failingAxis != null;
+
+  Map<String, dynamic> toJson() {
+    return _compact(<String, dynamic>{
+      'candidate_id': candidateId.trim().isEmpty ? null : candidateId.trim(),
+      'status': status.value,
+      'failing_axis': failingAxis?.value,
+      'reason_code': reasonCode?.value,
+      'message': message.isEmpty ? null : message,
+    });
+  }
+}
+
+class VPSProviderCatalogCapability {
+  const VPSProviderCatalogCapability({
+    required this.syncEndpoint,
+    required this.artifactIssueEndpoint,
+    this.endpoints = const <VPSProviderCatalogEndpointStatus>[],
+  });
+
+  factory VPSProviderCatalogCapability.fromJson(Map<String, dynamic> json) {
+    return VPSProviderCatalogCapability(
+      syncEndpoint: json['sync_endpoint'] as String? ?? '',
+      artifactIssueEndpoint: json['artifact_issue_endpoint'] as String? ?? '',
+      endpoints: (json['endpoints'] as List<dynamic>? ?? const <dynamic>[])
+          .map(
+            (dynamic raw) => VPSProviderCatalogEndpointStatus.fromJson(
+              raw as Map<String, dynamic>,
+            ),
+          )
+          .toList(growable: false),
+    );
+  }
+
+  final String syncEndpoint;
+  final String artifactIssueEndpoint;
+  final List<VPSProviderCatalogEndpointStatus> endpoints;
+}
+
+class VPSProviderCatalogEndpointStatus {
+  const VPSProviderCatalogEndpointStatus({
+    required this.id,
+    this.url = '',
+    this.issuer = '',
+    this.audience = '',
+  });
+
+  factory VPSProviderCatalogEndpointStatus.fromJson(Map<String, dynamic> json) {
+    return VPSProviderCatalogEndpointStatus(
+      id: json['id'] as String? ?? '',
+      url: json['url'] as String? ?? '',
+      issuer: json['issuer'] as String? ?? '',
+      audience: json['audience'] as String? ?? '',
+    );
+  }
+
+  final String id;
+  final String url;
+  final String issuer;
+  final String audience;
+}
+
+class RemoteProviderSourceDescriptor {
+  const RemoteProviderSourceDescriptor({
+    required this.endpointId,
+    required this.providerId,
+    required this.sourceId,
+    required this.validationStatus,
+    this.issuer = '',
+    this.audience = '',
+    this.generation = 0,
+    this.displayName = '',
+    this.description = '',
+    this.sourceFamily = '',
+    this.healthStatus = '',
+    this.evidenceStatus = '',
+    this.validationReason = '',
+    this.artifactOffers = const <RemoteProviderArtifactOffer>[],
+  });
+
+  factory RemoteProviderSourceDescriptor.fromJson(Map<String, dynamic> json) {
+    return RemoteProviderSourceDescriptor(
+      endpointId: json['endpoint_id'] as String? ?? '',
+      issuer: json['issuer'] as String? ?? '',
+      audience: json['audience'] as String? ?? '',
+      generation: _readInt(json['generation']),
+      providerId: json['provider_id'] as String? ?? '',
+      sourceId: json['source_id'] as String? ?? '',
+      displayName: json['display_name'] as String? ?? '',
+      description: json['description'] as String? ?? '',
+      sourceFamily: json['source_family'] as String? ?? '',
+      healthStatus: json['health_status'] as String? ?? '',
+      evidenceStatus: json['evidence_status'] as String? ?? '',
+      validationStatus: json['validation_status'] as String? ?? '',
+      validationReason: json['validation_reason'] as String? ?? '',
+      artifactOffers:
+          (json['artifact_offers'] as List<dynamic>? ?? const <dynamic>[])
+              .map(
+                (dynamic raw) => RemoteProviderArtifactOffer.fromJson(
+                  raw as Map<String, dynamic>,
+                ),
+              )
+              .toList(growable: false),
+    );
+  }
+
+  final String endpointId;
+  final String issuer;
+  final String audience;
+  final int generation;
+  final String providerId;
+  final String sourceId;
+  final String displayName;
+  final String description;
+  final String sourceFamily;
+  final String healthStatus;
+  final String evidenceStatus;
+  final String validationStatus;
+  final String validationReason;
+  final List<RemoteProviderArtifactOffer> artifactOffers;
+}
+
+class RemoteProviderArtifactOffer {
+  const RemoteProviderArtifactOffer({
+    required this.offerId,
+    required this.family,
+    required this.validationStatus,
+    this.accessMethods = const <String>[],
+    this.actions = const <String>[],
+    this.remoteEndpointFamily = '',
+    this.remoteEndpointRole = '',
+    this.compatibleProfileKinds = const <TransportProfileKind>[],
+    this.healthStatus = '',
+    this.evidenceStatus = '',
+    this.validationReason = '',
+  });
+
+  factory RemoteProviderArtifactOffer.fromJson(Map<String, dynamic> json) {
+    return RemoteProviderArtifactOffer(
+      offerId: json['offer_id'] as String? ?? '',
+      family: json['family'] as String? ?? '',
+      accessMethods: _readStringList(json['access_methods']),
+      actions: _readStringList(json['actions']),
+      remoteEndpointFamily: json['remote_endpoint_family'] as String? ?? '',
+      remoteEndpointRole: json['remote_endpoint_role'] as String? ?? '',
+      compatibleProfileKinds:
+          (json['compatible_profile_kinds'] as List<dynamic>? ??
+                  const <dynamic>[])
+              .map(
+                (dynamic raw) => TransportProfileKind.fromJson(raw as String?),
+              )
+              .whereType<TransportProfileKind>()
+              .toList(growable: false),
+      healthStatus: json['health_status'] as String? ?? '',
+      evidenceStatus: json['evidence_status'] as String? ?? '',
+      validationStatus: json['validation_status'] as String? ?? '',
+      validationReason: json['validation_reason'] as String? ?? '',
+    );
+  }
+
+  final String offerId;
+  final String family;
+  final List<String> accessMethods;
+  final List<String> actions;
+  final String remoteEndpointFamily;
+  final String remoteEndpointRole;
+  final List<TransportProfileKind> compatibleProfileKinds;
+  final String healthStatus;
+  final String evidenceStatus;
+  final String validationStatus;
+  final String validationReason;
+}
+
 class PlatformTunnelStartResult {
   const PlatformTunnelStartResult({
     required this.mode,
     required this.ready,
     this.executionPlan,
     this.transportProfile,
+    this.providerTransportCompatibility,
     this.remoteIngress,
     this.dataplane,
     this.sessionId = '',
@@ -1558,6 +2340,12 @@ class PlatformTunnelStartResult {
               json['transport_profile'] as Map<String, dynamic>,
             )
           : null,
+      providerTransportCompatibility:
+          json['provider_transport_compatibility'] is Map<String, dynamic>
+          ? ProviderTransportCompatibilityFailure.fromJson(
+              json['provider_transport_compatibility'] as Map<String, dynamic>,
+            )
+          : null,
       remoteIngress: json['remote_ingress'] is Map<String, dynamic>
           ? RuntimeRemoteIngressDiagnostics.fromJson(
               json['remote_ingress'] as Map<String, dynamic>,
@@ -1584,6 +2372,7 @@ class PlatformTunnelStartResult {
   final bool ready;
   final RuntimeExecutionPlan? executionPlan;
   final TransportProfileReference? transportProfile;
+  final ProviderTransportCompatibilityFailure? providerTransportCompatibility;
   final RuntimeRemoteIngressDiagnostics? remoteIngress;
   final PlatformTunnelDataplaneEvidence? dataplane;
   final String sessionId;
@@ -1599,6 +2388,8 @@ class PlatformTunnelStartResult {
       'ready': ready,
       'execution_plan': executionPlan?.toJson(),
       'transport_profile': transportProfile?.toJson(),
+      'provider_transport_compatibility': providerTransportCompatibility
+          ?.toJson(),
       'remote_ingress': remoteIngress?.toJson(),
       'dataplane': dataplane?.toJson(),
       'session_id': sessionId.isEmpty ? null : sessionId,
@@ -1621,6 +2412,7 @@ class PlatformTunnelStatus {
     this.sourceResolutionId = '',
     this.executionPlan,
     this.transportProfile,
+    this.providerTransportCompatibility,
     this.remoteIngress,
     this.dataplane,
     this.applicationRoutingPolicy,
@@ -1651,6 +2443,12 @@ class PlatformTunnelStatus {
       transportProfile: json['transport_profile'] is Map<String, dynamic>
           ? TransportProfileReference.fromJson(
               json['transport_profile'] as Map<String, dynamic>,
+            )
+          : null,
+      providerTransportCompatibility:
+          json['provider_transport_compatibility'] is Map<String, dynamic>
+          ? ProviderTransportCompatibilityFailure.fromJson(
+              json['provider_transport_compatibility'] as Map<String, dynamic>,
             )
           : null,
       remoteIngress: json['remote_ingress'] is Map<String, dynamic>
@@ -1694,6 +2492,7 @@ class PlatformTunnelStatus {
   final String sourceResolutionId;
   final RuntimeExecutionPlan? executionPlan;
   final TransportProfileReference? transportProfile;
+  final ProviderTransportCompatibilityFailure? providerTransportCompatibility;
   final RuntimeRemoteIngressDiagnostics? remoteIngress;
   final PlatformTunnelDataplaneEvidence? dataplane;
   final PlatformTunnelApplicationRoutingPolicy? applicationRoutingPolicy;
@@ -1717,6 +2516,8 @@ class PlatformTunnelStatus {
           : sourceResolutionId,
       'execution_plan': executionPlan?.toJson(),
       'transport_profile': transportProfile?.toJson(),
+      'provider_transport_compatibility': providerTransportCompatibility
+          ?.toJson(),
       'remote_ingress': remoteIngress?.toJson(),
       'dataplane': dataplane?.toJson(),
       'application_routing_policy': applicationRoutingPolicy?.value,
@@ -3462,6 +4263,19 @@ DateTime _readTimestamp(dynamic raw) {
     return DateTime.parse(raw).toLocal();
   }
   return DateTime.fromMillisecondsSinceEpoch(0).toLocal();
+}
+
+RuntimeExecutionPlanDescriptor? _readProviderTransportExecutionPlanDescriptor(
+  dynamic raw,
+) {
+  if (raw is! Map<String, dynamic>) {
+    return null;
+  }
+  try {
+    return RuntimeExecutionPlanDescriptor.fromJson(raw);
+  } on FormatException {
+    return null;
+  }
 }
 
 int _readInt(dynamic raw) {

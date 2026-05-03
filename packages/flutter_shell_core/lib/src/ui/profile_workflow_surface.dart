@@ -1290,6 +1290,7 @@ class _ProfileWorkflowBodyState extends State<ProfileWorkflowBody> {
     }
     return switch (descriptor.inputKind) {
       ProviderInputKind.link => context.shellText.providerLink,
+      ProviderInputKind.remoteVpsCatalog => context.shellText.providerInput,
     };
   }
 

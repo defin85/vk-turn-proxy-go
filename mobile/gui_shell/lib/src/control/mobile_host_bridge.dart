@@ -523,6 +523,7 @@ class HttpMobileHostBridge implements MobileHostBridge {
       Capability.platformTunnels,
       Capability.profiles,
       Capability.providerRuntimeArtifacts,
+      Capability.providerTransportCompatibility,
       Capability.runtimeExecutionPlanning,
       Capability.vpnTransportProfileStore,
       Capability.sessions,
@@ -648,6 +649,19 @@ class HttpMobileHostBridge implements MobileHostBridge {
   @override
   Future<List<ProviderDescriptor>> providers() {
     return _client.providers();
+  }
+
+  @override
+  Future<List<RemoteProviderSourceDescriptor>> providerSources() {
+    return _client.providerSources();
+  }
+
+  @override
+  Future<ProviderTransportCompatibilityResponse>
+  providerTransportCompatibilityCandidates(
+    ProviderTransportCompatibilityRequest request,
+  ) {
+    return _client.providerTransportCompatibilityCandidates(request);
   }
 
   @override
@@ -788,6 +802,8 @@ class HttpMobileHostBridge implements MobileHostBridge {
     RuntimeDefaults? runtimeDefaults,
     RuntimeExecutionPlan? executionPlan,
     TransportProfileReference? transportProfile,
+    ProviderTransportCompatibilityStartupReference?
+    providerTransportCompatibility,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
     PlatformTunnelUnderlayRoutePolicy underlayRoutePolicy =
@@ -801,6 +817,7 @@ class HttpMobileHostBridge implements MobileHostBridge {
       runtimeDefaults: runtimeDefaults,
       executionPlan: executionPlan,
       transportProfile: transportProfile,
+      providerTransportCompatibility: providerTransportCompatibility,
       applicationRoutingPolicy: applicationRoutingPolicy,
       underlayRoutePolicy: underlayRoutePolicy,
       allowedPackages: allowedPackages,
@@ -989,6 +1006,8 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
     RuntimeDefaults? runtimeDefaults,
     RuntimeExecutionPlan? executionPlan,
     TransportProfileReference? transportProfile,
+    ProviderTransportCompatibilityStartupReference?
+    providerTransportCompatibility,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
     PlatformTunnelUnderlayRoutePolicy underlayRoutePolicy =
@@ -1015,6 +1034,15 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
 
   @override
   Future<List<ProviderDescriptor>> providers() => _fail();
+
+  @override
+  Future<List<RemoteProviderSourceDescriptor>> providerSources() => _fail();
+
+  @override
+  Future<ProviderTransportCompatibilityResponse>
+  providerTransportCompatibilityCandidates(
+    ProviderTransportCompatibilityRequest request,
+  ) => _fail();
 
   @override
   Future<ProviderConfigRecord> restoreProviderConfig(

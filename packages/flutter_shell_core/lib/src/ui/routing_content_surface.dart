@@ -20,6 +20,7 @@ class RoutingContentSurface extends StatefulWidget {
     this.platformTunnelStatusFor,
     this.transportProfileStatusSummaryForMode,
     this.transportProfileImportAdapterLabelForMode,
+    this.providerTransportCompatibilitySummaryForMode,
     this.platformTunnelStartBlockReasonForMode,
     this.canConfigureTransportProfileForMode,
     this.canEditTransportProfileForMode,
@@ -41,6 +42,8 @@ class RoutingContentSurface extends StatefulWidget {
   transportProfileStatusSummaryForMode;
   final String? Function(PlatformTunnelMode mode)?
   transportProfileImportAdapterLabelForMode;
+  final String? Function(PlatformTunnelMode mode)?
+  providerTransportCompatibilitySummaryForMode;
   final String? Function(PlatformTunnelMode mode)?
   platformTunnelStartBlockReasonForMode;
   final bool Function(PlatformTunnelMode mode)?
@@ -99,6 +102,8 @@ class _RoutingContentSurfaceState extends State<RoutingContentSurface> {
           widget.transportProfileStatusSummaryForMode,
       transportProfileImportAdapterLabelForMode:
           widget.transportProfileImportAdapterLabelForMode,
+      providerTransportCompatibilitySummaryForMode:
+          widget.providerTransportCompatibilitySummaryForMode,
       platformTunnelStartBlockReasonForMode:
           widget.platformTunnelStartBlockReasonForMode,
       canConfigureTransportProfileForMode:
@@ -123,6 +128,7 @@ class _RoutingPlatformTunnelPanel extends StatefulWidget {
     this.platformTunnelStatusFor,
     this.transportProfileStatusSummaryForMode,
     this.transportProfileImportAdapterLabelForMode,
+    this.providerTransportCompatibilitySummaryForMode,
     this.platformTunnelStartBlockReasonForMode,
     this.canConfigureTransportProfileForMode,
     this.canEditTransportProfileForMode,
@@ -144,6 +150,8 @@ class _RoutingPlatformTunnelPanel extends StatefulWidget {
   transportProfileStatusSummaryForMode;
   final String? Function(PlatformTunnelMode mode)?
   transportProfileImportAdapterLabelForMode;
+  final String? Function(PlatformTunnelMode mode)?
+  providerTransportCompatibilitySummaryForMode;
   final String? Function(PlatformTunnelMode mode)?
   platformTunnelStartBlockReasonForMode;
   final bool Function(PlatformTunnelMode mode)?
@@ -311,6 +319,9 @@ class _RoutingPlatformTunnelPanelState
               transportProfileImportAdapterLabel: widget
                   .transportProfileImportAdapterLabelForMode
                   ?.call(capability.mode),
+              providerTransportCompatibilitySummary: widget
+                  .providerTransportCompatibilitySummaryForMode
+                  ?.call(capability.mode),
               startBlockReason: widget.platformTunnelStartBlockReasonForMode
                   ?.call(capability.mode),
               canConfigureTransportProfile:
@@ -450,6 +461,7 @@ class _RoutingPlatformTunnelCard extends StatelessWidget {
     required this.hostReady,
     this.transportProfileStatusSummary,
     this.transportProfileImportAdapterLabel,
+    this.providerTransportCompatibilitySummary,
     this.startBlockReason,
     this.canConfigureTransportProfile = false,
     this.canEditTransportProfile = false,
@@ -467,6 +479,7 @@ class _RoutingPlatformTunnelCard extends StatelessWidget {
   final bool hostReady;
   final String? transportProfileStatusSummary;
   final String? transportProfileImportAdapterLabel;
+  final String? providerTransportCompatibilitySummary;
   final String? startBlockReason;
   final bool canConfigureTransportProfile;
   final bool canEditTransportProfile;
@@ -559,6 +572,16 @@ class _RoutingPlatformTunnelCard extends StatelessWidget {
               onEdit: onEditTransportProfile,
               onImport: onImportTransportProfile,
               onForget: onForgetTransportProfile,
+            ),
+          ],
+          if (providerTransportCompatibilitySummary?.trim().isNotEmpty ==
+              true) ...<Widget>[
+            const SizedBox(height: 8),
+            Text(
+              providerTransportCompatibilitySummary!.trim(),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
           if (startBlocked) ...<Widget>[

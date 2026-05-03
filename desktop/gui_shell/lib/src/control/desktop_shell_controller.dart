@@ -135,6 +135,8 @@ class DesktopShellController extends ChangeNotifier {
   ShellStatus status = ShellStatus.booting;
   HostConnectionResult? hostConnection;
   List<ProviderDescriptor> providerDescriptors = const <ProviderDescriptor>[];
+  List<RemoteProviderSourceDescriptor> providerSources =
+      const <RemoteProviderSourceDescriptor>[];
   List<ManagedProviderRecord> managedProviders =
       const <ManagedProviderRecord>[];
   List<ProfileRecord> profiles = const <ProfileRecord>[];
@@ -162,6 +164,9 @@ class DesktopShellController extends ChangeNotifier {
       <String, ProfileProviderBinding>{};
   final Map<PlatformTunnelMode, PlatformTunnelStartResult>
   _platformTunnelResults = <PlatformTunnelMode, PlatformTunnelStartResult>{};
+  final Map<PlatformTunnelMode, ProviderTransportCompatibilityCandidate>
+  _providerTransportCompatibilityCandidates =
+      <PlatformTunnelMode, ProviderTransportCompatibilityCandidate>{};
   PlatformTunnelMode? _pendingPlatformTunnelStartMode;
   String? _pendingPlatformTunnelStartResolutionId;
   String? notice;
@@ -197,6 +202,17 @@ class DesktopShellController extends ChangeNotifier {
         info.transportProfileStore != null;
   }
 
+  bool get hostSupportsProviderTransportCompatibility {
+    final info = hostConnection?.info;
+    if (info == null) {
+      return false;
+    }
+    return info.capabilities.contains(
+          Capability.providerTransportCompatibility,
+        ) &&
+        info.providerTransportCompatibility != null;
+  }
+
   bool get systemTunnelSupported =>
       platformTunnels.any((PlatformTunnelCapability capability) {
         return capability.available;
@@ -204,6 +220,24 @@ class DesktopShellController extends ChangeNotifier {
 
   PlatformTunnelStartResult? platformTunnelResultFor(PlatformTunnelMode mode) {
     return _platformTunnelResults[mode];
+  }
+
+  ProviderTransportCompatibilityCandidate?
+  providerTransportCompatibilityCandidateForMode(PlatformTunnelMode mode) {
+    return _providerTransportCompatibilityCandidates[mode];
+  }
+
+  String? providerTransportCompatibilitySummaryForMode(
+    PlatformTunnelMode mode,
+  ) {
+    final candidate = providerTransportCompatibilityCandidateForMode(mode);
+    if (candidate == null) {
+      return null;
+    }
+    return _providerTransportCompatibilityMessage(
+      candidate,
+      prefix: 'Provider/transport compatibility',
+    );
   }
 
   bool platformTunnelModeRequiresVPNTransportProfile(PlatformTunnelMode mode) {
@@ -364,7 +398,14 @@ class DesktopShellController extends ChangeNotifier {
       }
       return null;
     }
-    return _transportProfileBlockReasonForMode(mode, plan: executionPlan);
+    final transportProfileBlockReason = _transportProfileBlockReasonForMode(
+      mode,
+      plan: executionPlan,
+    );
+    if (transportProfileBlockReason != null) {
+      return transportProfileBlockReason;
+    }
+    return _providerTransportCompatibilityBlockReasonForMode(mode);
   }
 
   List<ProviderPreset> get presetCatalog => kProviderPresetCatalog;
@@ -632,9 +673,11 @@ class DesktopShellController extends ChangeNotifier {
       await _stopRuntimeMonitoring();
       _challengeCache.clear();
       providerDescriptors = const <ProviderDescriptor>[];
+      providerSources = const <RemoteProviderSourceDescriptor>[];
       transportProfiles = const <TransportProfileStatus>[];
       resolutions = const <ResolutionRecord>[];
       sessions = const <SessionRecord>[];
+      _providerTransportCompatibilityCandidates.clear();
       selectedResolutionId = null;
       selectedSessionId = null;
       busy = false;
@@ -671,6 +714,7 @@ class DesktopShellController extends ChangeNotifier {
     }
     try {
       final nextProviders = await api.providers();
+      final nextProviderSources = await api.providerSources();
       final nextTransportProfiles = hostSupportsTransportProfileStore
           ? await api.transportProfiles()
           : const <TransportProfileStatus>[];
@@ -683,6 +727,7 @@ class DesktopShellController extends ChangeNotifier {
       );
 
       providerDescriptors = nextProviders;
+      providerSources = nextProviderSources;
       managedProviders = _overlayManagedProviders(managedProviders);
       transportProfiles = nextTransportProfiles;
       profiles = nextProfiles;
@@ -734,6 +779,7 @@ class DesktopShellController extends ChangeNotifier {
         selectedResolutionId = null;
       }
 
+      await _refreshProviderTransportCompatibilityCandidates();
       _scheduleStatePersist();
       _notify();
     } catch (error) {
@@ -1493,6 +1539,17 @@ class DesktopShellController extends ChangeNotifier {
       if (requiresResolution && resolutionId == null) {
         return;
       }
+      await _refreshProviderTransportCompatibilityForMode(
+        mode,
+        resolutionId: resolutionId,
+      );
+      final compatibilityBlockReason =
+          _providerTransportCompatibilityBlockReasonForMode(mode);
+      if (compatibilityBlockReason != null) {
+        _clearPendingPlatformTunnelStart(mode);
+        notice = compatibilityBlockReason;
+        return;
+      }
       _clearPendingPlatformTunnelStart(mode);
       await _startPlatformTunnelWithCapability(
         mode: mode,
@@ -1702,6 +1759,17 @@ class DesktopShellController extends ChangeNotifier {
           notice = preparationBlockReason;
           return;
         }
+        await _refreshProviderTransportCompatibilityForMode(
+          mode,
+          resolutionId: resolution.id,
+        );
+        final compatibilityBlockReason =
+            _providerTransportCompatibilityBlockReasonForMode(mode);
+        if (compatibilityBlockReason != null) {
+          _clearPendingPlatformTunnelStart(mode);
+          notice = compatibilityBlockReason;
+          return;
+        }
         _clearPendingPlatformTunnelStart(mode);
         await _startPlatformTunnelWithCapability(
           mode: mode,
@@ -1730,14 +1798,23 @@ class DesktopShellController extends ChangeNotifier {
     required String? resolutionId,
   }) async {
     final executionPlan = _defaultPlatformTunnelExecutionPlan(capability);
+    final transportProfile = executionPlan == null
+        ? null
+        : _transportProfileReferenceForPlan(mode, executionPlan);
+    final providerTransportCompatibility =
+        await _providerTransportCompatibilityStartupReference(
+          mode: mode,
+          resolutionId: resolutionId,
+          executionPlan: executionPlan,
+          transportProfile: transportProfile,
+        );
     final result = await api.startPlatformTunnel(
       mode: mode,
       resolutionId: resolutionId,
       runtimeDefaults: _platformTunnelRuntimeDefaultsFor(mode),
       executionPlan: executionPlan,
-      transportProfile: executionPlan == null
-          ? null
-          : _transportProfileReferenceForPlan(mode, executionPlan),
+      transportProfile: transportProfile,
+      providerTransportCompatibility: providerTransportCompatibility,
       underlayRoutePolicy: _defaultPlatformTunnelUnderlayRoutePolicy(
         capability,
       ),
@@ -1993,6 +2070,157 @@ class DesktopShellController extends ChangeNotifier {
       return null;
     }
     return prerequisite.selectedProfile ?? prerequisite.defaultProfile;
+  }
+
+  Future<ProviderTransportCompatibilityStartupReference?>
+  _providerTransportCompatibilityStartupReference({
+    required PlatformTunnelMode mode,
+    required String? resolutionId,
+    required RuntimeExecutionPlan? executionPlan,
+    required TransportProfileReference? transportProfile,
+  }) async {
+    final selected =
+        _providerTransportCompatibilityCandidates[mode] ??
+        await _providerTransportCompatibilityCandidate(
+          resolutionId: resolutionId,
+          executionPlan: executionPlan,
+          transportProfile: transportProfile,
+        );
+    return selected?.toStartupReference(
+      fallbackTransportProfile: transportProfile,
+    );
+  }
+
+  Future<void> _refreshProviderTransportCompatibilityCandidates() async {
+    final next =
+        <PlatformTunnelMode, ProviderTransportCompatibilityCandidate>{};
+    if (!hostSupportsProviderTransportCompatibility) {
+      _providerTransportCompatibilityCandidates
+        ..clear()
+        ..addAll(next);
+      return;
+    }
+    for (final capability in platformTunnels) {
+      final mode = capability.mode;
+      final candidate = await _providerTransportCompatibilityCandidateForMode(
+        mode,
+        resolutionId: _platformTunnelResolutionIdFor(mode),
+      );
+      if (candidate != null) {
+        next[mode] = candidate;
+      }
+    }
+    _providerTransportCompatibilityCandidates
+      ..clear()
+      ..addAll(next);
+  }
+
+  Future<void> _refreshProviderTransportCompatibilityForMode(
+    PlatformTunnelMode mode, {
+    required String? resolutionId,
+  }) async {
+    final candidate = await _providerTransportCompatibilityCandidateForMode(
+      mode,
+      resolutionId: resolutionId,
+    );
+    if (candidate == null) {
+      _providerTransportCompatibilityCandidates.remove(mode);
+      return;
+    }
+    _providerTransportCompatibilityCandidates[mode] = candidate;
+  }
+
+  Future<ProviderTransportCompatibilityCandidate?>
+  _providerTransportCompatibilityCandidateForMode(
+    PlatformTunnelMode mode, {
+    required String? resolutionId,
+  }) {
+    final executionPlan = _defaultPlatformTunnelExecutionPlan(
+      _platformTunnelCapabilityFor(mode),
+    );
+    final transportProfile = executionPlan == null
+        ? null
+        : _transportProfileReferenceForPlan(mode, executionPlan);
+    return _providerTransportCompatibilityCandidate(
+      resolutionId: resolutionId,
+      executionPlan: executionPlan,
+      transportProfile: transportProfile,
+    );
+  }
+
+  Future<ProviderTransportCompatibilityCandidate?>
+  _providerTransportCompatibilityCandidate({
+    required String? resolutionId,
+    required RuntimeExecutionPlan? executionPlan,
+    required TransportProfileReference? transportProfile,
+  }) async {
+    final trimmedResolutionId = resolutionId?.trim() ?? '';
+    if (!hostSupportsProviderTransportCompatibility ||
+        trimmedResolutionId.isEmpty ||
+        executionPlan == null ||
+        transportProfile == null ||
+        transportProfile.isEmpty) {
+      return null;
+    }
+    final response = await api.providerTransportCompatibilityCandidates(
+      ProviderTransportCompatibilityRequest(
+        resolutionId: trimmedResolutionId,
+        executionPlan: executionPlan,
+        transportProfile: transportProfile,
+      ),
+    );
+    ProviderTransportCompatibilityCandidate? selected;
+    for (final candidate in response.candidates) {
+      selected ??= candidate;
+      if (candidate.isStartable) {
+        selected = candidate;
+        break;
+      }
+    }
+    return selected;
+  }
+
+  String? _providerTransportCompatibilityBlockReasonForMode(
+    PlatformTunnelMode mode,
+  ) {
+    final candidate = _providerTransportCompatibilityCandidates[mode];
+    if (candidate == null || candidate.isStartable) {
+      return null;
+    }
+    return _providerTransportCompatibilityMessage(
+      candidate,
+      prefix: 'provider/transport compatibility',
+    );
+  }
+
+  String _providerTransportCompatibilityMessage(
+    ProviderTransportCompatibilityCandidate candidate, {
+    required String prefix,
+  }) {
+    final parts = <String>['$prefix: ${candidate.status.value}'];
+    final axis = candidate.failingAxis?.value.trim() ?? '';
+    if (axis.isNotEmpty) {
+      parts.add('axis $axis');
+    }
+    final reason = candidate.reasonCode?.value.trim() ?? '';
+    if (reason.isNotEmpty) {
+      parts.add('reason $reason');
+    }
+    final source = candidate.source;
+    if (source != null && !source.isEmpty) {
+      final sourceRef = source.sourceId.trim().isNotEmpty
+          ? source.sourceId.trim()
+          : source.resolutionId.trim();
+      if (sourceRef.isNotEmpty) {
+        parts.add('source $sourceRef');
+      }
+    }
+    final profile = candidate.selectedTransportProfile;
+    if (profile != null && !profile.isEmpty) {
+      parts.add('VPN transport ${profile.profileId}');
+    }
+    final message = candidate.message.trim();
+    return message.isEmpty ? parts.join('; ') : '${parts.join('; ')}. $message';
   }
 
   TransportProfileStatus? _transportProfileById(String rawProfileId) {
@@ -2436,6 +2664,7 @@ class DesktopShellController extends ChangeNotifier {
 
   void _clearPlatformTunnelResults() {
     _platformTunnelResults.clear();
+    _providerTransportCompatibilityCandidates.clear();
     _clearPendingPlatformTunnelStart();
   }
 

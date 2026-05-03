@@ -174,7 +174,13 @@ HostInfo _desktopTransportProfileHostInfo({required bool configured}) {
       Capability.diagnostics,
       Capability.eventStream,
       Capability.vpnTransportProfileStore,
+      Capability.providerTransportCompatibility,
     ],
+    providerTransportCompatibility:
+        const ProviderTransportCompatibilityCapability(
+          version: '1',
+          candidateEndpoint: '/v1/provider-transport-compatibility/candidates',
+        ),
     transportProfileStore: _transportProfileStoreCapability,
     platformTunnels: <PlatformTunnelCapability>[
       PlatformTunnelCapability(
@@ -1476,6 +1482,61 @@ void main() {
     },
   );
 
+  test('controller loads provider source catalog during refresh', () async {
+    final api = _FakeControlPlaneApi(
+      profiles: const <ProfileRecord>[],
+      sessions: const <SessionRecord>[],
+      providerSources: const <RemoteProviderSourceDescriptor>[
+        RemoteProviderSourceDescriptor(
+          endpointId: 'vps-1',
+          providerId: 'generic-turn',
+          sourceId: 'vk-turn-vps',
+          displayName: 'VK TURN VPS',
+          sourceFamily: 'turn',
+          healthStatus: 'ready',
+          evidenceStatus: 'fresh',
+          validationStatus: 'valid',
+          artifactOffers: <RemoteProviderArtifactOffer>[
+            RemoteProviderArtifactOffer(
+              offerId: 'turn-wg',
+              family: 'generic_turn',
+              accessMethods: <String>['turn_credentials'],
+              compatibleProfileKinds: <TransportProfileKind>[
+                TransportProfileKind.wireGuardNativeV1,
+              ],
+              validationStatus: 'valid',
+            ),
+          ],
+        ),
+      ],
+    );
+    final controller = DesktopShellController(
+      api: api,
+      supervisor: _SequencedHostSupervisor(<HostConnectionResult>[
+        const HostConnectionResult(
+          state: HostLifecycleState.ready,
+          message: 'ready',
+          info: _readyHostInfo,
+        ),
+      ]),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.initialize();
+
+    expect(controller.providerSources, hasLength(1));
+    expect(controller.providerSources.single.sourceId, 'vk-turn-vps');
+    expect(
+      controller
+          .providerSources
+          .single
+          .artifactOffers
+          .single
+          .compatibleProfileKinds,
+      <TransportProfileKind>[TransportProfileKind.wireGuardNativeV1],
+    );
+  });
+
   test(
     'controller uses VPN transport profile store before desktop platform tunnel startup',
     () async {
@@ -1550,8 +1611,35 @@ void main() {
 
       expect(api.startResolutionCalls, hasLength(1));
       expect(api.startPlatformTunnelCalls, hasLength(1));
+      expect(api.providerTransportCompatibilityRequests, hasLength(2));
+      expect(
+        api
+            .providerTransportCompatibilityRequests
+            .last
+            .transportProfile
+            ?.profileId,
+        'transport-profile-1',
+      );
       expect(
         api.startPlatformTunnelCalls.single.transportProfile?.profileId,
+        'transport-profile-1',
+      );
+      expect(
+        api
+            .startPlatformTunnelCalls
+            .single
+            .providerTransportCompatibility
+            ?.source
+            ?.resolutionId,
+        'resolution-1',
+      );
+      expect(
+        api
+            .startPlatformTunnelCalls
+            .single
+            .providerTransportCompatibility
+            ?.transportProfile
+            ?.profileId,
         'transport-profile-1',
       );
 
@@ -1577,6 +1665,90 @@ void main() {
         ),
         contains('VPN transport profile'),
       );
+    },
+  );
+
+  test(
+    'controller blocks desktop platform tunnel before host startup when provider transport compatibility is not startable',
+    () async {
+      final api = _FakeControlPlaneApi(
+        profiles: const <ProfileRecord>[],
+        sessions: const <SessionRecord>[],
+        resolutions: <ResolutionRecord>[
+          _resolutionRecord(provider: 'generic-turn'),
+        ],
+        hostInfo: _desktopTransportProfileHostInfo(configured: true),
+        transportProfiles: <TransportProfileStatus>[
+          _desktopTransportProfileStatus(),
+        ],
+        providerTransportCompatibilityResponseBuilder:
+            (ProviderTransportCompatibilityRequest request) {
+              final executionPlan = request.executionPlan!;
+              return ProviderTransportCompatibilityResponse(
+                version: '1',
+                generatedAt: DateTime.utc(2026, 5, 3, 12),
+                candidates: <ProviderTransportCompatibilityCandidate>[
+                  ProviderTransportCompatibilityCandidate(
+                    id: 'candidate-blocked',
+                    source: ProviderTransportSourceReference(
+                      providerId: 'generic-turn',
+                      resolutionId: request.resolutionId,
+                    ),
+                    artifact: ProviderTransportArtifactReference(
+                      providerId: 'generic-turn',
+                      resolutionId: request.resolutionId,
+                      family: ArtifactFamily.genericTurn,
+                      accessMethods: <RuntimeAccessMethod>[
+                        executionPlan.accessMethod,
+                      ],
+                    ),
+                    executionPlan: RuntimeExecutionPlanDescriptor(
+                      plan: executionPlan,
+                      supportState: RuntimeExecutionPlanSupportState.supported,
+                      remoteEndpointFamily:
+                          RuntimeRemoteEndpointFamily.turnServer,
+                      remoteEndpointRole:
+                          RuntimeRemoteEndpointRole.wireGuardRawDatagram,
+                    ),
+                    selectedTransportProfile: request.transportProfile,
+                    status: ProviderTransportCompatibilityStatus.unsupported,
+                    startable: false,
+                    failingAxis: ProviderTransportCompatibilityFailingAxis
+                        .transportProfile,
+                    reasonCode: ProviderTransportCompatibilityReasonCode
+                        .transportProfileIncompatibleKind,
+                    message:
+                        'selected VPN transport profile kind is not supported by this provider source',
+                  ),
+                ],
+              );
+            },
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(<HostConnectionResult>[
+          HostConnectionResult(
+            state: HostLifecycleState.ready,
+            message: 'ready',
+            info: _desktopTransportProfileHostInfo(configured: true),
+          ),
+        ]),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(api.providerTransportCompatibilityRequests, hasLength(1));
+      expect(
+        controller.platformTunnelStartPreparationBlockReason(
+          PlatformTunnelMode.windowsWintun,
+        ),
+        contains('provider/transport compatibility'),
+      );
+
+      await controller.startPlatformTunnel(PlatformTunnelMode.windowsWintun);
+
+      expect(api.startPlatformTunnelCalls, isEmpty);
     },
   );
 
@@ -1801,6 +1973,7 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
     required List<ProfileRecord> profiles,
     List<ProviderDescriptor>? providers,
     List<ProviderConfigRecord>? providerConfigs,
+    List<RemoteProviderSourceDescriptor>? providerSources,
     List<ResolutionRecord>? resolutions,
     required List<SessionRecord> sessions,
     Map<String, ChallengeRecord>? challenges,
@@ -1808,12 +1981,19 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
     List<TransportProfileStatus>? transportProfiles,
     ResolutionState startResolutionState = ResolutionState.resolved,
     ResolutionState? continueChallengeResolutionState,
+    ProviderTransportCompatibilityResponse Function(
+      ProviderTransportCompatibilityRequest request,
+    )?
+    providerTransportCompatibilityResponseBuilder,
   }) : _profiles = List<ProfileRecord>.of(profiles),
        _providers = List<ProviderDescriptor>.of(
          providers ?? _providerDescriptors,
        ),
        _providerConfigs = List<ProviderConfigRecord>.of(
          providerConfigs ?? const <ProviderConfigRecord>[],
+       ),
+       _providerSources = List<RemoteProviderSourceDescriptor>.of(
+         providerSources ?? const <RemoteProviderSourceDescriptor>[],
        ),
        _resolutions = List<ResolutionRecord>.of(
          resolutions ?? const <ResolutionRecord>[],
@@ -1827,10 +2007,13 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
          transportProfiles ?? const <TransportProfileStatus>[],
        ),
        _startResolutionState = startResolutionState,
-       _continueChallengeResolutionState = continueChallengeResolutionState;
+       _continueChallengeResolutionState = continueChallengeResolutionState,
+       _providerTransportCompatibilityResponseBuilder =
+           providerTransportCompatibilityResponseBuilder;
 
   final List<ProviderDescriptor> _providers;
   final List<ProviderConfigRecord> _providerConfigs;
+  final List<RemoteProviderSourceDescriptor> _providerSources;
   final List<ProfileRecord> _profiles;
   final List<ResolutionRecord> _resolutions;
   final List<SessionRecord> _sessions;
@@ -1839,6 +2022,10 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   final List<TransportProfileStatus> _transportProfiles;
   final ResolutionState _startResolutionState;
   final ResolutionState? _continueChallengeResolutionState;
+  final ProviderTransportCompatibilityResponse Function(
+    ProviderTransportCompatibilityRequest request,
+  )?
+  _providerTransportCompatibilityResponseBuilder;
   final StreamController<EventRecord> _events =
       StreamController<EventRecord>.broadcast();
   final List<String> challengeRequests = <String>[];
@@ -1849,6 +2036,9 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
       <RuntimeDefaults>[];
   final List<_StartPlatformTunnelCall> startPlatformTunnelCalls =
       <_StartPlatformTunnelCall>[];
+  final List<ProviderTransportCompatibilityRequest>
+  providerTransportCompatibilityRequests =
+      <ProviderTransportCompatibilityRequest>[];
   final List<TransportProfileImportRequest> importTransportProfileCalls =
       <TransportProfileImportRequest>[];
   final List<ProfileRecord> upsertedProfiles = <ProfileRecord>[];
@@ -2111,6 +2301,8 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
     RuntimeDefaults? runtimeDefaults,
     RuntimeExecutionPlan? executionPlan,
     TransportProfileReference? transportProfile,
+    ProviderTransportCompatibilityStartupReference?
+    providerTransportCompatibility,
     PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy =
         PlatformTunnelApplicationRoutingPolicy.allApps,
     PlatformTunnelUnderlayRoutePolicy underlayRoutePolicy =
@@ -2125,6 +2317,7 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
         runtimeDefaults: runtimeDefaults,
         executionPlan: executionPlan,
         transportProfile: transportProfile,
+        providerTransportCompatibility: providerTransportCompatibility,
         applicationRoutingPolicy: applicationRoutingPolicy,
         underlayRoutePolicy: underlayRoutePolicy,
         allowedPackages: allowedPackages,
@@ -2179,6 +2372,57 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
 
   @override
   Future<List<ProviderDescriptor>> providers() async => _providers;
+
+  @override
+  Future<List<RemoteProviderSourceDescriptor>> providerSources() async =>
+      _providerSources;
+
+  @override
+  Future<ProviderTransportCompatibilityResponse>
+  providerTransportCompatibilityCandidates(
+    ProviderTransportCompatibilityRequest request,
+  ) async {
+    providerTransportCompatibilityRequests.add(request);
+    final override = _providerTransportCompatibilityResponseBuilder;
+    if (override != null) {
+      return override(request);
+    }
+    final executionPlan = request.executionPlan;
+    return ProviderTransportCompatibilityResponse(
+      version: '1',
+      generatedAt: DateTime.utc(2026, 5, 3, 12),
+      candidates: executionPlan == null
+          ? const <ProviderTransportCompatibilityCandidate>[]
+          : <ProviderTransportCompatibilityCandidate>[
+              ProviderTransportCompatibilityCandidate(
+                id: 'candidate-1',
+                source: ProviderTransportSourceReference(
+                  providerId: 'generic-turn',
+                  resolutionId: request.resolutionId,
+                ),
+                artifact: ProviderTransportArtifactReference(
+                  providerId: 'generic-turn',
+                  resolutionId: request.resolutionId,
+                  family: ArtifactFamily.genericTurn,
+                  accessMethods: <RuntimeAccessMethod>[
+                    executionPlan.accessMethod,
+                  ],
+                ),
+                executionPlan: RuntimeExecutionPlanDescriptor(
+                  plan: executionPlan,
+                  supportState: RuntimeExecutionPlanSupportState.supported,
+                  remoteEndpointFamily: RuntimeRemoteEndpointFamily.turnServer,
+                  remoteEndpointRole:
+                      RuntimeRemoteEndpointRole.wireGuardRawDatagram,
+                ),
+                selectedTransportProfile: request.transportProfile,
+                status: ProviderTransportCompatibilityStatus.startable,
+                startable: true,
+                reasonCode: ProviderTransportCompatibilityReasonCode.ready,
+              ),
+            ],
+    );
+  }
 
   @override
   Future<List<ResolutionRecord>> resolutions() async => _resolutions;
@@ -2551,6 +2795,7 @@ class _StartPlatformTunnelCall {
     this.runtimeDefaults,
     this.executionPlan,
     this.transportProfile,
+    this.providerTransportCompatibility,
     this.allowedPackages = const <String>[],
     this.disallowedPackages = const <String>[],
   });
@@ -2560,6 +2805,8 @@ class _StartPlatformTunnelCall {
   final RuntimeDefaults? runtimeDefaults;
   final RuntimeExecutionPlan? executionPlan;
   final TransportProfileReference? transportProfile;
+  final ProviderTransportCompatibilityStartupReference?
+  providerTransportCompatibility;
   final PlatformTunnelApplicationRoutingPolicy applicationRoutingPolicy;
   final PlatformTunnelUnderlayRoutePolicy underlayRoutePolicy;
   final List<String> allowedPackages;

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_shell_core/home_workflow_surface.dart';
 import 'package:flutter_shell_core/portable_profile_transfer.dart';
+import 'package:flutter_shell_core/provider_source_catalog_surface.dart';
 import 'package:flutter_shell_core/routing_content_surface.dart' as routing;
 import 'package:flutter_shell_core/shell_visuals.dart';
 import 'package:flutter_shell_core/support_content_surface.dart' as support;
@@ -1607,6 +1608,11 @@ class _ProvidersPageState extends State<_ProvidersPage> {
             ],
           ),
           const SizedBox(height: 20),
+          ProviderSourceCatalogSurface(
+            sources: controller.providerSources,
+            compact: true,
+          ),
+          const SizedBox(height: 20),
           rootPanel,
         ];
 
@@ -2483,6 +2489,8 @@ class _RoutingPageState extends State<_RoutingPage> {
               controller.vpnTransportProfileStatusSummaryForMode,
           transportProfileImportAdapterLabelForMode:
               controller.vpnTransportProfileImportAdapterLabelForMode,
+          providerTransportCompatibilitySummaryForMode:
+              controller.providerTransportCompatibilitySummaryForMode,
           platformTunnelStartBlockReasonForMode:
               controller.platformTunnelStartPreparationBlockReason,
           canConfigureTransportProfileForMode:
