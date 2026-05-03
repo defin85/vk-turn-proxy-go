@@ -20,6 +20,7 @@ const (
 	CapabilityProviderTransportCompat  Capability = "provider-transport-compatibility"
 	CapabilityRuntimeExecutionPlanning Capability = "runtime-execution-planning"
 	CapabilityVPNTransportProfileStore Capability = "vpn-transport-profile-store"
+	CapabilityVPSProviderCatalogs      Capability = "vps-provider-catalogs"
 )
 
 type TransportMode string
@@ -186,6 +187,7 @@ type HostInfo struct {
 	PlatformTunnels                []PlatformTunnelCapability                `json:"platform_tunnels,omitempty"`
 	TransportProfileStore          *TransportProfileStoreCapability          `json:"transport_profile_store,omitempty"`
 	ProviderTransportCompatibility *ProviderTransportCompatibilityCapability `json:"provider_transport_compatibility,omitempty"`
+	VPSProviderCatalogs            *VPSProviderCatalogCapability             `json:"vps_provider_catalogs,omitempty"`
 }
 
 type BuildIdentity struct {
@@ -551,20 +553,21 @@ type ResolutionExportStatus struct {
 }
 
 type Resolution struct {
-	ID                string                 `json:"id"`
-	Provider          string                 `json:"provider"`
-	ResolutionMethod  string                 `json:"resolution_method,omitempty"`
-	Input             ResolutionInput        `json:"input"`
-	Artifact          *ResolutionArtifact    `json:"artifact,omitempty"`
-	State             ResolutionState        `json:"state"`
-	Credentials       *ResolutionCredentials `json:"credentials,omitempty"`
-	Export            ResolutionExportStatus `json:"export"`
-	Failure           *FailureInfo           `json:"failure,omitempty"`
-	ActiveChallengeID string                 `json:"active_challenge_id,omitempty"`
-	StartedAt         time.Time              `json:"started_at"`
-	UpdatedAt         time.Time              `json:"updated_at"`
-	ResolvedAt        *time.Time             `json:"resolved_at,omitempty"`
-	ExpiredAt         *time.Time             `json:"expired_at,omitempty"`
+	ID                string                    `json:"id"`
+	Provider          string                    `json:"provider"`
+	ResolutionMethod  string                    `json:"resolution_method,omitempty"`
+	Input             ResolutionInput           `json:"input"`
+	Artifact          *ResolutionArtifact       `json:"artifact,omitempty"`
+	State             ResolutionState           `json:"state"`
+	Credentials       *ResolutionCredentials    `json:"credentials,omitempty"`
+	Export            ResolutionExportStatus    `json:"export"`
+	Failure           *FailureInfo              `json:"failure,omitempty"`
+	ActiveChallengeID string                    `json:"active_challenge_id,omitempty"`
+	StartedAt         time.Time                 `json:"started_at"`
+	UpdatedAt         time.Time                 `json:"updated_at"`
+	ResolvedAt        *time.Time                `json:"resolved_at,omitempty"`
+	ExpiredAt         *time.Time                `json:"expired_at,omitempty"`
+	RemoteVPS         *RemoteVPSArtifactSummary `json:"remote_vps,omitempty"`
 }
 
 type FailureInfo struct {
@@ -658,13 +661,14 @@ type Event struct {
 }
 
 type Diagnostics struct {
-	Session         Session        `json:"session"`
-	Events          []Event        `json:"events"`
-	Challenges      []Challenge    `json:"challenges"`
-	Metrics         string         `json:"metrics"`
-	GUIBuild        *BuildIdentity `json:"gui_build,omitempty"`
-	HostBuild       BuildIdentity  `json:"host_build"`
-	ContractVersion string         `json:"contract_version"`
+	Session         Session                    `json:"session"`
+	Events          []Event                    `json:"events"`
+	Challenges      []Challenge                `json:"challenges"`
+	Metrics         string                     `json:"metrics"`
+	GUIBuild        *BuildIdentity             `json:"gui_build,omitempty"`
+	HostBuild       BuildIdentity              `json:"host_build"`
+	ContractVersion string                     `json:"contract_version"`
+	RemoteCatalogs  []VPSProviderCatalogStatus `json:"remote_catalogs,omitempty"`
 }
 
 type StartSessionRequest struct {

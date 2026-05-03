@@ -56,6 +56,49 @@ func Handler(host *Host) http.Handler {
 			localizeProviderDescriptors(host.Providers(), requestedDisplayLocale(r)),
 		)
 	})
+	mux.HandleFunc("/v1/vps-provider-catalogs", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeMethodNotAllowed(w, r.Method)
+			return
+		}
+		writeJSON(w, http.StatusOK, host.VPSProviderCatalogs())
+	})
+	mux.HandleFunc("/v1/vps-provider-catalogs:sync", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeMethodNotAllowed(w, r.Method)
+			return
+		}
+		statuses, err := host.SyncVPSProviderCatalogs(context.WithoutCancel(r.Context()))
+		if err != nil && len(statuses) == 0 {
+			writeVPSProviderCatalogError(w, err, "vps_provider_catalog_sync_failed")
+			return
+		}
+		writeJSON(w, http.StatusOK, statuses)
+	})
+	mux.HandleFunc("/v1/provider-sources", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeMethodNotAllowed(w, r.Method)
+			return
+		}
+		writeJSON(w, http.StatusOK, host.RemoteProviderSources())
+	})
+	mux.HandleFunc("/v1/vps-provider-catalogs/artifacts:issue", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeMethodNotAllowed(w, r.Method)
+			return
+		}
+		var req VPSProviderArtifactIssueRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_json", err)
+			return
+		}
+		result, err := host.IssueVPSProviderArtifact(context.WithoutCancel(r.Context()), req)
+		if err != nil {
+			writeVPSProviderCatalogError(w, err, "vps_provider_artifact_issue_failed")
+			return
+		}
+		writeJSON(w, http.StatusOK, result)
+	})
 	mux.HandleFunc("/v1/profiles", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -731,6 +774,19 @@ func writeTransportProfileActionError(w http.ResponseWriter, err error) {
 		writeNotFound(w, err)
 	default:
 		writeError(w, http.StatusBadRequest, "transport_profile_invalid", err)
+	}
+}
+
+func writeVPSProviderCatalogError(w http.ResponseWriter, err error, fallback string) {
+	switch {
+	case errors.Is(err, ErrVPSProviderCatalogUnavailable):
+		writeError(w, http.StatusNotFound, "vps_provider_catalog_unavailable", err)
+	case errors.Is(err, ErrVPSProviderCatalogInvalid):
+		writeError(w, http.StatusConflict, "vps_provider_catalog_invalid", err)
+	case errors.Is(err, ErrVPSProviderArtifactNotReady):
+		writeError(w, http.StatusConflict, "vps_provider_artifact_not_ready", err)
+	default:
+		writeError(w, http.StatusBadGateway, fallback, err)
 	}
 }
 

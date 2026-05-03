@@ -97,6 +97,8 @@ type hostConfig struct {
 	startTunnel                  func(context.Context, PlatformTunnelStartRequest) (PlatformTunnelStartResult, error)
 	resumeTunnel                 func(context.Context, PlatformTunnelResumeRequest) (PlatformTunnelStartResult, error)
 	stopTunnel                   func(context.Context, PlatformTunnelStopRequest) (PlatformTunnelStopResult, error)
+	vpsCatalogEndpoints          []VPSProviderCatalogEndpointConfig
+	vpsCatalogHTTPClient         *http.Client
 }
 
 type Host struct {
@@ -122,19 +124,23 @@ type Host struct {
 	startTunnel                  func(context.Context, PlatformTunnelStartRequest) (PlatformTunnelStartResult, error)
 	resumeTunnel                 func(context.Context, PlatformTunnelResumeRequest) (PlatformTunnelStartResult, error)
 	stopTunnel                   func(context.Context, PlatformTunnelStopRequest) (PlatformTunnelStopResult, error)
+	vpsCatalogEndpoints          []VPSProviderCatalogEndpointConfig
+	vpsCatalogHTTPClient         *http.Client
 
-	profiles                 map[string]Profile
-	transportProfiles        map[string]managedTransportProfile
-	transportProfileDefaults map[string]string
-	providerConfigs          map[string]ProviderConfig
-	resolutions              map[string]*managedResolution
-	sessions                 map[string]*managedSession
-	challenges               map[string]*managedChallenge
-	startupRequests          map[string]PlatformTunnelStartRequest
-	platformTunnelResults    map[PlatformTunnelMode]storedPlatformTunnelResult
-	platformTunnelStops      map[PlatformTunnelMode]storedPlatformTunnelStop
-	subscribers              map[uint64]chan Event
-	nextSubID                uint64
+	profiles                    map[string]Profile
+	transportProfiles           map[string]managedTransportProfile
+	transportProfileDefaults    map[string]string
+	providerConfigs             map[string]ProviderConfig
+	resolutions                 map[string]*managedResolution
+	vpsCatalogCache             map[string]cachedVPSProviderCatalog
+	vpsCatalogHighestGeneration map[string]uint64
+	sessions                    map[string]*managedSession
+	challenges                  map[string]*managedChallenge
+	startupRequests             map[string]PlatformTunnelStartRequest
+	platformTunnelResults       map[PlatformTunnelMode]storedPlatformTunnelResult
+	platformTunnelStops         map[PlatformTunnelMode]storedPlatformTunnelStop
+	subscribers                 map[uint64]chan Event
+	nextSubID                   uint64
 }
 
 type managedSession struct {
@@ -266,11 +272,15 @@ func New(opts ...Option) *Host {
 		startTunnel:                  cfg.startTunnel,
 		resumeTunnel:                 cfg.resumeTunnel,
 		stopTunnel:                   cfg.stopTunnel,
+		vpsCatalogEndpoints:          cloneVPSEndpointConfigs(cfg.vpsCatalogEndpoints),
+		vpsCatalogHTTPClient:         cfg.vpsCatalogHTTPClient,
 		profiles:                     make(map[string]Profile),
 		transportProfiles:            make(map[string]managedTransportProfile),
 		transportProfileDefaults:     make(map[string]string),
 		providerConfigs:              make(map[string]ProviderConfig),
 		resolutions:                  make(map[string]*managedResolution),
+		vpsCatalogCache:              make(map[string]cachedVPSProviderCatalog),
+		vpsCatalogHighestGeneration:  make(map[string]uint64),
 		sessions:                     make(map[string]*managedSession),
 		challenges:                   make(map[string]*managedChallenge),
 		startupRequests:              make(map[string]PlatformTunnelStartRequest),
@@ -378,6 +388,12 @@ func (h *Host) Info() HostInfo {
 	if transportProfileStore != nil {
 		capabilities = append(capabilities, CapabilityVPNTransportProfileStore)
 	}
+	var vpsProviderCatalogs *VPSProviderCatalogCapability
+	if len(h.vpsCatalogEndpoints) > 0 {
+		capabilities = append(capabilities, CapabilityVPSProviderCatalogs)
+		capability := defaultVPSProviderCatalogCapability(h.vpsCatalogEndpoints)
+		vpsProviderCatalogs = &capability
+	}
 	platformTunnels := h.platformTunnelCapabilitiesWithTransportProfileStateLocked()
 	providerTransportCompatibility := defaultProviderTransportCompatibilityCapability()
 	h.mu.Unlock()
@@ -390,6 +406,7 @@ func (h *Host) Info() HostInfo {
 		PlatformTunnels:                platformTunnels,
 		TransportProfileStore:          cloneTransportProfileStoreCapability(transportProfileStore),
 		ProviderTransportCompatibility: cloneProviderTransportCompatibilityCapability(&providerTransportCompatibility),
+		VPSProviderCatalogs:            cloneVPSProviderCatalogCapability(vpsProviderCatalogs),
 	}
 }
 
@@ -1536,6 +1553,7 @@ func (h *Host) ExportDiagnostics(sessionID string) (Diagnostics, error) {
 	}
 	events := append([]Event(nil), managed.events...)
 	challenges := append([]Challenge(nil), managed.challenges...)
+	remoteCatalogs := h.remoteCatalogStatusesLocked()
 	return Diagnostics{
 		Session:         managed.snapshot,
 		Events:          events,
@@ -1543,6 +1561,7 @@ func (h *Host) ExportDiagnostics(sessionID string) (Diagnostics, error) {
 		Metrics:         managed.metrics.Prometheus(),
 		HostBuild:       h.build,
 		ContractVersion: ContractVersion,
+		RemoteCatalogs:  remoteCatalogs,
 	}, nil
 }
 

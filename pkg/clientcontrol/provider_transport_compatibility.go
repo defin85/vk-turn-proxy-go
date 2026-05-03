@@ -47,6 +47,8 @@ const (
 	ProviderTransportCompatibilityReasonProviderSourceNotResolved        ProviderTransportCompatibilityReasonCode = "provider_source_not_resolved"
 	ProviderTransportCompatibilityReasonProviderArtifactMissing          ProviderTransportCompatibilityReasonCode = "provider_artifact_missing"
 	ProviderTransportCompatibilityReasonProviderArtifactStale            ProviderTransportCompatibilityReasonCode = "provider_artifact_stale"
+	ProviderTransportCompatibilityReasonProviderArtifactDegraded         ProviderTransportCompatibilityReasonCode = "provider_artifact_degraded"
+	ProviderTransportCompatibilityReasonProviderArtifactUnavailable      ProviderTransportCompatibilityReasonCode = "provider_artifact_unavailable"
 	ProviderTransportCompatibilityReasonProviderArtifactUnsupported      ProviderTransportCompatibilityReasonCode = "provider_artifact_unsupported"
 	ProviderTransportCompatibilityReasonArtifactAccessMethodUnsupported  ProviderTransportCompatibilityReasonCode = "artifact_access_method_unsupported"
 	ProviderTransportCompatibilityReasonCarrierFamilyUnsupported         ProviderTransportCompatibilityReasonCode = "carrier_family_unsupported"
@@ -171,6 +173,8 @@ func defaultProviderTransportCompatibilityCapability() ProviderTransportCompatib
 			ProviderTransportCompatibilityReasonProviderSourceNotResolved,
 			ProviderTransportCompatibilityReasonProviderArtifactMissing,
 			ProviderTransportCompatibilityReasonProviderArtifactStale,
+			ProviderTransportCompatibilityReasonProviderArtifactDegraded,
+			ProviderTransportCompatibilityReasonProviderArtifactUnavailable,
 			ProviderTransportCompatibilityReasonProviderArtifactUnsupported,
 			ProviderTransportCompatibilityReasonArtifactAccessMethodUnsupported,
 			ProviderTransportCompatibilityReasonCarrierFamilyUnsupported,
@@ -404,6 +408,19 @@ func (h *Host) providerTransportCompatibilityCandidatesLocked(
 			ProviderTransportCompatibilityAxisProviderArtifact,
 			ProviderTransportCompatibilityReasonProviderArtifactMissing,
 			fmt.Sprintf("provider resolution %s has no runtime artifact", resolutionID),
+		))
+		return response, event
+	}
+	if failure := providerTransportRemoteVPSArtifactFailure(snapshot, now); failure != nil {
+		response.Candidates = append(response.Candidates, providerTransportFailureCandidate(
+			req,
+			source,
+			artifact,
+			RuntimeExecutionPlanDescriptor{},
+			failure.Status,
+			failure.FailingAxis,
+			failure.ReasonCode,
+			failure.Message,
 		))
 		return response, event
 	}
@@ -972,6 +989,107 @@ func providerTransportArtifactSupportsAccessMethod(
 		}
 	}
 	return false
+}
+
+func providerTransportRemoteVPSArtifactFailure(
+	snapshot Resolution,
+	now time.Time,
+) *ProviderTransportCompatibilityFailure {
+	remote := snapshot.RemoteVPS
+	if remote == nil && snapshot.Artifact != nil {
+		remote = snapshot.Artifact.Summary.RemoteVPS
+	}
+	if remote == nil {
+		return nil
+	}
+	if remote.ExpiresAt != nil && !remote.ExpiresAt.UTC().After(now) {
+		return &ProviderTransportCompatibilityFailure{
+			Status:      ProviderTransportCompatibilityStatusStale,
+			FailingAxis: ProviderTransportCompatibilityAxisProviderArtifact,
+			ReasonCode:  ProviderTransportCompatibilityReasonProviderArtifactStale,
+			Message:     "VPS-issued provider artifact is expired or stale",
+		}
+	}
+	status := strings.TrimSpace(remote.ValidationStatus)
+	switch status {
+	case "", "valid":
+	case "missing_evidence":
+		return &ProviderTransportCompatibilityFailure{
+			Status:      ProviderTransportCompatibilityStatusMissingEvidence,
+			FailingAxis: ProviderTransportCompatibilityAxisEvidence,
+			ReasonCode:  ProviderTransportCompatibilityReasonEvidenceMissing,
+			Message:     "VPS-issued provider artifact has no fresh readiness evidence",
+		}
+	case "stale":
+		return &ProviderTransportCompatibilityFailure{
+			Status:      ProviderTransportCompatibilityStatusStale,
+			FailingAxis: ProviderTransportCompatibilityAxisProviderArtifact,
+			ReasonCode:  ProviderTransportCompatibilityReasonProviderArtifactStale,
+			Message:     "VPS-issued provider artifact readiness evidence is stale",
+		}
+	case "degraded":
+		return &ProviderTransportCompatibilityFailure{
+			Status:      ProviderTransportCompatibilityStatusDegraded,
+			FailingAxis: ProviderTransportCompatibilityAxisEvidence,
+			ReasonCode:  ProviderTransportCompatibilityReasonProviderArtifactDegraded,
+			Message:     "VPS-issued provider artifact readiness is degraded",
+		}
+	case "unavailable":
+		return &ProviderTransportCompatibilityFailure{
+			Status:      ProviderTransportCompatibilityStatusUnavailable,
+			FailingAxis: ProviderTransportCompatibilityAxisProviderArtifact,
+			ReasonCode:  ProviderTransportCompatibilityReasonProviderArtifactUnavailable,
+			Message:     "VPS-issued provider artifact is unavailable",
+		}
+	default:
+		return &ProviderTransportCompatibilityFailure{
+			Status:      ProviderTransportCompatibilityStatusUnsupported,
+			FailingAxis: ProviderTransportCompatibilityAxisProviderArtifact,
+			ReasonCode:  ProviderTransportCompatibilityReasonProviderArtifactUnsupported,
+			Message:     fmt.Sprintf("VPS-issued provider artifact validation status %q is not startable", status),
+		}
+	}
+
+	evidenceStatus := strings.TrimSpace(remote.EvidenceStatus)
+	switch evidenceStatus {
+	case "", "fresh":
+		return nil
+	case "missing", "unknown_limit":
+		return &ProviderTransportCompatibilityFailure{
+			Status:      ProviderTransportCompatibilityStatusMissingEvidence,
+			FailingAxis: ProviderTransportCompatibilityAxisEvidence,
+			ReasonCode:  ProviderTransportCompatibilityReasonEvidenceMissing,
+			Message:     "VPS-issued provider artifact evidence is missing",
+		}
+	case "stale":
+		return &ProviderTransportCompatibilityFailure{
+			Status:      ProviderTransportCompatibilityStatusStale,
+			FailingAxis: ProviderTransportCompatibilityAxisProviderArtifact,
+			ReasonCode:  ProviderTransportCompatibilityReasonProviderArtifactStale,
+			Message:     "VPS-issued provider artifact evidence is stale",
+		}
+	case "degraded":
+		return &ProviderTransportCompatibilityFailure{
+			Status:      ProviderTransportCompatibilityStatusDegraded,
+			FailingAxis: ProviderTransportCompatibilityAxisEvidence,
+			ReasonCode:  ProviderTransportCompatibilityReasonProviderArtifactDegraded,
+			Message:     "VPS-issued provider artifact evidence is degraded",
+		}
+	case "unavailable":
+		return &ProviderTransportCompatibilityFailure{
+			Status:      ProviderTransportCompatibilityStatusUnavailable,
+			FailingAxis: ProviderTransportCompatibilityAxisProviderArtifact,
+			ReasonCode:  ProviderTransportCompatibilityReasonProviderArtifactUnavailable,
+			Message:     "VPS-issued provider artifact evidence is unavailable",
+		}
+	default:
+		return &ProviderTransportCompatibilityFailure{
+			Status:      ProviderTransportCompatibilityStatusUnsupported,
+			FailingAxis: ProviderTransportCompatibilityAxisProviderArtifact,
+			ReasonCode:  ProviderTransportCompatibilityReasonProviderArtifactUnsupported,
+			Message:     fmt.Sprintf("VPS-issued provider artifact evidence status %q is not startable", evidenceStatus),
+		}
+	}
 }
 
 func providerTransportSourceMismatch(

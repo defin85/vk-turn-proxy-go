@@ -16,6 +16,7 @@ It points to the smallest set of files needed to understand the repo, choose the
 
 - `docs/build-workflows.md`: local and CI build entrypoints for Go plus current Flutter shell workflows
 - `docs/provider-matrix.md`: current provider support and scope
+- `docs/vps-provider-catalog-service.md`: VPS-side provider catalog/artifact service and local sync contract
 - `docs/runtime-observability.md`: log fields, metrics, stage taxonomy
 - `docs/adr/0001-go-monorepo.md`: canonical package boundaries
 
@@ -37,6 +38,7 @@ It points to the smallest set of files needed to understand the repo, choose the
 | Provider resolution or VK contour behavior | `test/compatibility/AGENTS.md`, `test/compatibility/vk/README.md`, `docs/provider-matrix.md` | `go test ./internal/provider/... ./cmd/probe` |
 | Client runtime or supervision | `docs/agent/architecture-map.md`, `openspec/specs/tunnel-client-runtime/spec.md`, `docs/runtime-observability.md` | `go test ./internal/session`; `go test ./test/turnlab -run TestHarnessRelayRoundTrip` |
 | Local client control plane or GUI host wiring | `pkg/clientcontrol`, `cmd/clientd`, `openspec/specs/client-control-plane/spec.md` | `go test ./pkg/clientcontrol ./cmd/clientd` |
+| VPS provider catalog or remote artifact issue service | `docs/vps-provider-catalog-service.md`, `internal/vpscatalog`, `pkg/clientcontrol`, `openspec/changes/add-79-vps-provider-catalog-and-artifact-service/specs/vps-provider-catalog-and-artifact-service/spec.md` | `go test ./internal/vpscatalog ./pkg/clientcontrol ./cmd/vps-provider-catalog` |
 | Desktop Flutter shell | `desktop/gui_shell/README.md`, `.agents/skills/vk-turn-desktop-shell/SKILL.md`, `openspec/specs/desktop-gui-client/spec.md`, `openspec/specs/platform-tunnel-integration/spec.md` | `dart pub get`; `cd desktop/gui_shell && flutter analyze && flutter test` |
 | Mobile Flutter shell | `mobile/gui_shell/README.md`, `docs/android-wg-phone-poc.md`, `openspec/specs/mobile-gui-client/spec.md`, `openspec/specs/android-embedded-mobile-host/spec.md` | `dart pub get`; `cd mobile/gui_shell && flutter analyze && flutter test` |
 | Android embedded host or mobile bridge wiring | `mobile/gui_shell/README.md`, `openspec/specs/android-embedded-mobile-host/spec.md`, `cmd/android-mobile-host`, `internal/androidembeddedhost` | `go test ./internal/androidembeddedhost ./pkg/clientcontrol` |

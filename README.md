@@ -11,6 +11,7 @@ Current baseline in this repository:
 - canonical Go module and package layout
 - provider resolution for `vk` and `generic-turn`
 - local client control plane in `cmd/clientd` and `pkg/clientcontrol`
+- VPS-side provider catalog/artifact service in `cmd/vps-provider-catalog` plus local sync in `pkg/clientcontrol`
 - runtime observability, compatibility scaffolding, and the local TURN lab harness
 - desktop and mobile Flutter shells with repo-owned build workflows
 
@@ -24,6 +25,7 @@ cmd/
   android-mobile-host/
   clientd/
   probe/
+  vps-provider-catalog/
   tunnel-client/
   tunnel-server/
   turn-expiry-check/
@@ -207,6 +209,10 @@ go run ./cmd/clientd -listen 127.0.0.1:7777
 
 Desktop shells should use the HTTP surface from `cmd/clientd`.
 Embedded/mobile hosts should use `pkg/clientcontrol` directly so they share the same profile, session, challenge, and diagnostics semantics without a second contract.
+
+`cmd/vps-provider-catalog` exposes the bounded VPS catalog/artifact service for remote provider sources.
+It publishes signed catalog snapshots, issues redacted remote artifacts by explicit operation id, and leaves local VPN transport profile selection to `clientd`.
+Use `docs/vps-provider-catalog-service.md` for endpoint scopes, systemd shape, smoke commands, and fail-closed cache behavior.
 
 ## Desktop GUI shell
 

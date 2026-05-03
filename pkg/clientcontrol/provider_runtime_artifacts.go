@@ -1,11 +1,16 @@
 package clientcontrol
 
-import internalprovider "github.com/defin85/vk-turn-proxy-go/internal/provider"
+import (
+	"time"
+
+	internalprovider "github.com/defin85/vk-turn-proxy-go/internal/provider"
+)
 
 type ProviderInputKind string
 
 const (
-	ProviderInputKindLink ProviderInputKind = "link"
+	ProviderInputKindLink             ProviderInputKind = "link"
+	ProviderInputKindRemoteVPSCatalog ProviderInputKind = "remote_vps_catalog"
 )
 
 type ProviderAuthPosture string
@@ -107,6 +112,31 @@ type ResolutionArtifactSummary struct {
 	GenericTURN    *ResolutionCredentials         `json:"generic_turn,omitempty"`
 	ConferenceRoom *ConferenceRoomArtifactSummary `json:"conference_room,omitempty"`
 	CameraStream   *CameraStreamArtifactSummary   `json:"camera_stream,omitempty"`
+	RemoteVPS      *RemoteVPSArtifactSummary      `json:"remote_vps,omitempty"`
+}
+
+type RemoteVPSArtifactSummary struct {
+	EndpointID       string           `json:"endpoint_id,omitempty"`
+	Issuer           string           `json:"issuer,omitempty"`
+	Audience         string           `json:"audience,omitempty"`
+	Generation       uint64           `json:"generation,omitempty"`
+	SourceID         string           `json:"source_id,omitempty"`
+	OfferID          string           `json:"offer_id,omitempty"`
+	ArtifactID       string           `json:"artifact_id,omitempty"`
+	HealthStatus     string           `json:"health_status,omitempty"`
+	EvidenceStatus   string           `json:"evidence_status,omitempty"`
+	ValidationStatus string           `json:"validation_status,omitempty"`
+	ValidationReason string           `json:"validation_reason,omitempty"`
+	ExpiresAt        *time.Time       `json:"expires_at,omitempty"`
+	Redaction        RedactionSummary `json:"redaction,omitempty"`
+}
+
+type RedactionSummary struct {
+	OrdinaryReads  string `json:"ordinary_reads,omitempty"`
+	Events         string `json:"events,omitempty"`
+	Diagnostics    string `json:"diagnostics,omitempty"`
+	PersistedState string `json:"persisted_state,omitempty"`
+	Export         string `json:"export,omitempty"`
 }
 
 type ResolutionArtifact struct {
@@ -231,6 +261,7 @@ func cloneResolutionArtifact(artifact *ResolutionArtifact) *ResolutionArtifact {
 			GenericTURN:    cloneResolutionCredentials(artifact.Summary.GenericTURN),
 			ConferenceRoom: cloneConferenceRoomArtifactSummary(artifact.Summary.ConferenceRoom),
 			CameraStream:   cloneCameraStreamArtifactSummary(artifact.Summary.CameraStream),
+			RemoteVPS:      cloneRemoteVPSArtifactSummary(artifact.Summary.RemoteVPS),
 		},
 	}
 	if len(artifact.Actions) > 0 {
@@ -265,5 +296,17 @@ func cloneCameraStreamArtifactSummary(summary *CameraStreamArtifactSummary) *Cam
 		return nil
 	}
 	clone := *summary
+	return &clone
+}
+
+func cloneRemoteVPSArtifactSummary(summary *RemoteVPSArtifactSummary) *RemoteVPSArtifactSummary {
+	if summary == nil {
+		return nil
+	}
+	clone := *summary
+	if summary.ExpiresAt != nil {
+		expiresAt := summary.ExpiresAt.UTC()
+		clone.ExpiresAt = &expiresAt
+	}
 	return &clone
 }

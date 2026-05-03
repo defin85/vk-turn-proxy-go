@@ -853,8 +853,7 @@ func TestManagerPlatformTunnelResumeContinuesAfterPermissionGrantAndFailsWithout
 	importAndroidWireGuardTransportProfile(t, baseURL)
 
 	startResult := startPlatformTunnel(t, baseURL, clientcontrol.PlatformTunnelStartRequest{
-		Mode:         clientcontrol.PlatformTunnelModeAndroidVPNService,
-		ResolutionID: "resolution-android-1",
+		Mode: clientcontrol.PlatformTunnelModeAndroidVPNService,
 		RuntimeDefaults: &clientcontrol.RuntimeDefaults{
 			ListenAddr: "127.0.0.1:7777",
 			PeerAddr:   "relay.example.test:3478",
