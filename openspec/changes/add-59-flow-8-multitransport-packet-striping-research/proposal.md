@@ -10,6 +10,10 @@ connection-level ordering, recovery, congestion, and duplication semantics.
 Without an explicit research boundary, the project can drift into overclaiming
 "multitransport" while still lacking the machinery that makes striping safe.
 
+The same boundary now also covers provider-side ceilings: packet striping is
+not a workaround for a throttled transport class unless live evidence proves
+that the striped child paths have independent capacity domains.
+
 ## Sequence
 - Order: `59`
 - Depends on: `add-58-flow-8-multitransport-flow-sharded-active-active`
@@ -25,6 +29,8 @@ Without an explicit research boundary, the project can drift into overclaiming
   support claim.
 - Define kill criteria so throughput anecdotes or one-off demos do not promote
   packet striping into product truth.
+- Require same-ceiling versus independent-domain A/B evidence before any
+  future striping change can claim bandwidth recovery.
 - Keep packet striping out of ordinary shipped runtime support in this slice.
 
 ## Impact
@@ -36,4 +42,6 @@ Without an explicit research boundary, the project can drift into overclaiming
 - Packet striping is substantially riskier than active-standby or
   flow-sharded runtime.
 - Throughput alone is not enough evidence for shipped striping support.
+- Throughput over several child paths is especially weak evidence if those
+  paths share the same provider/call/TURN policy ceiling.
 - This slice does not promise that packet striping will be implemented.

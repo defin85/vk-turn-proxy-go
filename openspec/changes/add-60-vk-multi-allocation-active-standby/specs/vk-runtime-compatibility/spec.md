@@ -24,3 +24,22 @@ do not rely on chat-level assumptions.
   allocation count cannot be established
 - **AND** the repository records explicit failure behavior instead of silent
   degradation to a smaller allocation set
+
+### Requirement: VK throughput-scaling claims require current live evidence
+
+The system SHALL block VK multi-allocation throughput-scaling claims unless the
+current compatibility evidence proves that the selected VK contour scales with
+additional connections, allocations, identities, or calls.
+
+#### Scenario: Current VK contour does not scale with connection count
+
+- **GIVEN** compatibility evidence for the selected VK TURN contour includes
+  one-connection and multi-connection measurements
+- **WHEN** the multi-connection measurement does not materially exceed the
+  one-connection throughput ceiling
+- **THEN** VK compatibility marks throughput scaling as unsupported or
+  degraded for that contour
+- **AND** release or operator wording keeps VK multi-allocation scoped to
+  resilience
+- **AND** any future bandwidth claim requires new live evidence for an
+  independent limit domain

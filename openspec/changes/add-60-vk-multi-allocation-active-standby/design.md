@@ -12,6 +12,11 @@ What it does not yet have is an honest same-provider resilience contract.
 Today `connections > 1` is still generic worker fan-out, not an explicit
 provider-scoped active/standby runtime policy.
 
+The latest operator evidence is stricter: connection count inside the VK TURN
+contour no longer scales throughput in the way it previously did. That turns
+`connections` into a resilience and diagnostics knob for this slice, not a
+performance knob.
+
 This change exists to define one narrower first step before generic
 multitransport work:
 
@@ -27,6 +32,8 @@ multitransport work:
 - Keep the first scheduler narrow as `active_standby`.
 - Preserve one provider resolution and one logical session identity.
 - Fail closed on partial standby bring-up or quota failure.
+- Preserve the current degraded-throughput truth instead of implying that more
+  VK allocations recover bandwidth.
 
 ## Non-Goals
 
@@ -67,3 +74,10 @@ capacity failure must stay visible in startup behavior and support claims.
 Even if multiple allocations exist, the first supported claim is standby
 promotion and failure recovery. The repository should not imply additive
 throughput until a later slice proves that separately.
+
+### Decision: VK connection-count scaling is an evidence gate
+
+Operator-facing support must treat VK TURN connection count as non-scaling
+unless fresh measurements prove otherwise. If one connection and several
+connections converge to the same observed ceiling, the runtime can still expose
+that evidence, but it cannot call VK multi-allocation a bandwidth feature.

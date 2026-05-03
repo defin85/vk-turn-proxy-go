@@ -798,6 +798,9 @@ func (h *Host) attachTransportProfileToStartRequest(
 	if !h.transportProfileStoreEnabled {
 		return req, PlatformTunnelStartResult{}, false
 	}
+	if strings.TrimSpace(req.ResolutionID) != "" && req.TransportProfile == nil {
+		return req, PlatformTunnelStartResult{}, false
+	}
 
 	h.mu.Lock()
 	defer h.mu.Unlock()

@@ -39,6 +39,24 @@ rebalance or failover reason applies.
 - **AND** it does not imply that unaffected flows were already using the failed
   child path concurrently
 
+### Requirement: Flow sharding bases throughput claims on scored independent paths
+
+The system SHALL evaluate `flow_sharded` throughput claims using documented
+path scores and limit-domain classification rather than the number of child
+paths alone.
+
+#### Scenario: Child paths share one observed throughput ceiling
+
+- **GIVEN** a `flow_sharded` pathset whose child paths share one provider,
+  call, TURN policy, or traffic-class limit domain
+- **AND** live evidence shows that additional connections or allocations do
+  not increase throughput for that contour
+- **WHEN** the host reports the pathset or operator docs describe support
+- **THEN** the support claim does not promise additive throughput
+- **AND** diagnostics or evidence identify the shared throughput limit domain
+- **AND** the scheduler may still use those child paths only for documented
+  flow isolation, resilience, or failover behavior
+
 ### Requirement: Flow-sharded support does not imply packet striping
 
 The system SHALL keep flow-sharded active-active support distinct from

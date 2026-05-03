@@ -43,3 +43,18 @@ budgets before any future shipped support claim is made.
   budgets
 - **AND** it does not inherit support status from `active_standby` or
   `flow_sharded` runtime alone
+
+### Requirement: Packet striping research distinguishes same-ceiling and independent-domain paths
+
+The system SHALL treat child-path independence as part of the packet-striping
+research bar before any future bandwidth-recovery claim can ship.
+
+#### Scenario: Striped child paths share one provider-side ceiling
+
+- **GIVEN** a packet-striping prototype or design that uses multiple child
+  paths inside one provider, call, TURN policy, or traffic class
+- **WHEN** live evidence shows those child paths share one throughput ceiling
+- **THEN** the repository does not treat packet striping as a bandwidth
+  recovery feature for that contour
+- **AND** the result remains research evidence rather than shipped support
+- **AND** a future shipped claim still requires independent-domain A/B evidence

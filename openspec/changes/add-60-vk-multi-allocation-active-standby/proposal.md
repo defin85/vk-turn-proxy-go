@@ -10,6 +10,12 @@ workers as a generic supervised pool, and the current UDP ingress dispatches
 datagrams across ready workers instead of keeping one explicit active path and
 one or more standby paths.
 
+Recent live VK TURN checks also show that increasing connection count no
+longer reliably increases throughput: a contour that previously reached about
+10 Mbit/s with four connections now stays around 3-4 Mbit/s. This makes the
+slice explicitly resilience-first; same-provider VK fan-out is not a current
+bandwidth strategy.
+
 Before the repository attempts general multitransport work, it needs one
 narrower provider-specific slice that answers a simpler question:
 
@@ -32,13 +38,16 @@ narrower provider-specific slice that answers a simpler question:
 - Define the first scheduler narrowly as explicit VK-only `active_standby`
   instead of reinterpreting the current generic `connections > 1` fan-out
   behavior as multipath support.
+- Record that VK TURN connection count is no longer accepted as a throughput
+  multiplier without fresh live evidence.
 - Require one successful VK provider resolution to feed multiple same-tuple
   TURN allocations while keeping one active payload path and one or more
   standby allocations.
 - Fail closed when the requested standby allocation count cannot be established
   or maintained according to the committed startup policy.
 - Extend the VK compatibility surface so standby promotion and
-  allocation-quota failure are both backed by explicit evidence.
+  allocation-quota failure are both backed by explicit evidence, and so
+  throughput-scaling claims stay blocked unless measurements prove them.
 
 ## Impact
 - Affected specs: `vk-multi-allocation-runtime` (new), `tunnel-client-runtime`,
@@ -55,3 +64,6 @@ narrower provider-specific slice that answers a simpler question:
   target policy.
 - The first slice is for resilience and standby promotion, not additive
   throughput claims.
+- If VK TURN remains capped at one provider-side throughput ceiling, this
+  change should mark that as degraded support rather than trying to hide it
+  with more allocations.

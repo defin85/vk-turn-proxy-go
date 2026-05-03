@@ -10,6 +10,11 @@ one logical runtime session alive across more than one documented child path
 without pretending that this already means packet striping or bandwidth
 aggregation.
 
+Recent VK TURN observations make the boundary sharper: increasing connection
+count inside one provider policy domain no longer reliably increases
+throughput. Pathsets therefore need to describe failure and throughput limit
+domains explicitly instead of treating child-path count as transport diversity.
+
 ## Sequence
 - Order: `57`
 - Depends on: `add-22-runtime-execution-planning`
@@ -23,6 +28,9 @@ aggregation.
 - Define the first pathset scheduler narrowly as `active_standby`.
 - Require each child path to remain an individually documented and
   compatibility-gated execution plan.
+- Require child paths to declare their failure/limit-domain relationship so
+  same-provider fan-out is not reported as bandwidth-diverse multitransport
+  without live evidence.
 - Keep packet striping, per-packet scheduling, and aggregate throughput claims
   out of scope for this slice.
 
@@ -35,6 +43,9 @@ aggregation.
 ## Assumptions
 - The first multitransport slice keeps one logical session identity.
 - The first slice promotes one standby path only after explicit health failure
-  or unavailability of the active path.
+  or documented degradation/unavailability of the active path.
 - Heterogeneous child plans must stay explicitly compatibility-gated instead of
   being synthesized heuristically.
+- Multiple child paths that share the same provider/call/TURN policy ceiling
+  can still be useful for resilience, but they are not evidence of additive
+  bandwidth.

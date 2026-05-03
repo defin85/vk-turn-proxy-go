@@ -48,3 +48,20 @@ standby promotion and failover rather than additive throughput.
 - **THEN** the claim is scoped to one active allocation plus standby promotion
 - **AND** it does not imply active-active scheduling or aggregate bandwidth
   across allocations
+
+### Requirement: VK connection count is an explicit throughput evidence gate
+
+The system SHALL treat VK TURN connection or allocation count as a measured
+compatibility property, not as an assumed throughput multiplier.
+
+#### Scenario: Multiple VK connections stop scaling throughput
+
+- **GIVEN** live compatibility evidence compares one VK TURN connection or
+  allocation against multiple same-provider connections or allocations
+- **WHEN** those measurements converge to the same observed throughput ceiling
+- **THEN** VK multi-allocation support remains scoped to resilience and
+  standby promotion
+- **AND** the repository records the contour as throughput-degraded for
+  bandwidth recovery
+- **AND** it does not recommend increasing VK connection count as the product
+  transport pivot

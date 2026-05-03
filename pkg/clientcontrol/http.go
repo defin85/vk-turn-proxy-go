@@ -199,6 +199,18 @@ func Handler(host *Host) http.Handler {
 		}
 		writeJSON(w, http.StatusOK, localizeProviderConfig(saved, requestedDisplayLocale(r)))
 	})
+	mux.HandleFunc("/v1/provider-transport-compatibility/candidates", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeMethodNotAllowed(w, r.Method)
+			return
+		}
+		var req ProviderTransportCompatibilityRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_json", err)
+			return
+		}
+		writeJSON(w, http.StatusOK, host.ProviderTransportCompatibilityCandidates(req))
+	})
 	mux.HandleFunc("/v1/profiles/", func(w http.ResponseWriter, r *http.Request) {
 		profileID := strings.TrimPrefix(r.URL.Path, "/v1/profiles/")
 		if profileID == "" {

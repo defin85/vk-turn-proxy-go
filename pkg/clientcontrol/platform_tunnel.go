@@ -267,6 +267,11 @@ func validatePlatformTunnelStartResult(req PlatformTunnelStartRequest, result Pl
 			return fmt.Errorf("startup result for mode %s reports invalid execution_plan: %w", result.Mode, err)
 		}
 	}
+	if result.ProviderTransportCompatibility != nil {
+		if err := validateProviderTransportCompatibilityFailure(*result.ProviderTransportCompatibility); err != nil {
+			return fmt.Errorf("startup result for mode %s reports invalid provider_transport_compatibility: %w", result.Mode, err)
+		}
+	}
 	if result.RemoteIngress != nil {
 		if err := validateRuntimeRemoteIngressDiagnostics(*result.RemoteIngress); err != nil {
 			return fmt.Errorf("startup result for mode %s reports invalid remote_ingress: %w", result.Mode, err)
@@ -480,6 +485,32 @@ func normalizePlatformTunnelStartRequest(req PlatformTunnelStartRequest) (Platfo
 		ref.Kind = TransportProfileKind(strings.TrimSpace(string(ref.Kind)))
 		ref.DefaultScopeID = strings.TrimSpace(ref.DefaultScopeID)
 		normalized.TransportProfile = &ref
+	}
+	if normalized.ProviderTransportCompatibility != nil {
+		ref := cloneProviderTransportCompatibilityStartupReference(normalized.ProviderTransportCompatibility)
+		ref.CandidateID = strings.TrimSpace(ref.CandidateID)
+		if ref.Source != nil {
+			ref.Source.ProviderID = strings.TrimSpace(ref.Source.ProviderID)
+			ref.Source.SourceID = strings.TrimSpace(ref.Source.SourceID)
+			ref.Source.ResolutionID = strings.TrimSpace(ref.Source.ResolutionID)
+			if normalized.ResolutionID == "" {
+				normalized.ResolutionID = ref.Source.ResolutionID
+			}
+		}
+		if ref.Artifact != nil {
+			ref.Artifact.ProviderID = strings.TrimSpace(ref.Artifact.ProviderID)
+			ref.Artifact.ResolutionID = strings.TrimSpace(ref.Artifact.ResolutionID)
+			if normalized.ResolutionID == "" {
+				normalized.ResolutionID = ref.Artifact.ResolutionID
+			}
+		}
+		if normalized.ExecutionPlan == nil {
+			normalized.ExecutionPlan = cloneRuntimeExecutionPlan(ref.ExecutionPlan)
+		}
+		if normalized.TransportProfile == nil {
+			normalized.TransportProfile = cloneTransportProfileReference(ref.TransportProfile)
+		}
+		normalized.ProviderTransportCompatibility = ref
 	}
 	if normalized.RuntimeDefaults != nil {
 		defaults := *normalized.RuntimeDefaults

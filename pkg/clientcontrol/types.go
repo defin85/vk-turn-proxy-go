@@ -17,6 +17,7 @@ const (
 	CapabilityMobileHostBridge         Capability = "mobile_host_bridge"
 	CapabilityPlatformTunnels          Capability = "platform_tunnels"
 	CapabilityProviderRuntimeArtifacts Capability = "provider-runtime-artifacts"
+	CapabilityProviderTransportCompat  Capability = "provider-transport-compatibility"
 	CapabilityRuntimeExecutionPlanning Capability = "runtime-execution-planning"
 	CapabilityVPNTransportProfileStore Capability = "vpn-transport-profile-store"
 )
@@ -178,12 +179,13 @@ type PlatformTunnelCapability struct {
 }
 
 type HostInfo struct {
-	Version               string                           `json:"version,omitempty"`
-	ContractVersion       string                           `json:"contract_version,omitempty"`
-	Build                 BuildIdentity                    `json:"build"`
-	Capabilities          []Capability                     `json:"capabilities"`
-	PlatformTunnels       []PlatformTunnelCapability       `json:"platform_tunnels,omitempty"`
-	TransportProfileStore *TransportProfileStoreCapability `json:"transport_profile_store,omitempty"`
+	Version                        string                                    `json:"version,omitempty"`
+	ContractVersion                string                                    `json:"contract_version,omitempty"`
+	Build                          BuildIdentity                             `json:"build"`
+	Capabilities                   []Capability                              `json:"capabilities"`
+	PlatformTunnels                []PlatformTunnelCapability                `json:"platform_tunnels,omitempty"`
+	TransportProfileStore          *TransportProfileStoreCapability          `json:"transport_profile_store,omitempty"`
+	ProviderTransportCompatibility *ProviderTransportCompatibilityCapability `json:"provider_transport_compatibility,omitempty"`
 }
 
 type BuildIdentity struct {
@@ -704,15 +706,16 @@ type MaterializeResolutionRequest struct {
 }
 
 type PlatformTunnelStartRequest struct {
-	ResolutionID             string                                 `json:"resolution_id,omitempty"`
-	RuntimeDefaults          *RuntimeDefaults                       `json:"runtime_defaults,omitempty"`
-	Mode                     PlatformTunnelMode                     `json:"mode"`
-	ExecutionPlan            *RuntimeExecutionPlan                  `json:"execution_plan,omitempty"`
-	TransportProfile         *TransportProfileReference             `json:"transport_profile,omitempty"`
-	ApplicationRoutingPolicy PlatformTunnelApplicationRoutingPolicy `json:"application_routing_policy,omitempty"`
-	UnderlayRoutePolicy      PlatformTunnelUnderlayRoutePolicy      `json:"underlay_route_policy,omitempty"`
-	AllowedPackages          []string                               `json:"allowed_packages,omitempty"`
-	DisallowedPackages       []string                               `json:"disallowed_packages,omitempty"`
+	ResolutionID                   string                                          `json:"resolution_id,omitempty"`
+	RuntimeDefaults                *RuntimeDefaults                                `json:"runtime_defaults,omitempty"`
+	Mode                           PlatformTunnelMode                              `json:"mode"`
+	ExecutionPlan                  *RuntimeExecutionPlan                           `json:"execution_plan,omitempty"`
+	TransportProfile               *TransportProfileReference                      `json:"transport_profile,omitempty"`
+	ProviderTransportCompatibility *ProviderTransportCompatibilityStartupReference `json:"provider_transport_compatibility,omitempty"`
+	ApplicationRoutingPolicy       PlatformTunnelApplicationRoutingPolicy          `json:"application_routing_policy,omitempty"`
+	UnderlayRoutePolicy            PlatformTunnelUnderlayRoutePolicy               `json:"underlay_route_policy,omitempty"`
+	AllowedPackages                []string                                        `json:"allowed_packages,omitempty"`
+	DisallowedPackages             []string                                        `json:"disallowed_packages,omitempty"`
 }
 
 type PlatformTunnelResumeRequest struct {
@@ -735,40 +738,42 @@ type PlatformTunnelDataplaneEvidence struct {
 }
 
 type PlatformTunnelStatus struct {
-	Mode                     PlatformTunnelMode                     `json:"mode"`
-	State                    PlatformTunnelLifecycleState           `json:"state"`
-	Ready                    bool                                   `json:"ready"`
-	SessionID                string                                 `json:"session_id,omitempty"`
-	SourceResolutionID       string                                 `json:"source_resolution_id,omitempty"`
-	ExecutionPlan            *RuntimeExecutionPlan                  `json:"execution_plan,omitempty"`
-	TransportProfile         *TransportProfileReference             `json:"transport_profile,omitempty"`
-	RemoteIngress            *RuntimeRemoteIngressDiagnostics       `json:"remote_ingress,omitempty"`
-	Dataplane                *PlatformTunnelDataplaneEvidence       `json:"dataplane,omitempty"`
-	ApplicationRoutingPolicy PlatformTunnelApplicationRoutingPolicy `json:"application_routing_policy,omitempty"`
-	UnderlayRoutePolicy      PlatformTunnelUnderlayRoutePolicy      `json:"underlay_route_policy,omitempty"`
-	AllowedPackages          []string                               `json:"allowed_packages,omitempty"`
-	DisallowedPackages       []string                               `json:"disallowed_packages,omitempty"`
-	Stage                    PlatformTunnelStartupStage             `json:"stage,omitempty"`
-	MissingPrerequisite      PlatformTunnelPrerequisite             `json:"missing_prerequisite,omitempty"`
-	StartupAttemptID         string                                 `json:"startup_attempt_id,omitempty"`
-	Message                  string                                 `json:"message,omitempty"`
-	UpdatedAt                time.Time                              `json:"updated_at"`
+	Mode                           PlatformTunnelMode                     `json:"mode"`
+	State                          PlatformTunnelLifecycleState           `json:"state"`
+	Ready                          bool                                   `json:"ready"`
+	SessionID                      string                                 `json:"session_id,omitempty"`
+	SourceResolutionID             string                                 `json:"source_resolution_id,omitempty"`
+	ExecutionPlan                  *RuntimeExecutionPlan                  `json:"execution_plan,omitempty"`
+	TransportProfile               *TransportProfileReference             `json:"transport_profile,omitempty"`
+	ProviderTransportCompatibility *ProviderTransportCompatibilityFailure `json:"provider_transport_compatibility,omitempty"`
+	RemoteIngress                  *RuntimeRemoteIngressDiagnostics       `json:"remote_ingress,omitempty"`
+	Dataplane                      *PlatformTunnelDataplaneEvidence       `json:"dataplane,omitempty"`
+	ApplicationRoutingPolicy       PlatformTunnelApplicationRoutingPolicy `json:"application_routing_policy,omitempty"`
+	UnderlayRoutePolicy            PlatformTunnelUnderlayRoutePolicy      `json:"underlay_route_policy,omitempty"`
+	AllowedPackages                []string                               `json:"allowed_packages,omitempty"`
+	DisallowedPackages             []string                               `json:"disallowed_packages,omitempty"`
+	Stage                          PlatformTunnelStartupStage             `json:"stage,omitempty"`
+	MissingPrerequisite            PlatformTunnelPrerequisite             `json:"missing_prerequisite,omitempty"`
+	StartupAttemptID               string                                 `json:"startup_attempt_id,omitempty"`
+	Message                        string                                 `json:"message,omitempty"`
+	UpdatedAt                      time.Time                              `json:"updated_at"`
 }
 
 type PlatformTunnelStartResult struct {
-	Mode                    PlatformTunnelMode                `json:"mode"`
-	ExecutionPlan           *RuntimeExecutionPlan             `json:"execution_plan,omitempty"`
-	TransportProfile        *TransportProfileReference        `json:"transport_profile,omitempty"`
-	RemoteIngress           *RuntimeRemoteIngressDiagnostics  `json:"remote_ingress,omitempty"`
-	Dataplane               *PlatformTunnelDataplaneEvidence  `json:"dataplane,omitempty"`
-	Ready                   bool                              `json:"ready"`
-	SessionID               string                            `json:"session_id,omitempty"`
-	Stage                   PlatformTunnelStartupStage        `json:"stage,omitempty"`
-	MissingPrerequisite     PlatformTunnelPrerequisite        `json:"missing_prerequisite,omitempty"`
-	StartupAttemptID        string                            `json:"startup_attempt_id,omitempty"`
-	UnderlayRoutePolicy     PlatformTunnelUnderlayRoutePolicy `json:"underlay_route_policy,omitempty"`
-	UnderlayRouteExclusions []string                          `json:"underlay_route_exclusions,omitempty"`
-	Message                 string                            `json:"message,omitempty"`
+	Mode                           PlatformTunnelMode                     `json:"mode"`
+	ExecutionPlan                  *RuntimeExecutionPlan                  `json:"execution_plan,omitempty"`
+	TransportProfile               *TransportProfileReference             `json:"transport_profile,omitempty"`
+	ProviderTransportCompatibility *ProviderTransportCompatibilityFailure `json:"provider_transport_compatibility,omitempty"`
+	RemoteIngress                  *RuntimeRemoteIngressDiagnostics       `json:"remote_ingress,omitempty"`
+	Dataplane                      *PlatformTunnelDataplaneEvidence       `json:"dataplane,omitempty"`
+	Ready                          bool                                   `json:"ready"`
+	SessionID                      string                                 `json:"session_id,omitempty"`
+	Stage                          PlatformTunnelStartupStage             `json:"stage,omitempty"`
+	MissingPrerequisite            PlatformTunnelPrerequisite             `json:"missing_prerequisite,omitempty"`
+	StartupAttemptID               string                                 `json:"startup_attempt_id,omitempty"`
+	UnderlayRoutePolicy            PlatformTunnelUnderlayRoutePolicy      `json:"underlay_route_policy,omitempty"`
+	UnderlayRouteExclusions        []string                               `json:"underlay_route_exclusions,omitempty"`
+	Message                        string                                 `json:"message,omitempty"`
 }
 
 type PlatformTunnelStopResult struct {

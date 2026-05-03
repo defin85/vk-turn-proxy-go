@@ -25,8 +25,8 @@ The system SHALL keep the first multitransport scheduler narrow as
 
 - **GIVEN** a same-device runtime pathset whose scheduler policy is
   `active_standby`
-- **WHEN** the active child path becomes unavailable according to the committed
-  runtime health policy
+- **WHEN** the active child path becomes degraded or unavailable according to
+  the committed runtime health policy
 - **THEN** the host may promote one eligible standby path into the active role
 - **AND** the logical runtime session remains the same session attempt
 - **AND** the host does not claim that both child paths were carrying runtime
@@ -46,6 +46,25 @@ part of the documented compatibility matrix.
 - **THEN** the host rejects that pathset before startup
 - **AND** it does not synthesize a guessed failover relationship between those
   plans
+
+### Requirement: Pathsets expose child-path limit-domain classification
+
+The system SHALL classify child paths by failure and throughput limit domain so
+support claims can distinguish independent transport paths from same-ceiling
+fan-out.
+
+#### Scenario: Same-provider fan-out shares one throughput limit domain
+
+- **GIVEN** two or more child execution plans that differ only by connection or
+  allocation count inside one provider, call, TURN policy, or traffic class
+- **WHEN** the host advertises a multitransport pathset or operator docs
+  describe that pathset
+- **THEN** those child paths are reported as sharing one throughput limit
+  domain
+- **AND** the support claim does not describe them as bandwidth-diverse
+  transports
+- **AND** the pathset may still use them for failover when the compatibility
+  and health policies allow that use
 
 ### Requirement: Active-standby support does not imply bandwidth aggregation
 

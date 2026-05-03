@@ -370,6 +370,7 @@ func (h *Host) Info() HostInfo {
 		CapabilityProfiles,
 		CapabilityProviderConfigs,
 		CapabilityProviderRuntimeArtifacts,
+		CapabilityProviderTransportCompat,
 		CapabilityRuntimeExecutionPlanning,
 		CapabilitySessions,
 	}
@@ -378,15 +379,17 @@ func (h *Host) Info() HostInfo {
 		capabilities = append(capabilities, CapabilityVPNTransportProfileStore)
 	}
 	platformTunnels := h.platformTunnelCapabilitiesWithTransportProfileStateLocked()
+	providerTransportCompatibility := defaultProviderTransportCompatibilityCapability()
 	h.mu.Unlock()
 
 	return HostInfo{
-		Version:               ContractVersion,
-		ContractVersion:       ContractVersion,
-		Build:                 h.build,
-		Capabilities:          capabilities,
-		PlatformTunnels:       platformTunnels,
-		TransportProfileStore: cloneTransportProfileStoreCapability(transportProfileStore),
+		Version:                        ContractVersion,
+		ContractVersion:                ContractVersion,
+		Build:                          h.build,
+		Capabilities:                   capabilities,
+		PlatformTunnels:                platformTunnels,
+		TransportProfileStore:          cloneTransportProfileStoreCapability(transportProfileStore),
+		ProviderTransportCompatibility: cloneProviderTransportCompatibilityCapability(&providerTransportCompatibility),
 	}
 }
 
@@ -449,6 +452,14 @@ func (h *Host) StartPlatformTunnel(ctx context.Context, req PlatformTunnelStartR
 	}
 	if h.startTunnel == nil {
 		return PlatformTunnelStartResult{}, fmt.Errorf("platform tunnel starter is not configured")
+	}
+	if compatibilityFailure, ok := h.validateProviderTransportCompatibilityForStartup(normalizedReq); ok {
+		compatibilityFailure = attachPlatformTunnelResultRequestContext(normalizedReq, compatibilityFailure)
+		if validateErr := validatePlatformTunnelStartResult(normalizedReq, compatibilityFailure); validateErr != nil {
+			return PlatformTunnelStartResult{}, fmt.Errorf("invalid platform tunnel startup result: %w", validateErr)
+		}
+		h.rememberPlatformTunnelResult(normalizedReq, compatibilityFailure)
+		return compatibilityFailure, nil
 	}
 	nextReq, profileFailure, ok := h.attachTransportProfileToStartRequest(normalizedReq)
 	if ok {
@@ -1240,6 +1251,9 @@ func applyPlatformTunnelStartResultToStatus(status *PlatformTunnelStatus, result
 	if result.TransportProfile != nil {
 		status.TransportProfile = cloneTransportProfileReference(result.TransportProfile)
 	}
+	if result.ProviderTransportCompatibility != nil {
+		status.ProviderTransportCompatibility = cloneProviderTransportCompatibilityFailure(result.ProviderTransportCompatibility)
+	}
 	if result.RemoteIngress != nil {
 		status.RemoteIngress = cloneRuntimeRemoteIngressDiagnostics(result.RemoteIngress)
 	}
@@ -1329,6 +1343,7 @@ func applyPlatformTunnelStopToStatus(status *PlatformTunnelStatus, result Platfo
 func clonePlatformTunnelStatus(status PlatformTunnelStatus) PlatformTunnelStatus {
 	status.ExecutionPlan = cloneRuntimeExecutionPlan(status.ExecutionPlan)
 	status.TransportProfile = cloneTransportProfileReference(status.TransportProfile)
+	status.ProviderTransportCompatibility = cloneProviderTransportCompatibilityFailure(status.ProviderTransportCompatibility)
 	status.RemoteIngress = cloneRuntimeRemoteIngressDiagnostics(status.RemoteIngress)
 	status.Dataplane = clonePlatformTunnelDataplaneEvidence(status.Dataplane)
 	status.AllowedPackages = cloneStringSlice(status.AllowedPackages)
@@ -1339,6 +1354,7 @@ func clonePlatformTunnelStatus(status PlatformTunnelStatus) PlatformTunnelStatus
 func clonePlatformTunnelStartRequest(req PlatformTunnelStartRequest) PlatformTunnelStartRequest {
 	req.ExecutionPlan = cloneRuntimeExecutionPlan(req.ExecutionPlan)
 	req.TransportProfile = cloneTransportProfileReference(req.TransportProfile)
+	req.ProviderTransportCompatibility = cloneProviderTransportCompatibilityStartupReference(req.ProviderTransportCompatibility)
 	if req.RuntimeDefaults != nil {
 		defaults := *req.RuntimeDefaults
 		req.RuntimeDefaults = &defaults
@@ -1351,6 +1367,7 @@ func clonePlatformTunnelStartRequest(req PlatformTunnelStartRequest) PlatformTun
 func clonePlatformTunnelStartResult(result PlatformTunnelStartResult) PlatformTunnelStartResult {
 	result.ExecutionPlan = cloneRuntimeExecutionPlan(result.ExecutionPlan)
 	result.TransportProfile = cloneTransportProfileReference(result.TransportProfile)
+	result.ProviderTransportCompatibility = cloneProviderTransportCompatibilityFailure(result.ProviderTransportCompatibility)
 	result.RemoteIngress = cloneRuntimeRemoteIngressDiagnostics(result.RemoteIngress)
 	result.Dataplane = clonePlatformTunnelDataplaneEvidence(result.Dataplane)
 	result.UnderlayRouteExclusions = cloneStringSlice(result.UnderlayRouteExclusions)

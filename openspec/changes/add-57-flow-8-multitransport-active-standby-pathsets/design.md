@@ -10,6 +10,8 @@ multitransport product:
 - there is no typed pathset object
 - there is no explicit failover scheduler
 - there is no honest boundary between failover and bandwidth aggregation
+- there is no explicit way to say that two child paths share the same
+  provider-side throughput ceiling
 
 This change exists to close only that first gap.
 
@@ -18,6 +20,7 @@ This change exists to close only that first gap.
 - Define one explicit pathset contract for multitransport runtime.
 - Keep the first scheduler narrow as `active_standby`.
 - Preserve explicit child-plan truth and fail-closed compatibility gates.
+- Distinguish independent transport limit domains from same-provider fan-out.
 
 ## Non-Goals
 
@@ -42,3 +45,11 @@ promotion. That is operationally simpler and does not overclaim throughput.
 
 The host should reject unsupported path combinations before startup instead of
 guessing that any two individually valid plans are also safe together.
+
+### Decision: Pathsets carry limit-domain truth
+
+A pathset must not use child-count as a proxy for transport diversity. If two
+child plans share the same provider, call, TURN allocation policy, traffic
+class, or another documented throttling domain, the host may still use them for
+failover, but support wording and diagnostics must not imply additive
+bandwidth.

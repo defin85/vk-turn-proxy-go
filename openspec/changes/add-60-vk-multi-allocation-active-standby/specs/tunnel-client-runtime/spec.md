@@ -25,6 +25,16 @@ other established VK allocations remain on standby.
   allocation
 - **AND** standby allocations do not carry ordinary payload before promotion
 
+#### Scenario: Degraded throughput does not turn standby into bandwidth mode
+
+- **GIVEN** a running VK `active_standby` session with one active allocation
+  and one or more standby allocations
+- **WHEN** live evidence shows the VK TURN contour is throughput-degraded but
+  the active allocation remains available
+- **THEN** the runtime reports or preserves degraded-throughput evidence
+- **AND** it does not start sending ordinary payload through standby
+  allocations as an implicit active-active bandwidth workaround
+
 #### Scenario: Standby allocation is promoted after active-path failure
 
 - **GIVEN** a running VK `active_standby` session whose current active

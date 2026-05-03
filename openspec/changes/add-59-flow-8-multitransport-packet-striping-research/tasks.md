@@ -7,12 +7,16 @@
       strategy.
 - [ ] 1.3 Define kill criteria so throughput anecdotes or one-off demos do not
       count as product readiness.
+- [ ] 1.4 Define same-ceiling child paths as insufficient evidence for
+      bandwidth-recovery claims.
 
 ## 2. Evidence posture
 - [ ] 2.1 Define the evidence required before the repository may claim
       packet-striping support.
 - [ ] 2.2 Keep packet striping separate from `active_standby` and
       `flow_sharded` support claims.
+- [ ] 2.3 Require live A/B evidence for same-provider versus independent-domain
+      child paths before any future striping support claim.
 
 ## 3. Validation
 - [ ] 3.1 Run
