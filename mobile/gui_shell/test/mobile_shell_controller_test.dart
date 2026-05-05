@@ -137,6 +137,30 @@ _missingProfileAndroidVpnExecutionPlanDescriptor =
       message: 'VPN transport profile wireguard_native_v1 is not configured.',
     );
 
+const ConferenceRoomActionsCapability _conferenceRoomActionsCapability =
+    ConferenceRoomActionsCapability(
+      version: '1',
+      artifactFamily: ArtifactFamily.conferenceRoom,
+      summaryFields: <String>[kConferenceRoomURLSummaryField],
+      actions: <ConferenceRoomActionDescriptor>[
+        ConferenceRoomActionDescriptor(
+          id: ArtifactAction.openRoom,
+          executionOwner: ActionExecutionOwner.shellExternal,
+          navigationTargetField: kConferenceRoomURLSummaryField,
+        ),
+      ],
+      unsupportedActions: <ArtifactAction>[
+        ArtifactAction.startOnThisDevice,
+        ArtifactAction.exportHandoff,
+      ],
+      redaction: ArtifactRedactionPolicy(
+        ordinaryReads: 'summary_only',
+        events: 'summary_only',
+        diagnostics: 'summary_only',
+        persistedState: 'summary_only',
+      ),
+    );
+
 const HostInfo _readyHostInfo = HostInfo(
   contractVersion: '1',
   build: _testHostBuild,
@@ -146,6 +170,7 @@ const HostInfo _readyHostInfo = HostInfo(
     Capability.profiles,
     Capability.providerConfigs,
     Capability.providerRuntimeArtifacts,
+    Capability.conferenceRoomActions,
     Capability.providerTransportCompatibility,
     Capability.runtimeExecutionPlanning,
     Capability.vpnTransportProfileStore,
@@ -158,6 +183,7 @@ const HostInfo _readyHostInfo = HostInfo(
     version: '1',
     candidateEndpoint: '/v1/provider-transport-compatibility/candidates',
   ),
+  conferenceRoomActions: _conferenceRoomActionsCapability,
   platformTunnels: <PlatformTunnelCapability>[
     PlatformTunnelCapability(
       mode: PlatformTunnelMode.androidVpnService,
@@ -1565,6 +1591,43 @@ void main() {
         'https://room.example.test/rooms/team-sync',
       ]);
       expect(controller.notice, contains('Opened action "Open room"'));
+    },
+  );
+
+  test(
+    'controller fails closed when conference-room actions are not host-capable',
+    () async {
+      final bridge = _FakeMobileHostBridge(
+        ensureReadyResult: const MobileHostConnectionResult(
+          state: MobileHostLifecycleState.ready,
+          message: 'ready',
+          info: _hostInfoWithoutSupportedAndroidExecutionPath,
+        ),
+        resolutionsList: <ResolutionRecord>[_conferenceRoomResolutionRecord()],
+      );
+      final browser = _FakeBrowserLauncher();
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: const <ProfileRecord>[],
+            providerConfigs: const <ProviderConfigRecord>[],
+            draft: ProfileDraft.defaults(),
+          ),
+        ),
+        browserLauncher: browser,
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.openResolutionExternalAction(
+        controller.resolutions.single.id,
+        ArtifactAction.openRoom,
+      );
+
+      expect(browser.openedUrls, isEmpty);
+      expect(controller.notice, contains('does not advertise action'));
     },
   );
 

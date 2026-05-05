@@ -4529,6 +4529,7 @@ class _ResolutionsPanel extends StatelessWidget {
                 : null,
             onOpenRoom:
                 resolution.state == ResolutionState.resolved &&
+                    controller.hostSupportsConferenceRoomActions &&
                     resolution.supportsAction(ArtifactAction.openRoom)
                 ? () => controller.openResolutionExternalAction(
                     resolution.id,

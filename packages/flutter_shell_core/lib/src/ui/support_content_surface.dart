@@ -680,18 +680,20 @@ class _SupportResolutionCard extends StatelessWidget {
       spacing: 10,
       runSpacing: 10,
       children: <Widget>[
-        FilledButton.tonal(
-          onPressed: busy || actions.onMaterialize == null
-              ? null
-              : () => unawaited(actions.onMaterialize!.call()),
-          child: Text(copy.startOnThisDevice),
-        ),
-        OutlinedButton(
-          onPressed: busy || actions.onCopyExport == null
-              ? null
-              : () => unawaited(actions.onCopyExport!.call()),
-          child: Text(copy.copyHandoff),
-        ),
+        if (_showMaterializeAction)
+          FilledButton.tonal(
+            onPressed: busy || actions.onMaterialize == null
+                ? null
+                : () => unawaited(actions.onMaterialize!.call()),
+            child: Text(copy.startOnThisDevice),
+          ),
+        if (_showCopyExportAction)
+          OutlinedButton(
+            onPressed: busy || actions.onCopyExport == null
+                ? null
+                : () => unawaited(actions.onCopyExport!.call()),
+            child: Text(copy.copyHandoff),
+          ),
         if (actions.onOpenRoom != null)
           OutlinedButton(
             onPressed: busy
@@ -720,6 +722,22 @@ class _SupportResolutionCard extends StatelessWidget {
           ),
       ],
     );
+  }
+
+  bool get _showMaterializeAction =>
+      actions.onMaterialize != null || _transportActionSurfaceLikely;
+
+  bool get _showCopyExportAction =>
+      actions.onCopyExport != null || _transportActionSurfaceLikely;
+
+  bool get _transportActionSurfaceLikely {
+    final artifact = resolution.artifact;
+    if (artifact == null) {
+      return true;
+    }
+    return artifact.family == ArtifactFamily.genericTurn ||
+        artifact.supports(ArtifactAction.startOnThisDevice) ||
+        artifact.supports(ArtifactAction.exportHandoff);
   }
 
   Widget _buildMobileResolutionActions(BuildContext context) {

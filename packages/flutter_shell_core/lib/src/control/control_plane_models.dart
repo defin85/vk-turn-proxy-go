@@ -17,6 +17,7 @@ enum Capability {
   mobileHostBridge('mobile_host_bridge'),
   platformTunnels('platform_tunnels'),
   providerRuntimeArtifacts('provider-runtime-artifacts'),
+  conferenceRoomActions('conference-room-actions'),
   providerTransportCompatibility('provider-transport-compatibility'),
   runtimeExecutionPlanning('runtime-execution-planning'),
   vpnTransportProfileStore('vpn-transport-profile-store'),
@@ -326,6 +327,94 @@ enum ActionExecutionOwner {
     }
     return ActionExecutionOwner.host;
   }
+}
+
+const String kConferenceRoomURLSummaryField =
+    'summary.conference_room.room_url';
+
+class ConferenceRoomActionsCapability {
+  const ConferenceRoomActionsCapability({
+    required this.version,
+    required this.artifactFamily,
+    this.summaryFields = const <String>[],
+    this.actions = const <ConferenceRoomActionDescriptor>[],
+    this.unsupportedActions = const <ArtifactAction>[],
+    this.redaction = const ArtifactRedactionPolicy(),
+  });
+
+  factory ConferenceRoomActionsCapability.fromJson(Map<String, dynamic> json) {
+    return ConferenceRoomActionsCapability(
+      version: json['version'] as String? ?? '',
+      artifactFamily:
+          ArtifactFamily.fromJson(json['artifact_family'] as String?) ??
+          ArtifactFamily.conferenceRoom,
+      summaryFields: _readStringList(json['summary_fields']),
+      actions: (json['actions'] as List<dynamic>? ?? const <dynamic>[])
+          .map(ConferenceRoomActionDescriptor.tryFromJson)
+          .whereType<ConferenceRoomActionDescriptor>()
+          .toList(growable: false),
+      unsupportedActions:
+          (json['unsupported_actions'] as List<dynamic>? ?? const <dynamic>[])
+              .map((dynamic raw) => ArtifactAction.fromJson(raw as String?))
+              .whereType<ArtifactAction>()
+              .toList(growable: false),
+      redaction: json['redaction'] is Map<String, dynamic>
+          ? ArtifactRedactionPolicy.fromJson(
+              json['redaction'] as Map<String, dynamic>,
+            )
+          : const ArtifactRedactionPolicy(),
+    );
+  }
+
+  final String version;
+  final ArtifactFamily artifactFamily;
+  final List<String> summaryFields;
+  final List<ConferenceRoomActionDescriptor> actions;
+  final List<ArtifactAction> unsupportedActions;
+  final ArtifactRedactionPolicy redaction;
+
+  bool get supportsOpenRoom {
+    if (artifactFamily != ArtifactFamily.conferenceRoom) {
+      return false;
+    }
+    if (!summaryFields.contains(kConferenceRoomURLSummaryField)) {
+      return false;
+    }
+    return actions.any((ConferenceRoomActionDescriptor action) {
+      return action.id == ArtifactAction.openRoom &&
+          action.executionOwner == ActionExecutionOwner.shellExternal &&
+          action.navigationTargetField == kConferenceRoomURLSummaryField;
+    });
+  }
+}
+
+class ConferenceRoomActionDescriptor {
+  const ConferenceRoomActionDescriptor({
+    required this.id,
+    required this.executionOwner,
+    this.navigationTargetField = '',
+  });
+
+  static ConferenceRoomActionDescriptor? tryFromJson(dynamic raw) {
+    if (raw is! Map<String, dynamic>) {
+      return null;
+    }
+    final action = ArtifactAction.fromJson(raw['id'] as String?);
+    if (action == null) {
+      return null;
+    }
+    return ConferenceRoomActionDescriptor(
+      id: action,
+      executionOwner: ActionExecutionOwner.fromJson(
+        raw['execution_owner'] as String?,
+      ),
+      navigationTargetField: raw['navigation_target_field'] as String? ?? '',
+    );
+  }
+
+  final ArtifactAction id;
+  final ActionExecutionOwner executionOwner;
+  final String navigationTargetField;
 }
 
 class ArtifactRedactionPolicy {
@@ -1424,6 +1513,7 @@ class HostInfo {
     required this.capabilities,
     this.platformTunnels = const <PlatformTunnelCapability>[],
     this.providerTransportCompatibility,
+    this.conferenceRoomActions,
     this.transportProfileStore,
     this.vpsProviderCatalogs,
     this.supportedProviderRollout,
@@ -1454,6 +1544,12 @@ class HostInfo {
               json['provider_transport_compatibility'] as Map<String, dynamic>,
             )
           : null,
+      conferenceRoomActions:
+          json['conference_room_actions'] is Map<String, dynamic>
+          ? ConferenceRoomActionsCapability.fromJson(
+              json['conference_room_actions'] as Map<String, dynamic>,
+            )
+          : null,
       transportProfileStore:
           json['transport_profile_store'] is Map<String, dynamic>
           ? TransportProfileStoreCapability.fromJson(
@@ -1480,6 +1576,7 @@ class HostInfo {
   final List<PlatformTunnelCapability> platformTunnels;
   final ProviderTransportCompatibilityCapability?
   providerTransportCompatibility;
+  final ConferenceRoomActionsCapability? conferenceRoomActions;
   final TransportProfileStoreCapability? transportProfileStore;
   final VPSProviderCatalogCapability? vpsProviderCatalogs;
   final SupportedProviderRolloutCapability? supportedProviderRollout;

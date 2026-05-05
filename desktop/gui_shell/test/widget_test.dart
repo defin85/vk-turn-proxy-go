@@ -35,6 +35,30 @@ const BuildIdentity _testHostBuild = BuildIdentity(
   target: 'windows/amd64',
 );
 
+const ConferenceRoomActionsCapability _conferenceRoomActionsCapability =
+    ConferenceRoomActionsCapability(
+      version: '1',
+      artifactFamily: ArtifactFamily.conferenceRoom,
+      summaryFields: <String>[kConferenceRoomURLSummaryField],
+      actions: <ConferenceRoomActionDescriptor>[
+        ConferenceRoomActionDescriptor(
+          id: ArtifactAction.openRoom,
+          executionOwner: ActionExecutionOwner.shellExternal,
+          navigationTargetField: kConferenceRoomURLSummaryField,
+        ),
+      ],
+      unsupportedActions: <ArtifactAction>[
+        ArtifactAction.startOnThisDevice,
+        ArtifactAction.exportHandoff,
+      ],
+      redaction: ArtifactRedactionPolicy(
+        ordinaryReads: 'summary_only',
+        events: 'summary_only',
+        diagnostics: 'summary_only',
+        persistedState: 'summary_only',
+      ),
+    );
+
 const HostInfo _readyHostInfo = HostInfo(
   contractVersion: '1',
   build: _testHostBuild,
@@ -44,6 +68,7 @@ const HostInfo _readyHostInfo = HostInfo(
     Capability.profiles,
     Capability.providerConfigs,
     Capability.providerRuntimeArtifacts,
+    Capability.conferenceRoomActions,
     Capability.runtimeExecutionPlanning,
     Capability.sessions,
     Capability.challenges,
@@ -58,6 +83,7 @@ const HostInfo _readyHostInfo = HostInfo(
       message: 'desktop sidecar does not implement system tunnel startup yet',
     ),
   ],
+  conferenceRoomActions: _conferenceRoomActionsCapability,
 );
 
 const RuntimeExecutionPlan _windowsWintunExecutionPlan = RuntimeExecutionPlan(
@@ -1221,6 +1247,11 @@ void main() {
       scrollable: resolutionsScrollable,
     );
     await tester.pumpAndSettle();
+    expect(
+      find.text('Start on this device', skipOffstage: false),
+      findsNothing,
+    );
+    expect(find.text('Copy handoff', skipOffstage: false), findsNothing);
     await tester.tap(openRoomButton);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));

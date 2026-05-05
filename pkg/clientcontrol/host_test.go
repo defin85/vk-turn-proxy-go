@@ -185,6 +185,9 @@ func TestHostInfoExposesContractVersionAndBuildIdentity(t *testing.T) {
 	if !containsCapability(info.Capabilities, CapabilityProviderRuntimeArtifacts) {
 		t.Fatalf("capabilities = %v, want provider-runtime-artifacts", info.Capabilities)
 	}
+	if !containsCapability(info.Capabilities, CapabilityConferenceRoomActions) {
+		t.Fatalf("capabilities = %v, want conference-room-actions", info.Capabilities)
+	}
 	if !containsCapability(info.Capabilities, CapabilitySupportedProviderRollout) {
 		t.Fatalf("capabilities = %v, want supported-provider-rollout", info.Capabilities)
 	}
@@ -202,6 +205,36 @@ func TestHostInfoExposesContractVersionAndBuildIdentity(t *testing.T) {
 	}
 	if info.PlatformTunnels[0].MissingPrerequisite != PlatformTunnelPrerequisiteHostImplementation {
 		t.Fatalf("platform_tunnels[0].missing_prerequisite = %q, want %q", info.PlatformTunnels[0].MissingPrerequisite, PlatformTunnelPrerequisiteHostImplementation)
+	}
+	conferenceRoomActions := info.ConferenceRoomActions
+	if conferenceRoomActions == nil {
+		t.Fatal("conference_room_actions = nil, want capability metadata")
+	}
+	if conferenceRoomActions.ArtifactFamily != ArtifactFamilyConferenceRoom {
+		t.Fatalf("conference_room_actions.artifact_family = %q, want %q", conferenceRoomActions.ArtifactFamily, ArtifactFamilyConferenceRoom)
+	}
+	if len(conferenceRoomActions.SummaryFields) != 1 || conferenceRoomActions.SummaryFields[0] != conferenceRoomURLSummaryField {
+		t.Fatalf("conference_room_actions.summary_fields = %#v, want room URL summary field", conferenceRoomActions.SummaryFields)
+	}
+	if len(conferenceRoomActions.Actions) != 1 || conferenceRoomActions.Actions[0].ID != ArtifactActionOpenRoom {
+		t.Fatalf("conference_room_actions.actions = %#v, want open_room", conferenceRoomActions.Actions)
+	}
+	if conferenceRoomActions.Actions[0].ExecutionOwner != ActionExecutionOwnerShellExternal {
+		t.Fatalf("conference_room_actions.actions[0].execution_owner = %q, want %q", conferenceRoomActions.Actions[0].ExecutionOwner, ActionExecutionOwnerShellExternal)
+	}
+	if conferenceRoomActions.Actions[0].NavigationTargetField != conferenceRoomURLSummaryField {
+		t.Fatalf("conference_room_actions.actions[0].navigation_target_field = %q, want %q", conferenceRoomActions.Actions[0].NavigationTargetField, conferenceRoomURLSummaryField)
+	}
+	if !containsArtifactAction(conferenceRoomActions.UnsupportedActions, ArtifactActionStartOnThisDevice) {
+		t.Fatalf("conference_room_actions.unsupported_actions = %#v, want start_on_this_device", conferenceRoomActions.UnsupportedActions)
+	}
+	if !containsArtifactAction(conferenceRoomActions.UnsupportedActions, ArtifactActionExportHandoff) {
+		t.Fatalf("conference_room_actions.unsupported_actions = %#v, want export_handoff", conferenceRoomActions.UnsupportedActions)
+	}
+	if conferenceRoomActions.Redaction.OrdinaryReads != string(ArtifactRedactionModeSummaryOnly) ||
+		conferenceRoomActions.Redaction.Events != string(ArtifactRedactionModeSummaryOnly) ||
+		conferenceRoomActions.Redaction.PersistedState != string(ArtifactRedactionModeSummaryOnly) {
+		t.Fatalf("conference_room_actions.redaction = %#v, want summary_only ordinary/events/persisted", conferenceRoomActions.Redaction)
 	}
 }
 
@@ -3205,6 +3238,15 @@ func TestHostStartResolutionResolvesConferenceRoomArtifactWithoutTURNCredentials
 						Input: provider.ProbeArtifactInput{
 							LinkRedacted: "https://room.example.test/join/<redacted:room-token>",
 						},
+						Stages: []provider.ProbeArtifactStage{{
+							Name: "room_join",
+							Response: provider.ProbeArtifactStageResponse{
+								StatusCode: 200,
+								Body: map[string]any{
+									"room_secret": "secret-room-material",
+								},
+							},
+						}},
 						Outcome: provider.ProbeArtifactOutcome{
 							ResultKind: "conference_room",
 							ConferenceRoom: &provider.ProbeArtifactConferenceRoom{
@@ -3216,6 +3258,9 @@ func TestHostStartResolutionResolvesConferenceRoomArtifactWithoutTURNCredentials
 			},
 		})),
 	)
+
+	events, cancel := host.Subscribe(16)
+	defer cancel()
 
 	resolutionState, err := host.StartResolution(context.Background(), StartResolutionRequest{
 		Provider: "roomy",
@@ -3249,6 +3294,51 @@ func TestHostStartResolutionResolvesConferenceRoomArtifactWithoutTURNCredentials
 	}
 	if len(resolved.Artifact.Actions) != 1 || resolved.Artifact.Actions[0].ID != ArtifactActionOpenRoom {
 		t.Fatalf("resolved artifact actions = %#v, want open_room only", resolved.Artifact.Actions)
+	}
+	if resolved.Artifact.Actions[0].ExecutionOwner != ActionExecutionOwnerShellExternal {
+		t.Fatalf("resolved artifact open_room execution_owner = %q, want %q", resolved.Artifact.Actions[0].ExecutionOwner, ActionExecutionOwnerShellExternal)
+	}
+	if len(resolved.Artifact.Actions[0].ExecutionPlans) != 0 {
+		t.Fatalf("resolved artifact open_room execution_plans = %#v, want none", resolved.Artifact.Actions[0].ExecutionPlans)
+	}
+	if len(resolved.Artifact.AccessMethods) != 0 {
+		t.Fatalf("resolved artifact access_methods = %#v, want none for conference_room", resolved.Artifact.AccessMethods)
+	}
+	_, err = host.MaterializeResolution(context.Background(), resolved.ID, RuntimeDefaults{})
+	if !errors.Is(err, errResolutionNotTransportReady) {
+		t.Fatalf("MaterializeResolution() error = %v, want not transport-ready", err)
+	}
+	var materializeActionErr *ResolutionActionError
+	if !errors.As(err, &materializeActionErr) {
+		t.Fatalf("MaterializeResolution() error = %T, want ResolutionActionError", err)
+	}
+	if materializeActionErr.Action != ArtifactActionStartOnThisDevice {
+		t.Fatalf("MaterializeResolution() action = %q, want %q", materializeActionErr.Action, ArtifactActionStartOnThisDevice)
+	}
+	if _, err := host.ExportResolution(resolved.ID); !errors.Is(err, errResolutionExportUnavailable) {
+		t.Fatalf("ExportResolution() error = %v, want export unavailable", err)
+	}
+	resolvedPayload, err := json.Marshal(resolved)
+	if err != nil {
+		t.Fatalf("Marshal(resolved) error = %v", err)
+	}
+	if strings.Contains(string(resolvedPayload), "secret-room-material") {
+		t.Fatalf("resolved payload leaked room secret: %s", resolvedPayload)
+	}
+	resolvedEvent := waitForEvent(t, events, EventResolutionResolved)
+	if resolvedEvent.Artifact == nil {
+		t.Fatal("resolved event artifact = nil, want typed conference_room artifact")
+	}
+	if resolvedEvent.Artifact.Summary.ConferenceRoom == nil ||
+		resolvedEvent.Artifact.Summary.ConferenceRoom.RoomURL != "https://room.example.test/rooms/team-sync" {
+		t.Fatalf("resolved event artifact summary = %#v, want room URL", resolvedEvent.Artifact.Summary.ConferenceRoom)
+	}
+	eventPayload, err := json.Marshal(resolvedEvent)
+	if err != nil {
+		t.Fatalf("Marshal(resolvedEvent) error = %v", err)
+	}
+	if strings.Contains(string(eventPayload), "secret-room-material") {
+		t.Fatalf("resolved event leaked room secret: %s", eventPayload)
 	}
 }
 
@@ -3820,6 +3910,15 @@ func boolRef(value bool) *bool {
 func containsCapability(caps []Capability, want Capability) bool {
 	for _, cap := range caps {
 		if cap == want {
+			return true
+		}
+	}
+	return false
+}
+
+func containsArtifactAction(actions []ArtifactAction, want ArtifactAction) bool {
+	for _, action := range actions {
+		if action == want {
 			return true
 		}
 	}

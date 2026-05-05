@@ -31,6 +31,18 @@ They do not by themselves promote a provider family into the shipped catalog.
 Presets, templates, disabled bootstrap assets, and archived research follow the
 same rule: they are non-authoritative unless the rollout gate is satisfied.
 
+## Conference-room action surface
+
+The host contract exposes a provider-neutral `conference-room-actions`
+capability for resolved `conference_room` artifacts. Its first committed action
+is `open_room`: shells use the typed `summary.conference_room.room_url`
+navigation target and execute it as a shell-external browser handoff.
+
+This action surface is not a provider rollout by itself. It does not promote
+`wb-stream`, does not create a same-device conference executor, and does not
+reinterpret conference-room artifacts as `generic_turn` exports or tunnel
+startup inputs.
+
 Open questions:
 - whether credentials are stable enough for production support
 - whether rebinding resilience must be guaranteed for mobile networks

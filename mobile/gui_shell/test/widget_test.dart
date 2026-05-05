@@ -3292,6 +3292,12 @@ void main() {
     await _openSupportTab(tester);
 
     final openRoomButton = find.text('Open room', skipOffstage: false);
+    expect(
+      find.text('Start on this device', skipOffstage: false),
+      findsNothing,
+    );
+    expect(find.text('Copy handoff', skipOffstage: false), findsNothing);
+    expect(find.text('Share handoff', skipOffstage: false), findsNothing);
     await tester.tap(openRoomButton);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
@@ -5094,6 +5100,30 @@ Finder _profileWorkspaceScrollable() {
   return _workflowScrollable();
 }
 
+const ConferenceRoomActionsCapability _conferenceRoomActionsCapability =
+    ConferenceRoomActionsCapability(
+      version: '1',
+      artifactFamily: ArtifactFamily.conferenceRoom,
+      summaryFields: <String>[kConferenceRoomURLSummaryField],
+      actions: <ConferenceRoomActionDescriptor>[
+        ConferenceRoomActionDescriptor(
+          id: ArtifactAction.openRoom,
+          executionOwner: ActionExecutionOwner.shellExternal,
+          navigationTargetField: kConferenceRoomURLSummaryField,
+        ),
+      ],
+      unsupportedActions: <ArtifactAction>[
+        ArtifactAction.startOnThisDevice,
+        ArtifactAction.exportHandoff,
+      ],
+      redaction: ArtifactRedactionPolicy(
+        ordinaryReads: 'summary_only',
+        events: 'summary_only',
+        diagnostics: 'summary_only',
+        persistedState: 'summary_only',
+      ),
+    );
+
 const HostInfo _readyHostInfo = HostInfo(
   contractVersion: '1',
   build: BuildIdentity(
@@ -5110,6 +5140,7 @@ const HostInfo _readyHostInfo = HostInfo(
     Capability.profiles,
     Capability.providerConfigs,
     Capability.providerRuntimeArtifacts,
+    Capability.conferenceRoomActions,
     Capability.runtimeExecutionPlanning,
     Capability.vpnTransportProfileStore,
     Capability.sessions,
@@ -5117,6 +5148,7 @@ const HostInfo _readyHostInfo = HostInfo(
     Capability.diagnostics,
     Capability.eventStream,
   ],
+  conferenceRoomActions: _conferenceRoomActionsCapability,
   platformTunnels: <PlatformTunnelCapability>[
     PlatformTunnelCapability(
       mode: PlatformTunnelMode.androidVpnService,

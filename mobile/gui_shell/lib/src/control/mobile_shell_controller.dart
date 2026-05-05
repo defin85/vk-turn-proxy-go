@@ -2257,6 +2257,14 @@ class MobileShellController extends ChangeNotifier {
         notice = _copy.resolutionNoLongerAvailable(resolutionId);
         return;
       }
+      if (action == ArtifactAction.openRoom &&
+          !hostSupportsConferenceRoomActions) {
+        notice = _copy.resolutionDoesNotAdvertiseAction(
+          resolutionId,
+          action.label,
+        );
+        return;
+      }
       final advertised = resolution.artifact?.action(action);
       if (advertised == null ||
           advertised.executionOwner != ActionExecutionOwner.shellExternal) {
@@ -4015,6 +4023,15 @@ class MobileShellController extends ChangeNotifier {
           Capability.providerTransportCompatibility,
         ) &&
         info.providerTransportCompatibility != null;
+  }
+
+  bool get hostSupportsConferenceRoomActions {
+    final info = hostConnection?.info;
+    if (info == null) {
+      return false;
+    }
+    return info.capabilities.contains(Capability.conferenceRoomActions) &&
+        (info.conferenceRoomActions?.supportsOpenRoom ?? false);
   }
 
   RuntimeExecutionPlanDescriptor?

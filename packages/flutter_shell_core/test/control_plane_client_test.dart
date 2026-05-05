@@ -70,6 +70,7 @@ void main() {
                   'event_stream',
                   'desktop_sidecar',
                   'platform_tunnels',
+                  'conference-room-actions',
                   'provider-transport-compatibility',
                   'runtime-execution-planning',
                   'vpn-transport-profile-store',
@@ -96,6 +97,31 @@ void main() {
                     'artifact_family_actions',
                     'verification_evidence',
                   ],
+                },
+                'conference_room_actions': <String, dynamic>{
+                  'version': '1',
+                  'artifact_family': 'conference_room',
+                  'summary_fields': <String>[
+                    'summary.conference_room.room_url',
+                  ],
+                  'actions': <Map<String, dynamic>>[
+                    <String, dynamic>{
+                      'id': 'open_room',
+                      'execution_owner': 'shell_external',
+                      'navigation_target_field':
+                          'summary.conference_room.room_url',
+                    },
+                  ],
+                  'unsupported_actions': <String>[
+                    'start_on_this_device',
+                    'export_handoff',
+                  ],
+                  'redaction': <String, dynamic>{
+                    'ordinary_reads': 'summary_only',
+                    'events': 'summary_only',
+                    'diagnostics': 'summary_only',
+                    'persisted_state': 'summary_only',
+                  },
                 },
                 'provider_transport_compatibility': <String, dynamic>{
                   'version': '1',
@@ -704,6 +730,23 @@ void main() {
       expect(info.capabilities, contains(Capability.vpnTransportProfileStore));
       expect(info.capabilities, contains(Capability.vpsProviderCatalogs));
       expect(info.capabilities, contains(Capability.supportedProviderRollout));
+      expect(info.capabilities, contains(Capability.conferenceRoomActions));
+      expect(
+        info.conferenceRoomActions?.artifactFamily,
+        ArtifactFamily.conferenceRoom,
+      );
+      expect(info.conferenceRoomActions?.supportsOpenRoom, isTrue);
+      expect(
+        info.conferenceRoomActions?.unsupportedActions,
+        containsAll(<ArtifactAction>[
+          ArtifactAction.startOnThisDevice,
+          ArtifactAction.exportHandoff,
+        ]),
+      );
+      expect(
+        info.conferenceRoomActions?.redaction.ordinaryReads,
+        'summary_only',
+      );
       expect(
         info.supportedProviderRollout?.catalogOwner,
         'app_owned_shell_core',
@@ -1046,6 +1089,18 @@ void main() {
       );
       expect(
         resolutions.single.artifact?.summary.conferenceRoom?.roomUrl,
+        'https://room.example.test/rooms/team-sync',
+      );
+      expect(
+        resolutions.single.supportsAction(ArtifactAction.openRoom),
+        isTrue,
+      );
+      expect(
+        resolutions.single.supportsAction(ArtifactAction.startOnThisDevice),
+        isFalse,
+      );
+      expect(
+        resolutions.single.externalTargetUrl(ArtifactAction.openRoom),
         'https://room.example.test/rooms/team-sync',
       );
     },

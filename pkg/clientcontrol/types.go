@@ -17,6 +17,7 @@ const (
 	CapabilityMobileHostBridge         Capability = "mobile_host_bridge"
 	CapabilityPlatformTunnels          Capability = "platform_tunnels"
 	CapabilityProviderRuntimeArtifacts Capability = "provider-runtime-artifacts"
+	CapabilityConferenceRoomActions    Capability = "conference-room-actions"
 	CapabilityProviderTransportCompat  Capability = "provider-transport-compatibility"
 	CapabilityRuntimeExecutionPlanning Capability = "runtime-execution-planning"
 	CapabilityVPNTransportProfileStore Capability = "vpn-transport-profile-store"
@@ -188,6 +189,7 @@ type HostInfo struct {
 	PlatformTunnels                []PlatformTunnelCapability                `json:"platform_tunnels,omitempty"`
 	TransportProfileStore          *TransportProfileStoreCapability          `json:"transport_profile_store,omitempty"`
 	ProviderTransportCompatibility *ProviderTransportCompatibilityCapability `json:"provider_transport_compatibility,omitempty"`
+	ConferenceRoomActions          *ConferenceRoomActionsCapability          `json:"conference_room_actions,omitempty"`
 	VPSProviderCatalogs            *VPSProviderCatalogCapability             `json:"vps_provider_catalogs,omitempty"`
 	SupportedProviderRollout       *SupportedProviderRolloutCapability       `json:"supported_provider_rollout,omitempty"`
 }

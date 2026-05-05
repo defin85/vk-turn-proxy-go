@@ -32,6 +32,30 @@ const BuildIdentity _testHostBuild = BuildIdentity(
   target: 'windows/amd64',
 );
 
+const ConferenceRoomActionsCapability _conferenceRoomActionsCapability =
+    ConferenceRoomActionsCapability(
+      version: '1',
+      artifactFamily: ArtifactFamily.conferenceRoom,
+      summaryFields: <String>[kConferenceRoomURLSummaryField],
+      actions: <ConferenceRoomActionDescriptor>[
+        ConferenceRoomActionDescriptor(
+          id: ArtifactAction.openRoom,
+          executionOwner: ActionExecutionOwner.shellExternal,
+          navigationTargetField: kConferenceRoomURLSummaryField,
+        ),
+      ],
+      unsupportedActions: <ArtifactAction>[
+        ArtifactAction.startOnThisDevice,
+        ArtifactAction.exportHandoff,
+      ],
+      redaction: ArtifactRedactionPolicy(
+        ordinaryReads: 'summary_only',
+        events: 'summary_only',
+        diagnostics: 'summary_only',
+        persistedState: 'summary_only',
+      ),
+    );
+
 const HostInfo _readyHostInfo = HostInfo(
   contractVersion: '1',
   build: _testHostBuild,
@@ -41,6 +65,7 @@ const HostInfo _readyHostInfo = HostInfo(
     Capability.profiles,
     Capability.providerConfigs,
     Capability.providerRuntimeArtifacts,
+    Capability.conferenceRoomActions,
     Capability.runtimeExecutionPlanning,
     Capability.sessions,
     Capability.challenges,
@@ -55,6 +80,7 @@ const HostInfo _readyHostInfo = HostInfo(
       message: 'desktop sidecar does not implement system tunnel startup yet',
     ),
   ],
+  conferenceRoomActions: _conferenceRoomActionsCapability,
 );
 
 const RuntimeExecutionPlan _windowsWintunExecutionPlan = RuntimeExecutionPlan(
@@ -1116,6 +1142,39 @@ void main() {
         'https://room.example.test/rooms/team-sync',
       ]);
       expect(controller.notice, contains('Opened action "Open room"'));
+    },
+  );
+
+  test(
+    'controller fails closed when conference-room actions are not host-capable',
+    () async {
+      final api = _FakeControlPlaneApi(
+        profiles: const <ProfileRecord>[],
+        resolutions: <ResolutionRecord>[_conferenceRoomResolutionRecord()],
+        sessions: const <SessionRecord>[],
+      );
+      final browser = _FakeDesktopBrowserLauncher();
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(const <HostConnectionResult>[
+          HostConnectionResult(
+            state: HostLifecycleState.ready,
+            message: 'ready',
+            info: _readyWindowsWintunHostInfo,
+          ),
+        ]),
+        browserLauncher: browser,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.openResolutionExternalAction(
+        controller.resolutions.single.id,
+        ArtifactAction.openRoom,
+      );
+
+      expect(browser.openedUrls, isEmpty);
+      expect(controller.notice, contains('does not advertise action'));
     },
   );
 

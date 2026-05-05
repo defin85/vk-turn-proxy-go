@@ -213,6 +213,15 @@ class DesktopShellController extends ChangeNotifier {
         info.providerTransportCompatibility != null;
   }
 
+  bool get hostSupportsConferenceRoomActions {
+    final info = hostConnection?.info;
+    if (info == null) {
+      return false;
+    }
+    return info.capabilities.contains(Capability.conferenceRoomActions) &&
+        (info.conferenceRoomActions?.supportsOpenRoom ?? false);
+  }
+
   bool get systemTunnelSupported =>
       platformTunnels.any((PlatformTunnelCapability capability) {
         return capability.available;
@@ -1269,6 +1278,14 @@ class DesktopShellController extends ChangeNotifier {
       final resolution = _resolutionById(resolutionId);
       if (resolution == null) {
         notice = _copy.resolutionNoLongerAvailable(resolutionId);
+        return;
+      }
+      if (action == ArtifactAction.openRoom &&
+          !hostSupportsConferenceRoomActions) {
+        notice = _copy.resolutionDoesNotAdvertiseAction(
+          resolutionId,
+          action.label,
+        );
         return;
       }
       final advertised = resolution.artifact?.action(action);
