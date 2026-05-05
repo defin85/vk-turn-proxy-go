@@ -20,7 +20,8 @@ enum Capability {
   providerTransportCompatibility('provider-transport-compatibility'),
   runtimeExecutionPlanning('runtime-execution-planning'),
   vpnTransportProfileStore('vpn-transport-profile-store'),
-  vpsProviderCatalogs('vps-provider-catalogs');
+  vpsProviderCatalogs('vps-provider-catalogs'),
+  supportedProviderRollout('supported-provider-rollout');
 
   const Capability(this.value);
 
@@ -34,6 +35,122 @@ enum Capability {
     }
     return null;
   }
+}
+
+enum ProviderRolloutState {
+  shipped('shipped'),
+  planned('planned'),
+  pendingRollout('pending_rollout'),
+  unknown('');
+
+  const ProviderRolloutState(this.value);
+
+  final String value;
+
+  bool get isShipped => this == ProviderRolloutState.shipped;
+
+  static ProviderRolloutState fromJson(String? raw) {
+    for (final state in values) {
+      if (state != ProviderRolloutState.unknown && state.value == raw) {
+        return state;
+      }
+    }
+    return ProviderRolloutState.unknown;
+  }
+}
+
+class ProviderRolloutEntry {
+  const ProviderRolloutEntry({required this.providerId, required this.state});
+
+  factory ProviderRolloutEntry.fromJson(Map<String, dynamic> json) {
+    return ProviderRolloutEntry(
+      providerId: json['provider_id'] as String? ?? '',
+      state: ProviderRolloutState.fromJson(json['state'] as String?),
+    );
+  }
+
+  final String providerId;
+  final ProviderRolloutState state;
+
+  bool get isShipped => state.isShipped;
+}
+
+class SupportedProviderRolloutCapability {
+  const SupportedProviderRolloutCapability({
+    required this.version,
+    required this.catalogOwner,
+    required this.providerDescriptorRole,
+    required this.providers,
+    required this.promotionRequirements,
+  });
+
+  factory SupportedProviderRolloutCapability.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return SupportedProviderRolloutCapability(
+      version: json['version'] as String? ?? '',
+      catalogOwner: json['catalog_owner'] as String? ?? '',
+      providerDescriptorRole: json['provider_descriptor_role'] as String? ?? '',
+      providers: (json['providers'] as List<dynamic>? ?? const <dynamic>[])
+          .whereType<Map<String, dynamic>>()
+          .map(ProviderRolloutEntry.fromJson)
+          .toList(growable: false),
+      promotionRequirements:
+          (json['promotion_requirements'] as List<dynamic>? ??
+                  const <dynamic>[])
+              .map((dynamic raw) => raw as String? ?? '')
+              .where((String raw) => raw.isNotEmpty)
+              .toList(growable: false),
+    );
+  }
+
+  final String version;
+  final String catalogOwner;
+  final String providerDescriptorRole;
+  final List<ProviderRolloutEntry> providers;
+  final List<String> promotionRequirements;
+}
+
+const List<String> kSupportedProviderPromotionRequirements = <String>[
+  'provider_contract',
+  'artifact_family_actions',
+  'host_readiness',
+  'desktop_shell_readiness',
+  'mobile_shell_readiness',
+  'verification_evidence',
+];
+
+const List<ProviderRolloutEntry> kProviderRolloutCatalog =
+    <ProviderRolloutEntry>[
+      ProviderRolloutEntry(
+        providerId: 'vk',
+        state: ProviderRolloutState.shipped,
+      ),
+      ProviderRolloutEntry(
+        providerId: 'generic-turn',
+        state: ProviderRolloutState.shipped,
+      ),
+      ProviderRolloutEntry(
+        providerId: 'wb-stream',
+        state: ProviderRolloutState.planned,
+      ),
+      ProviderRolloutEntry(
+        providerId: 'smarthome',
+        state: ProviderRolloutState.planned,
+      ),
+    ];
+
+ProviderRolloutEntry? providerRolloutEntryFor(String providerId) {
+  final normalized = providerId.trim().toLowerCase();
+  if (normalized.isEmpty) {
+    return null;
+  }
+  for (final entry in kProviderRolloutCatalog) {
+    if (entry.providerId.trim().toLowerCase() == normalized) {
+      return entry;
+    }
+  }
+  return null;
 }
 
 enum ProviderInputKind {
@@ -1309,6 +1426,7 @@ class HostInfo {
     this.providerTransportCompatibility,
     this.transportProfileStore,
     this.vpsProviderCatalogs,
+    this.supportedProviderRollout,
   });
 
   factory HostInfo.fromJson(Map<String, dynamic> json) {
@@ -1347,6 +1465,12 @@ class HostInfo {
               json['vps_provider_catalogs'] as Map<String, dynamic>,
             )
           : null,
+      supportedProviderRollout:
+          json['supported_provider_rollout'] is Map<String, dynamic>
+          ? SupportedProviderRolloutCapability.fromJson(
+              json['supported_provider_rollout'] as Map<String, dynamic>,
+            )
+          : null,
     );
   }
 
@@ -1358,6 +1482,7 @@ class HostInfo {
   providerTransportCompatibility;
   final TransportProfileStoreCapability? transportProfileStore;
   final VPSProviderCatalogCapability? vpsProviderCatalogs;
+  final SupportedProviderRolloutCapability? supportedProviderRollout;
 
   String get version => contractVersion;
 }
@@ -2972,9 +3097,13 @@ class SupportedProviderAvailability {
 }
 
 class SupportedProviderDefinition {
-  const SupportedProviderDefinition({required this.id});
+  const SupportedProviderDefinition({
+    required this.id,
+    this.rolloutState = ProviderRolloutState.shipped,
+  });
 
   final String id;
+  final ProviderRolloutState rolloutState;
 
   String get title => switch (id.trim().toLowerCase()) {
     'vk' => t.sharedCatalogSupportedProviderVkTitle,
@@ -2999,6 +3128,14 @@ class SupportedProviderDefinition {
     Iterable<ProviderDescriptor> descriptors,
   ) {
     final providerId = id.trim().toLowerCase();
+    final rollout = providerRolloutEntryFor(providerId);
+    if (!rolloutState.isShipped || rollout == null || !rollout.isShipped) {
+      return SupportedProviderAvailability(
+        state: SupportedProviderAvailabilityState.providerUnavailable,
+        message:
+            'The $title provider family is not promoted into shipped support.',
+      );
+    }
     for (final descriptor in descriptors) {
       if (descriptor.id.trim().toLowerCase() != providerId) {
         continue;
@@ -3250,20 +3387,26 @@ class ProviderPreset {
     Iterable<ProviderDescriptor> descriptors,
   ) {
     final providerId = provider.trim().toLowerCase();
-    for (final descriptor in descriptors) {
-      if (descriptor.id.trim().toLowerCase() != providerId) {
-        continue;
-      }
+    final supportedProvider = supportedProviderDefinitionFor(providerId);
+    if (supportedProvider == null) {
       return ProviderPresetAvailability(
-        state: ProviderPresetAvailabilityState.available,
-        message: '',
-        descriptor: descriptor,
+        state: ProviderPresetAvailabilityState.providerUnavailable,
+        message:
+            'The $title template family is not promoted into shipped support.',
+      );
+    }
+    final availability = supportedProvider.availabilityFor(descriptors);
+    if (!availability.isAvailable) {
+      return ProviderPresetAvailability(
+        state: ProviderPresetAvailabilityState.providerUnavailable,
+        message: availability.message,
+        descriptor: availability.descriptor,
       );
     }
     return ProviderPresetAvailability(
-      state: ProviderPresetAvailabilityState.providerUnavailable,
-      message:
-          'The connected host does not advertise the $title provider family yet.',
+      state: ProviderPresetAvailabilityState.available,
+      message: '',
+      descriptor: availability.descriptor,
     );
   }
 

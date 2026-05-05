@@ -386,6 +386,7 @@ func (h *Host) Info() HostInfo {
 		CapabilityProfiles,
 		CapabilityProviderConfigs,
 		CapabilityProviderRuntimeArtifacts,
+		CapabilitySupportedProviderRollout,
 		CapabilityProviderTransportCompat,
 		CapabilityRuntimeExecutionPlanning,
 		CapabilitySessions,
@@ -402,6 +403,7 @@ func (h *Host) Info() HostInfo {
 	}
 	platformTunnels := h.platformTunnelCapabilitiesWithTransportProfileStateLocked()
 	providerTransportCompatibility := defaultProviderTransportCompatibilityCapability()
+	supportedProviderRollout := defaultSupportedProviderRolloutCapability()
 	h.mu.Unlock()
 
 	return HostInfo{
@@ -413,6 +415,7 @@ func (h *Host) Info() HostInfo {
 		TransportProfileStore:          cloneTransportProfileStoreCapability(transportProfileStore),
 		ProviderTransportCompatibility: cloneProviderTransportCompatibilityCapability(&providerTransportCompatibility),
 		VPSProviderCatalogs:            cloneVPSProviderCatalogCapability(vpsProviderCatalogs),
+		SupportedProviderRollout:       cloneSupportedProviderRolloutCapability(&supportedProviderRollout),
 	}
 }
 

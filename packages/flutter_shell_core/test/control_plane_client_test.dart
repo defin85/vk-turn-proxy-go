@@ -74,7 +74,29 @@ void main() {
                   'runtime-execution-planning',
                   'vpn-transport-profile-store',
                   'vps-provider-catalogs',
+                  'supported-provider-rollout',
                 ],
+                'supported_provider_rollout': <String, dynamic>{
+                  'version': '1',
+                  'catalog_owner': 'app_owned_shell_core',
+                  'provider_descriptor_role': 'runtime_overlay',
+                  'providers': <Map<String, dynamic>>[
+                    <String, dynamic>{'provider_id': 'vk', 'state': 'shipped'},
+                    <String, dynamic>{
+                      'provider_id': 'generic-turn',
+                      'state': 'shipped',
+                    },
+                    <String, dynamic>{
+                      'provider_id': 'wb-stream',
+                      'state': 'planned',
+                    },
+                  ],
+                  'promotion_requirements': <String>[
+                    'provider_contract',
+                    'artifact_family_actions',
+                    'verification_evidence',
+                  ],
+                },
                 'provider_transport_compatibility': <String, dynamic>{
                   'version': '1',
                   'candidate_endpoint':
@@ -681,6 +703,35 @@ void main() {
       expect(info.capabilities, contains(Capability.runtimeExecutionPlanning));
       expect(info.capabilities, contains(Capability.vpnTransportProfileStore));
       expect(info.capabilities, contains(Capability.vpsProviderCatalogs));
+      expect(info.capabilities, contains(Capability.supportedProviderRollout));
+      expect(
+        info.supportedProviderRollout?.catalogOwner,
+        'app_owned_shell_core',
+      );
+      expect(
+        info.supportedProviderRollout?.providerDescriptorRole,
+        'runtime_overlay',
+      );
+      expect(
+        info.supportedProviderRollout?.providers
+            .where((entry) => entry.isShipped)
+            .map((entry) => entry.providerId),
+        <String>['vk', 'generic-turn'],
+      );
+      expect(
+        info.supportedProviderRollout?.providers
+            .firstWhere((entry) => entry.providerId == 'wb-stream')
+            .state,
+        ProviderRolloutState.planned,
+      );
+      expect(
+        info.supportedProviderRollout?.promotionRequirements,
+        containsAll(<String>[
+          'provider_contract',
+          'artifact_family_actions',
+          'verification_evidence',
+        ]),
+      );
       expect(
         info.providerTransportCompatibility?.candidateEndpoint,
         '/v1/provider-transport-compatibility/candidates',

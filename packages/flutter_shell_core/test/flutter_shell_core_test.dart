@@ -265,6 +265,73 @@ void main() {
     expect(seeded.provider, 'vk');
   });
 
+  test(
+    'provider rollout gate keeps planned families out of shipped support',
+    () {
+      const descriptors = <ProviderDescriptor>[
+        ProviderDescriptor(
+          id: 'wb-stream',
+          displayName: 'WB Stream',
+          inputKind: ProviderInputKind.link,
+          authPosture: ProviderAuthPosture.guestOrAccount,
+          browserPolicy: ProviderBrowserPolicy.externalRequired,
+        ),
+      ];
+      const plannedProvider = SupportedProviderDefinition(
+        id: 'wb-stream',
+        rolloutState: ProviderRolloutState.planned,
+      );
+      const speculativePreset = ProviderPreset(
+        id: 'wb-stream-default',
+        provider: 'wb-stream',
+      );
+
+      final plannedAvailability = plannedProvider.availabilityFor(descriptors);
+      final presetAvailability = speculativePreset.availabilityFor(descriptors);
+
+      expect(
+        providerRolloutEntryFor('vk')?.state,
+        ProviderRolloutState.shipped,
+      );
+      expect(
+        providerRolloutEntryFor('generic-turn')?.state,
+        ProviderRolloutState.shipped,
+      );
+      expect(
+        providerRolloutEntryFor('wb-stream')?.state,
+        ProviderRolloutState.planned,
+      );
+      expect(
+        providerRolloutEntryFor('smarthome')?.state,
+        ProviderRolloutState.planned,
+      );
+      expect(supportedProviderDefinitionFor('wb-stream'), isNull);
+      expect(kSupportedProviderCatalog.map((provider) => provider.id), <String>[
+        'vk',
+        'generic-turn',
+      ]);
+      expect(
+        kProviderPresetCatalog.map((preset) => preset.provider),
+        everyElement(isIn(<String>{'vk', 'generic-turn'})),
+      );
+      expect(
+        kSupportedProviderPromotionRequirements,
+        containsAll(<String>[
+          'provider_contract',
+          'artifact_family_actions',
+          'host_readiness',
+          'desktop_shell_readiness',
+          'mobile_shell_readiness',
+          'verification_evidence',
+        ]),
+      );
+      expect(plannedAvailability.isAvailable, isFalse);
+      expect(plannedAvailability.message, contains('not promoted'));
+      expect(presetAvailability.isAvailable, isFalse);
+      expect(presetAvailability.message, contains('not promoted'));
+    },
+  );
+
   test('build identity keeps shared labels and round-trips through json', () {
     const build = BuildIdentity(
       product: 'RelayDock',

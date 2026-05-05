@@ -21,6 +21,7 @@ const (
 	CapabilityRuntimeExecutionPlanning Capability = "runtime-execution-planning"
 	CapabilityVPNTransportProfileStore Capability = "vpn-transport-profile-store"
 	CapabilityVPSProviderCatalogs      Capability = "vps-provider-catalogs"
+	CapabilitySupportedProviderRollout Capability = "supported-provider-rollout"
 )
 
 type TransportMode string
@@ -188,6 +189,7 @@ type HostInfo struct {
 	TransportProfileStore          *TransportProfileStoreCapability          `json:"transport_profile_store,omitempty"`
 	ProviderTransportCompatibility *ProviderTransportCompatibilityCapability `json:"provider_transport_compatibility,omitempty"`
 	VPSProviderCatalogs            *VPSProviderCatalogCapability             `json:"vps_provider_catalogs,omitempty"`
+	SupportedProviderRollout       *SupportedProviderRolloutCapability       `json:"supported_provider_rollout,omitempty"`
 }
 
 type BuildIdentity struct {

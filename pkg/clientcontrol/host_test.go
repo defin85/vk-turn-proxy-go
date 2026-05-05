@@ -185,6 +185,9 @@ func TestHostInfoExposesContractVersionAndBuildIdentity(t *testing.T) {
 	if !containsCapability(info.Capabilities, CapabilityProviderRuntimeArtifacts) {
 		t.Fatalf("capabilities = %v, want provider-runtime-artifacts", info.Capabilities)
 	}
+	if !containsCapability(info.Capabilities, CapabilitySupportedProviderRollout) {
+		t.Fatalf("capabilities = %v, want supported-provider-rollout", info.Capabilities)
+	}
 	if !containsCapability(info.Capabilities, CapabilityRuntimeExecutionPlanning) {
 		t.Fatalf("capabilities = %v, want runtime-execution-planning", info.Capabilities)
 	}
@@ -199,6 +202,59 @@ func TestHostInfoExposesContractVersionAndBuildIdentity(t *testing.T) {
 	}
 	if info.PlatformTunnels[0].MissingPrerequisite != PlatformTunnelPrerequisiteHostImplementation {
 		t.Fatalf("platform_tunnels[0].missing_prerequisite = %q, want %q", info.PlatformTunnels[0].MissingPrerequisite, PlatformTunnelPrerequisiteHostImplementation)
+	}
+}
+
+func TestHostInfoExposesSupportedProviderRolloutGate(t *testing.T) {
+	registry := provider.NewRegistry(
+		fakeAdapter{name: "vk"},
+		fakeAdapter{name: "generic-turn"},
+		fakeAdapter{name: "wb-stream"},
+	)
+	host := New(WithRegistry(registry), WithBuildIdentity(testBuildIdentity()))
+
+	providers := host.Providers()
+	if !hasProviderDescriptor(providers, "wb-stream") {
+		t.Fatalf("providers = %+v, want runtime descriptor for wb-stream fixture", providers)
+	}
+
+	info := host.Info()
+	if !containsCapability(info.Capabilities, CapabilitySupportedProviderRollout) {
+		t.Fatalf("capabilities = %v, want supported-provider-rollout", info.Capabilities)
+	}
+	rollout := info.SupportedProviderRollout
+	if rollout == nil {
+		t.Fatal("supported_provider_rollout = nil, want capability metadata")
+	}
+	if rollout.CatalogOwner != "app_owned_shell_core" {
+		t.Fatalf("catalog_owner = %q, want app_owned_shell_core", rollout.CatalogOwner)
+	}
+	if rollout.ProviderDescriptorRole != "runtime_overlay" {
+		t.Fatalf("provider_descriptor_role = %q, want runtime_overlay", rollout.ProviderDescriptorRole)
+	}
+	if got := rolloutStateForProvider(rollout.Providers, "vk"); got != ProviderRolloutStateShipped {
+		t.Fatalf("vk rollout state = %q, want shipped", got)
+	}
+	if got := rolloutStateForProvider(rollout.Providers, "generic-turn"); got != ProviderRolloutStateShipped {
+		t.Fatalf("generic-turn rollout state = %q, want shipped", got)
+	}
+	if got := rolloutStateForProvider(rollout.Providers, "wb-stream"); got != ProviderRolloutStatePlanned {
+		t.Fatalf("wb-stream rollout state = %q, want planned", got)
+	}
+	if got := rolloutStateForProvider(rollout.Providers, "smarthome"); got != ProviderRolloutStatePlanned {
+		t.Fatalf("smarthome rollout state = %q, want planned", got)
+	}
+	if !containsRolloutRequirement(
+		rollout.PromotionRequirements,
+		ProviderRolloutRequirementProviderContract,
+	) || !containsRolloutRequirement(
+		rollout.PromotionRequirements,
+		ProviderRolloutRequirementArtifactFamilyActions,
+	) || !containsRolloutRequirement(
+		rollout.PromotionRequirements,
+		ProviderRolloutRequirementVerificationEvidence,
+	) {
+		t.Fatalf("promotion requirements = %v, want contract, action surface, and evidence gates", rollout.PromotionRequirements)
 	}
 }
 
@@ -3764,6 +3820,39 @@ func boolRef(value bool) *bool {
 func containsCapability(caps []Capability, want Capability) bool {
 	for _, cap := range caps {
 		if cap == want {
+			return true
+		}
+	}
+	return false
+}
+
+func hasProviderDescriptor(descriptors []ProviderDescriptor, providerID string) bool {
+	for _, descriptor := range descriptors {
+		if descriptor.ID == providerID {
+			return true
+		}
+	}
+	return false
+}
+
+func rolloutStateForProvider(
+	descriptors []ProviderRolloutDescriptor,
+	providerID string,
+) ProviderRolloutState {
+	for _, descriptor := range descriptors {
+		if descriptor.ProviderID == providerID {
+			return descriptor.State
+		}
+	}
+	return ""
+}
+
+func containsRolloutRequirement(
+	requirements []ProviderRolloutRequirement,
+	want ProviderRolloutRequirement,
+) bool {
+	for _, requirement := range requirements {
+		if requirement == want {
 			return true
 		}
 	}
