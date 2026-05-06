@@ -11,6 +11,9 @@ Provider-specific contracts live next to their fixtures.
 The first committed contract is `test/compatibility/vk/README.md`, which defines the VK call debug contour and the schema for sanitized fixtures.
 Runtime acceptance scaffolding for the supported VK-backed client slice lives in
 `test/compatibility/vk/runtime/README.md`.
+The WB Stream provider URL-shape contract lives in
+`test/compatibility/wbstream/README.md` and stays limited to external
+`conference_room` open-room handoff.
 
 Current transport support claims remain pair-specific:
 - `udp -> udp`

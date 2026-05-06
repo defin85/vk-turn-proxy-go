@@ -303,6 +303,8 @@ func providerDisplayNameTranslations(providerID string) map[string]string {
 	switch strings.TrimSpace(strings.ToLower(providerID)) {
 	case "vk":
 		return map[string]string{"ru": "Звонки VK"}
+	case "wb-stream":
+		return map[string]string{"ru": "WB Stream"}
 	default:
 		return nil
 	}
@@ -317,6 +319,10 @@ func providerDescriptionTranslations(providerID string) map[string]string {
 	case "generic-turn":
 		return map[string]string{
 			"ru": "Статическая передача TURN-параметров для детерминированного тестирования транспорта и запуска рантайма под управлением оператора.",
+		}
+	case "wb-stream":
+		return map[string]string{
+			"ru": "Открытие комнат stream.wb.ru во внешнем браузере или приложении без локального запуска транспорта.",
 		}
 	default:
 		return nil

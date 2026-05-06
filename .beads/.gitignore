@@ -3,10 +3,20 @@ dolt/
 dolt-access.lock
 
 # Runtime files
+.env
 bd.sock
 bd.sock.startlock
 sync-state.json
+export-state.json
 last-touched
+dolt-server.pid
+dolt-server.log
+dolt-server.lock
+dolt-server.port
+dolt-server.activity
+daemon.*
+*.lock
+.beads-credential-key
 
 # Local version tracking (prevents upgrade notification spam after git ops)
 .local_version
@@ -21,8 +31,10 @@ redirect
 .jsonl.lock
 sync_base.jsonl
 export-state/
+backup/
 
 # Ephemeral store (SQLite - wisps/molecules, intentionally not versioned)
+embeddeddolt/
 ephemeral.sqlite3
 ephemeral.sqlite3-journal
 ephemeral.sqlite3-wal
@@ -40,6 +52,7 @@ daemon.lock
 daemon.log
 daemon-*.log.gz
 daemon.pid
+*.corrupt.backup/
 beads.base.jsonl
 beads.base.meta.json
 beads.left.jsonl

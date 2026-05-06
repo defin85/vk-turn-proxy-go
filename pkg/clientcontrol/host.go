@@ -18,6 +18,7 @@ import (
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider/genericturn"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider/vk"
+	"github.com/defin85/vk-turn-proxy-go/internal/provider/wbstream"
 	"github.com/defin85/vk-turn-proxy-go/internal/providerprompt"
 	"github.com/defin85/vk-turn-proxy-go/internal/runstage"
 	"github.com/defin85/vk-turn-proxy-go/internal/session"
@@ -193,7 +194,7 @@ type challengeAction struct {
 func New(opts ...Option) *Host {
 	cfg := hostConfig{
 		logger:                   slog.Default(),
-		registry:                 provider.NewRegistry(genericturn.New(), vk.New()),
+		registry:                 provider.NewRegistry(genericturn.New(), vk.New(), wbstream.New()),
 		build:                    toBuildIdentity(buildinfo.Current(buildinfo.Options{Role: "clientd"})),
 		now:                      time.Now,
 		newID:                    observe.NewSessionID,
@@ -213,7 +214,7 @@ func New(opts ...Option) *Host {
 		cfg.logger = slog.Default()
 	}
 	if cfg.registry == nil {
-		cfg.registry = provider.NewRegistry(genericturn.New(), vk.New())
+		cfg.registry = provider.NewRegistry(genericturn.New(), vk.New(), wbstream.New())
 	}
 	if cfg.now == nil {
 		cfg.now = time.Now

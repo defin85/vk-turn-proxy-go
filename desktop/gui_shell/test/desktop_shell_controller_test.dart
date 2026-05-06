@@ -1139,7 +1139,7 @@ void main() {
       );
 
       expect(browser.openedUrls, <String>[
-        'https://room.example.test/rooms/team-sync',
+        'https://stream.wb.ru/rooms/team-sync',
       ]);
       expect(controller.notice, contains('Opened action "Open room"'));
     },
@@ -2805,11 +2805,11 @@ ResolutionRecord _conferenceRoomResolutionRecord({
 }) {
   return ResolutionRecord(
     id: id,
-    provider: 'roomy',
+    provider: 'wb-stream',
     input: const ResolutionInput(
-      provider: 'roomy',
+      provider: 'wb-stream',
       kind: ProviderInputKind.link,
-      linkRedacted: 'https://room.example.test/join/<redacted:room-token>',
+      linkRedacted: 'https://stream.wb.ru/rooms/<redacted:wb-stream-room-link>',
     ),
     state: ResolutionState.resolved,
     artifact: const ResolutionArtifactRecord(
@@ -2822,7 +2822,7 @@ ResolutionRecord _conferenceRoomResolutionRecord({
       ],
       summary: ResolutionArtifactSummary(
         conferenceRoom: ConferenceRoomArtifactSummary(
-          roomUrl: 'https://room.example.test/rooms/team-sync',
+          roomUrl: 'https://stream.wb.ru/rooms/team-sync',
         ),
       ),
     ),

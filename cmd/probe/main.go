@@ -15,6 +15,7 @@ import (
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider/genericturn"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider/vk"
+	"github.com/defin85/vk-turn-proxy-go/internal/provider/wbstream"
 	"github.com/defin85/vk-turn-proxy-go/internal/providerprompt"
 )
 
@@ -33,7 +34,7 @@ func main() {
 }
 
 func newRegistry() *provider.Registry {
-	return provider.NewRegistry(genericturn.New(), vk.New())
+	return provider.NewRegistry(genericturn.New(), vk.New(), wbstream.New())
 }
 
 func runProbe(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, args []string, registry *provider.Registry) int {

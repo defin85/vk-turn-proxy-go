@@ -71,6 +71,17 @@ func TestMobileProviderRegistryAdvertisesEmbeddedBrowserOnlyForApprovedProviders
 	if genericDescriptor.BrowserPolicy != provider.ProviderBrowserPolicyNotRequired {
 		t.Fatalf("generic-turn browser_policy = %q, want %q", genericDescriptor.BrowserPolicy, provider.ProviderBrowserPolicyNotRequired)
 	}
+
+	wbDescriptor, err := registry.Descriptor("wb-stream")
+	if err != nil {
+		t.Fatalf("Descriptor(wb-stream) error = %v", err)
+	}
+	if wbDescriptor.BrowserPolicy != provider.ProviderBrowserPolicyExternalRequired {
+		t.Fatalf("wb-stream browser_policy = %q, want %q", wbDescriptor.BrowserPolicy, provider.ProviderBrowserPolicyExternalRequired)
+	}
+	if len(wbDescriptor.ArtifactFamilies) != 1 || wbDescriptor.ArtifactFamilies[0] != provider.ArtifactFamilyConferenceRoom {
+		t.Fatalf("wb-stream artifact_families = %#v, want conference_room", wbDescriptor.ArtifactFamilies)
+	}
 }
 
 func TestMobileChallengeMetadataOverridesApprovedOwnedBrowserChallenges(t *testing.T) {

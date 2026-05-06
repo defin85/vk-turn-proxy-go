@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "provider": "wb-stream",
+  "accepted": [
+    {
+      "scenario_id": "wb_stream_rooms_path_success_v1",
+      "input": "https://stream.wb.ru/rooms/team-sync",
+      "normalized_room_url": "https://stream.wb.ru/rooms/team-sync",
+      "redacted_link": "https://stream.wb.ru/rooms/<redacted:wb-stream-room-link>"
+    },
+    {
+      "scenario_id": "wb_stream_meeting_path_success_v1",
+      "input": "https://STREAM.WB.RU/Meeting/ABC_123",
+      "normalized_room_url": "https://stream.wb.ru/meeting/ABC_123",
+      "redacted_link": "https://stream.wb.ru/meeting/<redacted:wb-stream-room-link>"
+    },
+    {
+      "scenario_id": "wb_stream_join_path_success_v1",
+      "input": "https://stream.wb.ru/join/guest-123",
+      "normalized_room_url": "https://stream.wb.ru/join/guest-123",
+      "redacted_link": "https://stream.wb.ru/join/<redacted:wb-stream-room-link>"
+    }
+  ],
+  "rejected": [
+    {
+      "scenario_id": "wb_stream_query_secret_rejected_v1",
+      "input": "https://stream.wb.ru/rooms/team-sync?token=fixture-secret",
+      "provider_error": {
+        "stage": "wb_stream_room_link",
+        "code": "invalid_room_link"
+      },
+      "must_not_contain": ["fixture-secret"]
+    },
+    {
+      "scenario_id": "wb_stream_userinfo_secret_rejected_v1",
+      "input": "https://user:password-secret@stream.wb.ru/rooms/team-sync",
+      "provider_error": {
+        "stage": "wb_stream_room_link",
+        "code": "invalid_room_link"
+      },
+      "must_not_contain": ["password-secret"]
+    },
+    {
+      "scenario_id": "wb_stream_wrong_host_rejected_v1",
+      "input": "https://example.test/rooms/team-sync",
+      "provider_error": {
+        "stage": "wb_stream_room_link",
+        "code": "invalid_room_link"
+      },
+      "must_not_contain": ["example.test/rooms/team-sync"]
+    }
+  ]
+}

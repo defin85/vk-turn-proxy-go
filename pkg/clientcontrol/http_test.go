@@ -105,14 +105,24 @@ func TestHandlerHostAndNegotiate(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &providers); err != nil {
 		t.Fatalf("decode providers: %v", err)
 	}
-	if len(providers) != 2 {
-		t.Fatalf("providers len = %d, want 2", len(providers))
+	if len(providers) != 3 {
+		t.Fatalf("providers len = %d, want 3", len(providers))
 	}
-	if providers[0].ID != "generic-turn" || providers[1].ID != "vk" {
-		t.Fatalf("providers order = %+v, want generic-turn,vk", providers)
+	if providers[0].ID != "generic-turn" || providers[1].ID != "vk" || providers[2].ID != "wb-stream" {
+		t.Fatalf("providers order = %+v, want generic-turn,vk,wb-stream", providers)
 	}
 	if providers[1].BrowserPolicy != ProviderBrowserPolicyExternalRequired {
 		t.Fatalf("providers[1].browser_policy = %q, want %q", providers[1].BrowserPolicy, ProviderBrowserPolicyExternalRequired)
+	}
+	if providers[2].BrowserPolicy != ProviderBrowserPolicyExternalRequired {
+		t.Fatalf("providers[2].browser_policy = %q, want %q", providers[2].BrowserPolicy, ProviderBrowserPolicyExternalRequired)
+	}
+	if len(providers[2].ArtifactFamilies) != 1 || providers[2].ArtifactFamilies[0] != ArtifactFamilyConferenceRoom {
+		t.Fatalf("providers[2].artifact_families = %#v, want conference_room", providers[2].ArtifactFamilies)
+	}
+	if len(providers[2].CapabilityHints.PotentialActions) != 1 ||
+		providers[2].CapabilityHints.PotentialActions[0] != ArtifactActionOpenRoom {
+		t.Fatalf("providers[2].potential_actions = %#v, want open_room", providers[2].CapabilityHints.PotentialActions)
 	}
 
 	body, _ = json.Marshal(PlatformTunnelStartRequest{Mode: PlatformTunnelModeLinuxTun})
@@ -187,8 +197,8 @@ func TestHandlerProvidersReturnLocalizedDisplayMetadata(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &providers); err != nil {
 		t.Fatalf("decode providers: %v", err)
 	}
-	if len(providers) != 2 {
-		t.Fatalf("providers len = %d, want 2", len(providers))
+	if len(providers) != 3 {
+		t.Fatalf("providers len = %d, want 3", len(providers))
 	}
 
 	byID := make(map[string]ProviderDescriptor, len(providers))
@@ -211,6 +221,15 @@ func TestHandlerProvidersReturnLocalizedDisplayMetadata(t *testing.T) {
 			"generic-turn description_localized[ru] = %q, want %q",
 			got,
 			"Статическая передача TURN-параметров для детерминированного тестирования транспорта и запуска рантайма под управлением оператора.",
+		)
+	}
+	if got := byID["wb-stream"].DisplayNameLocalized["ru"]; got != "WB Stream" {
+		t.Fatalf("wb-stream display_name_localized[ru] = %q, want WB Stream", got)
+	}
+	if got := byID["wb-stream"].DescriptionLocalized["ru"]; got != "Открытие комнат stream.wb.ru во внешнем браузере или приложении без локального запуска транспорта." {
+		t.Fatalf(
+			"wb-stream description_localized[ru] = %q, want localized external handoff copy",
+			got,
 		)
 	}
 }
@@ -694,7 +713,7 @@ func TestHandlerProviderConfigRejectsRestoreBypassOnOrdinaryCRUD(t *testing.T) {
 	payload, _ := json.Marshal(ProviderConfig{
 		ID:       "cfg-1",
 		Name:     "Legacy WB config",
-		Provider: "wb-stream",
+		Provider: "legacy-wb",
 		ProviderSettings: ProviderSettings{
 			"region": "eu-west",
 		},
@@ -717,7 +736,7 @@ func TestHandlerProviderConfigRestoreKeepsUnavailableRecordExplicit(t *testing.T
 	payload, _ := json.Marshal(ProviderConfig{
 		ID:       "cfg-1",
 		Name:     "Legacy WB config",
-		Provider: "wb-stream",
+		Provider: "legacy-wb",
 		ProviderSettings: ProviderSettings{
 			"region": "eu-west",
 		},

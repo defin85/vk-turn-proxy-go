@@ -160,7 +160,7 @@ func TestListProvidersIncludesGenericTurn(t *testing.T) {
 		t.Fatalf("runProbe() code = %d, stderr=%s", code, stderr.String())
 	}
 
-	if got := stdout.String(); got != "generic-turn\nvk\n" {
+	if got := stdout.String(); got != "generic-turn\nvk\nwb-stream\n" {
 		t.Fatalf("unexpected providers list %q", got)
 	}
 }

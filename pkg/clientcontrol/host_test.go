@@ -15,6 +15,7 @@ import (
 
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider/genericturn"
+	"github.com/defin85/vk-turn-proxy-go/internal/provider/wbstream"
 	"github.com/defin85/vk-turn-proxy-go/internal/transport"
 )
 
@@ -605,7 +606,7 @@ func TestHostProviderConfigRejectsRestoreBypassOnOrdinaryUpsert(t *testing.T) {
 	_, err := host.UpsertProviderConfig(ProviderConfig{
 		ID:       "cfg-1",
 		Name:     "Legacy WB config",
-		Provider: "wb-stream",
+		Provider: "legacy-wb",
 		ProviderSettings: ProviderSettings{
 			"region": "eu-west",
 		},
@@ -624,7 +625,7 @@ func TestHostProviderConfigRestoreKeepsUnavailableRecordExplicit(t *testing.T) {
 	saved, err := host.RestoreProviderConfig(ProviderConfig{
 		ID:       "cfg-1",
 		Name:     "Legacy WB config",
-		Provider: "wb-stream",
+		Provider: "legacy-wb",
 		ProviderSettings: ProviderSettings{
 			"region":       "eu-west",
 			"device_index": 2,
@@ -3339,6 +3340,110 @@ func TestHostStartResolutionResolvesConferenceRoomArtifactWithoutTURNCredentials
 	}
 	if strings.Contains(string(eventPayload), "secret-room-material") {
 		t.Fatalf("resolved event leaked room secret: %s", eventPayload)
+	}
+}
+
+func TestHostStartResolutionResolvesWBStreamRoomLinkAsExternalConferenceRoom(t *testing.T) {
+	host := New(
+		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+		withRegistry(provider.NewRegistry(wbstream.New())),
+	)
+
+	resolutionState, err := host.StartResolution(context.Background(), StartResolutionRequest{
+		Provider: "wb-stream",
+		Input: &ProviderInputEnvelope{
+			Kind: ProviderInputKindLink,
+			Link: "https://stream.wb.ru/rooms/team-sync",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartResolution() error = %v", err)
+	}
+
+	resolved := waitForResolutionState(t, host, resolutionState.ID, ResolutionStateResolved)
+	if resolved.Credentials != nil {
+		t.Fatalf("resolved credentials = %#v, want nil for wb-stream conference_room artifact", resolved.Credentials)
+	}
+	if resolved.Export.Supported {
+		t.Fatal("resolved export supported = true, want false for wb-stream conference_room artifact")
+	}
+	if resolved.Artifact == nil {
+		t.Fatal("resolved artifact = nil, want conference_room artifact")
+	}
+	if resolved.Artifact.Family != ArtifactFamilyConferenceRoom {
+		t.Fatalf("resolved artifact family = %q, want %q", resolved.Artifact.Family, ArtifactFamilyConferenceRoom)
+	}
+	if resolved.Artifact.Summary.GenericTURN != nil {
+		t.Fatalf("generic_turn summary = %#v, want nil for wb-stream", resolved.Artifact.Summary.GenericTURN)
+	}
+	if resolved.Artifact.Summary.ConferenceRoom == nil {
+		t.Fatal("conference_room summary = nil, want stream.wb.ru room URL")
+	}
+	if resolved.Artifact.Summary.ConferenceRoom.RoomURL != "https://stream.wb.ru/rooms/team-sync" {
+		t.Fatalf("room_url = %q, want stream.wb.ru room", resolved.Artifact.Summary.ConferenceRoom.RoomURL)
+	}
+	if len(resolved.Artifact.Actions) != 1 || resolved.Artifact.Actions[0].ID != ArtifactActionOpenRoom {
+		t.Fatalf("artifact actions = %#v, want open_room only", resolved.Artifact.Actions)
+	}
+	if resolved.Artifact.Actions[0].ExecutionOwner != ActionExecutionOwnerShellExternal {
+		t.Fatalf("open_room execution_owner = %q, want %q", resolved.Artifact.Actions[0].ExecutionOwner, ActionExecutionOwnerShellExternal)
+	}
+	if len(resolved.Artifact.AccessMethods) != 0 {
+		t.Fatalf("artifact access_methods = %#v, want none", resolved.Artifact.AccessMethods)
+	}
+	if _, err := host.MaterializeResolution(context.Background(), resolved.ID, RuntimeDefaults{}); !errors.Is(err, errResolutionNotTransportReady) {
+		t.Fatalf("MaterializeResolution() error = %v, want not transport-ready", err)
+	}
+	if _, err := host.ExportResolution(resolved.ID); !errors.Is(err, errResolutionExportUnavailable) {
+		t.Fatalf("ExportResolution() error = %v, want export unavailable", err)
+	}
+}
+
+func TestHostWBStreamMalformedRoomLinkFailureIsRedacted(t *testing.T) {
+	host := New(
+		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+		withRegistry(provider.NewRegistry(wbstream.New())),
+	)
+
+	events, cancel := host.Subscribe(16)
+	defer cancel()
+
+	resolutionState, err := host.StartResolution(context.Background(), StartResolutionRequest{
+		Provider: "wb-stream",
+		Input: &ProviderInputEnvelope{
+			Kind: ProviderInputKindLink,
+			Link: "https://stream.wb.ru/rooms/team-sync?token=secret-room-token",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartResolution() error = %v", err)
+	}
+
+	failed := waitForResolutionState(t, host, resolutionState.ID, ResolutionStateFailed)
+	if failed.Failure == nil {
+		t.Fatal("resolution failure = nil, want redacted failure")
+	}
+	if failed.Failure.Message != "provider resolution failed at wb_stream_room_link [invalid_room_link]" {
+		t.Fatalf("failure message = %q, want provider-stage failure", failed.Failure.Message)
+	}
+	if failed.Failure.Stage != "wb_stream_room_link" {
+		t.Fatalf("failure stage = %q, want wb_stream_room_link", failed.Failure.Stage)
+	}
+	failedPayload, err := json.Marshal(failed)
+	if err != nil {
+		t.Fatalf("Marshal(failed) error = %v", err)
+	}
+	if strings.Contains(string(failedPayload), "secret-room-token") {
+		t.Fatalf("failed resolution leaked raw token: %s", failedPayload)
+	}
+
+	failedEvent := waitForEvent(t, events, EventResolutionFailed)
+	eventPayload, err := json.Marshal(failedEvent)
+	if err != nil {
+		t.Fatalf("Marshal(failedEvent) error = %v", err)
+	}
+	if strings.Contains(string(eventPayload), "secret-room-token") {
+		t.Fatalf("failed event leaked raw token: %s", eventPayload)
 	}
 }
 

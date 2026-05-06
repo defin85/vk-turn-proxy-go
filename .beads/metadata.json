@@ -3,5 +3,8 @@
   "jsonl_export": "issues.jsonl",
   "backend": "dolt",
   "dolt_mode": "server",
-  "dolt_database": "beads_vk-turn-proxy-go"
+  "dolt_server_host": "127.0.0.1",
+  "dolt_server_port": 3307,
+  "dolt_database": "beads_vk-turn-proxy-go",
+  "project_id": "690929d4-9faf-44fc-b508-3082a2f331ac"
 }

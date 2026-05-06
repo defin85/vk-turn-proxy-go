@@ -8,12 +8,14 @@ import (
 	"github.com/defin85/vk-turn-proxy-go/internal/provider"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider/genericturn"
 	"github.com/defin85/vk-turn-proxy-go/internal/provider/vk"
+	"github.com/defin85/vk-turn-proxy-go/internal/provider/wbstream"
 )
 
 func mobileProviderRegistry() *provider.Registry {
 	return provider.NewRegistry(
 		genericturn.New(),
 		mobileOwnedBrowserAdapter{base: vk.New()},
+		wbstream.New(),
 	)
 }
 

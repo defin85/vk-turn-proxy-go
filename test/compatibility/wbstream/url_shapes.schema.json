@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WB Stream URL-shape fixture",
+  "type": "object",
+  "required": ["version", "provider", "accepted", "rejected"],
+  "properties": {
+    "version": { "const": 1 },
+    "provider": { "const": "wb-stream" },
+    "accepted": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "scenario_id",
+          "input",
+          "normalized_room_url",
+          "redacted_link"
+        ],
+        "properties": {
+          "scenario_id": { "type": "string", "minLength": 1 },
+          "input": { "type": "string", "minLength": 1 },
+          "normalized_room_url": {
+            "type": "string",
+            "pattern": "^https://stream\\.wb\\.ru/(room|rooms|meeting|meetings|join)/[A-Za-z0-9][A-Za-z0-9_-]{2,127}$"
+          },
+          "redacted_link": {
+            "type": "string",
+            "pattern": "^https://stream\\.wb\\.ru/(room|rooms|meeting|meetings|join)/<redacted:wb-stream-room-link>$"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "rejected": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "scenario_id",
+          "input",
+          "provider_error",
+          "must_not_contain"
+        ],
+        "properties": {
+          "scenario_id": { "type": "string", "minLength": 1 },
+          "input": { "type": "string", "minLength": 1 },
+          "provider_error": {
+            "type": "object",
+            "required": ["stage", "code"],
+            "properties": {
+              "stage": { "const": "wb_stream_room_link" },
+              "code": { "const": "invalid_room_link" }
+            },
+            "additionalProperties": false
+          },
+          "must_not_contain": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

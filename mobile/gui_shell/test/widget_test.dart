@@ -3248,12 +3248,12 @@ void main() {
         resolutionsList: <ResolutionRecord>[
           ResolutionRecord(
             id: 'resolution-room-1',
-            provider: 'roomy',
+            provider: 'wb-stream',
             input: ResolutionInput(
-              provider: 'roomy',
+              provider: 'wb-stream',
               kind: ProviderInputKind.link,
               linkRedacted:
-                  'https://room.example.test/join/<redacted:room-token>',
+                  'https://stream.wb.ru/rooms/<redacted:wb-stream-room-link>',
             ),
             state: ResolutionState.resolved,
             artifact: ResolutionArtifactRecord(
@@ -3266,7 +3266,7 @@ void main() {
               ],
               summary: ResolutionArtifactSummary(
                 conferenceRoom: ConferenceRoomArtifactSummary(
-                  roomUrl: 'https://room.example.test/rooms/team-sync',
+                  roomUrl: 'https://stream.wb.ru/rooms/team-sync',
                 ),
               ),
             ),
@@ -3303,7 +3303,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
 
     expect(browser.openedUrls, <String>[
-      'https://room.example.test/rooms/team-sync',
+      'https://stream.wb.ru/rooms/team-sync',
     ]);
   });
 
