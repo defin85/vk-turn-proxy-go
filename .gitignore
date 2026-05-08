@@ -37,6 +37,7 @@ coverage.out
 /artifacts/phone-vk-resolve/
 /artifacts/vk/
 /artifacts/wg-live-vk/
+/artifacts/*/chromium-profile*/
 /vk-browser-shot.png
 /build/
 

@@ -56,6 +56,18 @@ machine-readable identifiers and fail closed for unsupported execution paths.
 - **AND** it does not reinterpret the artifact as a conference room or tunnel
   handoff
 
+#### Scenario: Provider-owned player transport evidence does not imply local execution
+
+- **GIVEN** a resolved `camera_stream` artifact whose provider research
+  reveals concrete browser or native player transport details
+- **WHEN** no family-specific same-device executor has been committed and
+  live-verified for that artifact family
+- **THEN** the host continues to advertise only the navigation-first
+  camera-stream actions that are already committed for that artifact
+- **AND** it does not treat those provider-owned transport details as
+  permission to expose same-device playback, transport export, or tunnel
+  startup
+
 ### Requirement: Desktop and mobile shells present camera-stream actions without false playback claims
 
 The system SHALL let desktop and mobile shells present the same camera-stream

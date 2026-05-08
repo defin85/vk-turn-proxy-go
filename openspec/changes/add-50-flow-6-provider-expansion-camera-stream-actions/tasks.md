@@ -15,3 +15,15 @@
 ## 3. Validation
 - [ ] 3.1 Run
       `openspec validate add-50-flow-6-provider-expansion-camera-stream-actions --strict --no-interactive`
+
+## 4. Research carry-forward
+- [ ] 4.1 Preserve the current live evidence that researched camera providers
+      may still be navigation-first only: browser `fMP4` viewer paths, native
+      `spif2-proto` cloud playback, and `p2p_mode=false` on both same-LAN and
+      mobile uplinks.
+- [ ] 4.2 Before proposing same-device playback or transport reuse, test
+      whether blocking the provider cloud media contour while keeping ordinary
+      account access alive can force a typed local or P2P continuation.
+- [ ] 4.3 If a provider-selected local or P2P same-device path appears,
+      capture it as a separate family-specific executor follow-up with live
+      verification instead of widening the generic camera action contract.
