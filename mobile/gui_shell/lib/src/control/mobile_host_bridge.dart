@@ -599,6 +599,29 @@ class HttpMobileHostBridge implements MobileHostBridge {
   }
 
   @override
+  Future<TransportProfilePortableExportResult> exportTransportProfilePortable(
+    String profileId,
+    TransportProfilePortableExportRequest request,
+  ) {
+    return _client.exportTransportProfilePortable(profileId, request);
+  }
+
+  @override
+  Future<TransportProfilePortableTransferPreview>
+  previewTransportProfilePortableImport(
+    TransportProfilePortableImportRequest request,
+  ) {
+    return _client.previewTransportProfilePortableImport(request);
+  }
+
+  @override
+  Future<TransportProfileStatus> confirmTransportProfilePortableImport(
+    TransportProfilePortableImportRequest request,
+  ) {
+    return _client.confirmTransportProfilePortableImport(request);
+  }
+
+  @override
   Future<TransportProfileStructuredSaveResult> createStructuredTransportProfile(
     TransportProfileStructuredCreateRequest request,
   ) {
@@ -920,6 +943,23 @@ class UnavailableMobileHostBridge implements MobileHostBridge {
   @override
   Future<TransportProfileStatus> importTransportProfile(
     TransportProfileImportRequest request,
+  ) => _fail();
+
+  @override
+  Future<TransportProfilePortableExportResult> exportTransportProfilePortable(
+    String profileId,
+    TransportProfilePortableExportRequest request,
+  ) => _fail();
+
+  @override
+  Future<TransportProfilePortableTransferPreview>
+  previewTransportProfilePortableImport(
+    TransportProfilePortableImportRequest request,
+  ) => _fail();
+
+  @override
+  Future<TransportProfileStatus> confirmTransportProfilePortableImport(
+    TransportProfilePortableImportRequest request,
   ) => _fail();
 
   @override

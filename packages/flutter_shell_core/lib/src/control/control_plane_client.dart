@@ -50,6 +50,17 @@ abstract class ControlPlaneApi {
   Future<TransportProfileStatus> importTransportProfile(
     TransportProfileImportRequest request,
   );
+  Future<TransportProfilePortableExportResult> exportTransportProfilePortable(
+    String profileId,
+    TransportProfilePortableExportRequest request,
+  );
+  Future<TransportProfilePortableTransferPreview>
+  previewTransportProfilePortableImport(
+    TransportProfilePortableImportRequest request,
+  );
+  Future<TransportProfileStatus> confirmTransportProfilePortableImport(
+    TransportProfilePortableImportRequest request,
+  );
   Future<TransportProfileStructuredSaveResult> createStructuredTransportProfile(
     TransportProfileStructuredCreateRequest request,
   );
@@ -303,6 +314,44 @@ class ControlPlaneClient implements ControlPlaneApi {
     final payload = await _jsonRequest(
       'POST',
       '/v1/transport-profiles',
+      body: request.toJson(),
+    );
+    return TransportProfileStatus.fromJson(payload);
+  }
+
+  @override
+  Future<TransportProfilePortableExportResult> exportTransportProfilePortable(
+    String profileId,
+    TransportProfilePortableExportRequest request,
+  ) async {
+    final payload = await _jsonRequest(
+      'POST',
+      '/v1/transport-profiles/$profileId/export-portable',
+      body: request.toJson(),
+    );
+    return TransportProfilePortableExportResult.fromJson(payload);
+  }
+
+  @override
+  Future<TransportProfilePortableTransferPreview>
+  previewTransportProfilePortableImport(
+    TransportProfilePortableImportRequest request,
+  ) async {
+    final payload = await _jsonRequest(
+      'POST',
+      '/v1/transport-profiles:preview-portable-import',
+      body: request.toJson(),
+    );
+    return TransportProfilePortableTransferPreview.fromJson(payload);
+  }
+
+  @override
+  Future<TransportProfileStatus> confirmTransportProfilePortableImport(
+    TransportProfilePortableImportRequest request,
+  ) async {
+    final payload = await _jsonRequest(
+      'POST',
+      '/v1/transport-profiles:confirm-portable-import',
       body: request.toJson(),
     );
     return TransportProfileStatus.fromJson(payload);

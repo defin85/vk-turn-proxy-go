@@ -152,9 +152,31 @@ const TransportProfileStoreCapability _transportProfileStoreCapability =
         TransportProfileLifecycleAction.validate,
         TransportProfileLifecycleAction.selectForStartup,
       ],
+      portableTransfer: TransportProfilePortableTransferCapability(
+        envelopeType: 'portable_transport_profile',
+        envelopeVersion: 1,
+        supportedKinds: <TransportProfileKind>[
+          TransportProfileKind.wireGuardNativeV1,
+        ],
+        exportPaths: <TransportProfilePortableTransferPath>[
+          TransportProfilePortableTransferPath.textPayload,
+          TransportProfilePortableTransferPath.filePayload,
+          TransportProfilePortableTransferPath.qrPayload,
+        ],
+        importPaths: <TransportProfilePortableTransferPath>[
+          TransportProfilePortableTransferPath.textPayload,
+          TransportProfilePortableTransferPath.filePayload,
+        ],
+        qrMaxPayloadBytes: 2048,
+        qrMode: TransportProfilePortableTransferQrMode.singlePayload,
+      ),
     );
 
-HostInfo _desktopTransportProfileHostInfo({required bool configured}) {
+HostInfo _desktopTransportProfileHostInfo({
+  required bool configured,
+  bool importedOnly = false,
+}) {
+  assert(!(configured && importedOnly));
   final reference = configured
       ? const TransportProfileReference(
           profileId: 'transport-profile-1',
@@ -172,6 +194,18 @@ HostInfo _desktopTransportProfileHostInfo({required bool configured}) {
           importAdapters: const <TransportProfileImportAdapter>[
             TransportProfileImportAdapter.wireGuardConf,
           ],
+        )
+      : importedOnly
+      ? const TransportProfilePrerequisiteStatus(
+          requiredKinds: <TransportProfileKind>[
+            TransportProfileKind.wireGuardNativeV1,
+          ],
+          state: TransportProfileCompatibilityState.compatible,
+          importAdapters: <TransportProfileImportAdapter>[
+            TransportProfileImportAdapter.wireGuardConf,
+          ],
+          message:
+              'Select a VPN transport profile for this execution plan before startup.',
         )
       : const TransportProfilePrerequisiteStatus(
           requiredKinds: <TransportProfileKind>[
@@ -235,6 +269,8 @@ HostInfo _desktopTransportProfileHostInfo({required bool configured}) {
             transportProfile: prerequisite,
             message: configured
                 ? null
+                : importedOnly
+                ? 'Select a VPN transport profile for this execution plan before startup.'
                 : 'VPN transport profile wireguard_native_v1 is not configured.',
           ),
         ],
@@ -270,6 +306,7 @@ TransportProfileStatus _desktopTransportProfileStatus() {
       TransportProfileLifecycleAction.forget,
       TransportProfileLifecycleAction.validate,
       TransportProfileLifecycleAction.selectForStartup,
+      TransportProfileLifecycleAction.exportPortable,
     ],
     importedAt: DateTime.utc(2026, 4, 28, 12),
     updatedAt: DateTime.utc(2026, 4, 28, 12),
@@ -1442,6 +1479,208 @@ void main() {
   );
 
   test(
+    'controller exports portable VPN transport profiles through the desktop adapter',
+    () async {
+      final portableAdapter = _FakeDesktopPortableProfileTransferAdapter();
+      final api = _FakeControlPlaneApi(
+        profiles: const <ProfileRecord>[],
+        sessions: const <SessionRecord>[],
+        transportProfiles: <TransportProfileStatus>[
+          _desktopTransportProfileStatus(),
+        ],
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(<HostConnectionResult>[
+          HostConnectionResult(
+            state: HostLifecycleState.ready,
+            message: 'ready',
+            info: _desktopTransportProfileHostInfo(configured: true),
+          ),
+        ]),
+        portableProfileTransferAdapter: portableAdapter,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      final profile = controller
+          .vpnTransportProfilesForMode(PlatformTunnelMode.windowsWintun)
+          .single;
+      final carriage = await controller.exportPortableVPNTransportProfileRecord(
+        profile,
+        passphrase: 'portable-secret',
+      );
+
+      expect(carriage, isNotNull);
+      await controller.copyPortableVPNTransportProfileEnvelopeText(carriage!);
+      await controller.savePortableVPNTransportProfileEnvelopeToFile(carriage);
+
+      expect(api.exportTransportProfilePortableCalls, hasLength(1));
+      expect(api.exportTransportProfilePortableCalls.single.key, profile.id);
+      expect(
+        api.exportTransportProfilePortableCalls.single.value.passphrase,
+        'portable-secret',
+      );
+      expect(
+        portableAdapter.copiedPayloads.single,
+        contains('portable_transport_profile'),
+      );
+      expect(
+        portableAdapter.savedSuggestedNames.single,
+        'wireguard.portable-transport-profile.json',
+      );
+      expect(controller.notice, contains('portable VPN transport profile'));
+    },
+  );
+
+  test(
+    'controller previews and confirms portable VPN transport-profile import',
+    () async {
+      final api = _FakeControlPlaneApi(
+        profiles: const <ProfileRecord>[],
+        sessions: const <SessionRecord>[],
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(<HostConnectionResult>[
+          HostConnectionResult(
+            state: HostLifecycleState.ready,
+            message: 'ready',
+            info: _desktopTransportProfileHostInfo(configured: true),
+          ),
+        ]),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      final preview = await controller.previewPortableVPNTransportProfileImport(
+        envelope: '{"type":"portable_transport_profile","version":1}',
+        passphrase: 'portable-secret',
+      );
+
+      expect(preview, isNotNull);
+      expect(
+        api.previewTransportProfilePortableImportCalls.single.passphrase,
+        'portable-secret',
+      );
+      expect(
+        api.previewTransportProfilePortableImportCalls.single.envelope,
+        '{"type":"portable_transport_profile","version":1}',
+      );
+
+      final imported = await controller
+          .confirmPortableVPNTransportProfileImport(
+            envelope: '{"type":"portable_transport_profile","version":1}',
+            passphrase: 'portable-secret',
+          );
+
+      expect(imported, isNotNull);
+      expect(
+        api.confirmTransportProfilePortableImportCalls.single.passphrase,
+        'portable-secret',
+      );
+      expect(
+        imported!.secretMaterialRef.kind,
+        TransportProfileMaterialSource.portableTransfer,
+      );
+      expect(
+        controller.notice,
+        contains('Imported portable VPN transport profile'),
+      );
+    },
+  );
+
+  test(
+    'controller keeps desktop startup gated after portable VPN transport-profile import until explicit selection',
+    () async {
+      final profile = ProfileRecord(
+        id: 'profile-1',
+        name: 'vk live',
+        spec: _profileSpec(),
+      );
+      final api = _FakeControlPlaneApi(
+        profiles: <ProfileRecord>[profile],
+        sessions: const <SessionRecord>[],
+        hostInfo: _desktopTransportProfileHostInfo(configured: false),
+        transportProfiles: const <TransportProfileStatus>[],
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(<HostConnectionResult>[
+          HostConnectionResult(
+            state: HostLifecycleState.ready,
+            message: 'ready',
+            info: _desktopTransportProfileHostInfo(configured: false),
+          ),
+        ]),
+        stateStore: _FakeShellStateStore(
+          loaded: DesktopShellState(
+            profiles: <ProfileRecord>[profile],
+            selectedProfileId: profile.id,
+            draft: ProfileDraft.fromProfile(profile),
+          ),
+        ),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      await controller.confirmPortableVPNTransportProfileImport(
+        envelope: '{"type":"portable_transport_profile","version":1}',
+        passphrase: 'portable-secret',
+      );
+
+      expect(
+        controller.activeVPNTransportProfileConfiguredForMode(
+          PlatformTunnelMode.windowsWintun,
+        ),
+        isTrue,
+      );
+      expect(
+        controller.platformTunnelStartPreparationBlockReason(
+          PlatformTunnelMode.windowsWintun,
+        ),
+        contains('Select a VPN transport profile'),
+      );
+
+      await controller.startPlatformTunnel(PlatformTunnelMode.windowsWintun);
+
+      expect(api.startPlatformTunnelCalls, isEmpty);
+
+      final importedProfile = controller.vpnTransportProfilesForMode(
+        PlatformTunnelMode.windowsWintun,
+      ).single;
+      await controller.selectVPNTransportProfileForMode(
+        PlatformTunnelMode.windowsWintun,
+        importedProfile,
+      );
+
+      expect(
+        controller.activeVPNTransportProfileConfiguredForMode(
+          PlatformTunnelMode.windowsWintun,
+        ),
+        isTrue,
+      );
+      expect(
+        controller.platformTunnelStartPreparationBlockReason(
+          PlatformTunnelMode.windowsWintun,
+        ),
+        isNull,
+      );
+
+      await controller.startPlatformTunnel(PlatformTunnelMode.windowsWintun);
+
+      expect(api.startPlatformTunnelCalls, hasLength(1));
+      expect(
+        api.startPlatformTunnelCalls.single.transportProfile?.profileId,
+        importedProfile.id,
+      );
+    },
+  );
+
+  test(
     'controller consumes typed platform tunnel reports and startup-stage results',
     () async {
       final api = _FakeControlPlaneApi(
@@ -2100,6 +2339,15 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
       <ProviderTransportCompatibilityRequest>[];
   final List<TransportProfileImportRequest> importTransportProfileCalls =
       <TransportProfileImportRequest>[];
+  final List<MapEntry<String, TransportProfilePortableExportRequest>>
+  exportTransportProfilePortableCalls =
+      <MapEntry<String, TransportProfilePortableExportRequest>>[];
+  final List<TransportProfilePortableImportRequest>
+  previewTransportProfilePortableImportCalls =
+      <TransportProfilePortableImportRequest>[];
+  final List<TransportProfilePortableImportRequest>
+  confirmTransportProfilePortableImportCalls =
+      <TransportProfilePortableImportRequest>[];
   final List<ProfileRecord> upsertedProfiles = <ProfileRecord>[];
   final List<ProviderConfigRecord> upsertedProviderConfigs =
       <ProviderConfigRecord>[];
@@ -2233,6 +2481,72 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   }
 
   @override
+  Future<TransportProfilePortableExportResult> exportTransportProfilePortable(
+    String profileId,
+    TransportProfilePortableExportRequest request,
+  ) async {
+    exportTransportProfilePortableCalls.add(
+      MapEntry<String, TransportProfilePortableExportRequest>(
+        profileId,
+        request,
+      ),
+    );
+    return const TransportProfilePortableExportResult(
+      envelope: '{"type":"portable_transport_profile","version":1}',
+      profileKind: TransportProfileKind.wireGuardNativeV1,
+      displayName: 'WireGuard',
+      encodedBytes: 49,
+    );
+  }
+
+  @override
+  Future<TransportProfilePortableTransferPreview>
+  previewTransportProfilePortableImport(
+    TransportProfilePortableImportRequest request,
+  ) async {
+    previewTransportProfilePortableImportCalls.add(request);
+    return const TransportProfilePortableTransferPreview(
+      outcome: TransportProfilePortableTransferPreviewOutcome.importable,
+      profileKind: TransportProfileKind.wireGuardNativeV1,
+      displayName: 'Imported WireGuard',
+      compatibility: TransportProfileCompatibilityStatus(
+        state: TransportProfileCompatibilityState.compatible,
+      ),
+    );
+  }
+
+  @override
+  Future<TransportProfileStatus> confirmTransportProfilePortableImport(
+    TransportProfilePortableImportRequest request,
+  ) async {
+    confirmTransportProfilePortableImportCalls.add(request);
+    final profile = _desktopTransportProfileStatus();
+    final status = TransportProfileStatus(
+      id: profile.id,
+      kind: profile.kind,
+      version: profile.version,
+      displayName: 'Imported WireGuard',
+      validation: profile.validation,
+      compatibility: profile.compatibility,
+      secretMaterialRef: const TransportProfileSecretMaterialRef(
+        kind: TransportProfileMaterialSource.portableTransfer,
+        ref: 'host-owned:portable-imported',
+      ),
+      actions: profile.actions,
+      importedAt: profile.importedAt,
+      updatedAt: profile.updatedAt,
+    );
+    _transportProfiles
+      ..clear()
+      ..add(status);
+    _hostInfo = _desktopTransportProfileHostInfo(
+      configured: false,
+      importedOnly: true,
+    );
+    return status;
+  }
+
+  @override
   Future<TransportProfileStructuredSaveResult> createStructuredTransportProfile(
     TransportProfileStructuredCreateRequest request,
   ) async {
@@ -2290,6 +2604,7 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
     String profileId,
     TransportProfileSelectForStartupRequest request,
   ) async {
+    _hostInfo = _desktopTransportProfileHostInfo(configured: true);
     return validateTransportProfile(profileId);
   }
 

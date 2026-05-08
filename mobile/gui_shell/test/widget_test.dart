@@ -100,6 +100,25 @@ const TransportProfileStoreCapability _transportProfileStoreCapability =
         TransportProfileLifecycleAction.validate,
         TransportProfileLifecycleAction.selectForStartup,
       ],
+      portableTransfer: TransportProfilePortableTransferCapability(
+        envelopeType: 'portable_transport_profile',
+        envelopeVersion: 1,
+        supportedKinds: <TransportProfileKind>[
+          TransportProfileKind.wireGuardNativeV1,
+        ],
+        exportPaths: <TransportProfilePortableTransferPath>[
+          TransportProfilePortableTransferPath.textPayload,
+          TransportProfilePortableTransferPath.filePayload,
+          TransportProfilePortableTransferPath.qrPayload,
+        ],
+        importPaths: <TransportProfilePortableTransferPath>[
+          TransportProfilePortableTransferPath.textPayload,
+          TransportProfilePortableTransferPath.filePayload,
+          TransportProfilePortableTransferPath.qrPayload,
+        ],
+        qrMaxPayloadBytes: 2048,
+        qrMode: TransportProfilePortableTransferQrMode.singlePayload,
+      ),
     );
 
 const TransportProfilePrerequisiteStatus
@@ -629,6 +648,7 @@ void main() {
     expect(find.byType(BottomSheet), findsNothing);
     expect(find.text('VPN transport profiles'), findsOneWidget);
     expect(find.text('WireGuard required'), findsOneWidget);
+    expect(find.text('Import portable'), findsOneWidget);
     expect(find.textContaining('wireguard_native_v1'), findsNothing);
 
     await tester.tap(find.widgetWithText(OutlinedButton, 'Import'));
@@ -640,6 +660,7 @@ void main() {
       ),
       findsOneWidget,
     );
+    expect(find.text('Export'), findsNothing);
     expect(find.textContaining('wireguard_native_v1'), findsNothing);
     await tester.pageBack();
     await tester.pumpAndSettle();
@@ -5396,6 +5417,7 @@ List<TransportProfileStatus> _transportProfileStatuses() {
         TransportProfileLifecycleAction.forget,
         TransportProfileLifecycleAction.validate,
         TransportProfileLifecycleAction.selectForStartup,
+        TransportProfileLifecycleAction.exportPortable,
       ],
       importedAt: DateTime.utc(2026, 4, 28, 12),
       updatedAt: DateTime.utc(2026, 4, 28, 12),
@@ -5571,6 +5593,15 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       <ChallengeContinuationSubmission?>[];
   final List<_StartResolutionCall> startResolutionCalls =
       <_StartResolutionCall>[];
+  final List<MapEntry<String, TransportProfilePortableExportRequest>>
+  exportTransportProfilePortableCalls =
+      <MapEntry<String, TransportProfilePortableExportRequest>>[];
+  final List<TransportProfilePortableImportRequest>
+  previewTransportProfilePortableImportCalls =
+      <TransportProfilePortableImportRequest>[];
+  final List<TransportProfilePortableImportRequest>
+  confirmTransportProfilePortableImportCalls =
+      <TransportProfilePortableImportRequest>[];
 
   @override
   Stream<MobileBrowserReturnSignal> get browserReturnSignals =>
@@ -5665,6 +5696,69 @@ class _FakeMobileHostBridge implements MobileHostBridge {
       ..add(next);
     _hostInfo = _readyHostInfo;
     return next;
+  }
+
+  @override
+  Future<TransportProfilePortableExportResult> exportTransportProfilePortable(
+    String profileId,
+    TransportProfilePortableExportRequest request,
+  ) async {
+    exportTransportProfilePortableCalls.add(
+      MapEntry<String, TransportProfilePortableExportRequest>(
+        profileId,
+        request,
+      ),
+    );
+    return const TransportProfilePortableExportResult(
+      envelope: '{"type":"portable_transport_profile","version":1}',
+      profileKind: TransportProfileKind.wireGuardNativeV1,
+      displayName: 'WireGuard',
+      encodedBytes: 49,
+    );
+  }
+
+  @override
+  Future<TransportProfilePortableTransferPreview>
+  previewTransportProfilePortableImport(
+    TransportProfilePortableImportRequest request,
+  ) async {
+    previewTransportProfilePortableImportCalls.add(request);
+    return const TransportProfilePortableTransferPreview(
+      outcome: TransportProfilePortableTransferPreviewOutcome.importable,
+      profileKind: TransportProfileKind.wireGuardNativeV1,
+      displayName: 'Imported WireGuard',
+      compatibility: TransportProfileCompatibilityStatus(
+        state: TransportProfileCompatibilityState.compatible,
+      ),
+    );
+  }
+
+  @override
+  Future<TransportProfileStatus> confirmTransportProfilePortableImport(
+    TransportProfilePortableImportRequest request,
+  ) async {
+    confirmTransportProfilePortableImportCalls.add(request);
+    final profile = _transportProfileStatuses().first;
+    final status = TransportProfileStatus(
+      id: profile.id,
+      kind: profile.kind,
+      version: profile.version,
+      displayName: 'Imported WireGuard',
+      validation: profile.validation,
+      compatibility: profile.compatibility,
+      secretMaterialRef: const TransportProfileSecretMaterialRef(
+        kind: TransportProfileMaterialSource.portableTransfer,
+        ref: 'host-owned:portable-imported',
+      ),
+      actions: profile.actions,
+      importedAt: profile.importedAt,
+      updatedAt: profile.updatedAt,
+    );
+    _transportProfiles
+      ..clear()
+      ..add(status);
+    _hostInfo = _readyHostInfo;
+    return status;
   }
 
   @override

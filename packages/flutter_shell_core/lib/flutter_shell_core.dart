@@ -11,6 +11,7 @@ export 'provider_settings_form.dart';
 export 'routing_content_surface.dart';
 export 'shell_visuals.dart';
 export 'support_content_surface.dart';
+export 'transport_profile_portable_transfer.dart';
 export 'vpn_transport_profile_editor.dart';
 export 'workflow_library_surface.dart';
 

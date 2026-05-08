@@ -261,8 +261,10 @@ void main() {
   ) async {
     var selectedProfile = '';
     var editedProfile = '';
+    var exportedProfile = '';
     var validatedProfile = '';
     var forgottenProfile = '';
+    var importedPortable = false;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -275,6 +277,7 @@ void main() {
                 displayName: 'Phone WireGuard',
                 actions: const <TransportProfileLifecycleAction>[
                   TransportProfileLifecycleAction.selectForStartup,
+                  TransportProfileLifecycleAction.exportPortable,
                   TransportProfileLifecycleAction.updateStructured,
                   TransportProfileLifecycleAction.validate,
                   TransportProfileLifecycleAction.forget,
@@ -292,11 +295,17 @@ void main() {
             executionPlan: _androidVPNServicePlan,
             onCreate: () async {},
             onImport: () async {},
+            onImportPortable: () async {
+              importedPortable = true;
+            },
             onSelect: (TransportProfileStatus profile) async {
               selectedProfile = profile.id;
             },
             onEdit: (TransportProfileStatus profile) async {
               editedProfile = profile.id;
+            },
+            onExportPortable: (TransportProfileStatus profile) async {
+              exportedProfile = profile.id;
             },
             onValidate: (TransportProfileStatus profile) async {
               validatedProfile = profile.id;
@@ -313,14 +322,25 @@ void main() {
     expect(find.text('Future native'), findsNothing);
     expect(find.text('Create'), findsOneWidget);
     expect(find.text('Import'), findsOneWidget);
+    expect(find.text('Import portable'), findsOneWidget);
     expect(find.text('Connect'), findsNothing);
     expect(find.text('Disconnect'), findsNothing);
     expect(find.text('Start VPN'), findsNothing);
     expect(find.text('Stop VPN'), findsNothing);
 
     await tester.tap(
+      find.byKey(const ValueKey<String>('vpn-profile-manager-import-portable')),
+    );
+    await tester.pump();
+    await tester.tap(
       find.byKey(
         const ValueKey<String>('vpn-profile-manager-select-wg-profile'),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(
+      find.byKey(
+        const ValueKey<String>('vpn-profile-manager-export-wg-profile'),
       ),
     );
     await tester.pump();
@@ -346,7 +366,9 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Forget'));
     await tester.pumpAndSettle();
 
+    expect(importedPortable, isTrue);
     expect(selectedProfile, 'wg-profile');
+    expect(exportedProfile, 'wg-profile');
     expect(editedProfile, 'wg-profile');
     expect(validatedProfile, 'wg-profile');
     expect(forgottenProfile, 'wg-profile');
@@ -430,6 +452,7 @@ void main() {
                 displayName: 'Tablet WireGuard',
                 actions: const <TransportProfileLifecycleAction>[
                   TransportProfileLifecycleAction.selectForStartup,
+                  TransportProfileLifecycleAction.exportPortable,
                   TransportProfileLifecycleAction.validate,
                   TransportProfileLifecycleAction.forget,
                 ],
@@ -450,6 +473,8 @@ void main() {
             executionPlan: _androidVPNServicePlan,
             onCreate: () async {},
             onImport: () async {},
+            onImportPortable: () async {},
+            onExportPortable: (_) async {},
             onSelect: (_) async {},
             onValidate: (_) async {},
             onForget: (_) async {},
@@ -462,6 +487,7 @@ void main() {
     expect(find.textContaining('wireguard_native_v1'), findsNothing);
     expect(find.text('WireGuard required'), findsOneWidget);
     expect(find.text('Selected'), findsOneWidget);
+    expect(find.text('Import portable'), findsOneWidget);
     expect(
       find.byKey(
         const ValueKey<String>('vpn-profile-manager-select-selected-profile'),

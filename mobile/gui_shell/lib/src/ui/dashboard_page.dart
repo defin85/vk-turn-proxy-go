@@ -18,6 +18,7 @@ import 'package:mobile_gui_shell/src/ui/owned_browser_challenge.dart';
 import 'package:mobile_gui_shell/src/ui/portable_profile_transfer_dialogs.dart';
 import 'package:mobile_gui_shell/src/ui/profile_editor.dart';
 import 'package:mobile_gui_shell/src/ui/provider_config_editor.dart';
+import 'package:mobile_gui_shell/src/ui/transport_profile_portable_transfer_dialogs.dart';
 
 const double _compactNavigationBreakpoint = 840;
 const double _providerListDetailBreakpoint = 920;
@@ -1340,6 +1341,125 @@ class _VPNTransportProfileManagerPage extends StatelessWidget {
     );
   }
 
+  Future<void> _showPortableExport(
+    BuildContext context,
+    TransportProfileStatus profile,
+  ) async {
+    final capability = controller.portableTransportProfileTransferCapability;
+    if (capability == null) {
+      return;
+    }
+    String? errorText;
+    while (context.mounted) {
+      final passphrase = await showPortableTransportProfilePassphraseDialog(
+        context: context,
+        title: context.shellText.exportPortableProfile,
+        actionLabel: 'Prepare export',
+        errorText: errorText,
+        message:
+            'Encrypt this VPN transport profile before copying, sharing, or rendering it as a QR payload.',
+      );
+      if (passphrase == null || !context.mounted) {
+        return;
+      }
+      if (passphrase.isEmpty) {
+        errorText = 'Passphrase is required.';
+        continue;
+      }
+      final carriage = await controller.exportPortableVPNTransportProfileRecord(
+        profile,
+        passphrase: passphrase,
+      );
+      if (carriage == null || !context.mounted) {
+        return;
+      }
+      await showPortableTransportProfileExportDialog(
+        context: context,
+        carriage: carriage,
+        capability: capability,
+        onCopyText: () =>
+            controller.copyPortableVPNTransportProfileEnvelopeText(carriage),
+        onShareText: () =>
+            controller.sharePortableVPNTransportProfileEnvelopeText(carriage),
+        onShareFile: () =>
+            controller.sharePortableVPNTransportProfileEnvelopeFile(carriage),
+      );
+      return;
+    }
+  }
+
+  Future<void> _showPortableImportPreview(
+    BuildContext context,
+    String payload,
+  ) async {
+    String? errorText;
+    while (context.mounted) {
+      final passphrase = await showPortableTransportProfilePassphraseDialog(
+        context: context,
+        title: context.shellText.importPortableProfile,
+        actionLabel: context.shellText.previewImport,
+        errorText: errorText,
+        message:
+            'Enter the passphrase that protects this portable VPN transport-profile envelope.',
+      );
+      if (passphrase == null || !context.mounted) {
+        return;
+      }
+      if (passphrase.isEmpty) {
+        errorText = 'Passphrase is required.';
+        continue;
+      }
+      final preview = await controller.previewPortableVPNTransportProfileImport(
+        envelope: payload,
+        passphrase: passphrase,
+      );
+      if (preview == null || !context.mounted) {
+        return;
+      }
+      if (preview.outcome ==
+              TransportProfilePortableTransferPreviewOutcome.blocked &&
+          preview.blockedReason ==
+              TransportProfilePortableTransferBlockedReason.wrongPassphrase) {
+        errorText = 'Wrong passphrase.';
+        continue;
+      }
+      await showPortableTransportProfileImportPreviewDialog(
+        context: context,
+        preview: preview,
+        onConfirm:
+            preview.outcome ==
+                TransportProfilePortableTransferPreviewOutcome.importable
+            ? () => controller.confirmPortableVPNTransportProfileImport(
+                envelope: payload,
+                passphrase: passphrase,
+              )
+            : null,
+      );
+      return;
+    }
+  }
+
+  Future<void> _importPortable(BuildContext context) async {
+    final source = await showPortableTransportProfileImportSourceDialog(
+      context: context,
+    );
+    if (source == null || !context.mounted) {
+      return;
+    }
+    final payload = switch (source) {
+      PortableTransportProfileImportSource.file =>
+        await controller.openPortableVPNTransportProfileEnvelopeText(),
+      PortableTransportProfileImportSource.paste =>
+        await showPortableTransportProfilePasteDialog(context: context),
+      PortableTransportProfileImportSource.scanQr =>
+        await showPortableTransportProfileQrScanner(context),
+    };
+    if (payload == null || payload.trim().isEmpty || !context.mounted) {
+      return;
+    }
+    await _showPortableImportPreview(context, payload.trim());
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -1376,8 +1496,16 @@ class _VPNTransportProfileManagerPage extends StatelessWidget {
                       controller.canConfigureVPNTransportProfileForMode(mode)
                       ? () => controller.importVPNTransportProfileForMode(mode)
                       : null,
+                  onImportPortable:
+                      controller.canImportPortableVPNTransportProfileForMode(
+                        mode,
+                      )
+                      ? () => _importPortable(context)
+                      : null,
                   onEdit: (TransportProfileStatus profile) =>
                       _openEditor(context, existingProfile: profile),
+                  onExportPortable: (TransportProfileStatus profile) =>
+                      _showPortableExport(context, profile),
                   onValidate: controller.validateVPNTransportProfileRecord,
                   onForget: controller.forgetVPNTransportProfileRecord,
                   onSelect: (TransportProfileStatus profile) => controller
@@ -2501,6 +2629,7 @@ class _RoutingPageState extends State<_RoutingPage> {
               controller.activeVPNTransportProfileConfiguredForMode,
           onEditTransportProfile: widget.onOpenVPNTransportProfileEditor,
           onImportTransportProfile: controller.importVPNTransportProfileForMode,
+          onManageTransportProfiles: widget.onOpenVPNTransportProfileEditor,
           onForgetTransportProfile: controller.forgetVPNTransportProfileForMode,
         ),
         const SizedBox(height: 12),

@@ -155,6 +155,24 @@ const TransportProfileStoreCapability _transportProfileStoreCapability =
         TransportProfileLifecycleAction.validate,
         TransportProfileLifecycleAction.selectForStartup,
       ],
+      portableTransfer: TransportProfilePortableTransferCapability(
+        envelopeType: 'portable_transport_profile',
+        envelopeVersion: 1,
+        supportedKinds: <TransportProfileKind>[
+          TransportProfileKind.wireGuardNativeV1,
+        ],
+        exportPaths: <TransportProfilePortableTransferPath>[
+          TransportProfilePortableTransferPath.textPayload,
+          TransportProfilePortableTransferPath.filePayload,
+          TransportProfilePortableTransferPath.qrPayload,
+        ],
+        importPaths: <TransportProfilePortableTransferPath>[
+          TransportProfilePortableTransferPath.textPayload,
+          TransportProfilePortableTransferPath.filePayload,
+        ],
+        qrMaxPayloadBytes: 2048,
+        qrMode: TransportProfilePortableTransferQrMode.singlePayload,
+      ),
     );
 
 HostInfo _desktopTransportProfileHostInfo({required bool configured}) {
@@ -260,6 +278,13 @@ TransportProfileStatus _desktopTransportProfileStatus() {
       kind: TransportProfileMaterialSource.importAdapter,
       ref: 'host-owned:transport-profile-1',
     ),
+    actions: const <TransportProfileLifecycleAction>[
+      TransportProfileLifecycleAction.replace,
+      TransportProfileLifecycleAction.forget,
+      TransportProfileLifecycleAction.validate,
+      TransportProfileLifecycleAction.selectForStartup,
+      TransportProfileLifecycleAction.exportPortable,
+    ],
     importedAt: DateTime.utc(2026, 4, 28, 12),
     updatedAt: DateTime.utc(2026, 4, 28, 12),
   );
@@ -546,6 +571,7 @@ void main() {
         ),
         findsOneWidget,
       );
+      expect(find.text('Import portable'), findsOneWidget);
       expect(find.byType(Dialog), findsNothing);
       expect(api.importTransportProfileCalls, isEmpty);
 
@@ -576,8 +602,18 @@ void main() {
       expect(api.importTransportProfileCalls, hasLength(1));
       expect(find.text('Request startup'), findsNothing);
       expect(find.text('WireGuard profile: configured.'), findsWidgets);
+      expect(find.text('Open VPN profiles'), findsOneWidget);
       expect(find.text('Replace VPN profile'), findsWidgets);
       expect(find.text('Forget VPN profile'), findsWidgets);
+
+      await tester.tap(find.text('Open VPN profiles'));
+      await tester.pumpAndSettle();
+
+      expect(
+        controller.activeWorkbenchRoute,
+        DesktopWorkbenchRoute.vpnTransportProfiles,
+      );
+      expect(find.text('Export'), findsWidgets);
 
       await tester.tap(
         find.byKey(const ValueKey<String>('desktop-section-home')),
@@ -2477,6 +2513,61 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   ) async {
     importTransportProfileCalls.add(request);
     final status = _desktopTransportProfileStatus();
+    _transportProfiles
+      ..clear()
+      ..add(status);
+    _hostInfo = _desktopTransportProfileHostInfo(configured: true);
+    return status;
+  }
+
+  @override
+  Future<TransportProfilePortableExportResult> exportTransportProfilePortable(
+    String profileId,
+    TransportProfilePortableExportRequest request,
+  ) async {
+    return const TransportProfilePortableExportResult(
+      envelope: '{"type":"portable_transport_profile","version":1}',
+      profileKind: TransportProfileKind.wireGuardNativeV1,
+      displayName: 'WireGuard',
+      encodedBytes: 49,
+    );
+  }
+
+  @override
+  Future<TransportProfilePortableTransferPreview>
+  previewTransportProfilePortableImport(
+    TransportProfilePortableImportRequest request,
+  ) async {
+    return const TransportProfilePortableTransferPreview(
+      outcome: TransportProfilePortableTransferPreviewOutcome.importable,
+      profileKind: TransportProfileKind.wireGuardNativeV1,
+      displayName: 'Imported WireGuard',
+      compatibility: TransportProfileCompatibilityStatus(
+        state: TransportProfileCompatibilityState.compatible,
+      ),
+    );
+  }
+
+  @override
+  Future<TransportProfileStatus> confirmTransportProfilePortableImport(
+    TransportProfilePortableImportRequest request,
+  ) async {
+    final profile = _desktopTransportProfileStatus();
+    final status = TransportProfileStatus(
+      id: profile.id,
+      kind: profile.kind,
+      version: profile.version,
+      displayName: 'Imported WireGuard',
+      validation: profile.validation,
+      compatibility: profile.compatibility,
+      secretMaterialRef: const TransportProfileSecretMaterialRef(
+        kind: TransportProfileMaterialSource.portableTransfer,
+        ref: 'host-owned:portable-imported',
+      ),
+      actions: profile.actions,
+      importedAt: profile.importedAt,
+      updatedAt: profile.updatedAt,
+    );
     _transportProfiles
       ..clear()
       ..add(status);

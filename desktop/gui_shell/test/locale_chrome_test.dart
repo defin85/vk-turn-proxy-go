@@ -142,6 +142,25 @@ class _ReadyControlPlaneApi implements ControlPlaneApi {
   ) => Future<TransportProfileStatus>.error(UnimplementedError());
 
   @override
+  Future<TransportProfilePortableExportResult> exportTransportProfilePortable(
+    String profileId,
+    TransportProfilePortableExportRequest request,
+  ) => Future<TransportProfilePortableExportResult>.error(UnimplementedError());
+
+  @override
+  Future<TransportProfilePortableTransferPreview>
+  previewTransportProfilePortableImport(
+    TransportProfilePortableImportRequest request,
+  ) => Future<TransportProfilePortableTransferPreview>.error(
+    UnimplementedError(),
+  );
+
+  @override
+  Future<TransportProfileStatus> confirmTransportProfilePortableImport(
+    TransportProfilePortableImportRequest request,
+  ) => Future<TransportProfileStatus>.error(UnimplementedError());
+
+  @override
   Future<TransportProfileStructuredSaveResult> createStructuredTransportProfile(
     TransportProfileStructuredCreateRequest request,
   ) => Future<TransportProfileStructuredSaveResult>.error(UnimplementedError());

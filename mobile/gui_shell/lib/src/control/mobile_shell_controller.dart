@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter_shell_i18n/flutter_shell_i18n.dart';
 import 'package:flutter_shell_core/portable_profile_transfer.dart';
+import 'package:flutter_shell_core/transport_profile_portable_transfer.dart';
 import 'package:flutter/widgets.dart';
 import 'package:mobile_gui_shell/src/build/app_build_identity.dart';
 import 'package:mobile_gui_shell/src/control/control_plane_client.dart';
@@ -310,6 +311,33 @@ class MobileShellController extends ChangeNotifier {
     return _hostSupportsTransportProfileStore &&
         _transportProfilePrerequisiteForMode(mode) != null &&
         _transportProfileImportAdapterForMode(mode) != null;
+  }
+
+  TransportProfilePortableTransferCapability?
+  get portableTransportProfileTransferCapability =>
+      hostConnection?.info?.transportProfileStore?.portableTransfer;
+
+  bool canImportPortableVPNTransportProfileForMode(PlatformTunnelMode mode) {
+    final capability = portableTransportProfileTransferCapability;
+    if (!_hostSupportsTransportProfileStore ||
+        capability == null ||
+        capability.importPaths.isEmpty) {
+      return false;
+    }
+    final requiredKinds = vpnTransportProfileRequiredKindsForMode(mode);
+    return _portableTransferSupportsAnyKind(capability, requiredKinds);
+  }
+
+  bool canExportPortableVPNTransportProfileRecord(
+    TransportProfileStatus profile,
+  ) {
+    final capability = portableTransportProfileTransferCapability;
+    return capability != null &&
+        capability.exportPaths.isNotEmpty &&
+        profile.actions.contains(
+          TransportProfileLifecycleAction.exportPortable,
+        ) &&
+        _portableTransferSupportsKind(capability, profile.kind);
   }
 
   bool get canEditVPNTransportProfile {
@@ -906,6 +934,188 @@ class MobileShellController extends ChangeNotifier {
       await refresh();
       notice = _copy.vpnTransportProfileConfigured;
     });
+  }
+
+  Future<PortableTransportProfileEnvelopeCarriage?>
+  exportPortableVPNTransportProfileRecord(
+    TransportProfileStatus profile, {
+    required String passphrase,
+  }) async {
+    PortableTransportProfileEnvelopeCarriage? carriage;
+    await _runBridgeMutation(() async {
+      final capability = portableTransportProfileTransferCapability;
+      if (capability == null ||
+          capability.exportPaths.isEmpty ||
+          !_portableTransferSupportsKind(capability, profile.kind) ||
+          !profile.actions.contains(
+            TransportProfileLifecycleAction.exportPortable,
+          )) {
+        notice = 'Portable VPN transport-profile export is unavailable.';
+        return;
+      }
+      if (passphrase.isEmpty) {
+        notice = 'Passphrase is required.';
+        return;
+      }
+      final result = await bridge.exportTransportProfilePortable(
+        profile.id,
+        TransportProfilePortableExportRequest(passphrase: passphrase),
+      );
+      carriage = PortableTransportProfileEnvelopeCarriage.fromExportResult(
+        result,
+      );
+      notice =
+          'Prepared portable VPN transport profile '
+          '${_portableTransportProfileDisplayLabel(result.displayName, result.profileKind)}.';
+    });
+    return carriage;
+  }
+
+  Future<void> copyPortableVPNTransportProfileEnvelopeText(
+    PortableTransportProfileEnvelopeCarriage carriage,
+  ) async {
+    if (_requiresLocalStateReset) {
+      notice = _localStateResetBlockMessage();
+      _notify();
+      return;
+    }
+    busy = true;
+    _notify();
+    try {
+      await _portableProfileTransferAdapter.copyEnvelopeText(carriage.envelope);
+      notice =
+          'Copied portable VPN transport profile '
+          '${_portableTransportProfileDisplayLabel(carriage.displayName, carriage.profileKind)}.';
+    } catch (error) {
+      notice = '$error';
+    } finally {
+      busy = false;
+      _notify();
+    }
+  }
+
+  Future<void> sharePortableVPNTransportProfileEnvelopeText(
+    PortableTransportProfileEnvelopeCarriage carriage,
+  ) async {
+    if (_requiresLocalStateReset) {
+      notice = _localStateResetBlockMessage();
+      _notify();
+      return;
+    }
+    busy = true;
+    _notify();
+    try {
+      await _portableProfileTransferAdapter.shareEnvelopeText(
+        carriage.envelope,
+      );
+      notice =
+          'Shared portable VPN transport profile '
+          '${_portableTransportProfileDisplayLabel(carriage.displayName, carriage.profileKind)} '
+          'as text.';
+    } catch (error) {
+      notice = '$error';
+    } finally {
+      busy = false;
+      _notify();
+    }
+  }
+
+  Future<void> sharePortableVPNTransportProfileEnvelopeFile(
+    PortableTransportProfileEnvelopeCarriage carriage,
+  ) async {
+    if (_requiresLocalStateReset) {
+      notice = _localStateResetBlockMessage();
+      _notify();
+      return;
+    }
+    busy = true;
+    _notify();
+    try {
+      await _portableProfileTransferAdapter.shareEnvelopeFile(
+        suggestedName: _portableTransportProfileSuggestedFilename(carriage),
+        payload: carriage.envelope,
+      );
+      notice =
+          'Shared portable VPN transport profile '
+          '${_portableTransportProfileDisplayLabel(carriage.displayName, carriage.profileKind)} '
+          'as a file.';
+    } catch (error) {
+      notice = '$error';
+    } finally {
+      busy = false;
+      _notify();
+    }
+  }
+
+  Future<String?> openPortableVPNTransportProfileEnvelopeText() async {
+    if (_requiresLocalStateReset) {
+      notice = _localStateResetBlockMessage();
+      _notify();
+      return null;
+    }
+    try {
+      return await _portableProfileTransferAdapter.openEnvelopeText();
+    } catch (error) {
+      notice = '$error';
+      _notify();
+      return null;
+    }
+  }
+
+  Future<TransportProfilePortableTransferPreview?>
+  previewPortableVPNTransportProfileImport({
+    required String envelope,
+    required String passphrase,
+  }) async {
+    TransportProfilePortableTransferPreview? preview;
+    await _runBridgeMutation(() async {
+      final capability = portableTransportProfileTransferCapability;
+      if (capability == null || capability.importPaths.isEmpty) {
+        notice = 'Portable VPN transport-profile import is unavailable.';
+        return;
+      }
+      if (passphrase.isEmpty) {
+        notice = 'Passphrase is required.';
+        return;
+      }
+      preview = await bridge.previewTransportProfilePortableImport(
+        TransportProfilePortableImportRequest(
+          envelope: envelope,
+          passphrase: passphrase,
+        ),
+      );
+    });
+    return preview;
+  }
+
+  Future<TransportProfileStatus?> confirmPortableVPNTransportProfileImport({
+    required String envelope,
+    required String passphrase,
+  }) async {
+    TransportProfileStatus? imported;
+    await _runBridgeMutation(() async {
+      final capability = portableTransportProfileTransferCapability;
+      if (capability == null || capability.importPaths.isEmpty) {
+        notice = 'Portable VPN transport-profile import is unavailable.';
+        return;
+      }
+      if (passphrase.isEmpty) {
+        notice = 'Passphrase is required.';
+        return;
+      }
+      imported = await bridge.confirmTransportProfilePortableImport(
+        TransportProfilePortableImportRequest(
+          envelope: envelope,
+          passphrase: passphrase,
+        ),
+      );
+      await _refreshHostInfo();
+      await refresh();
+      notice =
+          'Imported portable VPN transport profile '
+          '${_portableTransportProfileDisplayLabel(imported!.displayName, imported!.kind)}.';
+    });
+    return imported;
   }
 
   List<ProviderPreset> get presetCatalog => kProviderPresetCatalog;
@@ -4079,8 +4289,30 @@ class MobileShellController extends ChangeNotifier {
     PlatformTunnelMode mode, {
     RuntimeExecutionPlan? plan,
   }) {
-    final prerequisite = _transportProfilePrerequisiteForMode(mode, plan: plan);
-    if (prerequisite == null || prerequisite.isCompatible) {
+    final descriptor = _transportProfileExecutionPlanDescriptorForMode(
+      mode,
+      plan: plan,
+    );
+    final prerequisite = descriptor?.transportProfile;
+    if (prerequisite == null) {
+      return null;
+    }
+    final hasSelectedOrDefault =
+        prerequisite.selectedProfile?.profileId.trim().isNotEmpty == true ||
+        prerequisite.defaultProfile?.profileId.trim().isNotEmpty == true;
+    if (!hasSelectedOrDefault &&
+        descriptor?.supportState != RuntimeExecutionPlanSupportState.supported) {
+      final descriptorMessage = descriptor?.message?.trim() ?? '';
+      if (descriptorMessage.isNotEmpty) {
+        return descriptorMessage;
+      }
+      final prerequisiteMessage = prerequisite.message.trim();
+      if (prerequisiteMessage.isNotEmpty) {
+        return prerequisiteMessage;
+      }
+      return _copy.vpnTransportProfileRequiredBeforeStarting;
+    }
+    if (prerequisite.isCompatible) {
       return null;
     }
     final hostMessage = prerequisite.message.trim();
@@ -4156,6 +4388,26 @@ class MobileShellController extends ChangeNotifier {
       }
     }
     return null;
+  }
+
+  bool _portableTransferSupportsAnyKind(
+    TransportProfilePortableTransferCapability capability,
+    List<TransportProfileKind> kinds,
+  ) {
+    if (kinds.isEmpty) {
+      return capability.supportedKinds.isNotEmpty;
+    }
+    return kinds.any(
+      (TransportProfileKind kind) =>
+          _portableTransferSupportsKind(capability, kind),
+    );
+  }
+
+  bool _portableTransferSupportsKind(
+    TransportProfilePortableTransferCapability capability,
+    TransportProfileKind kind,
+  ) {
+    return capability.supportedKinds.contains(kind);
   }
 
   TransportProfileReference? _transportProfileReferenceForPlan(
@@ -4743,14 +4995,49 @@ String _formatNoticeTimestamp(DateTime value) {
 
 String _portableProfileSuggestedFilename(PortableProfileEnvelope envelope) {
   final rawName = envelope.displayName.trim();
-  final slug = rawName.isEmpty
-      ? 'profile'
+  final safeSlug = _portableTransferSlug(rawName, fallback: 'profile');
+  return '$safeSlug.portable-profile.json';
+}
+
+String _portableTransportProfileSuggestedFilename(
+  PortableTransportProfileEnvelopeCarriage carriage,
+) {
+  final safeSlug = _portableTransferSlug(
+    carriage.displayName,
+    fallback: _portableTransportProfileKindLabel(
+      carriage.profileKind,
+    ).toLowerCase(),
+  );
+  return '$safeSlug.portable-transport-profile.json';
+}
+
+String _portableTransferSlug(String rawName, {required String fallback}) {
+  final slug = rawName.trim().isEmpty
+      ? fallback
       : rawName
+            .trim()
             .toLowerCase()
             .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
             .replaceAll(RegExp(r'^-+|-+$'), '');
-  final safeSlug = slug.isEmpty ? 'profile' : slug;
-  return '$safeSlug.portable-profile.json';
+  return slug.isEmpty ? fallback : slug;
+}
+
+String _portableTransportProfileDisplayLabel(
+  String displayName,
+  TransportProfileKind kind,
+) {
+  final trimmed = displayName.trim();
+  if (trimmed.isNotEmpty) {
+    return trimmed;
+  }
+  return _portableTransportProfileKindLabel(kind);
+}
+
+String _portableTransportProfileKindLabel(TransportProfileKind kind) {
+  if (kind == TransportProfileKind.wireGuardNativeV1) {
+    return 'WireGuard';
+  }
+  return kind.value;
 }
 
 String _twoDigits(int value) => value.toString().padLeft(2, '0');

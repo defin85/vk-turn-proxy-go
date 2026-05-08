@@ -41,6 +41,17 @@ func TestTransportProfileStoreNegotiatesAndRedactsWireGuardProfile(t *testing.T)
 	if len(info.TransportProfileStore.EditableKinds) != 1 {
 		t.Fatalf("editable kinds = %+v, want wireguard_native_v1 schema", info.TransportProfileStore.EditableKinds)
 	}
+	if info.TransportProfileStore.PortableTransfer == nil {
+		t.Fatal("portable_transfer = nil, want advertised portable transfer capability")
+	}
+	if info.TransportProfileStore.PortableTransfer.EnvelopeType != portableTransportProfileEnvelopeType ||
+		info.TransportProfileStore.PortableTransfer.EnvelopeVersion != portableTransportProfileEnvelopeVersion {
+		t.Fatalf("portable transfer capability = %+v, want portable transport-profile envelope metadata", info.TransportProfileStore.PortableTransfer)
+	}
+	if info.TransportProfileStore.PortableTransfer.QRMaxPayloadBytes != portableTransportProfileQRMaxPayloadBytes ||
+		info.TransportProfileStore.PortableTransfer.QRMode != TransportProfilePortableTransferQRModeSinglePayload {
+		t.Fatalf("portable transfer qr metadata = %+v, want bounded single-payload qr support", info.TransportProfileStore.PortableTransfer)
+	}
 	schema := info.TransportProfileStore.EditableKinds[0]
 	if schema.Kind != TransportProfileKindWireGuardNativeV1 || schema.SchemaVersion == "" {
 		t.Fatalf("editable schema = %+v, want versioned wireguard_native_v1 schema", schema)
@@ -69,6 +80,9 @@ func TestTransportProfileStoreNegotiatesAndRedactsWireGuardProfile(t *testing.T)
 	if status.SecretMaterialRef.Ref == "" || strings.Contains(status.SecretMaterialRef.Ref, "android-vpn-service.conf") {
 		t.Fatalf("secret material ref = %+v, want opaque host-owned ref", status.SecretMaterialRef)
 	}
+	if !testContainsLifecycleAction(status.Actions, TransportProfileLifecycleActionExportPortable) {
+		t.Fatalf("actions after import = %+v, want export_portable", status.Actions)
+	}
 
 	profiles, err := host.TransportProfiles()
 	if err != nil {
@@ -92,6 +106,56 @@ func TestTransportProfileStoreNegotiatesAndRedactsWireGuardProfile(t *testing.T)
 	ref := info.PlatformTunnels[0].ExecutionPlans[0].TransportProfile.SelectedProfile
 	if ref == nil || ref.ProfileID != status.ID {
 		t.Fatalf("selected profile ref = %+v, want %s", ref, status.ID)
+	}
+}
+
+func TestCloneTransportProfileStoreCapabilityPreservesPortableTransferMetadata(t *testing.T) {
+	original := &TransportProfileStoreCapability{
+		SupportedKinds: []TransportProfileKind{
+			TransportProfileKindWireGuardNativeV1,
+		},
+		PortableTransfer: &TransportProfilePortableTransferCapability{
+			EnvelopeType:    "portable_transport_profile",
+			EnvelopeVersion: 1,
+			SupportedKinds: []TransportProfileKind{
+				TransportProfileKindWireGuardNativeV1,
+			},
+			ExportPaths: []TransportProfilePortableTransferPath{
+				TransportProfilePortableTransferPathTextPayload,
+				TransportProfilePortableTransferPathQRPayload,
+			},
+			ImportPaths: []TransportProfilePortableTransferPath{
+				TransportProfilePortableTransferPathFilePayload,
+			},
+			QRMaxPayloadBytes: 2048,
+			QRMode:            TransportProfilePortableTransferQRModeSinglePayload,
+		},
+	}
+
+	cloned := cloneTransportProfileStoreCapability(original)
+	if cloned == nil || cloned.PortableTransfer == nil {
+		t.Fatalf("clone = %+v, want portable transfer metadata", cloned)
+	}
+	if cloned.PortableTransfer == original.PortableTransfer {
+		t.Fatal("portable transfer capability pointer was reused")
+	}
+	if cloned.PortableTransfer.EnvelopeType != "portable_transport_profile" {
+		t.Fatalf("envelope_type = %q, want portable_transport_profile", cloned.PortableTransfer.EnvelopeType)
+	}
+	if len(cloned.PortableTransfer.ExportPaths) != 2 || cloned.PortableTransfer.ExportPaths[1] != TransportProfilePortableTransferPathQRPayload {
+		t.Fatalf("export_paths = %+v, want text+qr payloads", cloned.PortableTransfer.ExportPaths)
+	}
+	if len(cloned.PortableTransfer.ImportPaths) != 1 || cloned.PortableTransfer.ImportPaths[0] != TransportProfilePortableTransferPathFilePayload {
+		t.Fatalf("import_paths = %+v, want file payload", cloned.PortableTransfer.ImportPaths)
+	}
+
+	original.PortableTransfer.SupportedKinds[0] = TransportProfileKind("mutated_kind")
+	original.PortableTransfer.ExportPaths[0] = TransportProfilePortableTransferPath("mutated_path")
+	if cloned.PortableTransfer.SupportedKinds[0] != TransportProfileKindWireGuardNativeV1 {
+		t.Fatalf("supported_kinds clone mutated = %+v, want independent copy", cloned.PortableTransfer.SupportedKinds)
+	}
+	if cloned.PortableTransfer.ExportPaths[0] != TransportProfilePortableTransferPathTextPayload {
+		t.Fatalf("export_paths clone mutated = %+v, want independent copy", cloned.PortableTransfer.ExportPaths)
 	}
 }
 
@@ -667,6 +731,438 @@ func TestTransportProfileStoreHTTPExposesValidateAndSelectLifecycleActions(t *te
 	}
 	if len(selected.DefaultFor) != 1 || selected.DefaultFor[0].ProfileID != status.ID {
 		t.Fatalf("selected default_for = %+v, want scoped default for %s", selected.DefaultFor, status.ID)
+	}
+}
+
+func TestTransportProfilePortableExportPreviewConfirmRoundTrip(t *testing.T) {
+	sourceHost := New(
+		WithBuildIdentity(BuildIdentity{Target: "android/embedded"}),
+		WithVPNTransportProfileStore(),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{supportedTestAndroidVPNCapability()}),
+	)
+	sourceStatus, err := sourceHost.ImportTransportProfile(testWireGuardTransportProfileImport("portable-source-private-key"))
+	if err != nil {
+		t.Fatalf("ImportTransportProfile(source) error = %v", err)
+	}
+
+	exported, err := sourceHost.ExportTransportProfilePortable(sourceStatus.ID, TransportProfilePortableExportRequest{
+		Passphrase: "transfer-passphrase",
+	})
+	if err != nil {
+		t.Fatalf("ExportTransportProfilePortable() error = %v", err)
+	}
+	if exported.ProfileKind != TransportProfileKindWireGuardNativeV1 ||
+		exported.DisplayName != sourceStatus.DisplayName ||
+		exported.EncodedBytes <= 0 {
+		t.Fatalf("exported portable result = %+v, want safe envelope metadata", exported)
+	}
+	body, err := json.Marshal(exported)
+	if err != nil {
+		t.Fatalf("Marshal(exported) error = %v", err)
+	}
+	if strings.Contains(string(body), "portable-source-private-key") ||
+		strings.Contains(string(body), "relay.example.test:51820") {
+		t.Fatalf("portable export response leaked secret material: %s", body)
+	}
+
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(exported.Envelope), &envelope); err != nil {
+		t.Fatalf("portable envelope json = %v", err)
+	}
+	if envelope["type"] != portableTransportProfileEnvelopeType ||
+		int(envelope["version"].(float64)) != portableTransportProfileEnvelopeVersion {
+		t.Fatalf("portable envelope cleartext metadata = %+v, want portable transport-profile identity", envelope)
+	}
+	if _, ok := envelope["display_name"]; ok {
+		t.Fatalf("portable envelope cleartext leaked display_name: %+v", envelope)
+	}
+	if _, ok := envelope["wireguard_native_v1"]; ok {
+		t.Fatalf("portable envelope cleartext leaked wireguard material: %+v", envelope)
+	}
+
+	destinationHost := New(
+		WithBuildIdentity(BuildIdentity{Target: "android/embedded"}),
+		WithVPNTransportProfileStore(),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{supportedTestAndroidVPNCapability()}),
+	)
+	preview, err := destinationHost.PreviewTransportProfilePortableImport(TransportProfilePortableImportRequest{
+		Envelope:   exported.Envelope,
+		Passphrase: "transfer-passphrase",
+	})
+	if err != nil {
+		t.Fatalf("PreviewTransportProfilePortableImport() error = %v", err)
+	}
+	if preview.Outcome != TransportProfilePortableTransferPreviewOutcomeImportable ||
+		preview.ProfileKind != TransportProfileKindWireGuardNativeV1 ||
+		preview.DisplayName != sourceStatus.DisplayName ||
+		preview.ResolvedDisplayName != sourceStatus.DisplayName ||
+		preview.Compatibility == nil ||
+		preview.Compatibility.State != TransportProfileCompatibilityStateCompatible ||
+		!preview.SelectionRequired {
+		t.Fatalf("preview = %+v, want importable compatible preview", preview)
+	}
+	profiles, err := destinationHost.TransportProfiles()
+	if err != nil {
+		t.Fatalf("TransportProfiles(destination before confirm) error = %v", err)
+	}
+	if len(profiles) != 0 {
+		t.Fatalf("profiles before confirm = %+v, want no persisted import side effects", profiles)
+	}
+
+	imported, err := destinationHost.ConfirmTransportProfilePortableImport(TransportProfilePortableImportRequest{
+		Envelope:   exported.Envelope,
+		Passphrase: "transfer-passphrase",
+	})
+	if err != nil {
+		t.Fatalf("ConfirmTransportProfilePortableImport() error = %v", err)
+	}
+	if imported.ID == sourceStatus.ID {
+		t.Fatalf("imported id = %q, want fresh local id distinct from source %q", imported.ID, sourceStatus.ID)
+	}
+	if imported.SecretMaterialRef.Kind != TransportProfileMaterialSourcePortableTransfer {
+		t.Fatalf("secret material source = %+v, want portable_transfer", imported.SecretMaterialRef)
+	}
+	if len(imported.DefaultFor) != 0 {
+		t.Fatalf("imported default_for = %+v, want no implicit startup selection", imported.DefaultFor)
+	}
+	if !testContainsLifecycleAction(imported.Actions, TransportProfileLifecycleActionExportPortable) {
+		t.Fatalf("imported actions = %+v, want export_portable on imported record", imported.Actions)
+	}
+
+	info := destinationHost.Info()
+	if info.PlatformTunnels[0].ExecutionPlans[0].SupportState != RuntimeExecutionPlanSupportStateUnavailable {
+		t.Fatalf("support_state after portable import = %q, want unavailable until explicit selection", info.PlatformTunnels[0].ExecutionPlans[0].SupportState)
+	}
+	if info.PlatformTunnels[0].ExecutionPlans[0].TransportProfile == nil ||
+		info.PlatformTunnels[0].ExecutionPlans[0].TransportProfile.SelectedProfile != nil ||
+		info.PlatformTunnels[0].ExecutionPlans[0].TransportProfile.DefaultProfile != nil {
+		t.Fatalf("transport profile prerequisite after portable import = %+v, want setup-needed state", info.PlatformTunnels[0].ExecutionPlans[0].TransportProfile)
+	}
+}
+
+func TestTransportProfilePortableImportPreviewBlocksWrongPassphrase(t *testing.T) {
+	sourceHost := New(
+		WithBuildIdentity(BuildIdentity{Target: "android/embedded"}),
+		WithVPNTransportProfileStore(),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{supportedTestAndroidVPNCapability()}),
+	)
+	sourceStatus, err := sourceHost.ImportTransportProfile(testWireGuardTransportProfileImport("portable-wrong-pass-key"))
+	if err != nil {
+		t.Fatalf("ImportTransportProfile(source) error = %v", err)
+	}
+	exported, err := sourceHost.ExportTransportProfilePortable(sourceStatus.ID, TransportProfilePortableExportRequest{
+		Passphrase: "correct-passphrase",
+	})
+	if err != nil {
+		t.Fatalf("ExportTransportProfilePortable() error = %v", err)
+	}
+
+	destinationHost := New(
+		WithBuildIdentity(BuildIdentity{Target: "android/embedded"}),
+		WithVPNTransportProfileStore(),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{supportedTestAndroidVPNCapability()}),
+	)
+	preview, err := destinationHost.PreviewTransportProfilePortableImport(TransportProfilePortableImportRequest{
+		Envelope:   exported.Envelope,
+		Passphrase: "wrong-passphrase",
+	})
+	if err != nil {
+		t.Fatalf("PreviewTransportProfilePortableImport(wrong passphrase) error = %v", err)
+	}
+	if preview.Outcome != TransportProfilePortableTransferPreviewOutcomeBlocked ||
+		preview.BlockedReason != TransportProfilePortableTransferBlockedReasonWrongPassphrase {
+		t.Fatalf("wrong-passphrase preview = %+v, want blocked/wrong_passphrase", preview)
+	}
+	profiles, err := destinationHost.TransportProfiles()
+	if err != nil {
+		t.Fatalf("TransportProfiles(destination) error = %v", err)
+	}
+	if len(profiles) != 0 {
+		t.Fatalf("profiles after blocked preview = %+v, want no imported records", profiles)
+	}
+}
+
+func TestTransportProfilePortableImportPreviewReturnsAlreadyPresentForExactDuplicate(t *testing.T) {
+	sourceHost := New(
+		WithBuildIdentity(BuildIdentity{Target: "android/embedded"}),
+		WithVPNTransportProfileStore(),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{supportedTestAndroidVPNCapability()}),
+	)
+	sourceStatus, err := sourceHost.ImportTransportProfile(testWireGuardTransportProfileImport("portable-duplicate-key"))
+	if err != nil {
+		t.Fatalf("ImportTransportProfile(source) error = %v", err)
+	}
+	exported, err := sourceHost.ExportTransportProfilePortable(sourceStatus.ID, TransportProfilePortableExportRequest{
+		Passphrase: "duplicate-passphrase",
+	})
+	if err != nil {
+		t.Fatalf("ExportTransportProfilePortable() error = %v", err)
+	}
+
+	destinationHost := New(
+		WithBuildIdentity(BuildIdentity{Target: "android/embedded"}),
+		WithVPNTransportProfileStore(),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{supportedTestAndroidVPNCapability()}),
+	)
+	existing, err := destinationHost.ImportTransportProfile(testWireGuardTransportProfileImport("portable-duplicate-key"))
+	if err != nil {
+		t.Fatalf("ImportTransportProfile(destination existing) error = %v", err)
+	}
+	preview, err := destinationHost.PreviewTransportProfilePortableImport(TransportProfilePortableImportRequest{
+		Envelope:   exported.Envelope,
+		Passphrase: "duplicate-passphrase",
+	})
+	if err != nil {
+		t.Fatalf("PreviewTransportProfilePortableImport(duplicate) error = %v", err)
+	}
+	if preview.Outcome != TransportProfilePortableTransferPreviewOutcomeAlreadyPresent ||
+		preview.DuplicateFingerprint == "" ||
+		len(preview.ExistingProfiles) != 1 ||
+		preview.ExistingProfiles[0].ProfileID != existing.ID ||
+		preview.SelectionRequired {
+		t.Fatalf("duplicate preview = %+v, want already_present pointing at existing selected record", preview)
+	}
+
+	_, err = destinationHost.ConfirmTransportProfilePortableImport(TransportProfilePortableImportRequest{
+		Envelope:   exported.Envelope,
+		Passphrase: "duplicate-passphrase",
+	})
+	if err == nil {
+		t.Fatal("ConfirmTransportProfilePortableImport(duplicate) error = nil, want no second identical record")
+	}
+	profiles, err := destinationHost.TransportProfiles()
+	if err != nil {
+		t.Fatalf("TransportProfiles(destination) error = %v", err)
+	}
+	if len(profiles) != 1 {
+		t.Fatalf("profiles after duplicate confirm attempt = %+v, want one existing record", profiles)
+	}
+}
+
+func TestTransportProfilePortableImportPreviewSuggestsResolvedDisplayNameForNameCollision(t *testing.T) {
+	sourceHost := New(
+		WithBuildIdentity(BuildIdentity{Target: "android/embedded"}),
+		WithVPNTransportProfileStore(),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{supportedTestAndroidVPNCapability()}),
+	)
+	sourceStatus, err := sourceHost.ImportTransportProfile(testWireGuardTransportProfileImport("portable-name-collision-source-key"))
+	if err != nil {
+		t.Fatalf("ImportTransportProfile(source) error = %v", err)
+	}
+	exported, err := sourceHost.ExportTransportProfilePortable(sourceStatus.ID, TransportProfilePortableExportRequest{
+		Passphrase: "collision-passphrase",
+	})
+	if err != nil {
+		t.Fatalf("ExportTransportProfilePortable() error = %v", err)
+	}
+
+	destinationHost := New(
+		WithBuildIdentity(BuildIdentity{Target: "android/embedded"}),
+		WithVPNTransportProfileStore(),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{supportedTestAndroidVPNCapability()}),
+	)
+	if _, err := destinationHost.ImportTransportProfile(testWireGuardTransportProfileImport("portable-name-collision-existing-key")); err != nil {
+		t.Fatalf("ImportTransportProfile(destination existing) error = %v", err)
+	}
+	preview, err := destinationHost.PreviewTransportProfilePortableImport(TransportProfilePortableImportRequest{
+		Envelope:   exported.Envelope,
+		Passphrase: "collision-passphrase",
+	})
+	if err != nil {
+		t.Fatalf("PreviewTransportProfilePortableImport(name collision) error = %v", err)
+	}
+	if preview.Outcome != TransportProfilePortableTransferPreviewOutcomeImportable ||
+		preview.ResolvedDisplayName != "phone transport (2)" ||
+		len(preview.Warnings) != 1 ||
+		preview.Warnings[0].Code != TransportProfilePortableTransferPreviewWarningDisplayNameConflict {
+		t.Fatalf("name-collision preview = %+v, want importable warning with resolved local name", preview)
+	}
+
+	imported, err := destinationHost.ConfirmTransportProfilePortableImport(TransportProfilePortableImportRequest{
+		Envelope:   exported.Envelope,
+		Passphrase: "collision-passphrase",
+	})
+	if err != nil {
+		t.Fatalf("ConfirmTransportProfilePortableImport(name collision) error = %v", err)
+	}
+	if imported.DisplayName != "phone transport (2)" {
+		t.Fatalf("imported display name = %q, want suggested resolved local name", imported.DisplayName)
+	}
+}
+
+func TestTransportProfilePortableImportPreviewBlocksUnsupportedEnvelopeVersion(t *testing.T) {
+	sourceHost := New(
+		WithBuildIdentity(BuildIdentity{Target: "android/embedded"}),
+		WithVPNTransportProfileStore(),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{supportedTestAndroidVPNCapability()}),
+	)
+	sourceStatus, err := sourceHost.ImportTransportProfile(testWireGuardTransportProfileImport("portable-version-key"))
+	if err != nil {
+		t.Fatalf("ImportTransportProfile(source) error = %v", err)
+	}
+	exported, err := sourceHost.ExportTransportProfilePortable(sourceStatus.ID, TransportProfilePortableExportRequest{
+		Passphrase: "version-passphrase",
+	})
+	if err != nil {
+		t.Fatalf("ExportTransportProfilePortable() error = %v", err)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(exported.Envelope), &envelope); err != nil {
+		t.Fatalf("Unmarshal(exported envelope) error = %v", err)
+	}
+	envelope["version"] = float64(99)
+	mutated, err := json.Marshal(envelope)
+	if err != nil {
+		t.Fatalf("Marshal(mutated envelope) error = %v", err)
+	}
+
+	destinationHost := New(
+		WithBuildIdentity(BuildIdentity{Target: "android/embedded"}),
+		WithVPNTransportProfileStore(),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{supportedTestAndroidVPNCapability()}),
+	)
+	preview, err := destinationHost.PreviewTransportProfilePortableImport(TransportProfilePortableImportRequest{
+		Envelope:   string(mutated),
+		Passphrase: "version-passphrase",
+	})
+	if err != nil {
+		t.Fatalf("PreviewTransportProfilePortableImport(unsupported version) error = %v", err)
+	}
+	if preview.Outcome != TransportProfilePortableTransferPreviewOutcomeBlocked ||
+		preview.BlockedReason != TransportProfilePortableTransferBlockedReasonUnsupportedEnvelope {
+		t.Fatalf("unsupported-version preview = %+v, want blocked/unsupported_envelope", preview)
+	}
+}
+
+func TestTransportProfilePortableImportPreviewBlocksIncompatibleHost(t *testing.T) {
+	sourceHost := New(
+		WithBuildIdentity(BuildIdentity{Target: "android/embedded"}),
+		WithVPNTransportProfileStore(),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{supportedTestAndroidVPNCapability()}),
+	)
+	sourceStatus, err := sourceHost.ImportTransportProfile(testWireGuardTransportProfileImport("portable-incompatible-host-key"))
+	if err != nil {
+		t.Fatalf("ImportTransportProfile(source) error = %v", err)
+	}
+	exported, err := sourceHost.ExportTransportProfilePortable(sourceStatus.ID, TransportProfilePortableExportRequest{
+		Passphrase: "host-passphrase",
+	})
+	if err != nil {
+		t.Fatalf("ExportTransportProfilePortable() error = %v", err)
+	}
+
+	incompatibleCapability := supportedTestAndroidVPNCapability()
+	incompatibleCapability.ExecutionPlans = []RuntimeExecutionPlanDescriptor{{
+		Plan:                 testStrictWireGuardTurnDescriptor().Plan,
+		SupportState:         RuntimeExecutionPlanSupportStateUnavailable,
+		RemoteEndpointFamily: RuntimeRemoteEndpointFamilyTURNServer,
+		RemoteEndpointRole:   RuntimeRemoteEndpointRoleWireGuardRawDatagram,
+	}}
+	destinationHost := New(
+		WithBuildIdentity(BuildIdentity{Target: "android/embedded"}),
+		WithVPNTransportProfileStore(),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{incompatibleCapability}),
+	)
+	preview, err := destinationHost.PreviewTransportProfilePortableImport(TransportProfilePortableImportRequest{
+		Envelope:   exported.Envelope,
+		Passphrase: "host-passphrase",
+	})
+	if err != nil {
+		t.Fatalf("PreviewTransportProfilePortableImport(incompatible host) error = %v", err)
+	}
+	if preview.Outcome != TransportProfilePortableTransferPreviewOutcomeBlocked ||
+		preview.BlockedReason != TransportProfilePortableTransferBlockedReasonIncompatibleHost {
+		t.Fatalf("incompatible-host preview = %+v, want blocked/incompatible_host", preview)
+	}
+}
+
+func TestTransportProfileStoreHTTPExposesPortableTransferActions(t *testing.T) {
+	sourceHost := New(
+		WithBuildIdentity(BuildIdentity{Target: "android/embedded"}),
+		WithVPNTransportProfileStore(),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{supportedTestAndroidVPNCapability()}),
+	)
+	sourceStatus, err := sourceHost.ImportTransportProfile(testWireGuardTransportProfileImport("portable-http-key"))
+	if err != nil {
+		t.Fatalf("ImportTransportProfile(source) error = %v", err)
+	}
+	sourceServer := httptest.NewServer(Handler(sourceHost))
+	t.Cleanup(sourceServer.Close)
+
+	destinationHost := New(
+		WithBuildIdentity(BuildIdentity{Target: "android/embedded"}),
+		WithVPNTransportProfileStore(),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{supportedTestAndroidVPNCapability()}),
+	)
+	destinationServer := httptest.NewServer(Handler(destinationHost))
+	t.Cleanup(destinationServer.Close)
+
+	exportBody, err := json.Marshal(TransportProfilePortableExportRequest{Passphrase: "http-transfer-passphrase"})
+	if err != nil {
+		t.Fatalf("Marshal(export request) error = %v", err)
+	}
+	resp, err := http.Post(
+		sourceServer.URL+"/v1/transport-profiles/"+sourceStatus.ID+"/export-portable",
+		"application/json",
+		bytes.NewReader(exportBody),
+	)
+	if err != nil {
+		t.Fatalf("POST export-portable error = %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("POST export-portable status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var exported TransportProfilePortableExportResult
+	if err := json.NewDecoder(resp.Body).Decode(&exported); err != nil {
+		t.Fatalf("decode exported result: %v", err)
+	}
+
+	importBody, err := json.Marshal(TransportProfilePortableImportRequest{
+		Envelope:   exported.Envelope,
+		Passphrase: "http-transfer-passphrase",
+	})
+	if err != nil {
+		t.Fatalf("Marshal(import request) error = %v", err)
+	}
+	resp, err = http.Post(
+		destinationServer.URL+"/v1/transport-profiles:preview-portable-import",
+		"application/json",
+		bytes.NewReader(importBody),
+	)
+	if err != nil {
+		t.Fatalf("POST preview-portable-import error = %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("POST preview-portable-import status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var preview TransportProfilePortableTransferPreview
+	if err := json.NewDecoder(resp.Body).Decode(&preview); err != nil {
+		t.Fatalf("decode portable preview: %v", err)
+	}
+	if preview.Outcome != TransportProfilePortableTransferPreviewOutcomeImportable {
+		t.Fatalf("preview = %+v, want importable", preview)
+	}
+
+	resp, err = http.Post(
+		destinationServer.URL+"/v1/transport-profiles:confirm-portable-import",
+		"application/json",
+		bytes.NewReader(importBody),
+	)
+	if err != nil {
+		t.Fatalf("POST confirm-portable-import error = %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("POST confirm-portable-import status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var imported TransportProfileStatus
+	if err := json.NewDecoder(resp.Body).Decode(&imported); err != nil {
+		t.Fatalf("decode imported profile: %v", err)
+	}
+	if imported.SecretMaterialRef.Kind != TransportProfileMaterialSourcePortableTransfer {
+		t.Fatalf("imported profile = %+v, want portable_transfer source", imported)
 	}
 }
 

@@ -239,7 +239,98 @@ const (
 	TransportProfileLifecycleActionUpdateStructured TransportProfileLifecycleAction = "update_structured"
 	TransportProfileLifecycleActionValidateDraft    TransportProfileLifecycleAction = "validate_draft"
 	TransportProfileLifecycleActionGenerateKey      TransportProfileLifecycleAction = "generate_key"
+	TransportProfileLifecycleActionExportPortable   TransportProfileLifecycleAction = "export_portable"
 )
+
+type TransportProfilePortableTransferPath string
+
+const (
+	TransportProfilePortableTransferPathTextPayload TransportProfilePortableTransferPath = "text_payload"
+	TransportProfilePortableTransferPathFilePayload TransportProfilePortableTransferPath = "file_payload"
+	TransportProfilePortableTransferPathQRPayload   TransportProfilePortableTransferPath = "qr_payload"
+)
+
+type TransportProfilePortableTransferQRMode string
+
+const (
+	TransportProfilePortableTransferQRModeSinglePayload TransportProfilePortableTransferQRMode = "single_payload"
+)
+
+type TransportProfilePortableTransferCapability struct {
+	EnvelopeType      string                                 `json:"envelope_type,omitempty"`
+	EnvelopeVersion   int                                    `json:"envelope_version,omitempty"`
+	SupportedKinds    []TransportProfileKind                 `json:"supported_kinds,omitempty"`
+	ExportPaths       []TransportProfilePortableTransferPath `json:"export_paths,omitempty"`
+	ImportPaths       []TransportProfilePortableTransferPath `json:"import_paths,omitempty"`
+	QRMaxPayloadBytes int                                    `json:"qr_max_payload_bytes,omitempty"`
+	QRMode            TransportProfilePortableTransferQRMode `json:"qr_mode,omitempty"`
+}
+
+type TransportProfilePortableTransferPreviewOutcome string
+
+const (
+	TransportProfilePortableTransferPreviewOutcomeBlocked        TransportProfilePortableTransferPreviewOutcome = "blocked"
+	TransportProfilePortableTransferPreviewOutcomeAlreadyPresent TransportProfilePortableTransferPreviewOutcome = "already_present"
+	TransportProfilePortableTransferPreviewOutcomeImportable     TransportProfilePortableTransferPreviewOutcome = "importable"
+)
+
+type TransportProfilePortableTransferBlockedReason string
+
+const (
+	TransportProfilePortableTransferBlockedReasonWrongPassphrase        TransportProfilePortableTransferBlockedReason = "wrong_passphrase"
+	TransportProfilePortableTransferBlockedReasonUnsupportedEnvelope    TransportProfilePortableTransferBlockedReason = "unsupported_envelope"
+	TransportProfilePortableTransferBlockedReasonUnsupportedProfileKind TransportProfilePortableTransferBlockedReason = "unsupported_profile_kind"
+	TransportProfilePortableTransferBlockedReasonIncompatibleHost       TransportProfilePortableTransferBlockedReason = "incompatible_host"
+	TransportProfilePortableTransferBlockedReasonMalformedEnvelope      TransportProfilePortableTransferBlockedReason = "malformed_envelope"
+	TransportProfilePortableTransferBlockedReasonMissingRequiredKind    TransportProfilePortableTransferBlockedReason = "missing_required_profile_kind"
+)
+
+type TransportProfilePortableTransferPreviewWarningCode string
+
+const (
+	TransportProfilePortableTransferPreviewWarningDisplayNameConflict TransportProfilePortableTransferPreviewWarningCode = "display_name_conflict"
+)
+
+type TransportProfilePortableTransferPreviewWarning struct {
+	Code    TransportProfilePortableTransferPreviewWarningCode `json:"code"`
+	Message string                                             `json:"message,omitempty"`
+}
+
+type TransportProfilePortableTransferExistingProfile struct {
+	ProfileID   string                           `json:"profile_id"`
+	Kind        TransportProfileKind             `json:"kind"`
+	DisplayName string                           `json:"display_name,omitempty"`
+	DefaultFor  []TransportProfileDefaultBinding `json:"default_for,omitempty"`
+}
+
+type TransportProfilePortableTransferPreview struct {
+	Outcome              TransportProfilePortableTransferPreviewOutcome    `json:"outcome"`
+	BlockedReason        TransportProfilePortableTransferBlockedReason     `json:"blocked_reason,omitempty"`
+	ProfileKind          TransportProfileKind                              `json:"profile_kind,omitempty"`
+	DisplayName          string                                            `json:"display_name,omitempty"`
+	ResolvedDisplayName  string                                            `json:"resolved_display_name,omitempty"`
+	Compatibility        *TransportProfileCompatibilityStatus              `json:"compatibility,omitempty"`
+	SelectionRequired    bool                                              `json:"selection_required,omitempty"`
+	DuplicateFingerprint string                                            `json:"duplicate_fingerprint,omitempty"`
+	ExistingProfiles     []TransportProfilePortableTransferExistingProfile `json:"existing_profiles,omitempty"`
+	Warnings             []TransportProfilePortableTransferPreviewWarning  `json:"warnings,omitempty"`
+}
+
+type TransportProfilePortableExportRequest struct {
+	Passphrase string `json:"passphrase"`
+}
+
+type TransportProfilePortableExportResult struct {
+	Envelope     string               `json:"envelope"`
+	ProfileKind  TransportProfileKind `json:"profile_kind,omitempty"`
+	DisplayName  string               `json:"display_name,omitempty"`
+	EncodedBytes int                  `json:"encoded_bytes,omitempty"`
+}
+
+type TransportProfilePortableImportRequest struct {
+	Envelope   string `json:"envelope"`
+	Passphrase string `json:"passphrase"`
+}
 
 type TransportProfileValidationState string
 
@@ -259,9 +350,10 @@ const (
 type TransportProfileMaterialSource string
 
 const (
-	TransportProfileMaterialSourceImportAdapter TransportProfileMaterialSource = "import_adapter"
-	TransportProfileMaterialSourceLegacyPath    TransportProfileMaterialSource = "legacy_path"
-	TransportProfileMaterialSourceStructured    TransportProfileMaterialSource = "structured_editor"
+	TransportProfileMaterialSourceImportAdapter    TransportProfileMaterialSource = "import_adapter"
+	TransportProfileMaterialSourceLegacyPath       TransportProfileMaterialSource = "legacy_path"
+	TransportProfileMaterialSourcePortableTransfer TransportProfileMaterialSource = "portable_transfer"
+	TransportProfileMaterialSourceStructured       TransportProfileMaterialSource = "structured_editor"
 )
 
 type TransportProfileSecretMaterialRef struct {
@@ -390,11 +482,12 @@ type TransportProfileEditableKindSchema struct {
 }
 
 type TransportProfileStoreCapability struct {
-	SupportedKinds      []TransportProfileKind                    `json:"supported_kinds,omitempty"`
-	ImportAdapters      []TransportProfileImportAdapterDescriptor `json:"import_adapters,omitempty"`
-	LifecycleActions    []TransportProfileLifecycleAction         `json:"lifecycle_actions,omitempty"`
-	RedactionGuarantees []string                                  `json:"redaction_guarantees,omitempty"`
-	EditableKinds       []TransportProfileEditableKindSchema      `json:"editable_kinds,omitempty"`
+	SupportedKinds      []TransportProfileKind                      `json:"supported_kinds,omitempty"`
+	ImportAdapters      []TransportProfileImportAdapterDescriptor   `json:"import_adapters,omitempty"`
+	LifecycleActions    []TransportProfileLifecycleAction           `json:"lifecycle_actions,omitempty"`
+	RedactionGuarantees []string                                    `json:"redaction_guarantees,omitempty"`
+	EditableKinds       []TransportProfileEditableKindSchema        `json:"editable_kinds,omitempty"`
+	PortableTransfer    *TransportProfilePortableTransferCapability `json:"portable_transfer,omitempty"`
 }
 
 type TransportProfileImportRequest struct {

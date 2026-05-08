@@ -329,7 +329,8 @@ enum TransportProfileLifecycleAction {
   createStructured('create_structured'),
   updateStructured('update_structured'),
   validateDraft('validate_draft'),
-  generateKey('generate_key');
+  generateKey('generate_key'),
+  exportPortable('export_portable');
 
   const TransportProfileLifecycleAction(this.value);
 
@@ -343,6 +344,175 @@ enum TransportProfileLifecycleAction {
     }
     return null;
   }
+}
+
+class TransportProfilePortableTransferPath {
+  const TransportProfilePortableTransferPath(this.value);
+
+  static const textPayload = TransportProfilePortableTransferPath(
+    'text_payload',
+  );
+  static const filePayload = TransportProfilePortableTransferPath(
+    'file_payload',
+  );
+  static const qrPayload = TransportProfilePortableTransferPath('qr_payload');
+
+  final String value;
+
+  static TransportProfilePortableTransferPath? fromJson(String? raw) {
+    final value = raw?.trim() ?? '';
+    if (value.isEmpty) {
+      return null;
+    }
+    return TransportProfilePortableTransferPath(value);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is TransportProfilePortableTransferPath && other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => value;
+}
+
+class TransportProfilePortableTransferQrMode {
+  const TransportProfilePortableTransferQrMode(this.value);
+
+  static const singlePayload = TransportProfilePortableTransferQrMode(
+    'single_payload',
+  );
+
+  final String value;
+
+  static TransportProfilePortableTransferQrMode? fromJson(String? raw) {
+    final value = raw?.trim() ?? '';
+    if (value.isEmpty) {
+      return null;
+    }
+    return TransportProfilePortableTransferQrMode(value);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is TransportProfilePortableTransferQrMode && other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => value;
+}
+
+class TransportProfilePortableTransferPreviewOutcome {
+  const TransportProfilePortableTransferPreviewOutcome(this.value);
+
+  static const blocked = TransportProfilePortableTransferPreviewOutcome(
+    'blocked',
+  );
+  static const alreadyPresent = TransportProfilePortableTransferPreviewOutcome(
+    'already_present',
+  );
+  static const importable = TransportProfilePortableTransferPreviewOutcome(
+    'importable',
+  );
+
+  final String value;
+
+  static TransportProfilePortableTransferPreviewOutcome? fromJson(String? raw) {
+    final value = raw?.trim() ?? '';
+    if (value.isEmpty) {
+      return null;
+    }
+    return TransportProfilePortableTransferPreviewOutcome(value);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is TransportProfilePortableTransferPreviewOutcome &&
+      other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => value;
+}
+
+class TransportProfilePortableTransferBlockedReason {
+  const TransportProfilePortableTransferBlockedReason(this.value);
+
+  static const wrongPassphrase = TransportProfilePortableTransferBlockedReason(
+    'wrong_passphrase',
+  );
+  static const unsupportedEnvelope =
+      TransportProfilePortableTransferBlockedReason('unsupported_envelope');
+  static const unsupportedProfileKind =
+      TransportProfilePortableTransferBlockedReason('unsupported_profile_kind');
+  static const incompatibleHost = TransportProfilePortableTransferBlockedReason(
+    'incompatible_host',
+  );
+  static const malformedEnvelope =
+      TransportProfilePortableTransferBlockedReason('malformed_envelope');
+  static const missingRequiredProfileKind =
+      TransportProfilePortableTransferBlockedReason(
+        'missing_required_profile_kind',
+      );
+
+  final String value;
+
+  static TransportProfilePortableTransferBlockedReason? fromJson(String? raw) {
+    final value = raw?.trim() ?? '';
+    if (value.isEmpty) {
+      return null;
+    }
+    return TransportProfilePortableTransferBlockedReason(value);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is TransportProfilePortableTransferBlockedReason &&
+      other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => value;
+}
+
+class TransportProfilePortableTransferPreviewWarningCode {
+  const TransportProfilePortableTransferPreviewWarningCode(this.value);
+
+  static const displayNameConflict =
+      TransportProfilePortableTransferPreviewWarningCode(
+        'display_name_conflict',
+      );
+
+  final String value;
+
+  static TransportProfilePortableTransferPreviewWarningCode? fromJson(
+    String? raw,
+  ) {
+    final value = raw?.trim() ?? '';
+    if (value.isEmpty) {
+      return null;
+    }
+    return TransportProfilePortableTransferPreviewWarningCode(value);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is TransportProfilePortableTransferPreviewWarningCode &&
+      other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => value;
 }
 
 enum TransportProfileValidationState {
@@ -385,6 +555,7 @@ enum TransportProfileCompatibilityState {
 enum TransportProfileMaterialSource {
   importAdapter('import_adapter'),
   legacyPath('legacy_path'),
+  portableTransfer('portable_transfer'),
   structuredEditor('structured_editor');
 
   const TransportProfileMaterialSource(this.value);
@@ -701,6 +872,16 @@ class TransportProfileDefaultBinding {
   final RuntimeHostAdapter hostAdapter;
   final RuntimeExecutionPlan plan;
   final String scopeId;
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'profile_id': profileId,
+      'kind': kind.value,
+      'host_adapter': hostAdapter.value,
+      'plan': plan.toJson(),
+      'scope_id': scopeId,
+    };
+  }
 }
 
 class TransportProfileStatus {
@@ -958,6 +1139,7 @@ class TransportProfileStoreCapability {
     this.lifecycleActions = const <TransportProfileLifecycleAction>[],
     this.redactionGuarantees = const <String>[],
     this.editableKinds = const <TransportProfileEditableKindSchema>[],
+    this.portableTransfer,
   });
 
   factory TransportProfileStoreCapability.fromJson(Map<String, dynamic> json) {
@@ -987,6 +1169,11 @@ class TransportProfileStoreCapability {
                 ),
               )
               .toList(growable: false),
+      portableTransfer: json['portable_transfer'] is Map<String, dynamic>
+          ? TransportProfilePortableTransferCapability.fromJson(
+              json['portable_transfer'] as Map<String, dynamic>,
+            )
+          : null,
     );
   }
 
@@ -995,6 +1182,309 @@ class TransportProfileStoreCapability {
   final List<TransportProfileLifecycleAction> lifecycleActions;
   final List<String> redactionGuarantees;
   final List<TransportProfileEditableKindSchema> editableKinds;
+  final TransportProfilePortableTransferCapability? portableTransfer;
+}
+
+class TransportProfilePortableTransferCapability {
+  const TransportProfilePortableTransferCapability({
+    this.envelopeType = '',
+    this.envelopeVersion = 0,
+    this.supportedKinds = const <TransportProfileKind>[],
+    this.exportPaths = const <TransportProfilePortableTransferPath>[],
+    this.importPaths = const <TransportProfilePortableTransferPath>[],
+    this.qrMaxPayloadBytes = 0,
+    this.qrMode,
+  });
+
+  factory TransportProfilePortableTransferCapability.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return TransportProfilePortableTransferCapability(
+      envelopeType: json['envelope_type'] as String? ?? '',
+      envelopeVersion: json['envelope_version'] as int? ?? 0,
+      supportedKinds: _readTransportProfileKinds(json['supported_kinds']),
+      exportPaths: (json['export_paths'] as List<dynamic>? ?? const <dynamic>[])
+          .map(
+            (dynamic raw) =>
+                TransportProfilePortableTransferPath.fromJson(raw as String?),
+          )
+          .whereType<TransportProfilePortableTransferPath>()
+          .toList(growable: false),
+      importPaths: (json['import_paths'] as List<dynamic>? ?? const <dynamic>[])
+          .map(
+            (dynamic raw) =>
+                TransportProfilePortableTransferPath.fromJson(raw as String?),
+          )
+          .whereType<TransportProfilePortableTransferPath>()
+          .toList(growable: false),
+      qrMaxPayloadBytes: json['qr_max_payload_bytes'] as int? ?? 0,
+      qrMode: TransportProfilePortableTransferQrMode.fromJson(
+        json['qr_mode'] as String?,
+      ),
+    );
+  }
+
+  final String envelopeType;
+  final int envelopeVersion;
+  final List<TransportProfileKind> supportedKinds;
+  final List<TransportProfilePortableTransferPath> exportPaths;
+  final List<TransportProfilePortableTransferPath> importPaths;
+  final int qrMaxPayloadBytes;
+  final TransportProfilePortableTransferQrMode? qrMode;
+}
+
+class TransportProfilePortableTransferPreviewWarning {
+  const TransportProfilePortableTransferPreviewWarning({
+    required this.code,
+    this.message = '',
+  });
+
+  factory TransportProfilePortableTransferPreviewWarning.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    final code = TransportProfilePortableTransferPreviewWarningCode.fromJson(
+      json['code'] as String?,
+    );
+    if (code == null) {
+      throw const FormatException(
+        'transport profile portable transfer preview warning invalid',
+      );
+    }
+    return TransportProfilePortableTransferPreviewWarning(
+      code: code,
+      message: json['message'] as String? ?? '',
+    );
+  }
+
+  final TransportProfilePortableTransferPreviewWarningCode code;
+  final String message;
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code.value,
+      if (message.isNotEmpty) 'message': message,
+    };
+  }
+}
+
+class TransportProfilePortableTransferExistingProfile {
+  const TransportProfilePortableTransferExistingProfile({
+    required this.profileId,
+    required this.kind,
+    this.displayName = '',
+    this.defaultFor = const <TransportProfileDefaultBinding>[],
+  });
+
+  factory TransportProfilePortableTransferExistingProfile.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    final kind = TransportProfileKind.fromJson(json['kind'] as String?);
+    if (kind == null) {
+      throw const FormatException(
+        'transport profile portable transfer existing profile invalid',
+      );
+    }
+    return TransportProfilePortableTransferExistingProfile(
+      profileId: json['profile_id'] as String? ?? '',
+      kind: kind,
+      displayName: json['display_name'] as String? ?? '',
+      defaultFor: (json['default_for'] as List<dynamic>? ?? const <dynamic>[])
+          .map(
+            (dynamic raw) => TransportProfileDefaultBinding.fromJson(
+              raw as Map<String, dynamic>,
+            ),
+          )
+          .toList(growable: false),
+    );
+  }
+
+  final String profileId;
+  final TransportProfileKind kind;
+  final String displayName;
+  final List<TransportProfileDefaultBinding> defaultFor;
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'profile_id': profileId,
+      'kind': kind.value,
+      if (displayName.isNotEmpty) 'display_name': displayName,
+      if (defaultFor.isNotEmpty)
+        'default_for': defaultFor
+            .map((TransportProfileDefaultBinding binding) => binding.toJson())
+            .toList(growable: false),
+    };
+  }
+}
+
+class TransportProfilePortableTransferPreview {
+  const TransportProfilePortableTransferPreview({
+    required this.outcome,
+    this.blockedReason,
+    this.profileKind,
+    this.displayName = '',
+    this.resolvedDisplayName = '',
+    this.compatibility,
+    this.selectionRequired = false,
+    this.duplicateFingerprint = '',
+    this.existingProfiles =
+        const <TransportProfilePortableTransferExistingProfile>[],
+    this.warnings = const <TransportProfilePortableTransferPreviewWarning>[],
+  });
+
+  factory TransportProfilePortableTransferPreview.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    final outcome = TransportProfilePortableTransferPreviewOutcome.fromJson(
+      json['outcome'] as String?,
+    );
+    if (outcome == null) {
+      throw const FormatException(
+        'transport profile portable transfer preview invalid',
+      );
+    }
+    return TransportProfilePortableTransferPreview(
+      outcome: outcome,
+      blockedReason: TransportProfilePortableTransferBlockedReason.fromJson(
+        json['blocked_reason'] as String?,
+      ),
+      profileKind: TransportProfileKind.fromJson(
+        json['profile_kind'] as String?,
+      ),
+      displayName: json['display_name'] as String? ?? '',
+      resolvedDisplayName: json['resolved_display_name'] as String? ?? '',
+      compatibility: json['compatibility'] is Map<String, dynamic>
+          ? TransportProfileCompatibilityStatus.fromJson(
+              json['compatibility'] as Map<String, dynamic>,
+            )
+          : null,
+      selectionRequired: json['selection_required'] as bool? ?? false,
+      duplicateFingerprint: json['duplicate_fingerprint'] as String? ?? '',
+      existingProfiles:
+          (json['existing_profiles'] as List<dynamic>? ?? const <dynamic>[])
+              .map(
+                (dynamic raw) =>
+                    TransportProfilePortableTransferExistingProfile.fromJson(
+                      raw as Map<String, dynamic>,
+                    ),
+              )
+              .toList(growable: false),
+      warnings: (json['warnings'] as List<dynamic>? ?? const <dynamic>[])
+          .map(
+            (dynamic raw) =>
+                TransportProfilePortableTransferPreviewWarning.fromJson(
+                  raw as Map<String, dynamic>,
+                ),
+          )
+          .toList(growable: false),
+    );
+  }
+
+  final TransportProfilePortableTransferPreviewOutcome outcome;
+  final TransportProfilePortableTransferBlockedReason? blockedReason;
+  final TransportProfileKind? profileKind;
+  final String displayName;
+  final String resolvedDisplayName;
+  final TransportProfileCompatibilityStatus? compatibility;
+  final bool selectionRequired;
+  final String duplicateFingerprint;
+  final List<TransportProfilePortableTransferExistingProfile> existingProfiles;
+  final List<TransportProfilePortableTransferPreviewWarning> warnings;
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'outcome': outcome.value,
+      if (blockedReason != null) 'blocked_reason': blockedReason!.value,
+      if (profileKind != null) 'profile_kind': profileKind!.value,
+      if (displayName.isNotEmpty) 'display_name': displayName,
+      if (resolvedDisplayName.isNotEmpty)
+        'resolved_display_name': resolvedDisplayName,
+      if (compatibility != null) 'compatibility': compatibility!.toJson(),
+      if (selectionRequired) 'selection_required': true,
+      if (duplicateFingerprint.isNotEmpty)
+        'duplicate_fingerprint': duplicateFingerprint,
+      if (existingProfiles.isNotEmpty)
+        'existing_profiles': existingProfiles
+            .map(
+              (TransportProfilePortableTransferExistingProfile profile) =>
+                  profile.toJson(),
+            )
+            .toList(growable: false),
+      if (warnings.isNotEmpty)
+        'warnings': warnings
+            .map(
+              (TransportProfilePortableTransferPreviewWarning warning) =>
+                  warning.toJson(),
+            )
+            .toList(growable: false),
+    };
+  }
+}
+
+class TransportProfilePortableExportRequest {
+  const TransportProfilePortableExportRequest({required this.passphrase});
+
+  final String passphrase;
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{'passphrase': passphrase};
+  }
+}
+
+class TransportProfilePortableExportResult {
+  const TransportProfilePortableExportResult({
+    required this.envelope,
+    required this.profileKind,
+    this.displayName = '',
+    this.encodedBytes = 0,
+  });
+
+  factory TransportProfilePortableExportResult.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    final envelope = (json['envelope'] as String? ?? '').trim();
+    final profileKind = TransportProfileKind.fromJson(
+      json['profile_kind'] as String?,
+    );
+    if (envelope.isEmpty || profileKind == null) {
+      throw const FormatException(
+        'transport profile portable export result invalid',
+      );
+    }
+    return TransportProfilePortableExportResult(
+      envelope: envelope,
+      profileKind: profileKind,
+      displayName: (json['display_name'] as String? ?? '').trim(),
+      encodedBytes: json['encoded_bytes'] as int? ?? 0,
+    );
+  }
+
+  final String envelope;
+  final TransportProfileKind profileKind;
+  final String displayName;
+  final int encodedBytes;
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'envelope': envelope,
+      'profile_kind': profileKind.value,
+      if (displayName.trim().isNotEmpty) 'display_name': displayName.trim(),
+      if (encodedBytes > 0) 'encoded_bytes': encodedBytes,
+    };
+  }
+}
+
+class TransportProfilePortableImportRequest {
+  const TransportProfilePortableImportRequest({
+    required this.envelope,
+    required this.passphrase,
+  });
+
+  final String envelope;
+  final String passphrase;
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{'envelope': envelope, 'passphrase': passphrase};
+  }
 }
 
 class TransportProfileImportRequest {

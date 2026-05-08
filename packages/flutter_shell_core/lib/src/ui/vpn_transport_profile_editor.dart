@@ -702,10 +702,12 @@ class VPNTransportProfileManagerSurface extends StatelessWidget {
     this.executionPlan,
     this.onCreate,
     this.onImport,
+    this.onImportPortable,
     this.onEdit,
     this.onValidate,
     this.onForget,
     this.onSelect,
+    this.onExportPortable,
     this.onClose,
     this.layout = VPNTransportProfileSurfaceLayout.modal,
     this.contentPadding,
@@ -718,10 +720,12 @@ class VPNTransportProfileManagerSurface extends StatelessWidget {
   final RuntimeExecutionPlan? executionPlan;
   final Future<void> Function()? onCreate;
   final Future<void> Function()? onImport;
+  final Future<void> Function()? onImportPortable;
   final Future<void> Function(TransportProfileStatus profile)? onEdit;
   final Future<void> Function(TransportProfileStatus profile)? onValidate;
   final Future<void> Function(TransportProfileStatus profile)? onForget;
   final Future<void> Function(TransportProfileStatus profile)? onSelect;
+  final Future<void> Function(TransportProfileStatus profile)? onExportPortable;
   final VoidCallback? onClose;
   final VPNTransportProfileSurfaceLayout layout;
   final EdgeInsetsGeometry? contentPadding;
@@ -774,6 +778,13 @@ class VPNTransportProfileManagerSurface extends StatelessWidget {
                       )
                   ? null
                   : () => onSelect!(profile),
+              onExportPortable:
+                  onExportPortable == null ||
+                      !profile.actions.contains(
+                        TransportProfileLifecycleAction.exportPortable,
+                      )
+                  ? null
+                  : () => onExportPortable!(profile),
             ),
           ),
         )
@@ -819,6 +830,7 @@ class VPNTransportProfileManagerSurface extends StatelessWidget {
             kindLabelFor: _kindLabel,
             onCreate: onCreate,
             onImport: onImport,
+            onImportPortable: onImportPortable,
           ),
           const SizedBox(height: 14),
           if (visibleProfiles.isEmpty)
@@ -914,6 +926,7 @@ class _ManagerActionStrip extends StatelessWidget {
     required this.kindLabelFor,
     this.onCreate,
     this.onImport,
+    this.onImportPortable,
   });
 
   final bool pageLayout;
@@ -921,6 +934,7 @@ class _ManagerActionStrip extends StatelessWidget {
   final String Function(TransportProfileKind kind) kindLabelFor;
   final Future<void> Function()? onCreate;
   final Future<void> Function()? onImport;
+  final Future<void> Function()? onImportPortable;
 
   @override
   Widget build(BuildContext context) {
@@ -938,6 +952,13 @@ class _ManagerActionStrip extends StatelessWidget {
           onPressed: () => unawaited(onImport!()),
           icon: const Icon(Icons.upload_file_rounded),
           label: const Text('Import'),
+        ),
+      if (onImportPortable != null)
+        OutlinedButton.icon(
+          key: const ValueKey<String>('vpn-profile-manager-import-portable'),
+          onPressed: () => unawaited(onImportPortable!()),
+          icon: const Icon(Icons.qr_code_rounded),
+          label: const Text('Import portable'),
         ),
     ];
     if (!pageLayout) {
@@ -1030,6 +1051,7 @@ class _TransportProfileManagerRow extends StatelessWidget {
     this.onValidate,
     this.onForget,
     this.onSelect,
+    this.onExportPortable,
   });
 
   final VPNTransportProfileEditorVariant variant;
@@ -1042,6 +1064,7 @@ class _TransportProfileManagerRow extends StatelessWidget {
   final Future<void> Function()? onValidate;
   final Future<void> Function()? onForget;
   final Future<void> Function()? onSelect;
+  final Future<void> Function()? onExportPortable;
 
   bool get _compactActions =>
       pageLayout && variant == VPNTransportProfileEditorVariant.mobile;
@@ -1117,6 +1140,12 @@ class _TransportProfileManagerRow extends StatelessWidget {
         ),
     ];
     final overflowActions = <PopupMenuEntry<String>>[
+      if (onExportPortable != null)
+        PopupMenuItem<String>(
+          key: ValueKey<String>('vpn-profile-manager-export-${profile.id}'),
+          value: 'export',
+          child: const Text('Export'),
+        ),
       if (onValidate != null)
         PopupMenuItem<String>(
           key: ValueKey<String>('vpn-profile-manager-validate-${profile.id}'),
@@ -1144,7 +1173,9 @@ class _TransportProfileManagerRow extends StatelessWidget {
               icon: const Icon(Icons.more_horiz_rounded),
               itemBuilder: (BuildContext context) => overflowActions,
               onSelected: (String action) {
-                if (action == 'validate') {
+                if (action == 'export') {
+                  unawaited(onExportPortable!());
+                } else if (action == 'validate') {
                   unawaited(onValidate!());
                 } else if (action == 'forget') {
                   unawaited(_confirmForget(context));
@@ -1159,6 +1190,13 @@ class _TransportProfileManagerRow extends StatelessWidget {
       runSpacing: 8,
       children: <Widget>[
         ...inlineActions,
+        if (onExportPortable != null)
+          OutlinedButton.icon(
+            key: ValueKey<String>('vpn-profile-manager-export-${profile.id}'),
+            onPressed: () => unawaited(onExportPortable!()),
+            icon: const Icon(Icons.ios_share_rounded),
+            label: const Text('Export'),
+          ),
         if (onValidate != null)
           OutlinedButton.icon(
             key: ValueKey<String>('vpn-profile-manager-validate-${profile.id}'),

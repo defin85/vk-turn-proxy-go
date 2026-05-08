@@ -61,6 +61,25 @@ const TransportProfileStoreCapability _transportProfileStoreCapability =
         TransportProfileLifecycleAction.validate,
         TransportProfileLifecycleAction.selectForStartup,
       ],
+      portableTransfer: TransportProfilePortableTransferCapability(
+        envelopeType: 'portable_transport_profile',
+        envelopeVersion: 1,
+        supportedKinds: <TransportProfileKind>[
+          TransportProfileKind.wireGuardNativeV1,
+        ],
+        exportPaths: <TransportProfilePortableTransferPath>[
+          TransportProfilePortableTransferPath.textPayload,
+          TransportProfilePortableTransferPath.filePayload,
+          TransportProfilePortableTransferPath.qrPayload,
+        ],
+        importPaths: <TransportProfilePortableTransferPath>[
+          TransportProfilePortableTransferPath.textPayload,
+          TransportProfilePortableTransferPath.filePayload,
+          TransportProfilePortableTransferPath.qrPayload,
+        ],
+        qrMaxPayloadBytes: 2048,
+        qrMode: TransportProfilePortableTransferQrMode.singlePayload,
+      ),
     );
 
 const TransportProfilePrerequisiteStatus
@@ -85,6 +104,16 @@ const TransportProfilePrerequisiteStatus _missingTransportProfilePrerequisite =
       ],
       message: 'VPN transport profile wireguard_native_v1 is not configured.',
     );
+
+const TransportProfilePrerequisiteStatus
+_unselectedTransportProfilePrerequisite = TransportProfilePrerequisiteStatus(
+  requiredKinds: <TransportProfileKind>[TransportProfileKind.wireGuardNativeV1],
+  state: TransportProfileCompatibilityState.compatible,
+  importAdapters: <TransportProfileImportAdapter>[
+    TransportProfileImportAdapter.wireGuardConf,
+  ],
+  message: 'Select a VPN transport profile for this execution plan before startup.',
+);
 
 const RuntimeExecutionPlanDescriptor _androidVpnExecutionPlanDescriptor =
     RuntimeExecutionPlanDescriptor(
@@ -135,6 +164,26 @@ _missingProfileAndroidVpnExecutionPlanDescriptor =
       ],
       transportProfile: _missingTransportProfilePrerequisite,
       message: 'VPN transport profile wireguard_native_v1 is not configured.',
+    );
+
+const RuntimeExecutionPlanDescriptor
+_portableImportedAndroidVpnExecutionPlanDescriptor =
+    RuntimeExecutionPlanDescriptor(
+      plan: RuntimeExecutionPlan(
+        accessMethod: RuntimeAccessMethod.turnCredentials,
+        carrierFamily: RuntimeCarrierFamily.turnDatagram,
+        engineFamily: RuntimeEngineFamily.wireguardNative,
+        hostAdapter: RuntimeHostAdapter.androidVpnService,
+      ),
+      supportState: RuntimeExecutionPlanSupportState.unavailable,
+      remoteEndpointFamily: RuntimeRemoteEndpointFamily.turnServer,
+      isDefault: true,
+      requiredTransportProfileKinds: <TransportProfileKind>[
+        TransportProfileKind.wireGuardNativeV1,
+      ],
+      transportProfile: _unselectedTransportProfilePrerequisite,
+      message:
+          'Select a VPN transport profile for this execution plan before startup.',
     );
 
 const ConferenceRoomActionsCapability _conferenceRoomActionsCapability =
@@ -279,6 +328,42 @@ const HostInfo _hostInfoMissingTransportProfile = HostInfo(
   transportProfileStore: _transportProfileStoreCapability,
 );
 
+const HostInfo _hostInfoPortableImportedTransportProfile = HostInfo(
+  contractVersion: '1',
+  build: _testHostBuild,
+  capabilities: <Capability>[
+    Capability.mobileHostBridge,
+    Capability.platformTunnels,
+    Capability.profiles,
+    Capability.providerConfigs,
+    Capability.runtimeExecutionPlanning,
+    Capability.vpnTransportProfileStore,
+    Capability.sessions,
+    Capability.challenges,
+    Capability.diagnostics,
+    Capability.eventStream,
+  ],
+  platformTunnels: <PlatformTunnelCapability>[
+    PlatformTunnelCapability(
+      mode: PlatformTunnelMode.androidVpnService,
+      available: true,
+      satisfiedPrerequisites: <PlatformTunnelPrerequisite>[
+        PlatformTunnelPrerequisite.routeExclusion,
+        PlatformTunnelPrerequisite.dnsBypass,
+      ],
+      supportedUnderlayRoutePolicies: <PlatformTunnelUnderlayRoutePolicy>[
+        PlatformTunnelUnderlayRoutePolicy.standard,
+        PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork,
+      ],
+      executionPlans: <RuntimeExecutionPlanDescriptor>[
+        _portableImportedAndroidVpnExecutionPlanDescriptor,
+      ],
+      message: 'Android VPN Service is available after profile setup.',
+    ),
+  ],
+  transportProfileStore: _transportProfileStoreCapability,
+);
+
 const HostInfo _readyHostInfoWithoutDevelopmentRouting = HostInfo(
   contractVersion: '1',
   build: _testHostBuild,
@@ -391,6 +476,7 @@ List<TransportProfileStatus> _transportProfileStatuses() {
         TransportProfileLifecycleAction.forget,
         TransportProfileLifecycleAction.validate,
         TransportProfileLifecycleAction.selectForStartup,
+        TransportProfileLifecycleAction.exportPortable,
       ],
       importedAt: DateTime.utc(2026, 4, 28, 12),
       updatedAt: DateTime.utc(2026, 4, 28, 12),
@@ -1995,6 +2081,200 @@ void main() {
 
       expect(envelope, isNull);
       expect(controller.notice, contains('unsupported envelope version'));
+    },
+  );
+
+  test(
+    'controller exports portable VPN transport profiles through the mobile adapter',
+    () async {
+      final adapter = _FakeMobilePortableProfileTransferAdapter();
+      final bridge = _FakeMobileHostBridge();
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: const <ProfileRecord>[],
+            providerConfigs: const <ProviderConfigRecord>[],
+            draft: ProfileDraft.defaults(),
+          ),
+        ),
+        portableProfileTransferAdapter: adapter,
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      final profile = controller
+          .vpnTransportProfilesForMode(PlatformTunnelMode.androidVpnService)
+          .single;
+      final carriage = await controller.exportPortableVPNTransportProfileRecord(
+        profile,
+        passphrase: 'portable-secret',
+      );
+
+      expect(carriage, isNotNull);
+      await controller.copyPortableVPNTransportProfileEnvelopeText(carriage!);
+      await controller.sharePortableVPNTransportProfileEnvelopeText(carriage);
+      await controller.sharePortableVPNTransportProfileEnvelopeFile(carriage);
+
+      expect(bridge.exportTransportProfilePortableCalls, hasLength(1));
+      expect(bridge.exportTransportProfilePortableCalls.single.key, profile.id);
+      expect(
+        bridge.exportTransportProfilePortableCalls.single.value.passphrase,
+        'portable-secret',
+      );
+      expect(
+        adapter.copiedPayloads.single,
+        contains('portable_transport_profile'),
+      );
+      expect(
+        adapter.sharedTextPayloads.single,
+        contains('portable_transport_profile'),
+      );
+      expect(
+        adapter.sharedSuggestedNames.single,
+        'wireguard.portable-transport-profile.json',
+      );
+      expect(controller.notice, contains('portable VPN transport profile'));
+    },
+  );
+
+  test(
+    'controller previews and confirms portable VPN transport-profile import',
+    () async {
+      final bridge = _FakeMobileHostBridge();
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: const <ProfileRecord>[],
+            providerConfigs: const <ProviderConfigRecord>[],
+            draft: ProfileDraft.defaults(),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      final preview = await controller.previewPortableVPNTransportProfileImport(
+        envelope: '{"type":"portable_transport_profile","version":1}',
+        passphrase: 'portable-secret',
+      );
+
+      expect(preview, isNotNull);
+      expect(
+        bridge.previewTransportProfilePortableImportCalls.single.passphrase,
+        'portable-secret',
+      );
+      expect(
+        bridge.previewTransportProfilePortableImportCalls.single.envelope,
+        '{"type":"portable_transport_profile","version":1}',
+      );
+
+      final imported = await controller
+          .confirmPortableVPNTransportProfileImport(
+            envelope: '{"type":"portable_transport_profile","version":1}',
+            passphrase: 'portable-secret',
+          );
+
+      expect(imported, isNotNull);
+      expect(
+        bridge.confirmTransportProfilePortableImportCalls.single.passphrase,
+        'portable-secret',
+      );
+      expect(
+        imported!.secretMaterialRef.kind,
+        TransportProfileMaterialSource.portableTransfer,
+      );
+      expect(
+        controller.notice,
+        contains('Imported portable VPN transport profile'),
+      );
+    },
+  );
+
+  test(
+    'controller keeps startup gated after portable VPN transport-profile import until explicit selection',
+    () async {
+      final profile = ProfileRecord(
+        id: 'profile-1',
+        name: 'vk live',
+        spec: _profileSpec(),
+      );
+      final bridge = _FakeMobileHostBridge(
+        ensureReadyResult: const MobileHostConnectionResult(
+          state: MobileHostLifecycleState.ready,
+          message: 'Connected to embedded mobile host bridge',
+          info: _hostInfoMissingTransportProfile,
+          description: 'native bridge',
+        ),
+        transportProfilesList: const <TransportProfileStatus>[],
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: <ProfileRecord>[profile],
+            providerConfigs: const <ProviderConfigRecord>[],
+            selectedProfileId: profile.id,
+            draft: ProfileDraft.fromProfile(profile),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      await controller.confirmPortableVPNTransportProfileImport(
+        envelope: '{"type":"portable_transport_profile","version":1}',
+        passphrase: 'portable-secret',
+      );
+
+      expect(controller.activeVPNTransportProfileConfigured, isTrue);
+      expect(
+        controller.platformTunnelStartPreparationBlockReason(
+          PlatformTunnelMode.androidVpnService,
+        ),
+        contains('Select a VPN transport profile'),
+      );
+
+      await controller.startPlatformTunnel(
+        PlatformTunnelMode.androidVpnService,
+      );
+
+      expect(bridge.startedPlatformTunnels, isEmpty);
+
+      final importedProfile = controller.vpnTransportProfilesForMode(
+        PlatformTunnelMode.androidVpnService,
+      ).single;
+      await controller.selectVPNTransportProfileForMode(
+        PlatformTunnelMode.androidVpnService,
+        importedProfile,
+      );
+
+      expect(controller.activeVPNTransportProfileConfigured, isTrue);
+      expect(
+        controller.platformTunnelStartPreparationBlockReason(
+          PlatformTunnelMode.androidVpnService,
+        ),
+        isNull,
+      );
+
+      await controller.startPlatformTunnel(
+        PlatformTunnelMode.androidVpnService,
+      );
+
+      expect(bridge.startedPlatformTunnels, <PlatformTunnelMode>[
+        PlatformTunnelMode.androidVpnService,
+      ]);
+      expect(
+        bridge.startedPlatformTunnelProfiles.single?.profileId,
+        importedProfile.id,
+      );
     },
   );
 
@@ -3884,6 +4164,15 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   final List<ProviderTransportCompatibilityRequest>
   providerTransportCompatibilityRequests =
       <ProviderTransportCompatibilityRequest>[];
+  final List<MapEntry<String, TransportProfilePortableExportRequest>>
+  exportTransportProfilePortableCalls =
+      <MapEntry<String, TransportProfilePortableExportRequest>>[];
+  final List<TransportProfilePortableImportRequest>
+  previewTransportProfilePortableImportCalls =
+      <TransportProfilePortableImportRequest>[];
+  final List<TransportProfilePortableImportRequest>
+  confirmTransportProfilePortableImportCalls =
+      <TransportProfilePortableImportRequest>[];
   final List<PlatformTunnelApplicationRoutingPolicy>
   startedPlatformTunnelRoutingPolicies =
       <PlatformTunnelApplicationRoutingPolicy>[];
@@ -3994,6 +4283,69 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   }
 
   @override
+  Future<TransportProfilePortableExportResult> exportTransportProfilePortable(
+    String profileId,
+    TransportProfilePortableExportRequest request,
+  ) async {
+    exportTransportProfilePortableCalls.add(
+      MapEntry<String, TransportProfilePortableExportRequest>(
+        profileId,
+        request,
+      ),
+    );
+    return const TransportProfilePortableExportResult(
+      envelope: '{"type":"portable_transport_profile","version":1}',
+      profileKind: TransportProfileKind.wireGuardNativeV1,
+      displayName: 'WireGuard',
+      encodedBytes: 49,
+    );
+  }
+
+  @override
+  Future<TransportProfilePortableTransferPreview>
+  previewTransportProfilePortableImport(
+    TransportProfilePortableImportRequest request,
+  ) async {
+    previewTransportProfilePortableImportCalls.add(request);
+    return const TransportProfilePortableTransferPreview(
+      outcome: TransportProfilePortableTransferPreviewOutcome.importable,
+      profileKind: TransportProfileKind.wireGuardNativeV1,
+      displayName: 'Imported WireGuard',
+      compatibility: TransportProfileCompatibilityStatus(
+        state: TransportProfileCompatibilityState.compatible,
+      ),
+    );
+  }
+
+  @override
+  Future<TransportProfileStatus> confirmTransportProfilePortableImport(
+    TransportProfilePortableImportRequest request,
+  ) async {
+    confirmTransportProfilePortableImportCalls.add(request);
+    final profile = _transportProfileStatuses().first;
+    final status = TransportProfileStatus(
+      id: profile.id,
+      kind: profile.kind,
+      version: profile.version,
+      displayName: 'Imported WireGuard',
+      validation: profile.validation,
+      compatibility: profile.compatibility,
+      secretMaterialRef: const TransportProfileSecretMaterialRef(
+        kind: TransportProfileMaterialSource.portableTransfer,
+        ref: 'host-owned:portable-imported',
+      ),
+      actions: profile.actions,
+      importedAt: profile.importedAt,
+      updatedAt: profile.updatedAt,
+    );
+    _transportProfiles
+      ..clear()
+      ..add(status);
+    _hostInfo = _hostInfoPortableImportedTransportProfile;
+    return status;
+  }
+
+  @override
   Future<TransportProfileStructuredSaveResult> createStructuredTransportProfile(
     TransportProfileStructuredCreateRequest request,
   ) async {
@@ -4065,6 +4417,7 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     String profileId,
     TransportProfileSelectForStartupRequest request,
   ) async {
+    _hostInfo = _readyHostInfo;
     return validateTransportProfile(profileId);
   }
 

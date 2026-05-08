@@ -200,6 +200,40 @@ func Handler(host *Host) http.Handler {
 		}
 		writeJSON(w, http.StatusOK, key)
 	})
+	mux.HandleFunc("/v1/transport-profiles:preview-portable-import", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeMethodNotAllowed(w, r.Method)
+			return
+		}
+		var req TransportProfilePortableImportRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_json", err)
+			return
+		}
+		preview, err := host.PreviewTransportProfilePortableImport(req)
+		if err != nil {
+			writeTransportProfileActionError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, preview)
+	})
+	mux.HandleFunc("/v1/transport-profiles:confirm-portable-import", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeMethodNotAllowed(w, r.Method)
+			return
+		}
+		var req TransportProfilePortableImportRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_json", err)
+			return
+		}
+		profile, err := host.ConfirmTransportProfilePortableImport(req)
+		if err != nil {
+			writeTransportProfileActionError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, profile)
+	})
 	mux.HandleFunc("/v1/provider-configs", func(w http.ResponseWriter, r *http.Request) {
 		requestedLocale := requestedDisplayLocale(r)
 		switch r.Method {
@@ -325,6 +359,18 @@ func Handler(host *Host) http.Handler {
 					return
 				}
 				writeJSON(w, http.StatusOK, profile)
+			case "export-portable":
+				var req TransportProfilePortableExportRequest
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid_json", err)
+					return
+				}
+				result, err := host.ExportTransportProfilePortable(profileID, req)
+				if err != nil {
+					writeTransportProfileActionError(w, err)
+					return
+				}
+				writeJSON(w, http.StatusOK, result)
 			default:
 				http.NotFound(w, r)
 			}

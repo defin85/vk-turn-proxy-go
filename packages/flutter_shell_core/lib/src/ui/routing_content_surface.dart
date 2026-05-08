@@ -27,6 +27,7 @@ class RoutingContentSurface extends StatefulWidget {
     this.transportProfileConfiguredForMode,
     this.onEditTransportProfile,
     this.onImportTransportProfile,
+    this.onManageTransportProfiles,
     this.onForgetTransportProfile,
   });
 
@@ -54,6 +55,8 @@ class RoutingContentSurface extends StatefulWidget {
   final Future<void> Function(PlatformTunnelMode mode)? onEditTransportProfile;
   final Future<void> Function(PlatformTunnelMode mode)?
   onImportTransportProfile;
+  final Future<void> Function(PlatformTunnelMode mode)?
+  onManageTransportProfiles;
   final Future<void> Function(PlatformTunnelMode mode)?
   onForgetTransportProfile;
 
@@ -113,6 +116,7 @@ class _RoutingContentSurfaceState extends State<RoutingContentSurface> {
           widget.transportProfileConfiguredForMode,
       onEditTransportProfile: widget.onEditTransportProfile,
       onImportTransportProfile: widget.onImportTransportProfile,
+      onManageTransportProfiles: widget.onManageTransportProfiles,
       onForgetTransportProfile: widget.onForgetTransportProfile,
     );
   }
@@ -135,6 +139,7 @@ class _RoutingPlatformTunnelPanel extends StatefulWidget {
     this.transportProfileConfiguredForMode,
     this.onEditTransportProfile,
     this.onImportTransportProfile,
+    this.onManageTransportProfiles,
     this.onForgetTransportProfile,
   });
 
@@ -162,6 +167,8 @@ class _RoutingPlatformTunnelPanel extends StatefulWidget {
   final Future<void> Function(PlatformTunnelMode mode)? onEditTransportProfile;
   final Future<void> Function(PlatformTunnelMode mode)?
   onImportTransportProfile;
+  final Future<void> Function(PlatformTunnelMode mode)?
+  onManageTransportProfiles;
   final Future<void> Function(PlatformTunnelMode mode)?
   onForgetTransportProfile;
 
@@ -345,6 +352,10 @@ class _RoutingPlatformTunnelPanelState
               onImportTransportProfile: widget.onImportTransportProfile == null
                   ? null
                   : () => widget.onImportTransportProfile!(capability.mode),
+              onManageTransportProfiles:
+                  widget.onManageTransportProfiles == null
+                  ? null
+                  : () => widget.onManageTransportProfiles!(capability.mode),
               onForgetTransportProfile: widget.onForgetTransportProfile == null
                   ? null
                   : () => widget.onForgetTransportProfile!(capability.mode),
@@ -468,6 +479,7 @@ class _RoutingPlatformTunnelCard extends StatelessWidget {
     this.transportProfileConfigured = false,
     this.onEditTransportProfile,
     this.onImportTransportProfile,
+    this.onManageTransportProfiles,
     this.onForgetTransportProfile,
   });
 
@@ -486,6 +498,7 @@ class _RoutingPlatformTunnelCard extends StatelessWidget {
   final bool transportProfileConfigured;
   final Future<void> Function()? onEditTransportProfile;
   final Future<void> Function()? onImportTransportProfile;
+  final Future<void> Function()? onManageTransportProfiles;
   final Future<void> Function()? onForgetTransportProfile;
 
   bool get _desktop => variant == RoutingContentSurfaceVariant.desktop;
@@ -497,6 +510,7 @@ class _RoutingPlatformTunnelCard extends StatelessWidget {
     final canImport =
         canConfigureTransportProfile && onImportTransportProfile != null;
     final canEdit = canEditTransportProfile && onEditTransportProfile != null;
+    final canManage = onManageTransportProfiles != null;
     final canForget =
         transportProfileConfigured && onForgetTransportProfile != null;
 
@@ -568,9 +582,11 @@ class _RoutingPlatformTunnelCard extends StatelessWidget {
               canEdit: canEdit,
               canImport: canImport,
               configured: transportProfileConfigured,
+              canManage: canManage,
               canForget: canForget,
               onEdit: onEditTransportProfile,
               onImport: onImportTransportProfile,
+              onManage: onManageTransportProfiles,
               onForget: onForgetTransportProfile,
             ),
           ],
@@ -630,9 +646,11 @@ class _RoutingTransportProfileStatus extends StatelessWidget {
     required this.canEdit,
     required this.canImport,
     required this.configured,
+    required this.canManage,
     required this.canForget,
     required this.onEdit,
     required this.onImport,
+    required this.onManage,
     required this.onForget,
   });
 
@@ -645,9 +663,11 @@ class _RoutingTransportProfileStatus extends StatelessWidget {
   final bool canEdit;
   final bool canImport;
   final bool configured;
+  final bool canManage;
   final bool canForget;
   final Future<void> Function()? onEdit;
   final Future<void> Function()? onImport;
+  final Future<void> Function()? onManage;
   final Future<void> Function()? onForget;
 
   bool get _desktop => variant == RoutingContentSurfaceVariant.desktop;
@@ -694,6 +714,15 @@ class _RoutingTransportProfileStatus extends StatelessWidget {
                 ? copy.replaceVPNTransportProfile
                 : copy.importVPNTransportProfile,
           ),
+        ),
+      if (canManage)
+        TextButton.icon(
+          key: ValueKey<String>(
+            '${variant.name}-routing-open-vpn-transport-profiles-${mode.value}',
+          ),
+          onPressed: busy || !hostReady ? null : () => unawaited(onManage!()),
+          icon: const Icon(Icons.folder_open_rounded),
+          label: const Text('Open VPN profiles'),
         ),
       if (canForget)
         TextButton.icon(

@@ -29,6 +29,175 @@ void main() {
     );
   });
 
+  test('portable transport-profile models round-trip through shared json', () {
+    const preview = TransportProfilePortableTransferPreview(
+      outcome: TransportProfilePortableTransferPreviewOutcome.importable,
+      profileKind: TransportProfileKind.wireGuardNativeV1,
+      displayName: 'RelayDock VPS WireGuard 92.63.105.2',
+      resolvedDisplayName: 'RelayDock VPS WireGuard 92.63.105.2 (2)',
+      compatibility: TransportProfileCompatibilityStatus(
+        state: TransportProfileCompatibilityState.compatible,
+      ),
+      selectionRequired: true,
+      duplicateFingerprint: 'sha256:portable-duplicate',
+      existingProfiles: <TransportProfilePortableTransferExistingProfile>[
+        TransportProfilePortableTransferExistingProfile(
+          profileId: 'transport-profile-1',
+          kind: TransportProfileKind.wireGuardNativeV1,
+          displayName: 'RelayDock VPS WireGuard 92.63.105.2',
+          defaultFor: <TransportProfileDefaultBinding>[
+            TransportProfileDefaultBinding(
+              profileId: 'transport-profile-1',
+              kind: TransportProfileKind.wireGuardNativeV1,
+              hostAdapter: RuntimeHostAdapter.androidVpnService,
+              plan: RuntimeExecutionPlan(
+                accessMethod: RuntimeAccessMethod.turnCredentials,
+                carrierFamily: RuntimeCarrierFamily.turnDatagram,
+                engineFamily: RuntimeEngineFamily.wireguardNative,
+                hostAdapter: RuntimeHostAdapter.androidVpnService,
+              ),
+              scopeId:
+                  'android_vpn_service|turn_credentials|turn_datagram|wireguard_native',
+            ),
+          ],
+        ),
+      ],
+      warnings: <TransportProfilePortableTransferPreviewWarning>[
+        TransportProfilePortableTransferPreviewWarning(
+          code: TransportProfilePortableTransferPreviewWarningCode
+              .displayNameConflict,
+          message: 'display name already exists on this device',
+        ),
+      ],
+    );
+    const capability = TransportProfilePortableTransferCapability(
+      envelopeType: 'portable_transport_profile',
+      envelopeVersion: 1,
+      supportedKinds: <TransportProfileKind>[
+        TransportProfileKind.wireGuardNativeV1,
+      ],
+      exportPaths: <TransportProfilePortableTransferPath>[
+        TransportProfilePortableTransferPath.textPayload,
+        TransportProfilePortableTransferPath.filePayload,
+        TransportProfilePortableTransferPath.qrPayload,
+      ],
+      importPaths: <TransportProfilePortableTransferPath>[
+        TransportProfilePortableTransferPath.textPayload,
+        TransportProfilePortableTransferPath.filePayload,
+        TransportProfilePortableTransferPath.qrPayload,
+      ],
+      qrMaxPayloadBytes: 2048,
+      qrMode: TransportProfilePortableTransferQrMode.singlePayload,
+    );
+
+    final restoredPreview = TransportProfilePortableTransferPreview.fromJson(
+      preview.toJson(),
+    );
+    final restoredCapability =
+        TransportProfilePortableTransferCapability.fromJson(<String, dynamic>{
+          'envelope_type': capability.envelopeType,
+          'envelope_version': capability.envelopeVersion,
+          'supported_kinds': capability.supportedKinds
+              .map((kind) => kind.value)
+              .toList(growable: false),
+          'export_paths': capability.exportPaths
+              .map((path) => path.value)
+              .toList(growable: false),
+          'import_paths': capability.importPaths
+              .map((path) => path.value)
+              .toList(growable: false),
+          'qr_max_payload_bytes': capability.qrMaxPayloadBytes,
+          'qr_mode': capability.qrMode?.value,
+        });
+
+    expect(
+      restoredPreview.outcome,
+      TransportProfilePortableTransferPreviewOutcome.importable,
+    );
+    expect(
+      restoredPreview.warnings.single.code,
+      TransportProfilePortableTransferPreviewWarningCode.displayNameConflict,
+    );
+    expect(restoredPreview.selectionRequired, isTrue);
+    expect(
+      restoredPreview.existingProfiles.single.defaultFor.single.hostAdapter,
+      RuntimeHostAdapter.androidVpnService,
+    );
+    expect(restoredCapability.envelopeType, 'portable_transport_profile');
+    expect(
+      restoredCapability.exportPaths,
+      <TransportProfilePortableTransferPath>[
+        TransportProfilePortableTransferPath.textPayload,
+        TransportProfilePortableTransferPath.filePayload,
+        TransportProfilePortableTransferPath.qrPayload,
+      ],
+    );
+    expect(
+      restoredCapability.qrMode,
+      TransportProfilePortableTransferQrMode.singlePayload,
+    );
+  });
+
+  test(
+    'portable transport-profile envelope carriage keeps qr bounds fail-closed',
+    () {
+      const capability = TransportProfilePortableTransferCapability(
+        envelopeType: 'portable_transport_profile',
+        envelopeVersion: 1,
+        supportedKinds: <TransportProfileKind>[
+          TransportProfileKind.wireGuardNativeV1,
+        ],
+        exportPaths: <TransportProfilePortableTransferPath>[
+          TransportProfilePortableTransferPath.textPayload,
+          TransportProfilePortableTransferPath.filePayload,
+          TransportProfilePortableTransferPath.qrPayload,
+        ],
+        importPaths: <TransportProfilePortableTransferPath>[
+          TransportProfilePortableTransferPath.textPayload,
+          TransportProfilePortableTransferPath.filePayload,
+          TransportProfilePortableTransferPath.qrPayload,
+        ],
+        qrMaxPayloadBytes: 64,
+        qrMode: TransportProfilePortableTransferQrMode.singlePayload,
+      );
+      const exportResult = TransportProfilePortableExportResult(
+        envelope: '{"type":"portable_transport_profile","version":1}',
+        profileKind: TransportProfileKind.wireGuardNativeV1,
+        displayName: 'RelayDock VPS WireGuard 92.63.105.2',
+        encodedBytes: 54,
+      );
+      const oversizedResult = TransportProfilePortableExportResult(
+        envelope:
+            '{"type":"portable_transport_profile","version":1,"extra":"too-big"}',
+        profileKind: TransportProfileKind.wireGuardNativeV1,
+        displayName: 'RelayDock VPS WireGuard 92.63.105.2',
+        encodedBytes: 128,
+      );
+
+      final carriage =
+          PortableTransportProfileEnvelopeCarriage.fromExportResult(
+            exportResult,
+          );
+      final oversized =
+          PortableTransportProfileEnvelopeCarriage.fromExportResult(
+            oversizedResult,
+          );
+
+      expect(carriage.fitsQrBounds(capability), isTrue);
+      expect(
+        carriage
+            .importRequest(passphrase: 'portable-secret')
+            .toJson()['envelope'],
+        exportResult.envelope,
+      );
+      expect(oversized.fitsQrBounds(capability), isFalse);
+      expect(
+        () => oversized.requireSupportedQrBounds(capability),
+        throwsFormatException,
+      );
+    },
+  );
+
   test('profile draft round-trips through profile records', () {
     const profile = ProfileRecord(
       id: 'profile-1',

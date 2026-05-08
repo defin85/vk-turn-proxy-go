@@ -190,6 +190,7 @@ func (h *Host) CreateStructuredTransportProfile(
 		normalized,
 		profile,
 		TransportProfileMaterialSourceStructured,
+		true,
 	)
 	if err != nil {
 		return TransportProfileStructuredSaveResult{}, err
@@ -227,6 +228,7 @@ func (h *Host) UpdateStructuredTransportProfile(
 		normalized,
 		profile,
 		TransportProfileMaterialSourceStructured,
+		true,
 	)
 	if err != nil {
 		return TransportProfileStructuredSaveResult{}, err

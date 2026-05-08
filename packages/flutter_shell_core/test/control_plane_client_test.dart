@@ -212,6 +212,23 @@ void main() {
                       ],
                     },
                   ],
+                  'portable_transfer': <String, dynamic>{
+                    'envelope_type': 'portable_transport_profile',
+                    'envelope_version': 1,
+                    'supported_kinds': <String>['wireguard_native_v1'],
+                    'export_paths': <String>[
+                      'text_payload',
+                      'file_payload',
+                      'qr_payload',
+                    ],
+                    'import_paths': <String>[
+                      'text_payload',
+                      'file_payload',
+                      'qr_payload',
+                    ],
+                    'qr_max_payload_bytes': 2048,
+                    'qr_mode': 'single_payload',
+                  },
                 },
                 'platform_tunnels': <Map<String, dynamic>>[
                   <String, dynamic>{
@@ -527,6 +544,59 @@ void main() {
             );
             await request.response.close();
             return;
+          case '/v1/transport-profiles:preview-portable-import':
+            expect(request.method, 'POST');
+            final payload =
+                jsonDecode(await utf8.decoder.bind(request).join())
+                    as Map<String, dynamic>;
+            expect(
+              (payload['envelope'] as String?) ?? '',
+              contains('"type":"portable_transport_profile"'),
+            );
+            expect(payload['passphrase'], 'portable-secret');
+            request.response.headers.contentType = ContentType.json;
+            request.response.write(
+              jsonEncode(<String, dynamic>{
+                'outcome': 'importable',
+                'profile_kind': 'wireguard_native_v1',
+                'display_name': 'RelayDock VPS WireGuard 92.63.105.2',
+                'resolved_display_name': 'RelayDock VPS WireGuard 92.63.105.2',
+                'compatibility': <String, dynamic>{
+                  'state': 'compatible',
+                  'compatible_execution_plans': <Map<String, dynamic>>[
+                    <String, dynamic>{
+                      'access_method': 'turn_credentials',
+                      'carrier_family': 'turn_datagram',
+                      'engine_family': 'wireguard_native',
+                      'host_adapter': 'windows_wintun',
+                    },
+                  ],
+                },
+                'selection_required': true,
+              }),
+            );
+            await request.response.close();
+            return;
+          case '/v1/transport-profiles:confirm-portable-import':
+            expect(request.method, 'POST');
+            final payload =
+                jsonDecode(await utf8.decoder.bind(request).join())
+                    as Map<String, dynamic>;
+            expect(
+              (payload['envelope'] as String?) ?? '',
+              contains('"type":"portable_transport_profile"'),
+            );
+            expect(payload['passphrase'], 'portable-secret');
+            request.response.headers.contentType = ContentType.json;
+            request.response.write(
+              jsonEncode(
+                _transportProfileStatusPayload(
+                  secretMaterialKind: 'portable_transfer',
+                ),
+              ),
+            );
+            await request.response.close();
+            return;
           case '/v1/transport-profiles/transport-profile-1':
             expect(request.method, 'DELETE');
             request.response.statusCode = HttpStatus.noContent;
@@ -537,6 +607,23 @@ void main() {
             request.response.headers.contentType = ContentType.json;
             request.response.write(
               jsonEncode(_transportProfileStatusPayload()),
+            );
+            await request.response.close();
+            return;
+          case '/v1/transport-profiles/transport-profile-1/export-portable':
+            expect(request.method, 'POST');
+            final payload =
+                jsonDecode(await utf8.decoder.bind(request).join())
+                    as Map<String, dynamic>;
+            expect(payload['passphrase'], 'portable-secret');
+            request.response.headers.contentType = ContentType.json;
+            request.response.write(
+              jsonEncode(<String, dynamic>{
+                'envelope': '{"type":"portable_transport_profile","version":1}',
+                'profile_kind': 'wireguard_native_v1',
+                'display_name': 'RelayDock VPS WireGuard 92.63.105.2',
+                'encoded_bytes': 54,
+              }),
             );
             await request.response.close();
             return;
@@ -807,6 +894,22 @@ void main() {
         info.transportProfileStore?.editableKinds.single.fields.single.id,
         TransportProfileStructuredFieldId.interfacePrivateKey,
       );
+      expect(
+        info.transportProfileStore?.portableTransfer?.envelopeType,
+        'portable_transport_profile',
+      );
+      expect(
+        info.transportProfileStore?.portableTransfer?.exportPaths,
+        <TransportProfilePortableTransferPath>[
+          TransportProfilePortableTransferPath.textPayload,
+          TransportProfilePortableTransferPath.filePayload,
+          TransportProfilePortableTransferPath.qrPayload,
+        ],
+      );
+      expect(
+        info.transportProfileStore?.portableTransfer?.qrMode,
+        TransportProfilePortableTransferQrMode.singlePayload,
+      );
       expect(info.platformTunnels, hasLength(1));
       expect(
         info.platformTunnels.single.mode,
@@ -881,6 +984,51 @@ void main() {
       final profiles = await client.transportProfiles();
       expect(profiles.single.id, 'transport-profile-1');
       expect(profiles.single.secretMaterialRef.ref, startsWith('host-owned:'));
+      expect(
+        profiles.single.actions,
+        contains(TransportProfileLifecycleAction.exportPortable),
+      );
+
+      final exportedPortable = await client.exportTransportProfilePortable(
+        'transport-profile-1',
+        const TransportProfilePortableExportRequest(
+          passphrase: 'portable-secret',
+        ),
+      );
+      expect(
+        exportedPortable.envelope,
+        '{"type":"portable_transport_profile","version":1}',
+      );
+      expect(
+        exportedPortable.profileKind,
+        TransportProfileKind.wireGuardNativeV1,
+      );
+      expect(exportedPortable.encodedBytes, 54);
+
+      final portablePreview = await client
+          .previewTransportProfilePortableImport(
+            const TransportProfilePortableImportRequest(
+              envelope: '{"type":"portable_transport_profile","version":1}',
+              passphrase: 'portable-secret',
+            ),
+          );
+      expect(
+        portablePreview.outcome,
+        TransportProfilePortableTransferPreviewOutcome.importable,
+      );
+      expect(portablePreview.selectionRequired, isTrue);
+
+      final importedPortable = await client
+          .confirmTransportProfilePortableImport(
+            const TransportProfilePortableImportRequest(
+              envelope: '{"type":"portable_transport_profile","version":1}',
+              passphrase: 'portable-secret',
+            ),
+          );
+      expect(
+        importedPortable.secretMaterialRef.kind,
+        TransportProfileMaterialSource.portableTransfer,
+      );
 
       final imported = await client.importTransportProfile(
         const TransportProfileImportRequest(
@@ -1748,7 +1896,10 @@ void main() {
   );
 }
 
-Map<String, dynamic> _transportProfileStatusPayload({bool defaultFor = false}) {
+Map<String, dynamic> _transportProfileStatusPayload({
+  bool defaultFor = false,
+  String secretMaterialKind = 'import_adapter',
+}) {
   final payload = <String, dynamic>{
     'id': 'transport-profile-1',
     'kind': 'wireguard_native_v1',
@@ -1770,10 +1921,16 @@ Map<String, dynamic> _transportProfileStatusPayload({bool defaultFor = false}) {
       ],
     },
     'secret_material_ref': <String, dynamic>{
-      'kind': 'import_adapter',
+      'kind': secretMaterialKind,
       'ref': 'host-owned:transport-profile-1',
     },
-    'actions': <String>['replace', 'forget', 'validate', 'select_for_startup'],
+    'actions': <String>[
+      'replace',
+      'forget',
+      'validate',
+      'select_for_startup',
+      'export_portable',
+    ],
     'imported_at': DateTime.utc(2026, 4, 28, 12).toIso8601String(),
     'updated_at': DateTime.utc(2026, 4, 28, 12).toIso8601String(),
   };

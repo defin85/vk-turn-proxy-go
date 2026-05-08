@@ -94,6 +94,25 @@ func defaultTransportProfileStoreCapability() TransportProfileStoreCapability {
 			"ordinary_reads_exclude_host_private_paths",
 		},
 		EditableKinds: defaultTransportProfileEditableKindSchemas(),
+		PortableTransfer: &TransportProfilePortableTransferCapability{
+			EnvelopeType:    portableTransportProfileEnvelopeType,
+			EnvelopeVersion: portableTransportProfileEnvelopeVersion,
+			SupportedKinds: []TransportProfileKind{
+				TransportProfileKindWireGuardNativeV1,
+			},
+			ExportPaths: []TransportProfilePortableTransferPath{
+				TransportProfilePortableTransferPathTextPayload,
+				TransportProfilePortableTransferPathFilePayload,
+				TransportProfilePortableTransferPathQRPayload,
+			},
+			ImportPaths: []TransportProfilePortableTransferPath{
+				TransportProfilePortableTransferPathTextPayload,
+				TransportProfilePortableTransferPathFilePayload,
+				TransportProfilePortableTransferPathQRPayload,
+			},
+			QRMaxPayloadBytes: portableTransportProfileQRMaxPayloadBytes,
+			QRMode:            TransportProfilePortableTransferQRModeSinglePayload,
+		},
 	}
 }
 
@@ -110,6 +129,20 @@ func cloneTransportProfileStoreCapability(capability *TransportProfileStoreCapab
 	clone.LifecycleActions = append([]TransportProfileLifecycleAction(nil), capability.LifecycleActions...)
 	clone.RedactionGuarantees = append([]string(nil), capability.RedactionGuarantees...)
 	clone.EditableKinds = cloneTransportProfileEditableKindSchemas(capability.EditableKinds)
+	clone.PortableTransfer = cloneTransportProfilePortableTransferCapability(capability.PortableTransfer)
+	return &clone
+}
+
+func cloneTransportProfilePortableTransferCapability(
+	capability *TransportProfilePortableTransferCapability,
+) *TransportProfilePortableTransferCapability {
+	if capability == nil {
+		return nil
+	}
+	clone := *capability
+	clone.SupportedKinds = append([]TransportProfileKind(nil), capability.SupportedKinds...)
+	clone.ExportPaths = append([]TransportProfilePortableTransferPath(nil), capability.ExportPaths...)
+	clone.ImportPaths = append([]TransportProfilePortableTransferPath(nil), capability.ImportPaths...)
 	return &clone
 }
 
@@ -287,6 +320,7 @@ func (h *Host) ImportTransportProfile(req TransportProfileImportRequest) (Transp
 		normalized,
 		parsed,
 		TransportProfileMaterialSourceImportAdapter,
+		true,
 	)
 	if err != nil {
 		return TransportProfileStatus{}, err
@@ -420,6 +454,7 @@ func (h *Host) MigrateWireGuardTransportProfileFromPath(path string) (TransportP
 		req,
 		parsed,
 		TransportProfileMaterialSourceLegacyPath,
+		true,
 	)
 	if err != nil {
 		return TransportProfileStatus{}, false, err
@@ -449,7 +484,11 @@ func (h *Host) storeInvalidLegacyWireGuardTransportProfileLocked(
 			Kind: TransportProfileMaterialSourceLegacyPath,
 			Ref:  "host-owned:" + profileID,
 		},
-		Actions:    transportProfileStatusActions(),
+		Actions: transportProfileStatusActionsForProfile(
+			TransportProfileKindWireGuardNativeV1,
+			TransportProfileValidationStatus{State: TransportProfileValidationStateInvalid},
+			nil,
+		),
 		ImportedAt: now,
 		UpdatedAt:  now,
 	}
@@ -470,6 +509,7 @@ func (h *Host) storeParsedTransportProfileLocked(
 	normalized TransportProfileImportRequest,
 	parsed *wireguardprofile.Profile,
 	materialSource TransportProfileMaterialSource,
+	assignDefaults bool,
 ) (TransportProfileStatus, error) {
 	profileID := strings.TrimSpace(normalized.ReplaceProfileID)
 	if profileID == "" {
@@ -501,11 +541,11 @@ func (h *Host) storeParsedTransportProfileLocked(
 			Kind: materialSource,
 			Ref:  "host-owned:" + profileID,
 		},
-		Actions:    transportProfileStatusActions(),
+		Actions:    transportProfileStatusActionsForProfile(normalized.Kind, TransportProfileValidationStatus{State: TransportProfileValidationStateValid}, parsed),
 		ImportedAt: importedAt,
 		UpdatedAt:  h.now().UTC(),
 	}
-	if normalized.DefaultFor != nil || !hadPreviousProfile {
+	if assignDefaults && (normalized.DefaultFor != nil || !hadPreviousProfile) {
 		status.DefaultFor = h.defaultBindingsForImportedTransportProfileLocked(status, normalized.DefaultFor)
 	} else {
 		status.DefaultFor = h.defaultBindingsForTransportProfileLocked(status)
@@ -516,7 +556,7 @@ func (h *Host) storeParsedTransportProfileLocked(
 		status:    cloneTransportProfileStatus(status),
 		wireguard: cloneWireGuardProfile(parsed),
 	}
-	if normalized.DefaultFor != nil || !hadPreviousProfile {
+	if assignDefaults && (normalized.DefaultFor != nil || !hadPreviousProfile) {
 		for _, binding := range status.DefaultFor {
 			h.transportProfileDefaults[binding.ScopeID] = profileID
 		}
@@ -616,7 +656,7 @@ func (h *Host) loadTransportProfileStore() error {
 		if status.SecretMaterialRef.Kind == "" {
 			status.SecretMaterialRef.Kind = TransportProfileMaterialSourceImportAdapter
 		}
-		status.Actions = transportProfileStatusActions()
+		status.Actions = transportProfileStatusActionsForProfile(status.Kind, status.Validation, profile)
 		h.transportProfiles[status.ID] = managedTransportProfile{
 			status:    status,
 			wireguard: profile,
@@ -645,9 +685,7 @@ func (h *Host) persistTransportProfileStoreLocked() error {
 	sort.Strings(profileIDs)
 	for _, profileID := range profileIDs {
 		managed := h.transportProfiles[profileID]
-		record := transportProfileDiskRecord{
-			Status: cloneTransportProfileStatus(managed.status),
-		}
+		record := transportProfileDiskRecord{Status: cloneTransportProfileStatus(managed.status)}
 		if managed.status.Kind == TransportProfileKindWireGuardNativeV1 {
 			record.WireGuard = wireGuardProfileToDisk(managed.wireguard)
 		}
@@ -722,7 +760,7 @@ func (h *Host) refreshTransportProfileStatusLocked(profileID string) {
 	if status.SecretMaterialRef.Kind == "" {
 		status.SecretMaterialRef.Kind = TransportProfileMaterialSourceImportAdapter
 	}
-	status.Actions = transportProfileStatusActions()
+	status.Actions = transportProfileStatusActionsForProfile(status.Kind, status.Validation, managed.wireguard)
 	status.Compatibility.CompatibleExecutionPlans = compatiblePlansForTransportProfileKind(
 		status.Kind,
 		h.platformTunnels,
@@ -749,7 +787,7 @@ func (h *Host) refreshTransportProfileStatusesLocked() {
 	}
 }
 
-func transportProfileStatusActions() []TransportProfileLifecycleAction {
+func transportProfileBaseStatusActions() []TransportProfileLifecycleAction {
 	return []TransportProfileLifecycleAction{
 		TransportProfileLifecycleActionValidate,
 		TransportProfileLifecycleActionReplace,
@@ -759,6 +797,18 @@ func transportProfileStatusActions() []TransportProfileLifecycleAction {
 		TransportProfileLifecycleActionValidateDraft,
 		TransportProfileLifecycleActionGenerateKey,
 	}
+}
+
+func transportProfileStatusActionsForProfile(
+	kind TransportProfileKind,
+	validation TransportProfileValidationStatus,
+	wireguard *wireguardprofile.Profile,
+) []TransportProfileLifecycleAction {
+	actions := transportProfileBaseStatusActions()
+	if transportProfilePortableExportAvailable(kind, validation, wireguard) {
+		actions = append(actions, TransportProfileLifecycleActionExportPortable)
+	}
+	return actions
 }
 
 func (h *Host) resolveTransportProfileForStartupLocked(

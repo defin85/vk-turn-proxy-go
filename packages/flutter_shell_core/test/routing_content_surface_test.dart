@@ -87,6 +87,7 @@ void main() {
     (WidgetTester tester) async {
       var editCalls = 0;
       var importCalls = 0;
+      var manageCalls = 0;
       var forgetCalls = 0;
 
       Future<void> pump({required bool configured}) async {
@@ -120,6 +121,9 @@ void main() {
               onImportTransportProfile: (_) async {
                 importCalls += 1;
               },
+              onManageTransportProfiles: (_) async {
+                manageCalls += 1;
+              },
               onForgetTransportProfile: (_) async {
                 forgetCalls += 1;
               },
@@ -137,10 +141,15 @@ void main() {
         tester,
         'desktop-routing-import-vpn-transport-profile-windows_wintun',
       );
+      await _tapRoutingAction(
+        tester,
+        'desktop-routing-open-vpn-transport-profiles-windows_wintun',
+      );
       await tester.pump();
 
       expect(editCalls, 1);
       expect(importCalls, 1);
+      expect(manageCalls, 1);
 
       await pump(configured: true);
       await _tapRoutingAction(
@@ -159,6 +168,10 @@ void main() {
       await tester.pumpAndSettle();
       await _tapRoutingAction(
         tester,
+        'desktop-routing-open-vpn-transport-profiles-windows_wintun',
+      );
+      await _tapRoutingAction(
+        tester,
         'desktop-routing-forget-vpn-transport-profile-windows_wintun',
       );
       await tester.pumpAndSettle();
@@ -168,6 +181,7 @@ void main() {
 
       expect(editCalls, 2);
       expect(importCalls, 2);
+      expect(manageCalls, 2);
       expect(forgetCalls, 1);
     },
   );
