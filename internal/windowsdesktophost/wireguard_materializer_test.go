@@ -149,8 +149,9 @@ func TestDefaultWindowsWireGuardTurnMaterializerRejectsProfileWithoutRawIngressE
 	}
 }
 
-func TestWindowsWireGuardEnvPathDoesNotAdvertiseTransportProfileStore(t *testing.T) {
+func TestWindowsWireGuardEnvPathMigratesIntoTransportProfileStore(t *testing.T) {
 	profilePath := filepath.Join(t.TempDir(), "desktop1-windows.conf")
+	storePath := filepath.Join(t.TempDir(), "vpn-transport-profiles", "store.json")
 	profileContents := strings.Join([]string{
 		"[Interface]",
 		"PrivateKey = client-private-key",
@@ -166,15 +167,34 @@ func TestWindowsWireGuardEnvPathDoesNotAdvertiseTransportProfileStore(t *testing
 		t.Fatalf("write profile: %v", err)
 	}
 	t.Setenv(windowsWireGuardProfileEnv, profilePath)
+	t.Setenv(windowsTransportProfileStoreEnv, storePath)
 
 	host := NewClientControlHost(nil)
 	info := host.Info()
+	found := false
 	for _, capability := range info.Capabilities {
 		if capability == clientcontrol.CapabilityVPNTransportProfileStore {
-			t.Fatalf("capabilities = %v, want env WireGuard path to stay outside product profile-store support", info.Capabilities)
+			found = true
+			break
 		}
 	}
-	if info.TransportProfileStore != nil {
-		t.Fatalf("transport_profile_store = %+v, want nil for env/default WireGuard path materializer", info.TransportProfileStore)
+	if !found {
+		t.Fatalf("capabilities = %v, want VPN transport profile store support", info.Capabilities)
+	}
+	if info.TransportProfileStore == nil {
+		t.Fatal("transport_profile_store = nil, want Windows host to advertise transport-profile store support")
+	}
+	profiles, err := host.TransportProfiles()
+	if err != nil {
+		t.Fatalf("TransportProfiles() error = %v", err)
+	}
+	if len(profiles) != 1 {
+		t.Fatalf("TransportProfiles() len = %d, want 1 migrated profile", len(profiles))
+	}
+	if profiles[0].SecretMaterialRef.Kind != clientcontrol.TransportProfileMaterialSourceLegacyPath {
+		t.Fatalf("secret material source = %q, want %q", profiles[0].SecretMaterialRef.Kind, clientcontrol.TransportProfileMaterialSourceLegacyPath)
+	}
+	if profiles[0].Validation.State != clientcontrol.TransportProfileValidationStateValid {
+		t.Fatalf("validation state = %s, want valid", profiles[0].Validation.State)
 	}
 }

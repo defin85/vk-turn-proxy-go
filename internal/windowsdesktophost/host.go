@@ -2,13 +2,18 @@ package windowsdesktophost
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/defin85/vk-turn-proxy-go/internal/buildinfo"
 	"github.com/defin85/vk-turn-proxy-go/pkg/clientcontrol"
 )
+
+const windowsTransportProfileStoreEnv = "VKTP_WINDOWS_TRANSPORT_PROFILE_STORE"
 
 func NewClientControlHost(logger *slog.Logger) *clientcontrol.Host {
 	if logger == nil {
@@ -16,15 +21,16 @@ func NewClientControlHost(logger *slog.Logger) *clientcontrol.Host {
 	}
 	build := currentBuildIdentity()
 	materializer, materializerErr := defaultWindowsWireGuardTurnMaterializer()
-	if materializerErr != nil {
+	storePath, storePathErr := detectWindowsTransportProfileStorePath()
+	if storePathErr != nil {
 		logger.Warn(
-			"windows_wintun strict carrier materializer unavailable; reporting fail-closed capability",
+			"windows transport profile store path unavailable; enabling in-memory store fallback",
 			"error",
-			materializerErr,
+			storePathErr,
 		)
 	}
 	controller := newWindowsWintunController(
-		currentWindowsWintunCapability(build, materializerErr),
+		currentWindowsWintunCapability(build, nil),
 		newWindowsWintunLifecycle(logger),
 	)
 	opts := []clientcontrol.Option{
@@ -34,10 +40,22 @@ func NewClientControlHost(logger *slog.Logger) *clientcontrol.Host {
 		clientcontrol.WithPlatformTunnelStarter(controller.Start),
 		clientcontrol.WithPlatformTunnelStopper(controller.Stop),
 	}
+	if strings.TrimSpace(storePath) != "" {
+		opts = append(opts, clientcontrol.WithVPNTransportProfileStorePath(storePath))
+	} else {
+		opts = append(opts, clientcontrol.WithVPNTransportProfileStore())
+	}
 	if materializer != nil {
 		opts = append(opts, clientcontrol.WithWireGuardTurnMaterializer(materializer))
+	} else if materializerErr != nil {
+		logger.Warn(
+			"windows_wintun legacy WireGuard profile path unavailable; startup now depends on imported transport profiles",
+			"error",
+			materializerErr,
+		)
 	}
 	host := clientcontrol.New(opts...)
+	migrateLegacyWindowsWireGuardProfile(logger, host)
 	controller.setWireGuardTurnLeaseProvider(
 		func(
 			ctx context.Context,
@@ -62,6 +80,37 @@ func NewClientControlHost(logger *slog.Logger) *clientcontrol.Host {
 		},
 	)
 	return host
+}
+
+func detectWindowsTransportProfileStorePath() (string, error) {
+	if override := strings.TrimSpace(os.Getenv(windowsTransportProfileStoreEnv)); override != "" {
+		return override, nil
+	}
+	configDir, err := os.UserConfigDir()
+	if err == nil && strings.TrimSpace(configDir) != "" {
+		return filepath.Join(configDir, "vk-turn-proxy-go", "vpn-transport-profiles", "store.json"), nil
+	}
+	home, homeErr := os.UserHomeDir()
+	if homeErr != nil || strings.TrimSpace(home) == "" {
+		if err != nil {
+			return "", fmt.Errorf("locate Windows config directory: %w", err)
+		}
+		return "", fmt.Errorf("locate Windows home directory: %w", homeErr)
+	}
+	return filepath.Join(home, ".vk-turn-proxy-go", "vpn-transport-profiles", "store.json"), nil
+}
+
+func migrateLegacyWindowsWireGuardProfile(logger *slog.Logger, host *clientcontrol.Host) {
+	if host == nil {
+		return
+	}
+	legacyPath, err := detectWindowsWireGuardProfilePath()
+	if err != nil {
+		return
+	}
+	if _, _, err := host.MigrateWireGuardTransportProfileFromPath(legacyPath); err != nil && logger != nil {
+		logger.Warn("legacy Windows WireGuard profile migration failed", "error", err)
+	}
 }
 
 func currentBuildIdentity() clientcontrol.BuildIdentity {
