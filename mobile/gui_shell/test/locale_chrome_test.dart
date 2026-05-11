@@ -62,8 +62,15 @@ class _ReadyMobileHostBridge extends UnavailableMobileHostBridge {
   Stream<EventRecord> events() => const Stream<EventRecord>.empty();
 
   @override
+  Future<HostInfo> hostInfo() async => _readyHostInfo;
+
+  @override
   Future<List<ProviderConfigRecord>> providerConfigs() async =>
       const <ProviderConfigRecord>[];
+
+  @override
+  Future<List<RemoteProviderSourceDescriptor>> providerSources() async =>
+      const <RemoteProviderSourceDescriptor>[];
 
   @override
   Future<List<ProviderDescriptor>> providers() async =>
@@ -125,8 +132,15 @@ class _LocalizedReadyMobileHostBridge extends UnavailableMobileHostBridge {
   }
 
   @override
+  Future<HostInfo> hostInfo() async => _readyHostInfo;
+
+  @override
   Future<List<ProviderConfigRecord>> providerConfigs() async =>
       const <ProviderConfigRecord>[];
+
+  @override
+  Future<List<RemoteProviderSourceDescriptor>> providerSources() async =>
+      const <RemoteProviderSourceDescriptor>[];
 
   @override
   Future<List<ProviderDescriptor>> providers() async =>

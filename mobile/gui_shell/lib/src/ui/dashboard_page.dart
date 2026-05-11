@@ -1349,11 +1349,15 @@ class _VPNTransportProfileManagerPage extends StatelessWidget {
     if (capability == null) {
       return;
     }
+    final copy = context.shellText;
     String? errorText;
-    while (context.mounted) {
+    while (true) {
+      if (!context.mounted) {
+        return;
+      }
       final passphrase = await showPortableTransportProfilePassphraseDialog(
         context: context,
-        title: context.shellText.exportPortableProfile,
+        title: copy.exportPortableProfile,
         actionLabel: 'Prepare export',
         errorText: errorText,
         message:
@@ -1392,12 +1396,16 @@ class _VPNTransportProfileManagerPage extends StatelessWidget {
     BuildContext context,
     String payload,
   ) async {
+    final copy = context.shellText;
     String? errorText;
-    while (context.mounted) {
+    while (true) {
+      if (!context.mounted) {
+        return;
+      }
       final passphrase = await showPortableTransportProfilePassphraseDialog(
         context: context,
-        title: context.shellText.importPortableProfile,
-        actionLabel: context.shellText.previewImport,
+        title: copy.importPortableProfile,
+        actionLabel: copy.previewImport,
         errorText: errorText,
         message:
             'Enter the passphrase that protects this portable VPN transport-profile envelope.',
@@ -1446,14 +1454,23 @@ class _VPNTransportProfileManagerPage extends StatelessWidget {
     if (source == null || !context.mounted) {
       return;
     }
-    final payload = switch (source) {
-      PortableTransportProfileImportSource.file =>
-        await controller.openPortableVPNTransportProfileEnvelopeText(),
-      PortableTransportProfileImportSource.paste =>
-        await showPortableTransportProfilePasteDialog(context: context),
-      PortableTransportProfileImportSource.scanQr =>
-        await showPortableTransportProfileQrScanner(context),
-    };
+    String? payload;
+    switch (source) {
+      case PortableTransportProfileImportSource.file:
+        payload = await controller.openPortableVPNTransportProfileEnvelopeText();
+      case PortableTransportProfileImportSource.paste:
+        if (!context.mounted) {
+          return;
+        }
+        payload = await showPortableTransportProfilePasteDialog(
+          context: context,
+        );
+      case PortableTransportProfileImportSource.scanQr:
+        if (!context.mounted) {
+          return;
+        }
+        payload = await showPortableTransportProfileQrScanner(context);
+    }
     if (payload == null || payload.trim().isEmpty || !context.mounted) {
       return;
     }
