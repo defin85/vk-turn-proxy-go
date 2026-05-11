@@ -1,0 +1,15 @@
+{
+  "source_device_serial": "192.168.0.16:33707",
+  "saved_profile": {
+    "id": "65149633707bd",
+    "name": "VPS copy",
+    "export_file": "vps-copy.portable-profile.json"
+  },
+  "transport_profile": {
+    "id": "aa49287f5cfcec4a53531cd772965f31",
+    "display_name": "RelayDock VPS WireGuard 92.63.105.2",
+    "kind": "wireguard_native_v1",
+    "export_file": "relaydock-vps-wireguard-92.63.105.2.portable-transport-profile.json",
+    "passphrase_hint": "provided out-of-band in chat reply"
+  }
+}

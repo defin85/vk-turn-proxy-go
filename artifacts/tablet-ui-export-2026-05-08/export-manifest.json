@@ -1,0 +1,19 @@
+{
+  "source": "tablet_ui_export_qr_decode",
+  "device_serial": "192.168.0.16:33707",
+  "exported_at_local": "2026-05-08T21:57:00+03:00",
+  "artifacts": [
+    {
+      "type": "portable_profile",
+      "path": "artifacts/tablet-ui-export-2026-05-08/vps-copy.portable-profile.json",
+      "profile_name": "VPS copy",
+      "ui_path": "Profiles -> VPS copy -> Export saved profile"
+    },
+    {
+      "type": "portable_transport_profile",
+      "path": "artifacts/tablet-ui-export-2026-05-08/relaydock-vps-wireguard-92.63.105.2.portable-transport-profile.json",
+      "profile_name": "RelayDock VPS WireGuard 92.63.105.2",
+      "ui_path": "Routing -> Show details -> Open VPN profiles -> RelayDock VPS WireGuard 92.63.105.2 -> Export"
+    }
+  ]
+}

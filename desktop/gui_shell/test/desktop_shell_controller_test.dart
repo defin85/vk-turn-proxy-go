@@ -1649,9 +1649,9 @@ void main() {
 
       expect(api.startPlatformTunnelCalls, isEmpty);
 
-      final importedProfile = controller.vpnTransportProfilesForMode(
-        PlatformTunnelMode.windowsWintun,
-      ).single;
+      final importedProfile = controller
+          .vpnTransportProfilesForMode(PlatformTunnelMode.windowsWintun)
+          .single;
       await controller.selectVPNTransportProfileForMode(
         PlatformTunnelMode.windowsWintun,
         importedProfile,
@@ -1718,6 +1718,72 @@ void main() {
         PlatformTunnelStartupStage.capabilityCheck,
       );
       expect(controller.notice, contains('Capability check'));
+    },
+  );
+
+  test(
+    'controller detaches windows platform tunnel startup from global busy state',
+    () async {
+      final startCompleter = Completer<PlatformTunnelStartResult>();
+      final api = _FakeControlPlaneApi(
+        profiles: const <ProfileRecord>[],
+        resolutions: <ResolutionRecord>[_resolutionRecord(id: 'resolution-1')],
+        sessions: const <SessionRecord>[],
+        startPlatformTunnelHandler: (_) => startCompleter.future,
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(const <HostConnectionResult>[
+          HostConnectionResult(
+            state: HostLifecycleState.ready,
+            message: 'ready',
+            info: _readyWindowsWintunHostInfo,
+          ),
+        ]),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.startPlatformTunnel(PlatformTunnelMode.windowsWintun);
+
+      expect(controller.busy, isFalse);
+      expect(
+        controller.platformTunnelStartInFlight(
+          PlatformTunnelMode.windowsWintun,
+        ),
+        isTrue,
+      );
+      expect(
+        controller
+            .platformTunnelStatusFor(PlatformTunnelMode.windowsWintun)
+            ?.state,
+        PlatformTunnelLifecycleState.starting,
+      );
+      expect(api.startPlatformTunnelCalls, hasLength(1));
+
+      startCompleter.complete(
+        const PlatformTunnelStartResult(
+          mode: PlatformTunnelMode.windowsWintun,
+          ready: false,
+          stage: PlatformTunnelStartupStage.dataplaneVerify,
+          missingPrerequisite: PlatformTunnelPrerequisite.dataplaneEvidence,
+          message: 'probe pending',
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        controller.platformTunnelStartInFlight(
+          PlatformTunnelMode.windowsWintun,
+        ),
+        isFalse,
+      );
+      expect(
+        controller
+            .platformTunnelResultFor(PlatformTunnelMode.windowsWintun)
+            ?.stage,
+        PlatformTunnelStartupStage.dataplaneVerify,
+      );
     },
   );
 
@@ -2277,8 +2343,11 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
     Map<String, ChallengeRecord>? challenges,
     HostInfo? hostInfo,
     List<TransportProfileStatus>? transportProfiles,
+    List<PlatformTunnelStatus>? platformTunnelStatuses,
     ResolutionState startResolutionState = ResolutionState.resolved,
     ResolutionState? continueChallengeResolutionState,
+    Future<PlatformTunnelStartResult> Function(_StartPlatformTunnelCall call)?
+    startPlatformTunnelHandler,
     ProviderTransportCompatibilityResponse Function(
       ProviderTransportCompatibilityRequest request,
     )?
@@ -2304,8 +2373,12 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
        _transportProfiles = List<TransportProfileStatus>.of(
          transportProfiles ?? const <TransportProfileStatus>[],
        ),
+       _platformTunnelStatuses = List<PlatformTunnelStatus>.of(
+         platformTunnelStatuses ?? const <PlatformTunnelStatus>[],
+       ),
        _startResolutionState = startResolutionState,
        _continueChallengeResolutionState = continueChallengeResolutionState,
+       _startPlatformTunnelHandler = startPlatformTunnelHandler,
        _providerTransportCompatibilityResponseBuilder =
            providerTransportCompatibilityResponseBuilder;
 
@@ -2318,8 +2391,13 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   final Map<String, ChallengeRecord> _challenges;
   HostInfo _hostInfo;
   final List<TransportProfileStatus> _transportProfiles;
+  final List<PlatformTunnelStatus> _platformTunnelStatuses;
   final ResolutionState _startResolutionState;
   final ResolutionState? _continueChallengeResolutionState;
+  final Future<PlatformTunnelStartResult> Function(
+    _StartPlatformTunnelCall call,
+  )?
+  _startPlatformTunnelHandler;
   final ProviderTransportCompatibilityResponse Function(
     ProviderTransportCompatibilityRequest request,
   )?
@@ -2464,7 +2542,7 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
 
   @override
   Future<List<PlatformTunnelStatus>> platformTunnelStatuses() async {
-    return const <PlatformTunnelStatus>[];
+    return _platformTunnelStatuses;
   }
 
   @override
@@ -2684,20 +2762,22 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
     List<String> allowedPackages = const <String>[],
     List<String> disallowedPackages = const <String>[],
   }) async {
-    startPlatformTunnelCalls.add(
-      _StartPlatformTunnelCall(
-        mode: mode,
-        resolutionId: resolutionId,
-        runtimeDefaults: runtimeDefaults,
-        executionPlan: executionPlan,
-        transportProfile: transportProfile,
-        providerTransportCompatibility: providerTransportCompatibility,
-        applicationRoutingPolicy: applicationRoutingPolicy,
-        underlayRoutePolicy: underlayRoutePolicy,
-        allowedPackages: allowedPackages,
-        disallowedPackages: disallowedPackages,
-      ),
+    final call = _StartPlatformTunnelCall(
+      mode: mode,
+      resolutionId: resolutionId,
+      runtimeDefaults: runtimeDefaults,
+      executionPlan: executionPlan,
+      transportProfile: transportProfile,
+      providerTransportCompatibility: providerTransportCompatibility,
+      applicationRoutingPolicy: applicationRoutingPolicy,
+      underlayRoutePolicy: underlayRoutePolicy,
+      allowedPackages: allowedPackages,
+      disallowedPackages: disallowedPackages,
     );
+    startPlatformTunnelCalls.add(call);
+    if (_startPlatformTunnelHandler != null) {
+      return _startPlatformTunnelHandler!(call);
+    }
     return const PlatformTunnelStartResult(
       mode: PlatformTunnelMode.windowsWintun,
       ready: false,

@@ -146,6 +146,8 @@ class DesktopShellController extends ChangeNotifier {
   List<EventRecord> events = const <EventRecord>[];
   List<TransportProfileStatus> transportProfiles =
       const <TransportProfileStatus>[];
+  List<PlatformTunnelStatus> platformTunnelStatuses =
+      const <PlatformTunnelStatus>[];
   ProfileDraft draft = ProfileDraft.defaults();
   ManagedProviderDraft managedProviderDraft = ManagedProviderDraft.defaults();
   DesktopShellSection activeSection = DesktopShellSection.profileWorkflow;
@@ -168,6 +170,8 @@ class DesktopShellController extends ChangeNotifier {
   final Map<PlatformTunnelMode, ProviderTransportCompatibilityCandidate>
   _providerTransportCompatibilityCandidates =
       <PlatformTunnelMode, ProviderTransportCompatibilityCandidate>{};
+  final Set<PlatformTunnelMode> _platformTunnelStartsInFlight =
+      <PlatformTunnelMode>{};
   PlatformTunnelMode? _pendingPlatformTunnelStartMode;
   String? _pendingPlatformTunnelStartResolutionId;
   String? notice;
@@ -230,6 +234,19 @@ class DesktopShellController extends ChangeNotifier {
 
   PlatformTunnelStartResult? platformTunnelResultFor(PlatformTunnelMode mode) {
     return _platformTunnelResults[mode];
+  }
+
+  PlatformTunnelStatus? platformTunnelStatusFor(PlatformTunnelMode mode) {
+    for (final status in platformTunnelStatuses) {
+      if (status.mode == mode) {
+        return status;
+      }
+    }
+    return null;
+  }
+
+  bool platformTunnelStartInFlight(PlatformTunnelMode mode) {
+    return _platformTunnelStartsInFlight.contains(mode);
   }
 
   ProviderTransportCompatibilityCandidate?
@@ -712,6 +729,7 @@ class DesktopShellController extends ChangeNotifier {
       providerDescriptors = const <ProviderDescriptor>[];
       providerSources = const <RemoteProviderSourceDescriptor>[];
       transportProfiles = const <TransportProfileStatus>[];
+      platformTunnelStatuses = const <PlatformTunnelStatus>[];
       resolutions = const <ResolutionRecord>[];
       sessions = const <SessionRecord>[];
       _providerTransportCompatibilityCandidates.clear();
@@ -755,6 +773,9 @@ class DesktopShellController extends ChangeNotifier {
       final nextTransportProfiles = hostSupportsTransportProfileStore
           ? await api.transportProfiles()
           : const <TransportProfileStatus>[];
+      final nextPlatformTunnelStatuses = platformTunnels.isNotEmpty
+          ? await api.platformTunnelStatuses()
+          : const <PlatformTunnelStatus>[];
       final nextProfiles = await api.profiles();
       final nextResolutions = await api.resolutions();
       final nextSessions = await api.sessions();
@@ -767,6 +788,7 @@ class DesktopShellController extends ChangeNotifier {
       providerSources = nextProviderSources;
       managedProviders = _overlayManagedProviders(managedProviders);
       transportProfiles = nextTransportProfiles;
+      _replacePlatformTunnelStatuses(nextPlatformTunnelStatuses);
       profiles = nextProfiles;
       resolutions = nextResolutions;
       sessions = nextSessions;
@@ -1682,6 +1704,9 @@ class DesktopShellController extends ChangeNotifier {
 
   Future<void> startPlatformTunnel(PlatformTunnelMode mode) async {
     await _runMutation(() async {
+      if (platformTunnelStartInFlight(mode)) {
+        return;
+      }
       final capability = _platformTunnelCapabilityFor(mode);
       if (capability == null) {
         _clearPendingPlatformTunnelStart(mode);
@@ -1725,12 +1750,27 @@ class DesktopShellController extends ChangeNotifier {
         notice = compatibilityBlockReason;
         return;
       }
+      final executionPlan = _defaultPlatformTunnelExecutionPlan(capability);
+      final transportProfile = executionPlan == null
+          ? null
+          : _transportProfileReferenceForPlan(mode, executionPlan);
+      final providerTransportCompatibility =
+          await _providerTransportCompatibilityStartupReference(
+            mode: mode,
+            resolutionId: resolutionId,
+            executionPlan: executionPlan,
+            transportProfile: transportProfile,
+          );
       _clearPendingPlatformTunnelStart(mode);
-      await _startPlatformTunnelWithCapability(
+      _schedulePlatformTunnelStart(
         mode: mode,
         capability: capability,
         resolutionId: resolutionId,
+        executionPlan: executionPlan,
+        transportProfile: transportProfile,
+        providerTransportCompatibility: providerTransportCompatibility,
       );
+      await Future<void>.value();
     });
   }
 
@@ -1945,12 +1985,27 @@ class DesktopShellController extends ChangeNotifier {
           notice = compatibilityBlockReason;
           return;
         }
+        final executionPlan = _defaultPlatformTunnelExecutionPlan(capability);
+        final transportProfile = executionPlan == null
+            ? null
+            : _transportProfileReferenceForPlan(mode, executionPlan);
+        final providerTransportCompatibility =
+            await _providerTransportCompatibilityStartupReference(
+              mode: mode,
+              resolutionId: resolution.id,
+              executionPlan: executionPlan,
+              transportProfile: transportProfile,
+            );
         _clearPendingPlatformTunnelStart(mode);
-        await _startPlatformTunnelWithCapability(
+        _schedulePlatformTunnelStart(
           mode: mode,
           capability: capability,
           resolutionId: resolution.id,
+          executionPlan: executionPlan,
+          transportProfile: transportProfile,
+          providerTransportCompatibility: providerTransportCompatibility,
         );
+        await Future<void>.value();
         return;
       case ResolutionState.failed ||
           ResolutionState.cancelled ||
@@ -1967,22 +2022,72 @@ class DesktopShellController extends ChangeNotifier {
     }
   }
 
+  void _schedulePlatformTunnelStart({
+    required PlatformTunnelMode mode,
+    required PlatformTunnelCapability capability,
+    required String? resolutionId,
+    required RuntimeExecutionPlan? executionPlan,
+    required TransportProfileReference? transportProfile,
+    required ProviderTransportCompatibilityStartupReference?
+    providerTransportCompatibility,
+  }) {
+    if (_platformTunnelStartsInFlight.contains(mode)) {
+      return;
+    }
+    _platformTunnelStartsInFlight.add(mode);
+    _platformTunnelResults.remove(mode);
+    _rememberPlatformTunnelLocalStatus(
+      _startingPlatformTunnelStatus(
+        mode: mode,
+        capability: capability,
+        resolutionId: resolutionId,
+      ),
+    );
+    _notify();
+    final startFuture = _startPlatformTunnelWithCapability(
+      mode: mode,
+      capability: capability,
+      resolutionId: resolutionId,
+      executionPlan: executionPlan,
+      transportProfile: transportProfile,
+      providerTransportCompatibility: providerTransportCompatibility,
+    );
+    unawaited(
+      startFuture
+          .then<void>((_) {})
+          .catchError((Object error, StackTrace _) async {
+            if (error is ControlPlaneError) {
+              if (error.statusCode == 0 ||
+                  error.incompatibleHost ||
+                  error.statusCode >= 500) {
+                await _handleHostFailure(error, scheduleRecovery: true);
+                return;
+              }
+              notice = error.message;
+              return;
+            }
+            notice = '$error';
+          })
+          .whenComplete(() {
+            _platformTunnelStartsInFlight.remove(mode);
+            final status = platformTunnelStatusFor(mode);
+            if (status?.state == PlatformTunnelLifecycleState.starting) {
+              _removePlatformTunnelLocalStatus(mode);
+            }
+            _notify();
+          }),
+    );
+  }
+
   Future<void> _startPlatformTunnelWithCapability({
     required PlatformTunnelMode mode,
     required PlatformTunnelCapability capability,
     required String? resolutionId,
+    required RuntimeExecutionPlan? executionPlan,
+    required TransportProfileReference? transportProfile,
+    required ProviderTransportCompatibilityStartupReference?
+    providerTransportCompatibility,
   }) async {
-    final executionPlan = _defaultPlatformTunnelExecutionPlan(capability);
-    final transportProfile = executionPlan == null
-        ? null
-        : _transportProfileReferenceForPlan(mode, executionPlan);
-    final providerTransportCompatibility =
-        await _providerTransportCompatibilityStartupReference(
-          mode: mode,
-          resolutionId: resolutionId,
-          executionPlan: executionPlan,
-          transportProfile: transportProfile,
-        );
     final result = await api.startPlatformTunnel(
       mode: mode,
       resolutionId: resolutionId,
@@ -1994,9 +2099,17 @@ class DesktopShellController extends ChangeNotifier {
         capability,
       ),
     );
-    _platformTunnelResults[mode] = result;
     if (result.ready) {
       await refresh();
+    }
+    _platformTunnelResults[mode] = result;
+    _rememberPlatformTunnelLocalStatus(
+      _statusFromPlatformTunnelStartResult(
+        result,
+        sourceResolutionId: resolutionId,
+      ),
+    );
+    if (result.ready) {
       final sessionId = _resolvePlatformTunnelReadySessionId(
         sessionId: result.sessionId,
         resolutionId: resolutionId,
@@ -2177,7 +2290,8 @@ class DesktopShellController extends ChangeNotifier {
         prerequisite.selectedProfile?.profileId.trim().isNotEmpty == true ||
         prerequisite.defaultProfile?.profileId.trim().isNotEmpty == true;
     if (!hasSelectedOrDefault &&
-        descriptor?.supportState != RuntimeExecutionPlanSupportState.supported) {
+        descriptor?.supportState !=
+            RuntimeExecutionPlanSupportState.supported) {
       final descriptorMessage = descriptor?.message?.trim() ?? '';
       if (descriptorMessage.isNotEmpty) {
         return descriptorMessage;
@@ -2881,8 +2995,180 @@ class DesktopShellController extends ChangeNotifier {
 
   void _clearPlatformTunnelResults() {
     _platformTunnelResults.clear();
+    platformTunnelStatuses = const <PlatformTunnelStatus>[];
+    _platformTunnelStartsInFlight.clear();
     _providerTransportCompatibilityCandidates.clear();
     _clearPendingPlatformTunnelStart();
+  }
+
+  void _replacePlatformTunnelStatuses(List<PlatformTunnelStatus> nextStatuses) {
+    final merged = <PlatformTunnelStatus>[...nextStatuses];
+    final seenModes = nextStatuses.map((PlatformTunnelStatus status) {
+      return status.mode;
+    }).toSet();
+    for (final mode in _platformTunnelStartsInFlight) {
+      if (seenModes.contains(mode)) {
+        continue;
+      }
+      final existing = platformTunnelStatusFor(mode);
+      if (existing != null &&
+          existing.state == PlatformTunnelLifecycleState.starting) {
+        merged.add(existing);
+        continue;
+      }
+      final capability = _platformTunnelCapabilityFor(mode);
+      if (capability == null) {
+        continue;
+      }
+      merged.add(
+        _startingPlatformTunnelStatus(
+          mode: mode,
+          capability: capability,
+          resolutionId: _platformTunnelResolutionIdFor(mode),
+        ),
+      );
+    }
+    platformTunnelStatuses = merged;
+    final seenStatusModes = <PlatformTunnelMode>{};
+    for (final status in merged) {
+      seenStatusModes.add(status.mode);
+      final result = _platformTunnelResultFromStatus(status);
+      if (result == null) {
+        _platformTunnelResults.remove(status.mode);
+      } else {
+        _platformTunnelResults[status.mode] = result;
+      }
+    }
+    _platformTunnelResults.removeWhere(
+      (PlatformTunnelMode mode, PlatformTunnelStartResult _) =>
+          !seenStatusModes.contains(mode),
+    );
+  }
+
+  PlatformTunnelStartResult? _platformTunnelResultFromStatus(
+    PlatformTunnelStatus status,
+  ) {
+    if (status.state == PlatformTunnelLifecycleState.stopped) {
+      return null;
+    }
+    if (status.state == PlatformTunnelLifecycleState.ready || status.ready) {
+      return PlatformTunnelStartResult(
+        mode: status.mode,
+        ready: true,
+        executionPlan: status.executionPlan,
+        transportProfile: status.transportProfile,
+        providerTransportCompatibility: status.providerTransportCompatibility,
+        remoteIngress: status.remoteIngress,
+        dataplane: status.dataplane,
+        sessionId: status.sessionId,
+        underlayRoutePolicy: status.underlayRoutePolicy,
+        message: status.message,
+      );
+    }
+    if (status.stage == null || status.missingPrerequisite == null) {
+      return null;
+    }
+    return PlatformTunnelStartResult(
+      mode: status.mode,
+      ready: false,
+      executionPlan: status.executionPlan,
+      transportProfile: status.transportProfile,
+      providerTransportCompatibility: status.providerTransportCompatibility,
+      remoteIngress: status.remoteIngress,
+      dataplane: status.dataplane,
+      stage: status.stage,
+      missingPrerequisite: status.missingPrerequisite,
+      startupAttemptId: status.startupAttemptId,
+      underlayRoutePolicy: status.underlayRoutePolicy,
+      message: status.message,
+    );
+  }
+
+  PlatformTunnelStatus _startingPlatformTunnelStatus({
+    required PlatformTunnelMode mode,
+    required PlatformTunnelCapability capability,
+    required String? resolutionId,
+  }) {
+    final executionPlan = _defaultPlatformTunnelExecutionPlan(capability);
+    final transportProfile = executionPlan == null
+        ? null
+        : _transportProfileReferenceForPlan(mode, executionPlan);
+    return PlatformTunnelStatus(
+      mode: mode,
+      state: PlatformTunnelLifecycleState.starting,
+      ready: false,
+      sourceResolutionId: (resolutionId ?? '').trim(),
+      executionPlan: executionPlan,
+      transportProfile: transportProfile,
+      underlayRoutePolicy: _defaultPlatformTunnelUnderlayRoutePolicy(
+        capability,
+      ),
+      updatedAt: _clock().toUtc(),
+    );
+  }
+
+  PlatformTunnelStatus _statusFromPlatformTunnelStartResult(
+    PlatformTunnelStartResult result, {
+    required String? sourceResolutionId,
+  }) {
+    final PlatformTunnelLifecycleState state;
+    if (result.ready) {
+      state = PlatformTunnelLifecycleState.ready;
+    } else if (result.stage == PlatformTunnelStartupStage.permissionAcquire &&
+        result.missingPrerequisite == PlatformTunnelPrerequisite.permission) {
+      state = PlatformTunnelLifecycleState.permission;
+    } else if (result.stage == PlatformTunnelStartupStage.profileValidate ||
+        result.missingPrerequisite ==
+            PlatformTunnelPrerequisite.transportProfile) {
+      state = PlatformTunnelLifecycleState.setupNeeded;
+    } else {
+      state = PlatformTunnelLifecycleState.failed;
+    }
+    return PlatformTunnelStatus(
+      mode: result.mode,
+      state: state,
+      ready: result.ready,
+      sessionId: result.sessionId,
+      sourceResolutionId: (sourceResolutionId ?? '').trim(),
+      executionPlan: result.executionPlan,
+      transportProfile: result.transportProfile,
+      providerTransportCompatibility: result.providerTransportCompatibility,
+      remoteIngress: result.remoteIngress,
+      dataplane: result.dataplane,
+      underlayRoutePolicy: result.underlayRoutePolicy,
+      stage: result.stage,
+      missingPrerequisite: result.missingPrerequisite,
+      startupAttemptId: result.startupAttemptId,
+      message: result.message,
+      updatedAt: _clock().toUtc(),
+    );
+  }
+
+  void _rememberPlatformTunnelLocalStatus(PlatformTunnelStatus status) {
+    final next = <PlatformTunnelStatus>[];
+    var replaced = false;
+    for (final existing in platformTunnelStatuses) {
+      if (existing.mode == status.mode) {
+        if (!replaced) {
+          next.add(status);
+          replaced = true;
+        }
+        continue;
+      }
+      next.add(existing);
+    }
+    if (!replaced) {
+      next.add(status);
+    }
+    platformTunnelStatuses = next;
+  }
+
+  void _removePlatformTunnelLocalStatus(PlatformTunnelMode mode) {
+    platformTunnelStatuses = platformTunnelStatuses
+        .where((PlatformTunnelStatus status) {
+          return status.mode != mode;
+        })
+        .toList(growable: false);
   }
 
   void _relocalizeReadyHostConnection() {

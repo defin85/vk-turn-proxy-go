@@ -1461,6 +1461,7 @@ class _RoutingWorkbenchSurface extends StatelessWidget {
                 hostReady: controller.hostConnection?.isReady == true,
                 platformTunnels: controller.platformTunnels,
                 platformTunnelResultFor: controller.platformTunnelResultFor,
+                platformTunnelStatusFor: controller.platformTunnelStatusFor,
                 transportProfileStatusSummaryForMode:
                     controller.vpnTransportProfileStatusSummaryForMode,
                 transportProfileImportAdapterLabelForMode:
@@ -2961,9 +2962,16 @@ HomeWorkflowPrimaryActionData _desktopHomePrimaryActionData(
   final selectedProfile = controller.selectedSavedProfile;
   final challenge = _desktopHomePrimaryChallenge(controller);
   final primaryTunnelMode = _desktopHomePrimaryPlatformTunnelMode(controller);
+  final primaryTunnelStatus = primaryTunnelMode == null
+      ? null
+      : controller.platformTunnelStatusFor(primaryTunnelMode);
   final primaryTunnelReady =
       primaryTunnelMode != null &&
-      controller.platformTunnelResultFor(primaryTunnelMode)?.ready == true;
+      (controller.platformTunnelResultFor(primaryTunnelMode)?.ready == true ||
+          primaryTunnelStatus?.ready == true);
+  final primaryTunnelStarting =
+      primaryTunnelMode != null &&
+      controller.platformTunnelStartInFlight(primaryTunnelMode);
   if (challenge != null) {
     return HomeWorkflowPrimaryActionData(
       tone: ShellSemanticTone.attention,
@@ -3052,6 +3060,35 @@ HomeWorkflowPrimaryActionData _desktopHomePrimaryActionData(
     );
   }
   if (primaryTunnelMode != null) {
+    if (primaryTunnelStarting) {
+      return HomeWorkflowPrimaryActionData(
+        tone: ShellSemanticTone.info,
+        eyebrow: copy.mainActionTone,
+        title: copy.sessionStateLabel('starting'),
+        subtitle:
+            '${selectedProfile.name.isEmpty ? selectedProfile.id : selectedProfile.name} · ${selectedProfile.spec.provider}',
+        leadingIcon: Icons.power_rounded,
+        primaryAction: HomeWorkflowAction(
+          key: const ValueKey<String>('desktop-home-turn-on-vpn'),
+          label: copy.sessionStateLabel('starting'),
+          icon: Icons.hourglass_top_rounded,
+          onPressed: null,
+        ),
+        secondaryActions: <HomeWorkflowAction>[
+          HomeWorkflowAction(
+            key: const ValueKey<String>('desktop-open-profile-library-button'),
+            label: t.commonProfiles,
+            style: HomeWorkflowActionStyle.tonal,
+            onPressed: controller.showProfiles,
+          ),
+          HomeWorkflowAction(
+            label: t.commonRouting,
+            style: HomeWorkflowActionStyle.outlined,
+            onPressed: controller.showRouting,
+          ),
+        ],
+      );
+    }
     final blockReason = controller.platformTunnelStartPreparationBlockReason(
       primaryTunnelMode,
     );
@@ -3156,7 +3193,10 @@ HomeWorkflowPrimaryActionData _desktopHomePrimaryActionData(
         key: const ValueKey<String>('desktop-home-turn-on-vpn'),
         label: copy.mobileTurnOnVpn,
         icon: Icons.power_settings_new_rounded,
-        onPressed: controller.status == ShellStatus.ready && !controller.busy
+        onPressed:
+            controller.status == ShellStatus.ready &&
+                !controller.busy &&
+                !controller.platformTunnelStartInFlight(primaryTunnelMode)
             ? () => unawaited(controller.startPlatformTunnel(primaryTunnelMode))
             : null,
       ),
@@ -3233,9 +3273,12 @@ HomeWorkflowSupportSectionData _desktopHomeSupportSectionData(
   DesktopShellController controller,
 ) {
   final latestResult = _desktopLatestPlatformTunnelResult(controller);
-  final liveSummary = latestResult == null
-      ? context.shellText.noStartupRequestYetShort
-      : _platformTunnelResultSummary(context, latestResult);
+  final latestStatus = _desktopLatestPlatformTunnelStatus(controller);
+  final liveSummary = latestResult != null
+      ? _platformTunnelResultSummary(context, latestResult)
+      : latestStatus != null
+      ? context.shellText.sessionStateLabel(latestStatus.state.value)
+      : context.shellText.noStartupRequestYetShort;
   return HomeWorkflowSupportSectionData(
     title: context.shellText.needDeeperDetail,
     summary: context.shellText.resolutionsSessionsSummary(
@@ -3294,6 +3337,18 @@ PlatformTunnelStartResult? _desktopLatestPlatformTunnelResult(
   return null;
 }
 
+PlatformTunnelStatus? _desktopLatestPlatformTunnelStatus(
+  DesktopShellController controller,
+) {
+  for (final capability in controller.platformTunnels) {
+    final status = controller.platformTunnelStatusFor(capability.mode);
+    if (status != null) {
+      return status;
+    }
+  }
+  return null;
+}
+
 String _desktopHomeModeSummary(
   BuildContext context,
   DesktopShellController controller,
@@ -3327,6 +3382,10 @@ String? _desktopHomeModeDetail(
   final latestResult = _desktopLatestPlatformTunnelResult(controller);
   if (latestResult != null) {
     return _platformTunnelResultSummary(context, latestResult);
+  }
+  final latestStatus = _desktopLatestPlatformTunnelStatus(controller);
+  if (latestStatus != null) {
+    return context.shellText.sessionStateLabel(latestStatus.state.value);
   }
   for (final capability in controller.platformTunnels) {
     final message = capability.message.trim();

@@ -1,0 +1,41 @@
+{
+  "provider": "wb-stream",
+  "resolution_method": "room_link",
+  "input": {
+    "link_redacted": "https://stream.wb.ru/rooms/\u003credacted:wb-stream-room-link\u003e"
+  },
+  "stages": [
+    {
+      "name": "wb_stream_room_link",
+      "endpoint_id": "wb_stream_room_link",
+      "request": {
+        "method": "PARSE",
+        "form_keys": [
+          "room_url"
+        ],
+        "redacted_fields": [
+          "room_url"
+        ]
+      },
+      "response": {
+        "status_code": 0,
+        "body": {
+          "host": "stream.wb.ru",
+          "path_shape": "/rooms/\u003credacted:wb-stream-room-link\u003e"
+        }
+      },
+      "outcome": {
+        "kind": "conference_room",
+        "extracted": {
+          "normalized_room_url": "https://stream.wb.ru/rooms/team-sync"
+        }
+      }
+    }
+  ],
+  "outcome": {
+    "result_kind": "conference_room",
+    "conference_room": {
+      "room_url": "https://stream.wb.ru/rooms/team-sync"
+    }
+  }
+}
