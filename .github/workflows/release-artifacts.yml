@@ -34,7 +34,13 @@ jobs:
       - name: Install Android SDK packages
         shell: bash
         run: |
+          set +o pipefail
           yes | sdkmanager --licenses >/dev/null
+          licenses_status=${PIPESTATUS[1]}
+          set -o pipefail
+          if [ "$licenses_status" -ne 0 ]; then
+            exit "$licenses_status"
+          fi
           sdkmanager --install \
             "platform-tools" \
             "platforms;android-36" \
