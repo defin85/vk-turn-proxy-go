@@ -38,7 +38,12 @@ Current support claims are:
 
 - `android_vpn_service`: supported on the documented packaged Android target
 - `windows_wintun`: supported on the documented packaged Windows target through the bundled host-owned Wintun lifecycle when the strict local WireGuard materializer prerequisite is present
-- `linux_tun`, `apple_network_extension`: still unavailable until those packaged hosts ship the adapter path
+- `linux_tun`: supported only on the documented Ubuntu package installed from
+  `dist/linux-gui/install-ubuntu.sh`; the packaged wrapper must set
+  `VKTP_LINUX_PACKAGED_TARGET=ubuntu`, and the host must still be elevated with
+  `/dev/net/tun`, `iproute2`, a compatible transport profile, route/DNS underlay
+  preservation, strict WireGuard TURN attach, and dataplane proof
+- `apple_network_extension`: still unavailable until that packaged host ships the adapter path
 
 Hosts must keep every adapter-specific claim honest.
 The planning contract says which packaged path is in scope; it does not authorize future adapters to report support early.
@@ -82,6 +87,9 @@ Current repo-owned evidence now covers:
 - the first packaged Windows path through `windows_wintun`, including
   repo-owned `ready=true` startup on the supported packaged target and
   host-owned route or DNS preparation plus teardown in the bundled host
+- the first packaged Ubuntu path through `linux_tun`, gated by the
+  repo-owned `/opt/relaydock` install surface and the runbook in
+  `docs/linux-desktop-tun-package.md`
 
 ## Remote endpoint ownership
 
@@ -102,6 +110,9 @@ The current `turn-server` role is not a universal backend for all future executi
 ## Follow-on slices
 
 1. `add-18-flow-1-desktop-core-platform-tunnel-ready-paths`: shipped the first desktop packaged host path that turns the documented TURN-backed `wireguard_native` plan into a real Windows desktop adapter ready path.
+2. `add-85-flow-10-linux-tun-packaging-support-promotion`: promotes the
+   Ubuntu-only packaged Linux desktop `linux_tun` path behind a repo-owned
+   package/install surface.
 3. Experimental `webrtc_datachannel`: define a real remote endpoint, framing, and lifecycle verification path before any host advertises it as startable.
 4. Foreign-core engines: add packaging, lifecycle ownership, and verification evidence before any host advertises `proxy_core_adapter` or `trusttunnel_native` as startable.
 

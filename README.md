@@ -129,6 +129,12 @@ Build the Windows GUI bundle from WSL through the `E:\Projects\vk-turn-proxy-go`
 make build-gui-windows
 ```
 
+Build the supported Ubuntu Linux GUI package with:
+
+```bash
+make build-gui-linux
+```
+
 The full build workflow contract lives in `docs/build-workflows.md`.
 Supported artifact builds derive their human-facing product version from the repo root `version.json`.
 Use `./scripts/sync-version-assets.py` when that manifest changes so Flutter dev/runtime defaults stay in sync across desktop and mobile Flutter workspaces.
@@ -233,6 +239,9 @@ flutter run -d linux
 ```
 
 Pinned Flutter version and reproducible GUI build entrypoints are documented in `docs/build-workflows.md`.
+For the supported Ubuntu `linux_tun` package, build with `make build-gui-linux`,
+install with `sudo dist/linux-gui/install-ubuntu.sh`, and launch
+`/opt/relaydock/relaydock`; see `docs/linux-desktop-tun-package.md`.
 
 The shell resolves the local host in this order:
 - `GUI_SHELL_CLIENTD_PATH`
@@ -330,15 +339,25 @@ Current repository-owned host responsibilities stay split by OS family:
 - Windows hosts own `windows_wintun` driver and route preparation
 - Linux hosts own `linux_tun`, capability elevation, and route/DNS preparation
 
-Current repo-owned hosts still fail closed by default for those modes with `stage=capability_check` and `missing_prerequisite=host_implementation` until a platform-specific host wires a real implementation.
+Repo-owned host claims stay target-gated and fail closed when the required host surface is missing.
 Current support claims are now:
 - `android_vpn_service`: supported on the documented packaged Android target
 - `windows_wintun`: supported on the documented packaged Windows target through the bundled host-owned Wintun lifecycle when the strict local WireGuard materializer prerequisite is present
-- `linux_tun`, `apple_network_extension`: still fail closed until those packaged hosts ship their adapter path
+- `linux_tun`: supported only through the repo-owned Ubuntu desktop package
+  staged by `make build-gui-linux` and installed under `/opt/relaydock`; the
+  packaged wrapper sets `VKTP_LINUX_PACKAGED_TARGET=ubuntu` and still requires
+  elevated execution, `/dev/net/tun`, `iproute2`, a compatible transport
+  profile, route/DNS underlay preservation, strict WireGuard TURN runtime
+  attach, and dataplane proof; raw `go run`, hand-copied bundles, and other
+  Linux contours fail closed with the typed missing prerequisite
+- `apple_network_extension`: still fail closed until that packaged host ships its adapter path
 
 Desktop and mobile shells render that typed capability report in-app instead of guessing from OS heuristics.
 The desktop shell now offers system-tunnel startup only for the packaged target and mode that the connected host explicitly reports as available.
 For the repo-owned Windows ready path, use `docs/windows-desktop-wg-poc.md`.
+For the first Linux ready path, use `docs/linux-desktop-tun-package.md`; the
+support claim requires package staging, host capability evidence, GUI gating,
+packaged Ubuntu startup smoke, cleanup evidence, and strict OpenSpec validation.
 `docs/windows-desktop-live-vk-workflow.md` remains the explicit external `WireGuard for Windows` compatibility workflow, not the same claim as repo-owned `windows_wintun`.
 Provider resolution, browser challenges, TURN credentials, and relay policy remain outside that tunnel boundary.
 Before the repository claims a concrete platform tunnel mode as supported, keep evidence for:

@@ -1361,6 +1361,11 @@ class DesktopShellController extends ChangeNotifier {
   }
 
   Future<void> openChallengeInBrowser(ChallengeRecord challenge) async {
+    if (!canOpenChallengeInBrowser(challenge)) {
+      notice = challenge.prompt ?? _copy.challengeHasNoBrowserHandoffUrl;
+      _notify();
+      return;
+    }
     final url = challenge.openUrl?.trim() ?? '';
     if (url.isEmpty) {
       notice = _copy.challengeHasNoBrowserHandoffUrl;
@@ -1372,6 +1377,12 @@ class DesktopShellController extends ChangeNotifier {
         ? _copy.openedMobileBrowserHandoff(challenge.kind)
         : _copy.failedToOpenMobileBrowserHandoffUrl;
     _notify();
+  }
+
+  bool canOpenChallengeInBrowser(ChallengeRecord challenge) {
+    // Desktop provider browser continuations are host-driven. Opening openUrl
+    // with xdg-open would leave the controlled browser session.
+    return false;
   }
 
   Future<void> stopSession(String sessionId) async {
@@ -2606,11 +2617,13 @@ class DesktopShellController extends ChangeNotifier {
   }
 
   bool _platformTunnelModeRequiresResolution(PlatformTunnelMode mode) {
-    return mode == PlatformTunnelMode.windowsWintun;
+    return mode == PlatformTunnelMode.windowsWintun ||
+        mode == PlatformTunnelMode.linuxTun;
   }
 
   bool _platformTunnelModeRequiresRuntimeDefaults(PlatformTunnelMode mode) {
-    return mode == PlatformTunnelMode.windowsWintun;
+    return mode == PlatformTunnelMode.windowsWintun ||
+        mode == PlatformTunnelMode.linuxTun;
   }
 
   ProviderDescriptor? descriptorForProvider(String providerId) {

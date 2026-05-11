@@ -1752,7 +1752,7 @@ class TranslationsRu extends Translations
       'Продолжите шаг провайдера во встроенном браузере, прежде чем VPN сможет запуститься.';
   @override
   String get shellTextOpenRequiredBrowserStepFromHome =>
-      'Откройте обязательный шаг в браузере с Главной, затем вернитесь сюда и подтвердите завершение до запуска VPN.';
+      'Завершите обязательный шаг в браузере, затем вернитесь сюда и подтвердите завершение до запуска VPN.';
   @override
   String get shellTextDisconnectCurrentMobileVpnPath =>
       'Отсюда отключите текущий путь мобильного VPN.';
@@ -3273,7 +3273,7 @@ extension on TranslationsRu {
           'shellTextContinueProviderFlowInApp' =>
             'Продолжите шаг провайдера во встроенном браузере, прежде чем VPN сможет запуститься.',
           'shellTextOpenRequiredBrowserStepFromHome' =>
-            'Откройте обязательный шаг в браузере с Главной, затем вернитесь сюда и подтвердите завершение до запуска VPN.',
+            'Завершите обязательный шаг в браузере, затем вернитесь сюда и подтвердите завершение до запуска VPN.',
           'shellTextDisconnectCurrentMobileVpnPath' =>
             'Отсюда отключите текущий путь мобильного VPN.',
           'shellTextChooseOrFinishProfileBeforeStartingVpn' =>

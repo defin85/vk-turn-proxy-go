@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CLIENTD="${APP_DIR}/libexec/clientd"
+STORE_PATH="${VKTP_LINUX_TRANSPORT_PROFILE_STORE:-/var/lib/relaydock/vpn-transport-profiles/store.json}"
+
+if [[ ! -x "${CLIENTD}" ]]; then
+  echo "RelayDock clientd binary not found: ${CLIENTD}" >&2
+  exit 1
+fi
+
+exec env \
+  VKTP_LINUX_PACKAGED_TARGET=ubuntu \
+  VKTP_LINUX_TRANSPORT_PROFILE_STORE="${STORE_PATH}" \
+  "${CLIENTD}" "$@"

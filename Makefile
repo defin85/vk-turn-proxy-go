@@ -3,7 +3,7 @@
 ACT_WORKFLOW ?= .github/workflows/ci.yml
 ACT_JOB ?= test
 
-.PHONY: ci codex-onboard codex-onboard-workflow verify-docs build-go build-gui-windows build-gui-android build-gui-android-play-release verify-gui-android-play-release-local-delivery build-gui-android-windows-mirror smoke-android-embedded-host smoke-android-vpn-service wg-e2e-check wg-e2e wg-live-vk-check wg-live-vk-run wg-live-vk-start wg-live-vk-continue wg-live-vk-cleanup android-phone-check android-phone-status android-phone-start android-phone-stop android-phone-diagnostics sync-version-assets check-version-assets sync-publish-identity check-publish-identity ci-act ci-act-dry ci-act-verbose deps-act
+.PHONY: ci codex-onboard codex-onboard-workflow verify-docs build-go build-gui-linux package-gui-linux-deb build-gui-windows build-gui-android build-gui-android-play-release verify-gui-android-play-release-local-delivery build-gui-android-windows-mirror smoke-android-embedded-host smoke-android-vpn-service wg-e2e-check wg-e2e wg-live-vk-check wg-live-vk-run wg-live-vk-start wg-live-vk-continue wg-live-vk-cleanup android-phone-check android-phone-status android-phone-start android-phone-stop android-phone-diagnostics sync-version-assets check-version-assets sync-publish-identity check-publish-identity ci-act ci-act-dry ci-act-verbose deps-act
 
 ci:
 	python3 ./scripts/verify-agent-docs.py
@@ -23,6 +23,12 @@ verify-docs:
 
 build-go:
 	./scripts/build-go-matrix.sh
+
+build-gui-linux:
+	bash ./scripts/build-linux-gui-package.sh
+
+package-gui-linux-deb:
+	bash ./scripts/package-linux-gui-deb.sh
 
 build-gui-windows:
 	./scripts/build-windows-gui-from-wsl.sh

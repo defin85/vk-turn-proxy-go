@@ -605,7 +605,7 @@
   "shellTextProfileRequired": "Profile required",
   "shellTextVpnIsOff": "VPN is off",
   "shellTextContinueProviderFlowInApp": "Continue the provider flow in the in-app browser before VPN can start.",
-  "shellTextOpenRequiredBrowserStepFromHome": "Open the required browser step from Home, then return here and confirm completion before VPN can start.",
+  "shellTextOpenRequiredBrowserStepFromHome": "Complete the required browser step, then return here and confirm completion before VPN can start.",
   "shellTextDisconnectCurrentMobileVpnPath": "Disconnect the current mobile VPN path from here.",
   "shellTextChooseOrFinishProfileBeforeStartingVpn": "Choose or finish a profile in Profiles before starting the current mobile VPN path.",
   "shellTextStartCurrentMobileVpnPath": "Start the current mobile VPN path from here.",

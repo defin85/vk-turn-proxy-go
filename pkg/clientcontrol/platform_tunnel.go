@@ -523,7 +523,9 @@ func normalizePlatformTunnelStartRequest(req PlatformTunnelStartRequest) (Platfo
 		normalized.RuntimeDefaults = &defaults
 	}
 
-	if req.Mode != PlatformTunnelModeAndroidVPNService && req.Mode != PlatformTunnelModeWindowsWintun {
+	if req.Mode != PlatformTunnelModeAndroidVPNService &&
+		req.Mode != PlatformTunnelModeWindowsWintun &&
+		req.Mode != PlatformTunnelModeLinuxTun {
 		if strings.TrimSpace(string(req.ApplicationRoutingPolicy)) != "" ||
 			len(req.AllowedPackages) > 0 ||
 			len(req.DisallowedPackages) > 0 {
@@ -535,7 +537,7 @@ func normalizePlatformTunnelStartRequest(req PlatformTunnelStartRequest) (Platfo
 		return normalized, nil
 	}
 
-	if req.Mode == PlatformTunnelModeWindowsWintun {
+	if req.Mode == PlatformTunnelModeWindowsWintun || req.Mode == PlatformTunnelModeLinuxTun {
 		if strings.TrimSpace(string(normalized.ApplicationRoutingPolicy)) != "" ||
 			len(normalized.AllowedPackages) > 0 ||
 			len(normalized.DisallowedPackages) > 0 {

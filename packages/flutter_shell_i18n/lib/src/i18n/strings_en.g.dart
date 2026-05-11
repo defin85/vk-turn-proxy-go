@@ -2302,9 +2302,9 @@ class Translations with BaseTranslations<AppLocale, Translations> {
   String get shellTextContinueProviderFlowInApp =>
       'Continue the provider flow in the in-app browser before VPN can start.';
 
-  /// en: 'Open the required browser step from Home, then return here and confirm completion before VPN can start.'
+  /// en: 'Complete the required browser step, then return here and confirm completion before VPN can start.'
   String get shellTextOpenRequiredBrowserStepFromHome =>
-      'Open the required browser step from Home, then return here and confirm completion before VPN can start.';
+      'Complete the required browser step, then return here and confirm completion before VPN can start.';
 
   /// en: 'Disconnect the current mobile VPN path from here.'
   String get shellTextDisconnectCurrentMobileVpnPath =>
@@ -3955,7 +3955,7 @@ extension on Translations {
           'shellTextContinueProviderFlowInApp' =>
             'Continue the provider flow in the in-app browser before VPN can start.',
           'shellTextOpenRequiredBrowserStepFromHome' =>
-            'Open the required browser step from Home, then return here and confirm completion before VPN can start.',
+            'Complete the required browser step, then return here and confirm completion before VPN can start.',
           'shellTextDisconnectCurrentMobileVpnPath' =>
             'Disconnect the current mobile VPN path from here.',
           'shellTextChooseOrFinishProfileBeforeStartingVpn' =>

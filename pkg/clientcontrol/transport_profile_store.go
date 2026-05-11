@@ -224,7 +224,8 @@ func (h *Host) platformTunnelCapabilitiesWithTransportProfileStateLocked() []Pla
 			}
 			status := h.transportProfilePrerequisiteStatusLocked(descriptor.Plan, required)
 			descriptor.TransportProfile = status
-			if status.State != TransportProfileCompatibilityStateCompatible {
+			if status.State != TransportProfileCompatibilityStateCompatible ||
+				firstTransportProfileReference(status.SelectedProfile, status.DefaultProfile) == nil {
 				descriptor.SupportState = RuntimeExecutionPlanSupportStateUnavailable
 				descriptor.Message = firstNonEmpty(
 					status.Message,
@@ -269,6 +270,7 @@ func (h *Host) transportProfilePrerequisiteStatusLocked(
 		}
 		if transportProfileCompatibleWithPlan(managed.status.Kind, plan) &&
 			managed.status.Validation.State == TransportProfileValidationStateValid {
+			status.State = TransportProfileCompatibilityStateCompatible
 			status.MissingKind = ""
 			status.Message = "Select a VPN transport profile for this execution plan before startup."
 			return status

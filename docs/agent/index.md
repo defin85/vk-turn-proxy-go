@@ -23,6 +23,7 @@ It points to the smallest set of files needed to understand the repo, choose the
 ## Scenario runbooks
 
 - `docs/windows-desktop-wg-poc.md`: verified repo-owned Windows `windows_wintun` ready-path VM smoke
+- `docs/linux-desktop-tun-package.md`: repo-owned Ubuntu `linux_tun` package and support-promotion runbook
 - `docs/windows-desktop-live-vk-workflow.md`: real VK invite preflight into the packaged Windows desktop flow
 - `docs/android-wg-phone-poc.md`: validated Android physical-device workflow with the packaged mobile shell
 
@@ -42,7 +43,7 @@ It points to the smallest set of files needed to understand the repo, choose the
 | Desktop Flutter shell | `desktop/gui_shell/README.md`, `.agents/skills/vk-turn-desktop-shell/SKILL.md`, `openspec/specs/desktop-gui-client/spec.md`, `openspec/specs/platform-tunnel-integration/spec.md` | `dart pub get`; `cd desktop/gui_shell && flutter analyze && flutter test` |
 | Mobile Flutter shell | `mobile/gui_shell/README.md`, `docs/android-wg-phone-poc.md`, `openspec/specs/mobile-gui-client/spec.md`, `openspec/specs/android-embedded-mobile-host/spec.md` | `dart pub get`; `cd mobile/gui_shell && flutter analyze && flutter test` |
 | Android embedded host or mobile bridge wiring | `mobile/gui_shell/README.md`, `openspec/specs/android-embedded-mobile-host/spec.md`, `cmd/android-mobile-host`, `internal/androidembeddedhost` | `go test ./internal/androidembeddedhost ./pkg/clientcontrol` |
-| Build scripts, packaging, or CI workflows | `docs/build-workflows.md`, `Makefile`, `openspec/specs/native-build-workflows/spec.md` | `./scripts/build-go-matrix.sh windows/amd64`; `make smoke-android-embedded-host`; `make ci` |
+| Build scripts, packaging, or CI workflows | `docs/build-workflows.md`, `Makefile`, `openspec/specs/native-build-workflows/spec.md` | `./scripts/build-go-matrix.sh windows/amd64`; `make build-gui-linux`; `make smoke-android-embedded-host`; `make ci` |
 | TURN lab harness or manual harness shell | `README.md` harness section, `openspec/specs/turn-lab-harness/spec.md`, `test/turnlab`, `cmd/turnlab-shell` | `go test ./test/turnlab -run TestHarnessRelayRoundTrip` |
 | TURN/DTLS transport or server behavior | `docs/agent/architecture-map.md`, `docs/adr/0001-go-monorepo.md` | `go test ./internal/transport ./internal/tunnelserver` |
 | Observability | `docs/runtime-observability.md`, `openspec/specs/runtime-observability/spec.md` | `go test ./internal/observe ./cmd/tunnel-client ./cmd/tunnel-server` |

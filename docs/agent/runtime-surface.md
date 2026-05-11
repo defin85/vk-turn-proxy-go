@@ -9,6 +9,10 @@ It is the concise first-pass view for Codex and other repository-local agents.
 - The legacy repository `/home/egor/code/vk-turn-proxy` remains the compatibility oracle until equivalent coverage exists here.
 - Current shipped slices cover provider resolution for `vk` and `generic-turn`, the local client control plane, runtime observability, the turnlab harness, and desktop/mobile Flutter shells.
 - The first packaged Windows system-tunnel ready path is now repo-owned through `windows_wintun`; use `docs/windows-desktop-wg-poc.md` for the verified packaged-host and VMware execution-cell runbook.
+- The first Linux `linux_tun` support claim is Ubuntu-package-specific: build
+  with `make build-gui-linux`, install under `/opt/relaydock`, and use
+  `docs/linux-desktop-tun-package.md` for the required package, capability,
+  startup, cleanup, and validation evidence.
 - The local control plane now exposes typed runtime execution planning so current overlay startup, future packaged `wireguard_native` plans, and later experimental carriers stay explicitly separated.
 - VPS-side provider catalogs now live behind `cmd/vps-provider-catalog`, while local `clientd` syncs, validates, and maps remote artifacts into typed provider resolutions.
 - Provider logic stays in `internal/provider/...`; transport stays in `internal/transport/...`; runtime orchestration stays in `internal/session`.
@@ -49,4 +53,5 @@ Use `docs/agent/verification.md` to choose the smallest relevant checks before e
 - `docs/runtime-observability.md`: logs, metrics, stage taxonomy
 - `docs/runtime-execution-planning.md`: explicit same-device execution matrix, remote endpoint ownership, and follow-on slices
 - `docs/windows-desktop-wg-poc.md`: repo-owned Windows `windows_wintun` ready-path runbook and safe VMware execution cell
+- `docs/linux-desktop-tun-package.md`: repo-owned Ubuntu `linux_tun` package and support-promotion runbook
 - `README.md`: full operator quick start, CLI examples, and deeper workflow details

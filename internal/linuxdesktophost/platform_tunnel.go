@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/defin85/vk-turn-proxy-go/pkg/clientcontrol"
 )
@@ -25,38 +26,74 @@ type LinuxTunHelper interface {
 	Cleanup(context.Context) error
 }
 
+type LinuxTunLifecycle interface {
+	AcquirePermission(context.Context, clientcontrol.PlatformTunnelStartRequest) error
+	ValidateRoutePolicy(context.Context, clientcontrol.PlatformTunnelStartRequest, *clientcontrol.RuntimeExecutionPlan, *clientcontrol.WireGuardTurnExecutionLease) (*linuxRoutePolicyState, error)
+	BringupHost(context.Context, clientcontrol.PlatformTunnelStartRequest, *clientcontrol.RuntimeExecutionPlan, *clientcontrol.WireGuardTurnExecutionLease, *linuxRoutePolicyState) error
+	AttachRuntime(context.Context, clientcontrol.PlatformTunnelStartRequest, *clientcontrol.RuntimeExecutionPlan, *clientcontrol.WireGuardTurnExecutionLease, *linuxRoutePolicyState) error
+	VerifyDataplane(context.Context, clientcontrol.PlatformTunnelStartRequest, *clientcontrol.RuntimeExecutionPlan, *clientcontrol.WireGuardTurnExecutionLease, *linuxRoutePolicyState) (*clientcontrol.PlatformTunnelDataplaneEvidence, error)
+	Cleanup(context.Context) error
+}
+
 type linuxTunLeaseProvider func(
 	context.Context,
 	clientcontrol.PlatformTunnelStartRequest,
 	*clientcontrol.RuntimeExecutionPlan,
 ) (*clientcontrol.WireGuardTurnExecutionLease, error)
 
-type linuxTunHelperError struct {
-	stage           clientcontrol.PlatformTunnelStartupStage
-	prerequisite    clientcontrol.PlatformTunnelPrerequisite
-	message         string
-	cleanupRequired bool
+type linuxRoutePolicyState struct {
+	UnderlayRoutePolicy clientcontrol.PlatformTunnelUnderlayRoutePolicy
+	Exclusions          []string
 }
 
-func (e *linuxTunHelperError) Error() string {
+type linuxTunRoutePolicyError struct {
+	prerequisite clientcontrol.PlatformTunnelPrerequisite
+	message      string
+}
+
+func (e *linuxTunRoutePolicyError) Error() string {
 	if e == nil {
 		return ""
 	}
 	if strings.TrimSpace(e.message) != "" {
 		return e.message
 	}
-	return "linux_tun helper startup failed"
+	return fmt.Sprintf("linux_tun route policy requires %s", e.prerequisite)
 }
+
+type linuxTunPrerequisiteFailure struct {
+	prerequisite clientcontrol.PlatformTunnelPrerequisite
+	message      string
+}
+
+func (e *linuxTunPrerequisiteFailure) Error() string {
+	if e == nil {
+		return ""
+	}
+	return strings.TrimSpace(e.message)
+}
+
+var (
+	linuxTunPrerequisiteCheck   = defaultLinuxTunPrerequisiteCheck
+	newLinuxTunLifecycleForHost = newLinuxTunLifecycle
+)
+
+const (
+	linuxTunPackagedTargetEnv    = "VKTP_LINUX_PACKAGED_TARGET"
+	linuxTunPackagedTargetUbuntu = "ubuntu"
+)
 
 type linuxTunController struct {
 	capability clientcontrol.PlatformTunnelCapability
-	helper     LinuxTunHelper
-	leaseFn    linuxTunLeaseProvider
+	lifecycle  LinuxTunLifecycle
+
+	mu      sync.Mutex
+	leaseFn linuxTunLeaseProvider
 }
 
 func newLinuxTunController(
 	capability clientcontrol.PlatformTunnelCapability,
-	helper LinuxTunHelper,
+	lifecycle LinuxTunLifecycle,
 ) *linuxTunController {
 	normalized := capability
 	if normalized.Mode == "" {
@@ -79,20 +116,46 @@ func newLinuxTunController(
 	}
 	return &linuxTunController{
 		capability: normalized,
-		helper:     helper,
+		lifecycle:  lifecycle,
 	}
 }
 
 func currentLinuxTunCapability(build clientcontrol.BuildIdentity) clientcontrol.PlatformTunnelCapability {
-	return clientcontrol.PlatformTunnelCapability{
-		Mode:                clientcontrol.PlatformTunnelModeLinuxTun,
-		Available:           false,
-		MissingPrerequisite: clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
-		Message: fmt.Sprintf(
+	if failure := linuxTunPrerequisiteCheck(build); failure != nil {
+		prerequisite := failure.prerequisite
+		if strings.TrimSpace(string(prerequisite)) == "" {
+			prerequisite = clientcontrol.PlatformTunnelPrerequisiteHostImplementation
+		}
+		return clientcontrol.PlatformTunnelCapability{
+			Mode:                clientcontrol.PlatformTunnelModeLinuxTun,
+			Available:           false,
+			MissingPrerequisite: prerequisite,
+			Message:             failure.Error(),
+		}
+	}
+	return supportedLinuxTunCapability("packaged Ubuntu Linux host owns linux_tun startup and privilege mediation")
+}
+
+func unavailableLinuxTunCapability(
+	build clientcontrol.BuildIdentity,
+	prerequisite clientcontrol.PlatformTunnelPrerequisite,
+	message string,
+) clientcontrol.PlatformTunnelCapability {
+	if strings.TrimSpace(string(prerequisite)) == "" {
+		prerequisite = clientcontrol.PlatformTunnelPrerequisiteHostImplementation
+	}
+	if strings.TrimSpace(message) == "" {
+		message = fmt.Sprintf(
 			"The %s host reserves mode %s for the dedicated packaged Linux desktop host boundary, but the ready path is not implemented yet.",
 			hostTargetLabel(build),
 			clientcontrol.PlatformTunnelModeLinuxTun,
-		),
+		)
+	}
+	return clientcontrol.PlatformTunnelCapability{
+		Mode:                clientcontrol.PlatformTunnelModeLinuxTun,
+		Available:           false,
+		MissingPrerequisite: prerequisite,
+		Message:             strings.TrimSpace(message),
 	}
 }
 
@@ -130,17 +193,7 @@ func (c *linuxTunController) Capability() clientcontrol.PlatformTunnelCapability
 	if c == nil {
 		return clientcontrol.PlatformTunnelCapability{}
 	}
-	capability := c.capability
-	if len(capability.ExecutionPlans) > 0 {
-		capability.ExecutionPlans = append([]clientcontrol.RuntimeExecutionPlanDescriptor(nil), capability.ExecutionPlans...)
-	}
-	if len(capability.SatisfiedPrerequisites) > 0 {
-		capability.SatisfiedPrerequisites = append([]clientcontrol.PlatformTunnelPrerequisite(nil), capability.SatisfiedPrerequisites...)
-	}
-	if len(capability.SupportedUnderlayRoutePolicies) > 0 {
-		capability.SupportedUnderlayRoutePolicies = append([]clientcontrol.PlatformTunnelUnderlayRoutePolicy(nil), capability.SupportedUnderlayRoutePolicies...)
-	}
-	return capability
+	return clonePlatformTunnelCapability(c.capability)
 }
 
 func (c *linuxTunController) Start(
@@ -152,99 +205,152 @@ func (c *linuxTunController) Start(
 	}
 	capability := c.Capability()
 	if req.Mode != capability.Mode {
-		return clientcontrol.PlatformTunnelStartResult{
-			Mode:                req.Mode,
-			Ready:               false,
-			Stage:               clientcontrol.PlatformTunnelStartupStageCapabilityCheck,
-			MissingPrerequisite: clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
-			UnderlayRoutePolicy: req.UnderlayRoutePolicy,
-			Message:             fmt.Sprintf("linux desktop host does not publish platform tunnel mode %s", req.Mode),
-		}, nil
+		return capabilityCheckFailure(
+			req.Mode,
+			nil,
+			clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+			req.UnderlayRoutePolicy,
+			fmt.Sprintf("linux desktop host does not publish platform tunnel mode %s", req.Mode),
+		), nil
 	}
-	if len(capability.ExecutionPlans) > 0 {
-		plan := capability.ExecutionPlans[0].Plan
-		if !capability.Available {
-			return clientcontrol.PlatformTunnelStartResult{
-				Mode:                req.Mode,
-				ExecutionPlan:       &plan,
-				Ready:               false,
-				Stage:               clientcontrol.PlatformTunnelStartupStageCapabilityCheck,
-				MissingPrerequisite: capability.MissingPrerequisite,
-				UnderlayRoutePolicy: req.UnderlayRoutePolicy,
-				Message:             capability.Message,
-			}, nil
-		}
-		if c.helper == nil {
-			return startFailureResult(
-				req.Mode,
-				&plan,
-				clientcontrol.PlatformTunnelStartupStageHostBringup,
-				clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+	selectedPlan, err := selectLinuxExecutionPlan(capability.ExecutionPlans, req.ExecutionPlan)
+	if err != nil {
+		return capabilityCheckFailure(
+			req.Mode,
+			nil,
+			clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+			req.UnderlayRoutePolicy,
+			err.Error(),
+		), nil
+	}
+	if !capability.Available {
+		return capabilityCheckFailure(
+			req.Mode,
+			cloneRuntimeExecutionPlan(selectedPlan),
+			capability.MissingPrerequisite,
+			req.UnderlayRoutePolicy,
+			firstNonEmpty(strings.TrimSpace(capability.Message), unavailableExecutionPlanMessage(capability, selectedPlan)),
+		), nil
+	}
+	if c.lifecycle == nil {
+		return capabilityCheckFailure(
+			req.Mode,
+			selectedPlan,
+			clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+			req.UnderlayRoutePolicy,
+			"linux desktop host reports linux_tun support without a packaged lifecycle implementation",
+		), nil
+	}
+	if !supportsLinuxUnderlayRoutePolicy(capability, req.UnderlayRoutePolicy) {
+		return capabilityCheckFailure(
+			req.Mode,
+			selectedPlan,
+			clientcontrol.PlatformTunnelPrerequisiteRouteExclusion,
+			req.UnderlayRoutePolicy,
+			fmt.Sprintf(
+				"linux desktop host does not advertise underlay_route_policy %s for mode %s",
 				req.UnderlayRoutePolicy,
-				"linux desktop host reports linux_tun support without a packaged helper implementation",
-			)
-		}
-		leaseFn := c.wireGuardTurnLeaseProvider()
-		if leaseFn == nil {
-			return startFailureResult(
 				req.Mode,
-				&plan,
-				clientcontrol.PlatformTunnelStartupStageRuntimeAttach,
-				clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
-				req.UnderlayRoutePolicy,
-				"linux desktop host cannot materialize the strict TURN datagram WireGuard runtime lease",
-			)
-		}
-		lease, err := leaseFn(ctx, req, &plan)
-		if err != nil {
-			stage, prerequisite := leaseMaterializationFailureClassification(err)
-			return startFailureResult(
-				req.Mode,
-				&plan,
-				stage,
-				prerequisite,
-				req.UnderlayRoutePolicy,
-				err.Error(),
-			)
-		}
-		startup := LinuxTunHelperStartup{
-			Lease: *lease,
-			PolicyDirectives: LinuxNativePolicyDirectives{
-				UnderlayRoutePolicy: req.UnderlayRoutePolicy,
-				UnderlayExclusions:  helperUnderlayExclusions(lease),
-				DNSBypassRequired:   true,
-			},
-		}
-		if err := c.helper.Start(ctx, startup); err != nil {
-			return c.startFailureForHelperError(ctx, req, &plan, err)
-		}
-		if err := c.helper.Cleanup(ctx); err != nil {
-			return startFailureResult(
-				req.Mode,
-				&plan,
-				clientcontrol.PlatformTunnelStartupStageHostBringup,
-				clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
-				req.UnderlayRoutePolicy,
-				fmt.Sprintf("linux_tun helper cleanup failed after reserved startup boundary completed: %v", err),
-			)
-		}
-		return clientcontrol.PlatformTunnelStartResult{
-			Mode:                req.Mode,
-			ExecutionPlan:       &plan,
-			Ready:               false,
-			Stage:               clientcontrol.PlatformTunnelStartupStageRuntimeAttach,
-			MissingPrerequisite: clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
-			UnderlayRoutePolicy: req.UnderlayRoutePolicy,
-			Message:             "linux desktop host boundary is defined, but the packaged linux_tun ready path is not implemented yet",
-		}, nil
+			),
+		), nil
+	}
+	if err := c.lifecycle.AcquirePermission(ctx, req); err != nil {
+		return startFailureResult(
+			req.Mode,
+			selectedPlan,
+			clientcontrol.PlatformTunnelStartupStagePermissionAcquire,
+			clientcontrol.PlatformTunnelPrerequisitePermission,
+			req.UnderlayRoutePolicy,
+			err.Error(),
+		)
+	}
+	leaseFn := c.wireGuardTurnLeaseProvider()
+	if leaseFn == nil {
+		return startFailureResult(
+			req.Mode,
+			selectedPlan,
+			clientcontrol.PlatformTunnelStartupStageRuntimeAttach,
+			clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+			req.UnderlayRoutePolicy,
+			"linux desktop host cannot materialize the strict TURN datagram WireGuard runtime lease",
+		)
+	}
+	lease, err := leaseFn(ctx, req, selectedPlan)
+	if err != nil {
+		stage, prerequisite := leaseMaterializationFailureClassification(err)
+		return startFailureResult(
+			req.Mode,
+			selectedPlan,
+			stage,
+			prerequisite,
+			req.UnderlayRoutePolicy,
+			err.Error(),
+		)
+	}
+	routeState, err := c.lifecycle.ValidateRoutePolicy(ctx, req, selectedPlan, lease)
+	if err != nil {
+		return startFailureResult(
+			req.Mode,
+			selectedPlan,
+			clientcontrol.PlatformTunnelStartupStageRouteValidate,
+			routePolicyPrerequisite(err),
+			req.UnderlayRoutePolicy,
+			err.Error(),
+		)
+	}
+	if err := c.lifecycle.BringupHost(ctx, req, selectedPlan, lease, routeState); err != nil {
+		return startFailureResult(
+			req.Mode,
+			selectedPlan,
+			clientcontrol.PlatformTunnelStartupStageHostBringup,
+			clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+			req.UnderlayRoutePolicy,
+			err.Error(),
+		)
+	}
+	if err := c.lifecycle.AttachRuntime(ctx, req, selectedPlan, lease, routeState); err != nil {
+		return startFailureResult(
+			req.Mode,
+			selectedPlan,
+			clientcontrol.PlatformTunnelStartupStageRuntimeAttach,
+			clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+			req.UnderlayRoutePolicy,
+			err.Error(),
+		)
+	}
+	dataplane, err := c.lifecycle.VerifyDataplane(ctx, req, selectedPlan, lease, routeState)
+	if err != nil {
+		return startFailureResult(
+			req.Mode,
+			selectedPlan,
+			clientcontrol.PlatformTunnelStartupStageDataplaneVerify,
+			clientcontrol.PlatformTunnelPrerequisiteDataplaneEvidence,
+			req.UnderlayRoutePolicy,
+			err.Error(),
+		)
+	}
+	if dataplane == nil ||
+		!dataplane.HostAttached ||
+		!dataplane.WireGuardHandshakeFresh ||
+		!dataplane.BidirectionalTrafficVerified {
+		return startFailureResult(
+			req.Mode,
+			selectedPlan,
+			clientcontrol.PlatformTunnelStartupStageDataplaneVerify,
+			clientcontrol.PlatformTunnelPrerequisiteDataplaneEvidence,
+			req.UnderlayRoutePolicy,
+			"linux_tun dataplane verification did not produce fresh WireGuard handshake and bidirectional traffic evidence",
+		)
 	}
 	return clientcontrol.PlatformTunnelStartResult{
-		Mode:                req.Mode,
-		Ready:               false,
-		Stage:               clientcontrol.PlatformTunnelStartupStageCapabilityCheck,
-		MissingPrerequisite: capability.MissingPrerequisite,
-		UnderlayRoutePolicy: req.UnderlayRoutePolicy,
-		Message:             capability.Message,
+		Mode:                    req.Mode,
+		ExecutionPlan:           cloneRuntimeExecutionPlan(selectedPlan),
+		RemoteIngress:           clientcontrol.RemoteIngressDiagnosticsFromWireGuardTurnLease(lease),
+		Dataplane:               dataplane,
+		Ready:                   true,
+		Stage:                   clientcontrol.PlatformTunnelStartupStageDataplaneVerify,
+		UnderlayRoutePolicy:     req.UnderlayRoutePolicy,
+		UnderlayRouteExclusions: append([]string(nil), routeState.Exclusions...),
 	}, nil
 }
 
@@ -259,13 +365,13 @@ func (c *linuxTunController) Stop(
 			req.Mode,
 		)
 	}
-	if c.helper == nil {
+	if c.lifecycle == nil {
 		return clientcontrol.PlatformTunnelStopResult{}, fmt.Errorf(
 			"linux desktop host does not implement stop for %s",
 			req.Mode,
 		)
 	}
-	if err := c.helper.Cleanup(ctx); err != nil {
+	if err := c.lifecycle.Cleanup(ctx); err != nil {
 		return clientcontrol.PlatformTunnelStopResult{}, err
 	}
 	return clientcontrol.PlatformTunnelStopResult{
@@ -279,6 +385,8 @@ func (c *linuxTunController) setWireGuardTurnLeaseProvider(fn linuxTunLeaseProvi
 	if c == nil {
 		return
 	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.leaseFn = fn
 }
 
@@ -286,6 +394,8 @@ func (c *linuxTunController) wireGuardTurnLeaseProvider() linuxTunLeaseProvider 
 	if c == nil {
 		return nil
 	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return c.leaseFn
 }
 
@@ -298,44 +408,6 @@ func helperUnderlayExclusions(lease *clientcontrol.WireGuardTurnExecutionLease) 
 		return nil
 	}
 	return []string{endpoint}
-}
-
-func (c *linuxTunController) startFailureForHelperError(
-	ctx context.Context,
-	req clientcontrol.PlatformTunnelStartRequest,
-	plan *clientcontrol.RuntimeExecutionPlan,
-	err error,
-) (clientcontrol.PlatformTunnelStartResult, error) {
-	stage := clientcontrol.PlatformTunnelStartupStageHostBringup
-	prerequisite := clientcontrol.PlatformTunnelPrerequisiteHostImplementation
-	message := err.Error()
-	cleanupRequired := false
-	var helperErr *linuxTunHelperError
-	if errors.As(err, &helperErr) && helperErr != nil {
-		if strings.TrimSpace(string(helperErr.stage)) != "" {
-			stage = helperErr.stage
-		}
-		if strings.TrimSpace(string(helperErr.prerequisite)) != "" {
-			prerequisite = helperErr.prerequisite
-		}
-		if strings.TrimSpace(helperErr.message) != "" {
-			message = helperErr.message
-		}
-		cleanupRequired = helperErr.cleanupRequired
-	}
-	if cleanupRequired && c.helper != nil {
-		if cleanupErr := c.helper.Cleanup(ctx); cleanupErr != nil {
-			message = fmt.Sprintf("%s; cleanup failed: %v", message, cleanupErr)
-		}
-	}
-	return startFailureResult(
-		req.Mode,
-		plan,
-		stage,
-		prerequisite,
-		req.UnderlayRoutePolicy,
-		message,
-	)
 }
 
 func startFailureResult(
@@ -364,6 +436,121 @@ func cloneRuntimeExecutionPlan(plan *clientcontrol.RuntimeExecutionPlan) *client
 	}
 	copy := *plan
 	return &copy
+}
+
+func capabilityCheckFailure(
+	mode clientcontrol.PlatformTunnelMode,
+	plan *clientcontrol.RuntimeExecutionPlan,
+	prerequisite clientcontrol.PlatformTunnelPrerequisite,
+	underlayRoutePolicy clientcontrol.PlatformTunnelUnderlayRoutePolicy,
+	message string,
+) clientcontrol.PlatformTunnelStartResult {
+	if strings.TrimSpace(string(prerequisite)) == "" {
+		prerequisite = clientcontrol.PlatformTunnelPrerequisiteHostImplementation
+	}
+	return clientcontrol.PlatformTunnelStartResult{
+		Mode:                mode,
+		ExecutionPlan:       cloneRuntimeExecutionPlan(plan),
+		Ready:               false,
+		Stage:               clientcontrol.PlatformTunnelStartupStageCapabilityCheck,
+		MissingPrerequisite: prerequisite,
+		UnderlayRoutePolicy: underlayRoutePolicy,
+		Message:             strings.TrimSpace(message),
+	}
+}
+
+func routePolicyPrerequisite(err error) clientcontrol.PlatformTunnelPrerequisite {
+	var routeErr *linuxTunRoutePolicyError
+	if errors.As(err, &routeErr) && strings.TrimSpace(string(routeErr.prerequisite)) != "" {
+		return routeErr.prerequisite
+	}
+	return clientcontrol.PlatformTunnelPrerequisiteRouteExclusion
+}
+
+func selectLinuxExecutionPlan(
+	descriptors []clientcontrol.RuntimeExecutionPlanDescriptor,
+	requested *clientcontrol.RuntimeExecutionPlan,
+) (*clientcontrol.RuntimeExecutionPlan, error) {
+	if len(descriptors) == 0 {
+		if requested == nil {
+			return nil, fmt.Errorf("linux_tun does not advertise any execution plans")
+		}
+		return nil, fmt.Errorf("requested linux_tun execution plan is not advertised by this host")
+	}
+	if requested != nil {
+		for _, descriptor := range descriptors {
+			if runtimeExecutionPlanEquals(descriptor.Plan, *requested) {
+				return cloneRuntimeExecutionPlan(&descriptor.Plan), nil
+			}
+		}
+		return nil, fmt.Errorf("requested linux_tun execution plan is not advertised by this host")
+	}
+	for _, descriptor := range descriptors {
+		if descriptor.Default {
+			return cloneRuntimeExecutionPlan(&descriptor.Plan), nil
+		}
+	}
+	if len(descriptors) == 1 {
+		return cloneRuntimeExecutionPlan(&descriptors[0].Plan), nil
+	}
+	return nil, fmt.Errorf("linux_tun startup requires an explicit execution plan selection")
+}
+
+func unavailableExecutionPlanMessage(
+	capability clientcontrol.PlatformTunnelCapability,
+	plan *clientcontrol.RuntimeExecutionPlan,
+) string {
+	for _, descriptor := range capability.ExecutionPlans {
+		if plan != nil && runtimeExecutionPlanEquals(descriptor.Plan, *plan) && strings.TrimSpace(descriptor.Message) != "" {
+			return strings.TrimSpace(descriptor.Message)
+		}
+	}
+	return strings.TrimSpace(capability.Message)
+}
+
+func supportsLinuxUnderlayRoutePolicy(
+	capability clientcontrol.PlatformTunnelCapability,
+	policy clientcontrol.PlatformTunnelUnderlayRoutePolicy,
+) bool {
+	for _, supported := range capability.SupportedUnderlayRoutePolicies {
+		if supported == policy {
+			return true
+		}
+	}
+	return false
+}
+
+func clonePlatformTunnelCapability(capability clientcontrol.PlatformTunnelCapability) clientcontrol.PlatformTunnelCapability {
+	clone := capability
+	if len(capability.SatisfiedPrerequisites) > 0 {
+		clone.SatisfiedPrerequisites = append([]clientcontrol.PlatformTunnelPrerequisite(nil), capability.SatisfiedPrerequisites...)
+	}
+	if len(capability.SupportedUnderlayRoutePolicies) > 0 {
+		clone.SupportedUnderlayRoutePolicies = append([]clientcontrol.PlatformTunnelUnderlayRoutePolicy(nil), capability.SupportedUnderlayRoutePolicies...)
+	}
+	if len(capability.ExecutionPlans) > 0 {
+		clone.ExecutionPlans = append([]clientcontrol.RuntimeExecutionPlanDescriptor(nil), capability.ExecutionPlans...)
+	}
+	return clone
+}
+
+func runtimeExecutionPlanEquals(
+	left clientcontrol.RuntimeExecutionPlan,
+	right clientcontrol.RuntimeExecutionPlan,
+) bool {
+	return left.AccessMethod == right.AccessMethod &&
+		left.CarrierFamily == right.CarrierFamily &&
+		left.EngineFamily == right.EngineFamily &&
+		left.HostAdapter == right.HostAdapter
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func leaseMaterializationFailureClassification(err error) (clientcontrol.PlatformTunnelStartupStage, clientcontrol.PlatformTunnelPrerequisite) {

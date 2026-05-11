@@ -1182,6 +1182,48 @@ void main() {
     },
   );
 
+  test('controller keeps provider browser challenges host-driven', () async {
+    final api = _FakeControlPlaneApi(
+      profiles: const <ProfileRecord>[],
+      resolutions: const <ResolutionRecord>[],
+      sessions: const <SessionRecord>[],
+    );
+    final browser = _FakeDesktopBrowserLauncher();
+    final controller = DesktopShellController(
+      api: api,
+      supervisor: _SequencedHostSupervisor(const <HostConnectionResult>[
+        HostConnectionResult(
+          state: HostLifecycleState.ready,
+          message: 'ready',
+          info: _readyHostInfo,
+        ),
+      ]),
+      browserLauncher: browser,
+    );
+    addTearDown(controller.dispose);
+
+    await controller.initialize();
+    await controller.openChallengeInBrowser(
+      ChallengeRecord(
+        id: 'challenge-1',
+        sessionId: '',
+        resolutionId: 'resolution-1',
+        provider: 'vk',
+        stage: 'provider_resolve',
+        kind: 'browser',
+        prompt:
+            'Authenticate in VK Calls and create a hosted call in the same browser session to continue provider resolution.',
+        openUrl: 'https://calls.vk.com/',
+        status: ChallengeStatus.pending,
+        createdAt: DateTime.utc(2026, 4, 5, 17, 0),
+        updatedAt: DateTime.utc(2026, 4, 5, 17, 1),
+      ),
+    );
+
+    expect(browser.openedUrls, isEmpty);
+    expect(controller.notice, contains('same browser session'));
+  });
+
   test(
     'controller fails closed when conference-room actions are not host-capable',
     () async {
@@ -2775,8 +2817,9 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
       disallowedPackages: disallowedPackages,
     );
     startPlatformTunnelCalls.add(call);
-    if (_startPlatformTunnelHandler != null) {
-      return _startPlatformTunnelHandler!(call);
+    final handler = _startPlatformTunnelHandler;
+    if (handler != null) {
+      return handler(call);
     }
     return const PlatformTunnelStartResult(
       mode: PlatformTunnelMode.windowsWintun,

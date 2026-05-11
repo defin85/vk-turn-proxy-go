@@ -93,6 +93,53 @@ The default matrix currently includes:
 - `linux/amd64`
 - `windows/amd64`
 
+## Ubuntu Linux GUI package
+
+The first supported Linux `linux_tun` desktop target is the repo-owned Ubuntu
+package staged by:
+
+```bash
+make build-gui-linux
+```
+
+That workflow:
+1. synchronizes publish and version metadata
+2. verifies the pinned Flutter Linux desktop toolchain
+3. builds the Linux Go sidecar artifacts
+4. builds the desktop Flutter Linux bundle
+5. stages the GUI, sibling `clientd` launcher, real `libexec/clientd`, privileged
+   `libexec/relaydock-clientd-linux-tun` wrapper, desktop entry, hicolor app
+   icon, polkit action, installer, and build metadata under `dist/linux-gui/`
+
+Install the staged package on the documented Ubuntu target with:
+
+```bash
+sudo dist/linux-gui/install-ubuntu.sh
+```
+
+Build an installable Debian package from the staged Ubuntu package with:
+
+```bash
+make package-gui-linux-deb
+```
+
+That workflow reads `dist/linux-gui/`, then stages
+`dist/linux-deb/relaydock_<version>-<build>_amd64.deb` plus a `.sha256`
+checksum. The `.deb` installs the same `/opt/relaydock` payload, desktop entry,
+hicolor icon, polkit action, and VPN transport-profile state directory as the
+scripted Ubuntu installer.
+
+The installed package lives under `/opt/relaydock`.
+The desktop GUI discovers the sibling `clientd` launcher, which uses `pkexec`
+to start the packaged privileged wrapper. That wrapper is the only shipped
+Linux path that sets `VKTP_LINUX_PACKAGED_TARGET=ubuntu`; raw `go run` or
+hand-copied bundles must keep `linux_tun` unavailable.
+The installer also places `com.defin85.relaydock.desktop` and the hicolor
+`com.defin85.relaydock` icon into the desktop environment so launchers and docks
+resolve the packaged RelayDock icon instead of stale local entries.
+Use `docs/linux-desktop-tun-package.md` for the support-promotion runbook and
+verification bar.
+
 ## Windows GUI from WSL
 
 Windows Flutter desktop builds are host-bound and must run through a Windows-native toolchain.
@@ -348,3 +395,8 @@ make sync-version-assets
 The repository uses the same repo-owned scripts in CI:
 - Ubuntu runners use the Go build/test entrypoints
 - Windows runners build the GUI through `scripts/build-gui-windows.ps1`
+- `.github/workflows/release-artifacts.yml` can be run manually to upload the
+  Android debug APK, Windows `RelayDock.exe` bundle zip, and Ubuntu `.deb`
+  package as GitHub Actions artifacts
+- the same workflow also creates or updates a GitHub Release on `v*` tag pushes
+  and attaches those APK/ZIP/DEB artifacts to the release

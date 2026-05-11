@@ -956,20 +956,23 @@ func validateReadyPlatformTunnelDataplaneEvidence(
 	mode PlatformTunnelMode,
 	evidence *PlatformTunnelDataplaneEvidence,
 ) error {
-	if mode != PlatformTunnelModeWindowsWintun {
+	switch mode {
+	case PlatformTunnelModeWindowsWintun, PlatformTunnelModeLinuxTun:
+	default:
 		return nil
 	}
+	modeLabel := string(mode)
 	if evidence == nil {
-		return fmt.Errorf("windows_wintun ready requires dataplane evidence")
+		return fmt.Errorf("%s ready requires dataplane evidence", modeLabel)
 	}
 	if !evidence.HostAttached {
-		return fmt.Errorf("windows_wintun ready requires host_attached dataplane evidence")
+		return fmt.Errorf("%s ready requires host_attached dataplane evidence", modeLabel)
 	}
 	if !evidence.WireGuardHandshakeFresh {
-		return fmt.Errorf("windows_wintun ready requires fresh WireGuard handshake evidence")
+		return fmt.Errorf("%s ready requires fresh WireGuard handshake evidence", modeLabel)
 	}
 	if !evidence.BidirectionalTrafficVerified {
-		return fmt.Errorf("windows_wintun ready requires bidirectional dataplane traffic evidence")
+		return fmt.Errorf("%s ready requires bidirectional dataplane traffic evidence", modeLabel)
 	}
 	return nil
 }
@@ -1191,11 +1194,13 @@ func platformTunnelStatusFromCapability(capability PlatformTunnelCapability) Pla
 	if descriptor != nil {
 		status.ExecutionPlan = cloneRuntimeExecutionPlan(&descriptor.Plan)
 		if descriptor.TransportProfile != nil {
-			status.TransportProfile = cloneTransportProfileReference(firstTransportProfileReference(
+			ref := firstTransportProfileReference(
 				descriptor.TransportProfile.SelectedProfile,
 				descriptor.TransportProfile.DefaultProfile,
-			))
-			if descriptor.TransportProfile.State != TransportProfileCompatibilityStateCompatible {
+			)
+			status.TransportProfile = cloneTransportProfileReference(ref)
+			if descriptor.TransportProfile.State != TransportProfileCompatibilityStateCompatible ||
+				ref == nil {
 				status.State = PlatformTunnelLifecycleStateSetupNeeded
 				status.Stage = PlatformTunnelStartupStageProfileValidate
 				status.MissingPrerequisite = PlatformTunnelPrerequisiteTransportProfile

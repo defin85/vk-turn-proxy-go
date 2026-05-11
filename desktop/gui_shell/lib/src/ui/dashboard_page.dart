@@ -1525,10 +1525,14 @@ class _VPNTransportProfilesWorkbenchSurface extends StatelessWidget {
       return;
     }
     String? errorText;
-    while (context.mounted) {
+    while (true) {
+      if (!context.mounted) {
+        return;
+      }
+      final copy = context.shellText;
       final passphrase = await showPortableTransportProfilePassphraseDialog(
         context: context,
-        title: context.shellText.exportPortableProfile,
+        title: copy.exportPortableProfile,
         actionLabel: 'Prepare export',
         errorText: errorText,
         message:
@@ -1566,11 +1570,15 @@ class _VPNTransportProfilesWorkbenchSurface extends StatelessWidget {
     String payload,
   ) async {
     String? errorText;
-    while (context.mounted) {
+    while (true) {
+      if (!context.mounted) {
+        return;
+      }
+      final copy = context.shellText;
       final passphrase = await showPortableTransportProfilePassphraseDialog(
         context: context,
-        title: context.shellText.importPortableProfile,
-        actionLabel: context.shellText.previewImport,
+        title: copy.importPortableProfile,
+        actionLabel: copy.previewImport,
         errorText: errorText,
         message:
             'Enter the passphrase that protects this portable VPN transport-profile envelope.',
@@ -1619,12 +1627,19 @@ class _VPNTransportProfilesWorkbenchSurface extends StatelessWidget {
     if (source == null || !context.mounted) {
       return;
     }
-    final payload = switch (source) {
-      PortableTransportProfileImportSource.file =>
-        await controller.openPortableVPNTransportProfileEnvelopeText(),
-      PortableTransportProfileImportSource.paste =>
-        await showPortableTransportProfilePasteDialog(context: context),
-    };
+    final String? payload;
+    switch (source) {
+      case PortableTransportProfileImportSource.file:
+        payload = await controller
+            .openPortableVPNTransportProfileEnvelopeText();
+      case PortableTransportProfileImportSource.paste:
+        if (!context.mounted) {
+          return;
+        }
+        payload = await showPortableTransportProfilePasteDialog(
+          context: context,
+        );
+    }
     if (payload == null || payload.trim().isEmpty || !context.mounted) {
       return;
     }
@@ -2795,9 +2810,11 @@ class _ResolutionsPanel extends StatelessWidget {
                         ArtifactAction.openArchive,
                       )
                     : null,
-                onOpenChallenge: challenge == null
-                    ? null
-                    : () => controller.openChallengeInBrowser(challenge),
+                onOpenChallenge:
+                    challenge != null &&
+                        controller.canOpenChallengeInBrowser(challenge)
+                    ? () => controller.openChallengeInBrowser(challenge)
+                    : null,
                 openChallengeLabel: context.shellText.mobileOpenBrowser,
                 onContinueChallenge: challenge == null
                     ? null
@@ -2829,9 +2846,11 @@ class _SessionsPanel extends StatelessWidget {
             onSelect: () => controller.selectSession(session.id),
             onStop: () => controller.stopSession(session.id),
             onExport: () => controller.exportDiagnostics(session.id),
-            onOpenChallenge: challenge == null
-                ? null
-                : () => controller.openChallengeInBrowser(challenge),
+            onOpenChallenge:
+                challenge != null &&
+                    controller.canOpenChallengeInBrowser(challenge)
+                ? () => controller.openChallengeInBrowser(challenge)
+                : null,
             openChallengeLabel: context.shellText.mobileOpenBrowser,
             onContinueChallenge: challenge == null
                 ? null
@@ -2973,28 +2992,25 @@ HomeWorkflowPrimaryActionData _desktopHomePrimaryActionData(
       primaryTunnelMode != null &&
       controller.platformTunnelStartInFlight(primaryTunnelMode);
   if (challenge != null) {
+    final challengePrompt = challenge.prompt?.trim();
     return HomeWorkflowPrimaryActionData(
       tone: ShellSemanticTone.attention,
       eyebrow: copy.providerStepTone,
       title: copy.finishProviderValidation,
-      subtitle: copy.openRequiredBrowserStepFromHome,
-      leadingIcon: Icons.travel_explore_rounded,
+      subtitle: challengePrompt == null || challengePrompt.isEmpty
+          ? copy.openRequiredBrowserStepFromHome
+          : challengePrompt,
+      leadingIcon: Icons.fact_check_rounded,
       primaryAction: HomeWorkflowAction(
-        label: copy.mobileOpenBrowser,
-        icon: Icons.open_in_browser_rounded,
+        key: const ValueKey<String>('desktop-home-continue-challenge'),
+        label: copy.iveCompletedIt,
+        icon: Icons.check_circle_outline_rounded,
         onPressed: controller.busy
             ? null
-            : () => unawaited(controller.openChallengeInBrowser(challenge)),
+            : () => unawaited(controller.continueChallenge(challenge.id)),
       ),
       annotation: copy.challengeKind(challenge.kind),
       secondaryActions: <HomeWorkflowAction>[
-        HomeWorkflowAction(
-          label: copy.iveCompletedIt,
-          style: HomeWorkflowActionStyle.outlined,
-          onPressed: controller.busy
-              ? null
-              : () => unawaited(controller.continueChallenge(challenge.id)),
-        ),
         HomeWorkflowAction(
           label: copy.cancelChallenge,
           style: HomeWorkflowActionStyle.text,

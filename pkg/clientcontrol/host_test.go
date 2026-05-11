@@ -1282,6 +1282,51 @@ func TestHostStartPlatformTunnelDefaultsWindowsUnderlayRoutePolicy(t *testing.T)
 	}
 }
 
+func TestHostStartPlatformTunnelDefaultsLinuxUnderlayRoutePolicy(t *testing.T) {
+	var captured PlatformTunnelStartRequest
+	host := New(
+		WithBuildIdentity(BuildIdentity{Target: "linux/amd64"}),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{{
+			Mode:      PlatformTunnelModeLinuxTun,
+			Available: true,
+			SatisfiedPrerequisites: []PlatformTunnelPrerequisite{
+				PlatformTunnelPrerequisitePermission,
+				PlatformTunnelPrerequisiteRouteExclusion,
+				PlatformTunnelPrerequisiteDNSBypass,
+			},
+			SupportedUnderlayRoutePolicies: []PlatformTunnelUnderlayRoutePolicy{
+				PlatformTunnelUnderlayRoutePolicyPreserveActiveLocalNetwork,
+			},
+		}}),
+		WithWireGuardTurnMaterializer(func(context.Context, WireGuardTurnMaterializeRequest) (*WireGuardTurnExecutionLease, error) {
+			return &WireGuardTurnExecutionLease{}, nil
+		}),
+		WithPlatformTunnelStarter(func(_ context.Context, req PlatformTunnelStartRequest) (PlatformTunnelStartResult, error) {
+			captured = req
+			return PlatformTunnelStartResult{
+				Mode:                req.Mode,
+				Ready:               false,
+				Stage:               PlatformTunnelStartupStageCapabilityCheck,
+				MissingPrerequisite: PlatformTunnelPrerequisiteHostImplementation,
+				UnderlayRoutePolicy: req.UnderlayRoutePolicy,
+			}, nil
+		}),
+	)
+
+	if _, err := host.StartPlatformTunnel(context.Background(), PlatformTunnelStartRequest{
+		Mode: PlatformTunnelModeLinuxTun,
+	}); err != nil {
+		t.Fatalf("StartPlatformTunnel() error = %v", err)
+	}
+	if captured.UnderlayRoutePolicy != PlatformTunnelUnderlayRoutePolicyPreserveActiveLocalNetwork {
+		t.Fatalf(
+			"underlay_route_policy = %q, want %q",
+			captured.UnderlayRoutePolicy,
+			PlatformTunnelUnderlayRoutePolicyPreserveActiveLocalNetwork,
+		)
+	}
+}
+
 func TestHostStartPlatformTunnelRejectsInvalidAndroidAppRoutingPolicy(t *testing.T) {
 	host := New(WithBuildIdentity(BuildIdentity{Target: "android/embedded"}))
 
@@ -1773,6 +1818,51 @@ func TestHostStartPlatformTunnelRejectsWindowsReadyWithoutDataplaneEvidence(t *t
 
 	result, err := host.StartPlatformTunnel(context.Background(), PlatformTunnelStartRequest{
 		Mode: PlatformTunnelModeWindowsWintun,
+	})
+	if err != nil {
+		t.Fatalf("StartPlatformTunnel() error = %v", err)
+	}
+	if result.Ready {
+		t.Fatalf("StartPlatformTunnel().Ready = true, want false: %+v", result)
+	}
+	if result.Stage != PlatformTunnelStartupStageDataplaneVerify {
+		t.Fatalf("StartPlatformTunnel().Stage = %q, want %q", result.Stage, PlatformTunnelStartupStageDataplaneVerify)
+	}
+	if result.MissingPrerequisite != PlatformTunnelPrerequisiteDataplaneEvidence {
+		t.Fatalf(
+			"StartPlatformTunnel().MissingPrerequisite = %q, want %q",
+			result.MissingPrerequisite,
+			PlatformTunnelPrerequisiteDataplaneEvidence,
+		)
+	}
+	if stopCalls != 1 {
+		t.Fatalf("platform tunnel cleanup calls = %d, want 1", stopCalls)
+	}
+}
+
+func TestHostStartPlatformTunnelRejectsLinuxReadyWithoutDataplaneEvidence(t *testing.T) {
+	build := testBuildIdentity()
+	build.Target = "linux/amd64"
+	stopCalls := 0
+	host := New(
+		WithBuildIdentity(build),
+		WithPlatformTunnelStarter(func(_ context.Context, req PlatformTunnelStartRequest) (PlatformTunnelStartResult, error) {
+			return PlatformTunnelStartResult{
+				Mode:  req.Mode,
+				Ready: true,
+			}, nil
+		}),
+		WithPlatformTunnelStopper(func(_ context.Context, req PlatformTunnelStopRequest) (PlatformTunnelStopResult, error) {
+			stopCalls++
+			return PlatformTunnelStopResult{
+				Mode:    req.Mode,
+				Stopped: true,
+			}, nil
+		}),
+	)
+
+	result, err := host.StartPlatformTunnel(context.Background(), PlatformTunnelStartRequest{
+		Mode: PlatformTunnelModeLinuxTun,
 	})
 	if err != nil {
 		t.Fatalf("StartPlatformTunnel() error = %v", err)

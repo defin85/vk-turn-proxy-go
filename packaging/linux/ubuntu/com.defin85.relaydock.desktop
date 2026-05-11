@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=RelayDock
+Comment=RelayDock desktop shell
+Exec=/opt/relaydock/relaydock
+Icon=com.defin85.relaydock
+Terminal=false
+Categories=Network;RemoteAccess;
+StartupNotify=true
+StartupWMClass=com.defin85.relaydock

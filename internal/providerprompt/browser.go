@@ -31,6 +31,8 @@ const browserStageTimeout = 20 * time.Second
 
 const browserHeadlessEnv = "VK_PROVIDER_BROWSER_HEADLESS"
 
+var currentEUID = os.Geteuid
+
 type browserSession interface {
 	Open(context.Context, string) error
 	Cookies(context.Context, []string) ([]*http.Cookie, error)
@@ -804,6 +806,9 @@ func chromiumLaunchArgs(userDataDir string, debugPort int) []string {
 			"--disable-dev-shm-usage",
 		)
 	} else {
+		if currentEUID() == 0 {
+			args = append(args, "--no-sandbox")
+		}
 		args = append(args, "--new-window")
 	}
 	args = append(args, "about:blank")

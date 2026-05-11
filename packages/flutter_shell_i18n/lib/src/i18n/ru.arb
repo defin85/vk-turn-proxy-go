@@ -605,7 +605,7 @@
   "shellTextProfileRequired": "Требуется профиль",
   "shellTextVpnIsOff": "VPN выключен",
   "shellTextContinueProviderFlowInApp": "Продолжите шаг провайдера во встроенном браузере, прежде чем VPN сможет запуститься.",
-  "shellTextOpenRequiredBrowserStepFromHome": "Откройте обязательный шаг в браузере с Главной, затем вернитесь сюда и подтвердите завершение до запуска VPN.",
+  "shellTextOpenRequiredBrowserStepFromHome": "Завершите обязательный шаг в браузере, затем вернитесь сюда и подтвердите завершение до запуска VPN.",
   "shellTextDisconnectCurrentMobileVpnPath": "Отсюда отключите текущий путь мобильного VPN.",
   "shellTextChooseOrFinishProfileBeforeStartingVpn": "Выберите или завершите профиль в Профилях перед запуском текущего пути мобильного VPN.",
   "shellTextStartCurrentMobileVpnPath": "Запустите текущий путь мобильного VPN отсюда.",

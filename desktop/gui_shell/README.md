@@ -108,6 +108,20 @@ needed, and then starts the same-device desktop session, follow
 The canonical actor model and invite-first workflow contract live in
 `docs/vk-invite-user-workflow.md`.
 
+For the supported Ubuntu `linux_tun` package, use the repo-owned Linux build
+entrypoint from the repository root:
+
+```bash
+make build-gui-linux
+sudo dist/linux-gui/install-ubuntu.sh
+/opt/relaydock/relaydock
+```
+
+That package stages the GUI, sibling `clientd` launcher, real host binary,
+privileged wrapper, polkit action, and build metadata together. Raw local
+Flutter bundles and `go run ./cmd/clientd` remain development paths, not the
+Linux `linux_tun` support surface.
+
 ## Control-plane contract
 
 The shell talks to `cmd/clientd` on `127.0.0.1:7777` through the versioned HTTP surface from `pkg/clientcontrol`.
@@ -165,7 +179,8 @@ If a launched candidate exits or negotiates as incompatible, the supervisor disp
 
 ## Packaging behavior
 
-- Linux: package the GUI binary with a sibling `clientd` binary.
+- Linux: package the GUI binary with a sibling `clientd` launcher that uses the
+  staged polkit wrapper and real `libexec/clientd` host from the Ubuntu package.
 - Windows: package `clientd.exe` next to the GUI executable.
 - macOS: package the sidecar in `YourApp.app/Contents/Frameworks/clientd`.
 - All desktop platforms: keep the control plane loopback-only and keep the GUI talking to a compatible host rather than embedding runtime code in the UI process.

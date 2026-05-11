@@ -93,6 +93,13 @@ const RuntimeExecutionPlan _windowsWintunExecutionPlan = RuntimeExecutionPlan(
   hostAdapter: RuntimeHostAdapter.windowsWintun,
 );
 
+const RuntimeExecutionPlan _linuxTunExecutionPlan = RuntimeExecutionPlan(
+  accessMethod: RuntimeAccessMethod.turnCredentials,
+  carrierFamily: RuntimeCarrierFamily.turnDatagram,
+  engineFamily: RuntimeEngineFamily.wireguardNative,
+  hostAdapter: RuntimeHostAdapter.linuxTun,
+);
+
 const HostInfo _readyWindowsWintunHostInfo = HostInfo(
   contractVersion: '1',
   build: _testHostBuild,
@@ -123,6 +130,52 @@ const HostInfo _readyWindowsWintunHostInfo = HostInfo(
       executionPlans: <RuntimeExecutionPlanDescriptor>[
         RuntimeExecutionPlanDescriptor(
           plan: _windowsWintunExecutionPlan,
+          supportState: RuntimeExecutionPlanSupportState.supported,
+          remoteEndpointFamily: RuntimeRemoteEndpointFamily.turnServer,
+          isDefault: true,
+        ),
+      ],
+    ),
+  ],
+);
+
+const HostInfo _readyLinuxTunHostInfo = HostInfo(
+  contractVersion: '1',
+  build: BuildIdentity(
+    product: 'RelayDock',
+    version: '0.1.0',
+    buildNumber: '1',
+    revision: 'deadbeefcafe',
+    role: 'clientd',
+    target: 'linux/amd64',
+  ),
+  capabilities: <Capability>[
+    Capability.desktopSidecar,
+    Capability.platformTunnels,
+    Capability.profiles,
+    Capability.providerConfigs,
+    Capability.providerRuntimeArtifacts,
+    Capability.runtimeExecutionPlanning,
+    Capability.sessions,
+    Capability.challenges,
+    Capability.diagnostics,
+    Capability.eventStream,
+  ],
+  platformTunnels: <PlatformTunnelCapability>[
+    PlatformTunnelCapability(
+      mode: PlatformTunnelMode.linuxTun,
+      available: true,
+      satisfiedPrerequisites: <PlatformTunnelPrerequisite>[
+        PlatformTunnelPrerequisite.permission,
+        PlatformTunnelPrerequisite.routeExclusion,
+        PlatformTunnelPrerequisite.dnsBypass,
+      ],
+      supportedUnderlayRoutePolicies: <PlatformTunnelUnderlayRoutePolicy>[
+        PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork,
+      ],
+      executionPlans: <RuntimeExecutionPlanDescriptor>[
+        RuntimeExecutionPlanDescriptor(
+          plan: _linuxTunExecutionPlan,
           supportState: RuntimeExecutionPlanSupportState.supported,
           remoteEndpointFamily: RuntimeRemoteEndpointFamily.turnServer,
           isDefault: true,
@@ -523,6 +576,110 @@ void main() {
     expect(api.startedProfileIDs, isEmpty);
     expect(controller.selectedSessionId, 'platform-session-1');
     expect(find.text('Turn off VPN'), findsOneWidget);
+  });
+
+  testWidgets('desktop home starts linux tun through a resolved handoff', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final api = _FakeControlPlaneApi(
+      hostInfo: _readyLinuxTunHostInfo,
+      startPlatformTunnelResult: const PlatformTunnelStartResult(
+        mode: PlatformTunnelMode.linuxTun,
+        ready: true,
+        sessionId: 'platform-session-linux-1',
+      ),
+    );
+    final controller = DesktopShellController(
+      api: api,
+      supervisor: const _FakeHostSupervisor(
+        result: HostConnectionResult(
+          state: HostLifecycleState.ready,
+          message: 'Connected to local host 127.0.0.1:7777',
+          info: _readyLinuxTunHostInfo,
+        ),
+      ),
+      stateStore: const _InMemoryShellStateStore(),
+      appBuild: _testGuiBuild,
+    );
+
+    await controller.initialize();
+    await pumpDesktopShellTestApp(tester, controller: controller);
+
+    await tester.tap(find.text('Turn on VPN'));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(api.startedPlatformTunnels, <PlatformTunnelMode>[
+      PlatformTunnelMode.linuxTun,
+    ]);
+    expect(controller.selectedResolutionId, 'resolution-1');
+    expect(controller.selectedSessionId, 'platform-session-linux-1');
+    expect(find.text('Turn off VPN'), findsOneWidget);
+  });
+
+  testWidgets('desktop home continues host-driven browser challenges', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final challenge = ChallengeRecord(
+      id: 'challenge-resolution-1',
+      sessionId: '',
+      resolutionId: 'resolution-1',
+      provider: 'vk',
+      stage: 'provider_resolve',
+      kind: 'browser',
+      prompt:
+          'Authenticate in VK Calls and create a hosted call in the same browser session to continue provider resolution.',
+      openUrl: 'https://calls.vk.com/',
+      status: ChallengeStatus.pending,
+      createdAt: DateTime.utc(2026, 4, 5, 17, 0),
+      updatedAt: DateTime.utc(2026, 4, 5, 17, 1),
+    );
+    final api = _FakeControlPlaneApi(
+      resolutionsList: <ResolutionRecord>[
+        ResolutionRecord(
+          id: 'resolution-1',
+          provider: 'vk',
+          input: const ResolutionInput(
+            provider: 'vk',
+            kind: ProviderInputKind.link,
+            linkRedacted: 'https://calls.vk.com/',
+            interactiveProvider: true,
+          ),
+          state: ResolutionState.challengeRequired,
+          activeChallengeId: challenge.id,
+          export: const ResolutionExportStatus(supported: false),
+          startedAt: DateTime.utc(2026, 4, 5, 17, 0),
+          updatedAt: DateTime.utc(2026, 4, 5, 17, 1),
+        ),
+      ],
+      challenges: <String, ChallengeRecord>{challenge.id: challenge},
+    );
+    final controller = DesktopShellController(
+      api: api,
+      supervisor: const _FakeHostSupervisor(),
+      stateStore: const _InMemoryShellStateStore(),
+      appBuild: _testGuiBuild,
+    );
+
+    await controller.initialize();
+    await pumpDesktopShellTestApp(tester, controller: controller);
+
+    expect(find.text('Open browser'), findsNothing);
+    await tester.tap(
+      find.byKey(const ValueKey<String>('desktop-home-continue-challenge')),
+    );
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(api.continuedChallengeIDs, <String>['challenge-resolution-1']);
   });
 
   testWidgets(
@@ -2370,6 +2527,7 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
     List<ProviderConfigRecord>? providerConfigs,
     List<ProfileRecord>? profiles,
     HostInfo? hostInfo,
+    Map<String, ChallengeRecord>? challenges,
     List<TransportProfileStatus>? transportProfiles,
     this.startPlatformTunnelResult = const PlatformTunnelStartResult(
       mode: PlatformTunnelMode.windowsWintun,
@@ -2392,6 +2550,9 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
          transportProfiles ?? const <TransportProfileStatus>[],
        ),
        _resolutions = List<ResolutionRecord>.of(resolutionsList),
+       _challenges = Map<String, ChallengeRecord>.of(
+         challenges ?? const <String, ChallengeRecord>{},
+       ),
        _profiles = List<ProfileRecord>.of(
          profiles ??
              <ProfileRecord>[
@@ -2433,27 +2594,58 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
       <TransportProfileImportRequest>[];
   final PlatformTunnelStartResult startPlatformTunnelResult;
   final List<ResolutionRecord> _resolutions;
+  final Map<String, ChallengeRecord> _challenges;
   final List<ProfileRecord> _profiles;
+  final List<String> continuedChallengeIDs = <String>[];
   final StreamController<EventRecord> _events =
       StreamController<EventRecord>.broadcast();
   List<SessionRecord> _sessions = const <SessionRecord>[];
 
   @override
-  Future<ChallengeRecord> cancelChallenge(String challengeId) {
-    throw UnimplementedError();
+  Future<ChallengeRecord> cancelChallenge(String challengeId) async {
+    final challenge = _challenges[challengeId];
+    if (challenge == null) {
+      throw const ControlPlaneError(
+        statusCode: 404,
+        code: 'not_found',
+        message: 'not found',
+      );
+    }
+    final cancelled = challenge.copyWith(status: ChallengeStatus.cancelled);
+    _challenges[challengeId] = cancelled;
+    return cancelled;
   }
 
   @override
-  Future<ChallengeRecord> challenge(String challengeId) {
-    throw UnimplementedError();
+  Future<ChallengeRecord> challenge(String challengeId) async {
+    final challenge = _challenges[challengeId];
+    if (challenge == null) {
+      throw const ControlPlaneError(
+        statusCode: 404,
+        code: 'not_found',
+        message: 'not found',
+      );
+    }
+    return challenge;
   }
 
   @override
   Future<ChallengeRecord> continueChallenge(
     String challengeId, {
     ChallengeContinuationSubmission? browserContinuation,
-  }) {
-    throw UnimplementedError();
+  }) async {
+    final challenge = _challenges[challengeId];
+    if (challenge == null) {
+      throw const ControlPlaneError(
+        statusCode: 404,
+        code: 'not_found',
+        message: 'not found',
+      );
+    }
+    continuedChallengeIDs.add(challengeId);
+    final completed = challenge.copyWith(status: ChallengeStatus.completed);
+    _challenges[challengeId] = completed;
+    return completed;
   }
 
   @override

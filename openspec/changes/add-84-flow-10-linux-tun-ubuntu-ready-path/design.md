@@ -75,5 +75,29 @@ returns failure.
 
 - Host and control-plane tests for Linux stage-aware startup semantics.
 - Ubuntu VM validation for TUN, route policy, runtime attach, cleanup, and
-  dataplane proof.
+  dataplane proof. This is the promotion gate for claiming the first Ubuntu
+  `linux_tun` path is runtime-ready; local/unit checks are not a substitute.
 - Strict OpenSpec validation for this change.
+
+### Ubuntu VM verification expectations
+
+The Ubuntu VM check should use the packaged Linux desktop host path and the
+canonical `/v1/platform-tunnels/start` API. The evidence bundle should include:
+
+- host info showing the selected `linux_tun` execution plan and
+  `preserve_active_local_network` underlay policy
+- a start attempt that reaches `permission_acquire`, `route_validate`,
+  `host_bringup`, `runtime_attach`, and `dataplane_verify` in order
+- native evidence that the TUN interface exists only for the active attempt and
+  is removed after stop or startup failure
+- route evidence that the TURN/control underlay remains reachable outside the
+  tunnel while tunnel default routes are active
+- strict WireGuard TURN lease evidence that provider credentials and transport
+  profile material stay in the host/control-plane scope, not in helper input
+- dataplane evidence with host attachment, a fresh WireGuard handshake,
+  positive RX/TX deltas, and expected remote egress
+- negative cases for denied privilege mediation, unsafe route preservation, and
+  runtime attach/dataplane failures, each returning typed failure and cleanup
+
+If any of those checks cannot be run in the VM, the result should remain an
+explicit gap in the change evidence rather than being replaced by local tests.

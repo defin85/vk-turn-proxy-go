@@ -18,11 +18,39 @@ func TestChromiumLaunchArgsDefaultToInteractive(t *testing.T) {
 	t.Setenv("GITHUB_ACTIONS", "")
 	t.Setenv("ACT", "")
 	t.Setenv(browserHeadlessEnv, "")
+	previousEUID := currentEUID
+	currentEUID = func() int { return 1000 }
+	t.Cleanup(func() { currentEUID = previousEUID })
 
 	args := chromiumLaunchArgs("/tmp/browser-profile", 9222)
 
 	if !slices.Contains(args, "--new-window") {
 		t.Fatalf("expected interactive launch args, got %#v", args)
+	}
+	if slices.Contains(args, "--headless=new") {
+		t.Fatalf("did not expect headless launch args by default, got %#v", args)
+	}
+	if slices.Contains(args, "--no-sandbox") {
+		t.Fatalf("did not expect no-sandbox for non-root interactive launch, got %#v", args)
+	}
+}
+
+func TestChromiumLaunchArgsDisableSandboxForRootInteractiveLaunch(t *testing.T) {
+	t.Setenv("CI", "")
+	t.Setenv("GITHUB_ACTIONS", "")
+	t.Setenv("ACT", "")
+	t.Setenv(browserHeadlessEnv, "")
+	previousEUID := currentEUID
+	currentEUID = func() int { return 0 }
+	t.Cleanup(func() { currentEUID = previousEUID })
+
+	args := chromiumLaunchArgs("/tmp/browser-profile", 9222)
+
+	if !slices.Contains(args, "--new-window") {
+		t.Fatalf("expected interactive launch args, got %#v", args)
+	}
+	if !slices.Contains(args, "--no-sandbox") {
+		t.Fatalf("expected no-sandbox for root interactive launch, got %#v", args)
 	}
 	if slices.Contains(args, "--headless=new") {
 		t.Fatalf("did not expect headless launch args by default, got %#v", args)

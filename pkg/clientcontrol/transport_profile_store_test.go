@@ -299,8 +299,23 @@ func TestTransportProfileStoreDoesNotInferStartupProfileFromCompatibleRecords(t 
 	if transportProfile.SelectedProfile != nil || transportProfile.DefaultProfile != nil {
 		t.Fatalf("transport profile refs = selected %+v default %+v, want no implicit selection", transportProfile.SelectedProfile, transportProfile.DefaultProfile)
 	}
+	if transportProfile.State != TransportProfileCompatibilityStateCompatible {
+		t.Fatalf("transport profile state = %q, want compatible setup-needed selection", transportProfile.State)
+	}
+	if transportProfile.MissingKind != "" {
+		t.Fatalf("missing_kind = %q, want empty for compatible unselected profile", transportProfile.MissingKind)
+	}
+	if !strings.Contains(transportProfile.Message, "Select a VPN transport profile") {
+		t.Fatalf("transport profile message = %q, want selection prompt", transportProfile.Message)
+	}
 	if info.PlatformTunnels[0].ExecutionPlans[0].SupportState != RuntimeExecutionPlanSupportStateUnavailable {
 		t.Fatalf("support_state without selected/default profile = %q, want unavailable", info.PlatformTunnels[0].ExecutionPlans[0].SupportState)
+	}
+	platformStatus := platformTunnelStatusForTest(t, host, PlatformTunnelModeAndroidVPNService)
+	if platformStatus.State != PlatformTunnelLifecycleStateSetupNeeded ||
+		platformStatus.Stage != PlatformTunnelStartupStageProfileValidate ||
+		platformStatus.MissingPrerequisite != PlatformTunnelPrerequisiteTransportProfile {
+		t.Fatalf("platform status without selection = %+v, want profile setup-needed state", platformStatus)
 	}
 
 	result, err := host.StartPlatformTunnel(context.Background(), PlatformTunnelStartRequest{
@@ -837,6 +852,9 @@ func TestTransportProfilePortableExportPreviewConfirmRoundTrip(t *testing.T) {
 		info.PlatformTunnels[0].ExecutionPlans[0].TransportProfile.SelectedProfile != nil ||
 		info.PlatformTunnels[0].ExecutionPlans[0].TransportProfile.DefaultProfile != nil {
 		t.Fatalf("transport profile prerequisite after portable import = %+v, want setup-needed state", info.PlatformTunnels[0].ExecutionPlans[0].TransportProfile)
+	}
+	if info.PlatformTunnels[0].ExecutionPlans[0].TransportProfile.State != TransportProfileCompatibilityStateCompatible {
+		t.Fatalf("transport profile state after portable import = %q, want compatible setup-needed selection", info.PlatformTunnels[0].ExecutionPlans[0].TransportProfile.State)
 	}
 }
 
