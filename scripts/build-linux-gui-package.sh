@@ -9,6 +9,7 @@ VERSION_FILE="${GUI_ROOT}/.flutter-version"
 PACKAGE_ASSETS_DIR="${ROOT_DIR}/packaging/linux/ubuntu"
 STAGE_DIR="${ROOT_DIR}/dist/linux-gui"
 GO_CLIENTD="${ROOT_DIR}/dist/go/linux-amd64/clientd"
+GO_LINUX_TUN_HELPER="${ROOT_DIR}/dist/go/linux-amd64/relaydock-linux-tun-helper"
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -164,6 +165,10 @@ if [[ ! -x "${GO_CLIENTD}" ]]; then
   echo "expected Go clientd artifact not found after build: ${GO_CLIENTD}" >&2
   exit 1
 fi
+if [[ ! -x "${GO_LINUX_TUN_HELPER}" ]]; then
+  echo "expected Go linux_tun helper artifact not found after build: ${GO_LINUX_TUN_HELPER}" >&2
+  exit 1
+fi
 
 rm -rf "${STAGE_DIR}"
 mkdir -p "${STAGE_DIR}"
@@ -174,8 +179,8 @@ install -d -m 0755 "${STAGE_DIR}/share/applications"
 install -d -m 0755 "${STAGE_DIR}/share/icons/hicolor/256x256/apps"
 install -d -m 0755 "${STAGE_DIR}/share/polkit-1/actions"
 install -m 0755 "${GO_CLIENTD}" "${STAGE_DIR}/libexec/clientd"
+install -m 0755 "${GO_LINUX_TUN_HELPER}" "${STAGE_DIR}/libexec/relaydock-linux-tun-helper"
 install -m 0755 "${PACKAGE_ASSETS_DIR}/clientd-launcher" "${STAGE_DIR}/clientd"
-install -m 0755 "${PACKAGE_ASSETS_DIR}/relaydock-clientd-linux-tun" "${STAGE_DIR}/libexec/relaydock-clientd-linux-tun"
 install -m 0644 "${PACKAGE_ASSETS_DIR}/com.defin85.relaydock.desktop" "${STAGE_DIR}/share/applications/com.defin85.relaydock.desktop"
 install -m 0644 "${GUI_ROOT}/assets/branding/app_icon_256.png" "${STAGE_DIR}/share/icons/hicolor/256x256/apps/com.defin85.relaydock.png"
 install -m 0644 "${PACKAGE_ASSETS_DIR}/com.defin85.relaydock.linux-tun.policy" "${STAGE_DIR}/share/polkit-1/actions/com.defin85.relaydock.linux-tun.policy"

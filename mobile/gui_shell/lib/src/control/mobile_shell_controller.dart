@@ -1091,8 +1091,10 @@ class MobileShellController extends ChangeNotifier {
   Future<TransportProfileStatus?> confirmPortableVPNTransportProfileImport({
     required String envelope,
     required String passphrase,
+    PlatformTunnelMode? selectForStartupMode,
   }) async {
     TransportProfileStatus? imported;
+    var selectedForStartup = false;
     await _runBridgeMutation(() async {
       final capability = portableTransportProfileTransferCapability;
       if (capability == null || capability.importPaths.isEmpty) {
@@ -1109,13 +1111,41 @@ class MobileShellController extends ChangeNotifier {
           passphrase: passphrase,
         ),
       );
+      if (selectForStartupMode != null) {
+        selectedForStartup = await _selectImportedVPNTransportProfileForMode(
+          selectForStartupMode,
+          imported!,
+        );
+      }
       await _refreshHostInfo();
       await refresh();
       notice =
-          'Imported portable VPN transport profile '
+          '${selectedForStartup ? 'Imported and selected' : 'Imported'} portable VPN transport profile '
           '${_portableTransportProfileDisplayLabel(imported!.displayName, imported!.kind)}.';
     });
     return imported;
+  }
+
+  Future<bool> _selectImportedVPNTransportProfileForMode(
+    PlatformTunnelMode mode,
+    TransportProfileStatus profile,
+  ) async {
+    final plan = vpnTransportProfileExecutionPlanForMode(mode);
+    if (plan == null) {
+      return false;
+    }
+    if (!_transportProfileSelectableForPlan(
+      profile,
+      plan,
+      vpnTransportProfileRequiredKindsForMode(mode),
+    )) {
+      return false;
+    }
+    await bridge.selectTransportProfileForStartup(
+      profile.id,
+      TransportProfileSelectForStartupRequest(plan: plan),
+    );
+    return true;
   }
 
   List<ProviderPreset> get presetCatalog => kProviderPresetCatalog;
@@ -4301,7 +4331,8 @@ class MobileShellController extends ChangeNotifier {
         prerequisite.selectedProfile?.profileId.trim().isNotEmpty == true ||
         prerequisite.defaultProfile?.profileId.trim().isNotEmpty == true;
     if (!hasSelectedOrDefault &&
-        descriptor?.supportState != RuntimeExecutionPlanSupportState.supported) {
+        descriptor?.supportState !=
+            RuntimeExecutionPlanSupportState.supported) {
       final descriptorMessage = descriptor?.message?.trim() ?? '';
       if (descriptorMessage.isNotEmpty) {
         return descriptorMessage;
@@ -4832,6 +4863,29 @@ class MobileShellController extends ChangeNotifier {
         left.carrierFamily == right.carrierFamily &&
         left.engineFamily == right.engineFamily &&
         left.hostAdapter == right.hostAdapter;
+  }
+
+  bool _transportProfileSelectableForPlan(
+    TransportProfileStatus profile,
+    RuntimeExecutionPlan plan,
+    List<TransportProfileKind> requiredKinds,
+  ) {
+    if (!profile.actions.contains(
+      TransportProfileLifecycleAction.selectForStartup,
+    )) {
+      return false;
+    }
+    if (requiredKinds.isNotEmpty && !requiredKinds.contains(profile.kind)) {
+      return false;
+    }
+    if (profile.compatibility.state !=
+        TransportProfileCompatibilityState.compatible) {
+      return false;
+    }
+    final compatiblePlans = profile.compatibility.compatibleExecutionPlans;
+    return compatiblePlans.any(
+      (RuntimeExecutionPlan candidate) => _sameExecutionPlan(candidate, plan),
+    );
   }
 
   bool _sameStringLists(List<String> left, List<String> right) {

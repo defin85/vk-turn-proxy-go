@@ -28,7 +28,7 @@ for required in \
   "${STAGE_DIR}/relaydock" \
   "${STAGE_DIR}/clientd" \
   "${STAGE_DIR}/libexec/clientd" \
-  "${STAGE_DIR}/libexec/relaydock-clientd-linux-tun" \
+  "${STAGE_DIR}/libexec/relaydock-linux-tun-helper" \
   "${STAGE_DIR}/share/applications/com.defin85.relaydock.desktop" \
   "${STAGE_DIR}/share/icons/hicolor/256x256/apps/com.defin85.relaydock.png" \
   "${STAGE_DIR}/share/polkit-1/actions/com.defin85.relaydock.linux-tun.policy" \
@@ -38,6 +38,17 @@ for required in \
     exit 1
   fi
 done
+
+POLKIT_POLICY="${STAGE_DIR}/share/polkit-1/actions/com.defin85.relaydock.linux-tun.policy"
+if ! grep -Fq "/opt/relaydock/libexec/relaydock-linux-tun-helper" "${POLKIT_POLICY}"; then
+  echo "Linux GUI stage polkit policy does not authorize the linux_tun helper artifact." >&2
+  exit 1
+fi
+if grep -Fq "/opt/relaydock/clientd" "${POLKIT_POLICY}" ||
+  grep -Fq "/opt/relaydock/libexec/clientd" "${POLKIT_POLICY}"; then
+  echo "Linux GUI stage polkit policy authorizes broad clientd execution; expected helper-only authorization." >&2
+  exit 1
+fi
 
 mapfile -t VERSION_FIELDS < <(
   python3 -c '
@@ -98,8 +109,6 @@ install -m 0644 \
   "${STAGE_DIR}/share/polkit-1/actions/com.defin85.relaydock.linux-tun.policy" \
   "${PACKAGE_ROOT}/usr/share/polkit-1/actions/com.defin85.relaydock.linux-tun.policy"
 
-install -d -m 0700 "${PACKAGE_ROOT}/var/lib/relaydock/vpn-transport-profiles"
-
 INSTALLED_SIZE="$(du -sk "${PACKAGE_ROOT}" | awk '{print $1}')"
 cat > "${DEBIAN_DIR}/control" <<EOF
 Package: ${PACKAGE_NAME}
@@ -113,7 +122,7 @@ Installed-Size: ${INSTALLED_SIZE}
 Homepage: https://github.com/defin85/vk-turn-proxy-go
 Description: ${PRODUCT_NAME} desktop VPN relay client
  RelayDock packages the Flutter desktop shell, local clientd sidecar,
- Ubuntu linux_tun privilege wrapper, desktop launcher, icon, and polkit
+ Ubuntu linux_tun privileged helper, desktop launcher, icon, and polkit
  metadata into one installable desktop package.
 EOF
 

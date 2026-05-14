@@ -7,14 +7,14 @@
   <vendor_url>https://github.com/defin85/vk-turn-proxy-go</vendor_url>
 
   <action id="com.defin85.relaydock.linux-tun.start">
-    <description>Start the RelayDock Linux TUN host</description>
+    <description>Start the RelayDock Linux TUN helper</description>
     <message>Authentication is required to start RelayDock Linux TUN mode.</message>
     <defaults>
       <allow_any>auth_admin</allow_any>
       <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
-    <annotate key="org.freedesktop.policykit.exec.path">/opt/relaydock/libexec/relaydock-clientd-linux-tun</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/opt/relaydock/libexec/relaydock-linux-tun-helper</annotate>
     <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
   </action>
 </policyconfig>

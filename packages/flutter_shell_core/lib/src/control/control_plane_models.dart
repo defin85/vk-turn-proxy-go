@@ -4387,6 +4387,7 @@ class DiagnosticsBundle {
     required this.events,
     required this.challenges,
     required this.metrics,
+    this.platformTunnels = const <PlatformTunnelStatus>[],
     this.guiBuild,
     this.hostBuild = BuildIdentity.unknown,
     this.contractVersion = '',
@@ -4409,6 +4410,12 @@ class DiagnosticsBundle {
           )
           .toList(growable: false),
       metrics: json['metrics'] as String? ?? '',
+      platformTunnels: (json['platform_tunnels'] as List<dynamic>? ?? const [])
+          .map(
+            (dynamic raw) =>
+                PlatformTunnelStatus.fromJson(raw as Map<String, dynamic>),
+          )
+          .toList(growable: false),
       guiBuild: json['gui_build'] is Map<String, dynamic>
           ? BuildIdentity.fromJson(json['gui_build'] as Map<String, dynamic>)
           : null,
@@ -4423,6 +4430,7 @@ class DiagnosticsBundle {
   final List<EventRecord> events;
   final List<ChallengeRecord> challenges;
   final String metrics;
+  final List<PlatformTunnelStatus> platformTunnels;
   final BuildIdentity? guiBuild;
   final BuildIdentity hostBuild;
   final String contractVersion;
@@ -4432,6 +4440,7 @@ class DiagnosticsBundle {
     List<EventRecord>? events,
     List<ChallengeRecord>? challenges,
     String? metrics,
+    List<PlatformTunnelStatus>? platformTunnels,
     BuildIdentity? guiBuild,
     bool clearGuiBuild = false,
     BuildIdentity? hostBuild,
@@ -4442,6 +4451,7 @@ class DiagnosticsBundle {
       events: events ?? this.events,
       challenges: challenges ?? this.challenges,
       metrics: metrics ?? this.metrics,
+      platformTunnels: platformTunnels ?? this.platformTunnels,
       guiBuild: clearGuiBuild ? null : (guiBuild ?? this.guiBuild),
       hostBuild: hostBuild ?? this.hostBuild,
       contractVersion: contractVersion ?? this.contractVersion,
@@ -4456,6 +4466,11 @@ class DiagnosticsBundle {
           .map((challenge) => challenge.toJson())
           .toList(growable: false),
       'metrics': metrics,
+      'platform_tunnels': platformTunnels.isEmpty
+          ? null
+          : platformTunnels
+                .map((status) => status.toJson())
+                .toList(growable: false),
       'gui_build': guiBuild?.toJson(),
       'host_build': hostBuild.toJson(),
       'contract_version': contractVersion.isEmpty ? null : contractVersion,

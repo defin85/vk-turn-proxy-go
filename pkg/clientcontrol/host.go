@@ -602,7 +602,10 @@ func (h *Host) PlatformTunnelStatuses() []PlatformTunnelStatus {
 	now := h.now().UTC()
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	return h.platformTunnelStatusesLocked(now)
+}
 
+func (h *Host) platformTunnelStatusesLocked(now time.Time) []PlatformTunnelStatus {
 	statuses := make(map[PlatformTunnelMode]*PlatformTunnelStatus)
 	order := make([]PlatformTunnelMode, 0, len(h.platformTunnels))
 	ensure := func(mode PlatformTunnelMode) *PlatformTunnelStatus {
@@ -1563,6 +1566,7 @@ func (h *Host) MetricsHandler(sessionID string) (http.Handler, error) {
 }
 
 func (h *Host) ExportDiagnostics(sessionID string) (Diagnostics, error) {
+	now := h.now().UTC()
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	managed, ok := h.sessions[sessionID]
@@ -1572,6 +1576,7 @@ func (h *Host) ExportDiagnostics(sessionID string) (Diagnostics, error) {
 	events := append([]Event(nil), managed.events...)
 	challenges := append([]Challenge(nil), managed.challenges...)
 	remoteCatalogs := h.remoteCatalogStatusesLocked()
+	platformTunnels := h.platformTunnelStatusesLocked(now)
 	return Diagnostics{
 		Session:         managed.snapshot,
 		Events:          events,
@@ -1580,6 +1585,7 @@ func (h *Host) ExportDiagnostics(sessionID string) (Diagnostics, error) {
 		HostBuild:       h.build,
 		ContractVersion: ContractVersion,
 		RemoteCatalogs:  remoteCatalogs,
+		PlatformTunnels: platformTunnels,
 	}, nil
 }
 

@@ -2007,6 +2007,16 @@ func TestHostStartsReadySessionAndExportsDiagnostics(t *testing.T) {
 	if finalState.State != SessionStateStopped {
 		t.Fatalf("final state = %q, want stopped", finalState.State)
 	}
+	host.rememberPlatformTunnelResult(
+		PlatformTunnelStartRequest{Mode: PlatformTunnelModeLinuxTun},
+		PlatformTunnelStartResult{
+			Mode:                PlatformTunnelModeLinuxTun,
+			Ready:               false,
+			Stage:               PlatformTunnelStartupStageHostBringup,
+			MissingPrerequisite: PlatformTunnelPrerequisiteHostImplementation,
+			Message:             "linux_tun helper failed during native start",
+		},
+	)
 
 	diagnostics, err := host.ExportDiagnostics(sessionState.ID)
 	if err != nil {
@@ -2023,6 +2033,23 @@ func TestHostStartsReadySessionAndExportsDiagnostics(t *testing.T) {
 	}
 	if diagnostics.HostBuild.Version != "0.1.0" {
 		t.Fatalf("diagnostics host build version = %q, want 0.1.0", diagnostics.HostBuild.Version)
+	}
+	if len(diagnostics.PlatformTunnels) != 1 {
+		t.Fatalf("diagnostics platform_tunnels len = %d, want 1", len(diagnostics.PlatformTunnels))
+	}
+	tunnelStatus := diagnostics.PlatformTunnels[0]
+	if tunnelStatus.Mode != PlatformTunnelModeLinuxTun {
+		t.Fatalf("diagnostics platform tunnel mode = %q, want %q", tunnelStatus.Mode, PlatformTunnelModeLinuxTun)
+	}
+	if tunnelStatus.Stage != PlatformTunnelStartupStageHostBringup {
+		t.Fatalf(
+			"diagnostics platform tunnel stage = %q, want %q",
+			tunnelStatus.Stage,
+			PlatformTunnelStartupStageHostBringup,
+		)
+	}
+	if tunnelStatus.Message != "linux_tun helper failed during native start" {
+		t.Fatalf("diagnostics platform tunnel message = %q", tunnelStatus.Message)
 	}
 }
 

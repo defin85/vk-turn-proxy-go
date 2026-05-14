@@ -523,6 +523,53 @@ void main() {
     expect(restored.builtAt, '2026-04-12T09:30:00Z');
   });
 
+  test('diagnostics bundle preserves platform tunnel stage details', () {
+    final bundle = DiagnosticsBundle.fromJson(<String, dynamic>{
+      'session': <String, dynamic>{
+        'id': 'session-1',
+        'profile': <String, dynamic>{},
+        'state': 'ready',
+        'started_at': '2026-04-07T10:00:00Z',
+        'updated_at': '2026-04-07T10:00:01Z',
+      },
+      'events': <Map<String, dynamic>>[],
+      'challenges': <Map<String, dynamic>>[],
+      'metrics': 'vk_turn_proxy_runtime_session_starts_total 1',
+      'platform_tunnels': <Map<String, dynamic>>[
+        <String, dynamic>{
+          'mode': 'linux_tun',
+          'state': 'failed',
+          'ready': false,
+          'stage': 'host_bringup',
+          'missing_prerequisite': 'host_implementation',
+          'message': 'linux_tun helper failed during native start',
+          'updated_at': '2026-04-07T10:00:02Z',
+        },
+      ],
+    });
+
+    expect(bundle.platformTunnels, hasLength(1));
+    expect(bundle.platformTunnels.single.mode, PlatformTunnelMode.linuxTun);
+    expect(
+      bundle.platformTunnels.single.stage,
+      PlatformTunnelStartupStage.hostBringup,
+    );
+    expect(
+      bundle.toJson()['platform_tunnels'],
+      isA<List<dynamic>>()
+          .having(
+            (value) => (value.single as Map<String, dynamic>)['stage'],
+            'stage',
+            'host_bringup',
+          )
+          .having(
+            (value) => (value.single as Map<String, dynamic>)['message'],
+            'message',
+            'linux_tun helper failed during native start',
+          ),
+    );
+  });
+
   test('runtime execution plans round-trip through json', () {
     const plan = RuntimeExecutionPlan(
       accessMethod: RuntimeAccessMethod.turnCredentials,

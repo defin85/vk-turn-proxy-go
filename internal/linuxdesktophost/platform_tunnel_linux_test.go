@@ -74,6 +74,41 @@ func TestLinuxTunPackagedTargetGateKeepsUnsupportedTargetsClosed(t *testing.T) {
 	}
 }
 
+func TestDefaultLinuxTunPrerequisiteCheckAllowsPackagedUserSpaceHost(t *testing.T) {
+	t.Setenv(linuxTunPackagedTargetEnv, linuxTunPackagedTargetUbuntu)
+	previousUbuntuHostCheck := linuxTunUbuntuHostCheck
+	previousDeviceCheck := linuxTunDeviceCheck
+	previousIPRouteCheck := linuxTunIPRouteCheck
+	linuxTunUbuntuHostCheck = func() (bool, string) {
+		return true, ""
+	}
+	linuxTunDeviceCheck = func() error {
+		return nil
+	}
+	linuxTunIPRouteCheck = func() error {
+		return nil
+	}
+	t.Cleanup(func() {
+		linuxTunUbuntuHostCheck = previousUbuntuHostCheck
+		linuxTunDeviceCheck = previousDeviceCheck
+		linuxTunIPRouteCheck = previousIPRouteCheck
+	})
+
+	build := clientcontrol.BuildIdentity{Target: "linux/amd64"}
+	if failure := defaultLinuxTunPrerequisiteCheck(build); failure != nil {
+		t.Fatalf("defaultLinuxTunPrerequisiteCheck() = %v, want nil for user-space packaged host prerequisites", failure)
+	}
+	capability := currentLinuxTunCapability(build)
+	if !capability.Available {
+		t.Fatalf("currentLinuxTunCapability().Available = false, want true: %+v", capability)
+	}
+	for _, prerequisite := range capability.SatisfiedPrerequisites {
+		if prerequisite == clientcontrol.PlatformTunnelPrerequisitePermission {
+			t.Fatalf("satisfied_prerequisites = %v, want permission excluded until startup", capability.SatisfiedPrerequisites)
+		}
+	}
+}
+
 func TestLinuxTunLifecycleConcreteReadyPathUsesHostPrimitives(t *testing.T) {
 	ctx := context.Background()
 	resolvConfPath := filepath.Join(t.TempDir(), "resolv.conf")

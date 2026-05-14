@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
@@ -267,6 +268,44 @@ func TestResolveBrowserPathWithWindowsUsesPATHCandidates(t *testing.T) {
 	}
 	if !slices.Contains(lookedUp, "chrome.exe") || !slices.Contains(lookedUp, "msedge.exe") {
 		t.Fatalf("resolveBrowserPathWith() looked up %#v, want chrome.exe and msedge.exe", lookedUp)
+	}
+}
+
+func TestResolveBrowserPathWithLinuxSkipsSnapChromiumWrappers(t *testing.T) {
+	tempDir := t.TempDir()
+	snapChromium := filepath.Join(tempDir, "chromium")
+	if err := os.WriteFile(
+		snapChromium,
+		[]byte("#!/bin/sh\nexec /usr/bin/snap run chromium \"$@\"\n"),
+		0o755,
+	); err != nil {
+		t.Fatal(err)
+	}
+	googleChrome := filepath.Join(tempDir, "google-chrome-stable")
+	if err := os.WriteFile(googleChrome, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	path, err := resolveBrowserPathWith("linux", func(string) string {
+		return ""
+	}, func(name string) (string, error) {
+		switch name {
+		case "chromium", "chromium-browser":
+			return snapChromium, nil
+		case "google-chrome-stable":
+			return googleChrome, nil
+		default:
+			return "", exec.ErrNotFound
+		}
+	}, func(string) bool {
+		t.Fatal("pathExists should not be called when browser is found in PATH")
+		return false
+	})
+	if err != nil {
+		t.Fatalf("resolveBrowserPathWith() error = %v", err)
+	}
+	if path != googleChrome {
+		t.Fatalf("resolveBrowserPathWith() path = %q, want %q", path, googleChrome)
 	}
 }
 

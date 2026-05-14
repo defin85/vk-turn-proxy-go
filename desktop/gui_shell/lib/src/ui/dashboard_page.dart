@@ -1568,6 +1568,7 @@ class _VPNTransportProfilesWorkbenchSurface extends StatelessWidget {
   Future<void> _showPortableImportPreview(
     BuildContext context,
     String payload,
+    PlatformTunnelMode mode,
   ) async {
     String? errorText;
     while (true) {
@@ -1613,6 +1614,7 @@ class _VPNTransportProfilesWorkbenchSurface extends StatelessWidget {
             ? () => controller.confirmPortableVPNTransportProfileImport(
                 envelope: payload,
                 passphrase: passphrase,
+                selectForStartupMode: mode,
               )
             : null,
       );
@@ -1620,7 +1622,10 @@ class _VPNTransportProfilesWorkbenchSurface extends StatelessWidget {
     }
   }
 
-  Future<void> _importPortable(BuildContext context) async {
+  Future<void> _importPortable(
+    BuildContext context,
+    PlatformTunnelMode mode,
+  ) async {
     final source = await showPortableTransportProfileImportSourceDialog(
       context: context,
     );
@@ -1643,7 +1648,7 @@ class _VPNTransportProfilesWorkbenchSurface extends StatelessWidget {
     if (payload == null || payload.trim().isEmpty || !context.mounted) {
       return;
     }
-    await _showPortableImportPreview(context, payload.trim());
+    await _showPortableImportPreview(context, payload.trim(), mode);
   }
 
   @override
@@ -1744,7 +1749,7 @@ class _VPNTransportProfilesWorkbenchSurface extends StatelessWidget {
               : null,
           onImportPortable:
               controller.canImportPortableVPNTransportProfileForMode(activeMode)
-              ? () => _importPortable(context)
+              ? () => _importPortable(context, activeMode)
               : null,
           onEdit: (TransportProfileStatus profile) =>
               onEdit(activeMode, profile),

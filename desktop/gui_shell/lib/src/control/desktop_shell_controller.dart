@@ -1686,8 +1686,10 @@ class DesktopShellController extends ChangeNotifier {
   Future<TransportProfileStatus?> confirmPortableVPNTransportProfileImport({
     required String envelope,
     required String passphrase,
+    PlatformTunnelMode? selectForStartupMode,
   }) async {
     TransportProfileStatus? imported;
+    var selectedForStartup = false;
     await _runMutation(() async {
       final capability = portableTransportProfileTransferCapability;
       if (capability == null || capability.importPaths.isEmpty) {
@@ -1704,13 +1706,41 @@ class DesktopShellController extends ChangeNotifier {
           passphrase: passphrase,
         ),
       );
+      if (selectForStartupMode != null) {
+        selectedForStartup = await _selectImportedVPNTransportProfileForMode(
+          selectForStartupMode,
+          imported!,
+        );
+      }
       await _refreshHostInfo();
       await refresh();
       notice =
-          'Imported portable VPN transport profile '
+          '${selectedForStartup ? 'Imported and selected' : 'Imported'} portable VPN transport profile '
           '${_portableTransportProfileDisplayLabel(imported!.displayName, imported!.kind)}.';
     });
     return imported;
+  }
+
+  Future<bool> _selectImportedVPNTransportProfileForMode(
+    PlatformTunnelMode mode,
+    TransportProfileStatus profile,
+  ) async {
+    final plan = vpnTransportProfileExecutionPlanForMode(mode);
+    if (plan == null) {
+      return false;
+    }
+    if (!_transportProfileSelectableForPlan(
+      profile,
+      plan,
+      vpnTransportProfileRequiredKindsForMode(mode),
+    )) {
+      return false;
+    }
+    await api.selectTransportProfileForStartup(
+      profile.id,
+      TransportProfileSelectForStartupRequest(plan: plan),
+    );
+    return true;
   }
 
   Future<void> startPlatformTunnel(PlatformTunnelMode mode) async {
@@ -2202,8 +2232,11 @@ class DesktopShellController extends ChangeNotifier {
     if (!_platformTunnelModeRequiresResolution(mode)) {
       return null;
     }
-    final resolutionId = selectedResolutionId?.trim() ?? '';
-    return resolutionId.isEmpty ? null : resolutionId;
+    final resolution = _selectedResolutionRecord();
+    if (resolution?.state != ResolutionState.resolved) {
+      return null;
+    }
+    return resolution!.id;
   }
 
   RuntimeDefaults? _platformTunnelRuntimeDefaultsFor(PlatformTunnelMode mode) {
@@ -2602,6 +2635,29 @@ class DesktopShellController extends ChangeNotifier {
         left.carrierFamily == right.carrierFamily &&
         left.engineFamily == right.engineFamily &&
         left.hostAdapter == right.hostAdapter;
+  }
+
+  bool _transportProfileSelectableForPlan(
+    TransportProfileStatus profile,
+    RuntimeExecutionPlan plan,
+    List<TransportProfileKind> requiredKinds,
+  ) {
+    if (!profile.actions.contains(
+      TransportProfileLifecycleAction.selectForStartup,
+    )) {
+      return false;
+    }
+    if (requiredKinds.isNotEmpty && !requiredKinds.contains(profile.kind)) {
+      return false;
+    }
+    if (profile.compatibility.state !=
+        TransportProfileCompatibilityState.compatible) {
+      return false;
+    }
+    final compatiblePlans = profile.compatibility.compatibleExecutionPlans;
+    return compatiblePlans.any(
+      (RuntimeExecutionPlan candidate) => _sameExecutionPlan(candidate, plan),
+    );
   }
 
   PlatformTunnelUnderlayRoutePolicy _defaultPlatformTunnelUnderlayRoutePolicy(

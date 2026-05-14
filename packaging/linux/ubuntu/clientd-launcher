@@ -2,20 +2,13 @@
 set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WRAPPER="${APP_DIR}/libexec/relaydock-clientd-linux-tun"
+CLIENTD="${APP_DIR}/libexec/clientd"
 
-if [[ ! -x "${WRAPPER}" ]]; then
-  echo "RelayDock Linux TUN wrapper not found: ${WRAPPER}" >&2
+if [[ ! -x "${CLIENTD}" ]]; then
+  echo "RelayDock clientd binary not found: ${CLIENTD}" >&2
   exit 1
 fi
 
-if [[ "$(id -u)" -eq 0 ]]; then
-  exec "${WRAPPER}" "$@"
-fi
-
-if ! command -v pkexec >/dev/null 2>&1; then
-  echo "pkexec is required to start the packaged RelayDock Linux TUN host." >&2
-  exit 1
-fi
-
-exec pkexec "${WRAPPER}" "$@"
+exec env \
+  VKTP_LINUX_PACKAGED_TARGET=ubuntu \
+  "${CLIENTD}" "$@"

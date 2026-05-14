@@ -1395,6 +1395,7 @@ class _VPNTransportProfileManagerPage extends StatelessWidget {
   Future<void> _showPortableImportPreview(
     BuildContext context,
     String payload,
+    PlatformTunnelMode mode,
   ) async {
     final copy = context.shellText;
     String? errorText;
@@ -1440,6 +1441,7 @@ class _VPNTransportProfileManagerPage extends StatelessWidget {
             ? () => controller.confirmPortableVPNTransportProfileImport(
                 envelope: payload,
                 passphrase: passphrase,
+                selectForStartupMode: mode,
               )
             : null,
       );
@@ -1457,7 +1459,8 @@ class _VPNTransportProfileManagerPage extends StatelessWidget {
     String? payload;
     switch (source) {
       case PortableTransportProfileImportSource.file:
-        payload = await controller.openPortableVPNTransportProfileEnvelopeText();
+        payload = await controller
+            .openPortableVPNTransportProfileEnvelopeText();
       case PortableTransportProfileImportSource.paste:
         if (!context.mounted) {
           return;
@@ -1474,7 +1477,7 @@ class _VPNTransportProfileManagerPage extends StatelessWidget {
     if (payload == null || payload.trim().isEmpty || !context.mounted) {
       return;
     }
-    await _showPortableImportPreview(context, payload.trim());
+    await _showPortableImportPreview(context, payload.trim(), mode);
   }
 
   @override

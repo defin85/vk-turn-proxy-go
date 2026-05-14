@@ -2,6 +2,8 @@ package linuxdesktophost
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -24,6 +26,60 @@ type LinuxTunHelperStartup struct {
 type LinuxTunHelper interface {
 	Start(context.Context, LinuxTunHelperStartup) error
 	Cleanup(context.Context) error
+}
+
+type LinuxTunNativeStartRequest struct {
+	AttemptID        string
+	AttemptNonce     string
+	Mode             clientcontrol.PlatformTunnelMode
+	ExecutionPlan    clientcontrol.RuntimeExecutionPlan
+	Lease            clientcontrol.WireGuardTurnExecutionLease
+	PolicyDirectives LinuxNativePolicyDirectives
+}
+
+type LinuxTunNativeStartResult struct {
+	UnderlayRoutePolicy clientcontrol.PlatformTunnelUnderlayRoutePolicy
+	UnderlayExclusions  []string
+	Dataplane           *clientcontrol.PlatformTunnelDataplaneEvidence
+}
+
+type LinuxTunNativeCleanupRequest struct {
+	AttemptID    string
+	AttemptNonce string
+	Mode         clientcontrol.PlatformTunnelMode
+}
+
+type LinuxTunNativeClient interface {
+	Start(context.Context, LinuxTunNativeStartRequest) (LinuxTunNativeStartResult, error)
+	Cleanup(context.Context, LinuxTunNativeCleanupRequest) error
+}
+
+type LinuxTunNativeFailureKind string
+
+const (
+	LinuxTunNativeFailurePermissionDenied LinuxTunNativeFailureKind = "permission_denied"
+	LinuxTunNativeFailureMalformedPayload LinuxTunNativeFailureKind = "malformed_payload"
+	LinuxTunNativeFailureHelperExit       LinuxTunNativeFailureKind = "helper_exit"
+	LinuxTunNativeFailureNativeStart      LinuxTunNativeFailureKind = "native_start"
+	LinuxTunNativeFailureRouteValidate    LinuxTunNativeFailureKind = "route_validate"
+	LinuxTunNativeFailureRuntimeAttach    LinuxTunNativeFailureKind = "runtime_attach"
+	LinuxTunNativeFailureDataplane        LinuxTunNativeFailureKind = "dataplane"
+	LinuxTunNativeFailureCleanup          LinuxTunNativeFailureKind = "cleanup"
+	LinuxTunNativeFailureStaleState       LinuxTunNativeFailureKind = "stale_native_state"
+)
+
+type LinuxTunNativeFailure struct {
+	Kind         LinuxTunNativeFailureKind
+	Message      string
+	Stage        clientcontrol.PlatformTunnelStartupStage
+	Prerequisite clientcontrol.PlatformTunnelPrerequisite
+}
+
+func (e *LinuxTunNativeFailure) Error() string {
+	if e == nil {
+		return ""
+	}
+	return strings.TrimSpace(e.Message)
 }
 
 type LinuxTunLifecycle interface {
@@ -85,15 +141,29 @@ const (
 
 type linuxTunController struct {
 	capability clientcontrol.PlatformTunnelCapability
-	lifecycle  LinuxTunLifecycle
+	native     LinuxTunNativeClient
 
-	mu      sync.Mutex
-	leaseFn linuxTunLeaseProvider
+	mu            sync.Mutex
+	leaseFn       linuxTunLeaseProvider
+	attemptMu     sync.Mutex
+	attemptSeq    uint64
+	activeAttempt linuxTunNativeAttempt
 }
 
 func newLinuxTunController(
 	capability clientcontrol.PlatformTunnelCapability,
 	lifecycle LinuxTunLifecycle,
+) *linuxTunController {
+	var native LinuxTunNativeClient
+	if lifecycle != nil {
+		native = linuxTunLifecycleNativeClient{lifecycle: lifecycle}
+	}
+	return newLinuxTunControllerWithNativeClient(capability, native)
+}
+
+func newLinuxTunControllerWithNativeClient(
+	capability clientcontrol.PlatformTunnelCapability,
+	native LinuxTunNativeClient,
 ) *linuxTunController {
 	normalized := capability
 	if normalized.Mode == "" {
@@ -116,7 +186,7 @@ func newLinuxTunController(
 	}
 	return &linuxTunController{
 		capability: normalized,
-		lifecycle:  lifecycle,
+		native:     native,
 	}
 }
 
@@ -133,7 +203,7 @@ func currentLinuxTunCapability(build clientcontrol.BuildIdentity) clientcontrol.
 			Message:             failure.Error(),
 		}
 	}
-	return supportedLinuxTunCapability("packaged Ubuntu Linux host owns linux_tun startup and privilege mediation")
+	return supportedLinuxTunCapability("packaged Ubuntu Linux host can negotiate linux_tun; privilege is acquired during tunnel startup")
 }
 
 func unavailableLinuxTunCapability(
@@ -164,7 +234,6 @@ func supportedLinuxTunCapability(message string) clientcontrol.PlatformTunnelCap
 		Mode:      clientcontrol.PlatformTunnelModeLinuxTun,
 		Available: true,
 		SatisfiedPrerequisites: []clientcontrol.PlatformTunnelPrerequisite{
-			clientcontrol.PlatformTunnelPrerequisitePermission,
 			clientcontrol.PlatformTunnelPrerequisiteRouteExclusion,
 			clientcontrol.PlatformTunnelPrerequisiteDNSBypass,
 		},
@@ -232,7 +301,7 @@ func (c *linuxTunController) Start(
 			firstNonEmpty(strings.TrimSpace(capability.Message), unavailableExecutionPlanMessage(capability, selectedPlan)),
 		), nil
 	}
-	if c.lifecycle == nil {
+	if c.native == nil {
 		return capabilityCheckFailure(
 			req.Mode,
 			selectedPlan,
@@ -253,16 +322,6 @@ func (c *linuxTunController) Start(
 				req.Mode,
 			),
 		), nil
-	}
-	if err := c.lifecycle.AcquirePermission(ctx, req); err != nil {
-		return startFailureResult(
-			req.Mode,
-			selectedPlan,
-			clientcontrol.PlatformTunnelStartupStagePermissionAcquire,
-			clientcontrol.PlatformTunnelPrerequisitePermission,
-			req.UnderlayRoutePolicy,
-			err.Error(),
-		)
 	}
 	leaseFn := c.wireGuardTurnLeaseProvider()
 	if leaseFn == nil {
@@ -287,48 +346,48 @@ func (c *linuxTunController) Start(
 			err.Error(),
 		)
 	}
-	routeState, err := c.lifecycle.ValidateRoutePolicy(ctx, req, selectedPlan, lease)
-	if err != nil {
+	attempt, ok := c.beginNativeAttempt()
+	if !ok {
 		return startFailureResult(
 			req.Mode,
 			selectedPlan,
-			clientcontrol.PlatformTunnelStartupStageRouteValidate,
-			routePolicyPrerequisite(err),
-			req.UnderlayRoutePolicy,
-			err.Error(),
-		)
-	}
-	if err := c.lifecycle.BringupHost(ctx, req, selectedPlan, lease, routeState); err != nil {
-		return startFailureResult(
-			req.Mode,
-			selectedPlan,
-			clientcontrol.PlatformTunnelStartupStageHostBringup,
+			clientcontrol.PlatformTunnelStartupStageCapabilityCheck,
 			clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
 			req.UnderlayRoutePolicy,
-			err.Error(),
+			"linux_tun native startup already has an active attempt",
 		)
 	}
-	if err := c.lifecycle.AttachRuntime(ctx, req, selectedPlan, lease, routeState); err != nil {
-		return startFailureResult(
-			req.Mode,
-			selectedPlan,
-			clientcontrol.PlatformTunnelStartupStageRuntimeAttach,
-			clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
-			req.UnderlayRoutePolicy,
-			err.Error(),
-		)
-	}
-	dataplane, err := c.lifecycle.VerifyDataplane(ctx, req, selectedPlan, lease, routeState)
+	nativeResult, err := c.native.Start(ctx, LinuxTunNativeStartRequest{
+		AttemptID:     attempt.id,
+		AttemptNonce:  attempt.nonce,
+		Mode:          req.Mode,
+		ExecutionPlan: *selectedPlan,
+		Lease:         cloneLinuxTunNativeLease(lease),
+		PolicyDirectives: LinuxNativePolicyDirectives{
+			UnderlayRoutePolicy: req.UnderlayRoutePolicy,
+			UnderlayExclusions:  helperUnderlayExclusions(lease),
+			DNSBypassRequired:   true,
+		},
+	})
 	if err != nil {
+		stage, prerequisite := nativeStartFailureClassification(err)
+		if !linuxTunStartupStageNeedsCleanup(stage) {
+			c.endNativeAttempt(attempt.id)
+		}
 		return startFailureResult(
 			req.Mode,
 			selectedPlan,
-			clientcontrol.PlatformTunnelStartupStageDataplaneVerify,
-			clientcontrol.PlatformTunnelPrerequisiteDataplaneEvidence,
+			stage,
+			prerequisite,
 			req.UnderlayRoutePolicy,
 			err.Error(),
 		)
 	}
+	underlayRoutePolicy := nativeResult.UnderlayRoutePolicy
+	if strings.TrimSpace(string(underlayRoutePolicy)) == "" {
+		underlayRoutePolicy = req.UnderlayRoutePolicy
+	}
+	dataplane := nativeResult.Dataplane
 	if dataplane == nil ||
 		!dataplane.HostAttached ||
 		!dataplane.WireGuardHandshakeFresh ||
@@ -349,8 +408,8 @@ func (c *linuxTunController) Start(
 		Dataplane:               dataplane,
 		Ready:                   true,
 		Stage:                   clientcontrol.PlatformTunnelStartupStageDataplaneVerify,
-		UnderlayRoutePolicy:     req.UnderlayRoutePolicy,
-		UnderlayRouteExclusions: append([]string(nil), routeState.Exclusions...),
+		UnderlayRoutePolicy:     underlayRoutePolicy,
+		UnderlayRouteExclusions: append([]string(nil), nativeResult.UnderlayExclusions...),
 	}, nil
 }
 
@@ -365,15 +424,21 @@ func (c *linuxTunController) Stop(
 			req.Mode,
 		)
 	}
-	if c.lifecycle == nil {
+	if c.native == nil {
 		return clientcontrol.PlatformTunnelStopResult{}, fmt.Errorf(
 			"linux desktop host does not implement stop for %s",
 			req.Mode,
 		)
 	}
-	if err := c.lifecycle.Cleanup(ctx); err != nil {
+	attempt := c.activeNativeAttempt()
+	if err := c.native.Cleanup(ctx, LinuxTunNativeCleanupRequest{
+		AttemptID:    attempt.id,
+		AttemptNonce: attempt.nonce,
+		Mode:         req.Mode,
+	}); err != nil {
 		return clientcontrol.PlatformTunnelStopResult{}, err
 	}
+	c.endNativeAttempt(attempt.id)
 	return clientcontrol.PlatformTunnelStopResult{
 		Mode:    req.Mode,
 		Stopped: true,
@@ -408,6 +473,240 @@ func helperUnderlayExclusions(lease *clientcontrol.WireGuardTurnExecutionLease) 
 		return nil
 	}
 	return []string{endpoint}
+}
+
+type linuxTunNativeAttempt struct {
+	id    string
+	nonce string
+}
+
+func (c *linuxTunController) beginNativeAttempt() (linuxTunNativeAttempt, bool) {
+	if c == nil {
+		return linuxTunNativeAttempt{}, false
+	}
+	c.attemptMu.Lock()
+	defer c.attemptMu.Unlock()
+	if strings.TrimSpace(c.activeAttempt.id) != "" {
+		return linuxTunNativeAttempt{}, false
+	}
+	c.attemptSeq++
+	attempt := linuxTunNativeAttempt{
+		id:    fmt.Sprintf("linux-tun-%d", c.attemptSeq),
+		nonce: randomLinuxTunAttemptNonce(c.attemptSeq),
+	}
+	c.activeAttempt = attempt
+	return attempt, true
+}
+
+func (c *linuxTunController) activeNativeAttempt() linuxTunNativeAttempt {
+	if c == nil {
+		return linuxTunNativeAttempt{}
+	}
+	c.attemptMu.Lock()
+	defer c.attemptMu.Unlock()
+	return c.activeAttempt
+}
+
+func (c *linuxTunController) endNativeAttempt(attemptID string) {
+	if c == nil || strings.TrimSpace(attemptID) == "" {
+		return
+	}
+	c.attemptMu.Lock()
+	defer c.attemptMu.Unlock()
+	if c.activeAttempt.id == attemptID {
+		c.activeAttempt = linuxTunNativeAttempt{}
+	}
+}
+
+func randomLinuxTunAttemptNonce(seq uint64) string {
+	var buf [16]byte
+	if _, err := rand.Read(buf[:]); err == nil {
+		return hex.EncodeToString(buf[:])
+	}
+	return fmt.Sprintf("linux-tun-nonce-%d", seq)
+}
+
+type linuxTunLifecycleNativeClient struct {
+	lifecycle LinuxTunLifecycle
+}
+
+func (c linuxTunLifecycleNativeClient) Start(
+	ctx context.Context,
+	req LinuxTunNativeStartRequest,
+) (LinuxTunNativeStartResult, error) {
+	if c.lifecycle == nil {
+		return LinuxTunNativeStartResult{}, &linuxTunNativeStartError{
+			stage:        clientcontrol.PlatformTunnelStartupStageHostBringup,
+			prerequisite: clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+			message:      "linux_tun native lifecycle is not configured",
+		}
+	}
+	startReq := clientcontrol.PlatformTunnelStartRequest{
+		Mode:                req.Mode,
+		UnderlayRoutePolicy: req.PolicyDirectives.UnderlayRoutePolicy,
+	}
+	plan := req.ExecutionPlan
+	lease := req.Lease
+	if err := c.lifecycle.AcquirePermission(ctx, startReq); err != nil {
+		return LinuxTunNativeStartResult{}, &linuxTunNativeStartError{
+			stage:        clientcontrol.PlatformTunnelStartupStagePermissionAcquire,
+			prerequisite: clientcontrol.PlatformTunnelPrerequisitePermission,
+			message:      err.Error(),
+		}
+	}
+	routeState, err := c.lifecycle.ValidateRoutePolicy(ctx, startReq, &plan, &lease)
+	if err != nil {
+		return LinuxTunNativeStartResult{}, &linuxTunNativeStartError{
+			stage:        clientcontrol.PlatformTunnelStartupStageRouteValidate,
+			prerequisite: routePolicyPrerequisite(err),
+			message:      err.Error(),
+		}
+	}
+	if err := c.lifecycle.BringupHost(ctx, startReq, &plan, &lease, routeState); err != nil {
+		return LinuxTunNativeStartResult{}, &linuxTunNativeStartError{
+			stage:        clientcontrol.PlatformTunnelStartupStageHostBringup,
+			prerequisite: clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+			message:      err.Error(),
+		}
+	}
+	if err := c.lifecycle.AttachRuntime(ctx, startReq, &plan, &lease, routeState); err != nil {
+		return LinuxTunNativeStartResult{}, &linuxTunNativeStartError{
+			stage:        clientcontrol.PlatformTunnelStartupStageRuntimeAttach,
+			prerequisite: clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+			message:      err.Error(),
+		}
+	}
+	dataplane, err := c.lifecycle.VerifyDataplane(ctx, startReq, &plan, &lease, routeState)
+	if err != nil {
+		return LinuxTunNativeStartResult{}, &linuxTunNativeStartError{
+			stage:        clientcontrol.PlatformTunnelStartupStageDataplaneVerify,
+			prerequisite: clientcontrol.PlatformTunnelPrerequisiteDataplaneEvidence,
+			message:      err.Error(),
+		}
+	}
+	result := LinuxTunNativeStartResult{
+		UnderlayRoutePolicy: req.PolicyDirectives.UnderlayRoutePolicy,
+		Dataplane:           dataplane,
+	}
+	if routeState != nil {
+		result.UnderlayRoutePolicy = routeState.UnderlayRoutePolicy
+		result.UnderlayExclusions = append([]string(nil), routeState.Exclusions...)
+	}
+	return result, nil
+}
+
+func (c linuxTunLifecycleNativeClient) Cleanup(ctx context.Context, _ LinuxTunNativeCleanupRequest) error {
+	if c.lifecycle == nil {
+		return nil
+	}
+	return c.lifecycle.Cleanup(ctx)
+}
+
+type linuxTunNativeStartError struct {
+	stage        clientcontrol.PlatformTunnelStartupStage
+	prerequisite clientcontrol.PlatformTunnelPrerequisite
+	message      string
+}
+
+func (e *linuxTunNativeStartError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return strings.TrimSpace(e.message)
+}
+
+func nativeStartFailureClassification(err error) (clientcontrol.PlatformTunnelStartupStage, clientcontrol.PlatformTunnelPrerequisite) {
+	var nativeFailure *LinuxTunNativeFailure
+	if errors.As(err, &nativeFailure) {
+		if strings.TrimSpace(string(nativeFailure.Stage)) != "" ||
+			strings.TrimSpace(string(nativeFailure.Prerequisite)) != "" {
+			stage := nativeFailure.Stage
+			if strings.TrimSpace(string(stage)) == "" {
+				stage = clientcontrol.PlatformTunnelStartupStageHostBringup
+			}
+			prerequisite := nativeFailure.Prerequisite
+			if strings.TrimSpace(string(prerequisite)) == "" {
+				prerequisite = clientcontrol.PlatformTunnelPrerequisiteHostImplementation
+			}
+			return stage, prerequisite
+		}
+		return nativeFailureKindClassification(nativeFailure.Kind)
+	}
+	var nativeErr *linuxTunNativeStartError
+	if errors.As(err, &nativeErr) {
+		stage := nativeErr.stage
+		if strings.TrimSpace(string(stage)) == "" {
+			stage = clientcontrol.PlatformTunnelStartupStageHostBringup
+		}
+		prerequisite := nativeErr.prerequisite
+		if strings.TrimSpace(string(prerequisite)) == "" {
+			prerequisite = clientcontrol.PlatformTunnelPrerequisiteHostImplementation
+		}
+		return stage, prerequisite
+	}
+	return clientcontrol.PlatformTunnelStartupStageHostBringup,
+		clientcontrol.PlatformTunnelPrerequisiteHostImplementation
+}
+
+func nativeFailureKindClassification(kind LinuxTunNativeFailureKind) (clientcontrol.PlatformTunnelStartupStage, clientcontrol.PlatformTunnelPrerequisite) {
+	switch kind {
+	case LinuxTunNativeFailurePermissionDenied:
+		return clientcontrol.PlatformTunnelStartupStagePermissionAcquire,
+			clientcontrol.PlatformTunnelPrerequisitePermission
+	case LinuxTunNativeFailureRouteValidate:
+		return clientcontrol.PlatformTunnelStartupStageRouteValidate,
+			clientcontrol.PlatformTunnelPrerequisiteRouteExclusion
+	case LinuxTunNativeFailureRuntimeAttach:
+		return clientcontrol.PlatformTunnelStartupStageRuntimeAttach,
+			clientcontrol.PlatformTunnelPrerequisiteHostImplementation
+	case LinuxTunNativeFailureDataplane:
+		return clientcontrol.PlatformTunnelStartupStageDataplaneVerify,
+			clientcontrol.PlatformTunnelPrerequisiteDataplaneEvidence
+	case LinuxTunNativeFailureMalformedPayload,
+		LinuxTunNativeFailureHelperExit,
+		LinuxTunNativeFailureNativeStart,
+		LinuxTunNativeFailureStaleState,
+		LinuxTunNativeFailureCleanup:
+		return clientcontrol.PlatformTunnelStartupStageHostBringup,
+			clientcontrol.PlatformTunnelPrerequisiteHostImplementation
+	default:
+		return clientcontrol.PlatformTunnelStartupStageHostBringup,
+			clientcontrol.PlatformTunnelPrerequisiteHostImplementation
+	}
+}
+
+func linuxTunStartupStageNeedsCleanup(stage clientcontrol.PlatformTunnelStartupStage) bool {
+	switch stage {
+	case clientcontrol.PlatformTunnelStartupStageRouteValidate,
+		clientcontrol.PlatformTunnelStartupStageHostBringup,
+		clientcontrol.PlatformTunnelStartupStageRuntimeAttach,
+		clientcontrol.PlatformTunnelStartupStageDataplaneVerify:
+		return true
+	default:
+		return false
+	}
+}
+
+func cloneLinuxTunNativeLease(lease *clientcontrol.WireGuardTurnExecutionLease) clientcontrol.WireGuardTurnExecutionLease {
+	if lease == nil {
+		return clientcontrol.WireGuardTurnExecutionLease{}
+	}
+	clone := *lease
+	clone.ResolutionID = ""
+	if len(lease.ClientAddresses) > 0 {
+		clone.ClientAddresses = append([]string(nil), lease.ClientAddresses...)
+	}
+	if len(lease.AllowedIPs) > 0 {
+		clone.AllowedIPs = append([]string(nil), lease.AllowedIPs...)
+	}
+	if len(lease.DNSServers) > 0 {
+		clone.DNSServers = append([]string(nil), lease.DNSServers...)
+	}
+	if lease.ExpiresAt != nil {
+		expiresAt := lease.ExpiresAt.UTC()
+		clone.ExpiresAt = &expiresAt
+	}
+	return clone
 }
 
 func startFailureResult(

@@ -14,7 +14,10 @@ import (
 	"github.com/defin85/vk-turn-proxy-go/pkg/clientcontrol"
 )
 
-const linuxTransportProfileStoreEnv = "VKTP_LINUX_TRANSPORT_PROFILE_STORE"
+const (
+	linuxTransportProfileStoreEnv            = "VKTP_LINUX_TRANSPORT_PROFILE_STORE"
+	linuxLegacyRootTransportProfileStorePath = "/var/lib/relaydock/vpn-transport-profiles/store.json"
+)
 
 var (
 	errMissingExecutionPlan   = errors.New("linux_tun startup requires an execution plan")
@@ -27,7 +30,7 @@ func NewClientControlHost(logger *slog.Logger) *clientcontrol.Host {
 		logger = slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	}
 	build := currentBuildIdentity()
-	controller := newLinuxTunController(currentLinuxTunCapability(build), newLinuxTunLifecycleForHost(logger))
+	controller := newLinuxTunControllerWithNativeClient(currentLinuxTunCapability(build), newLinuxTunNativeClientForHost(logger))
 	storePath, storePathErr := detectLinuxTransportProfileStorePath()
 	if storePathErr != nil {
 		logger.Warn(
@@ -36,6 +39,7 @@ func NewClientControlHost(logger *slog.Logger) *clientcontrol.Host {
 			storePathErr,
 		)
 	}
+	warnLegacyLinuxTransportProfileStore(logger, storePath)
 	opts := []clientcontrol.Option{
 		clientcontrol.WithLogger(logger),
 		clientcontrol.WithBuildIdentity(build),
@@ -85,6 +89,35 @@ func detectLinuxTransportProfileStorePath() (string, error) {
 		return "", fmt.Errorf("locate Linux home directory: %w", homeErr)
 	}
 	return filepath.Join(home, ".vk-turn-proxy-go", "vpn-transport-profiles", "store.json"), nil
+}
+
+func warnLegacyLinuxTransportProfileStore(logger *slog.Logger, activeStorePath string) {
+	if logger == nil {
+		return
+	}
+	active := strings.TrimSpace(activeStorePath)
+	if active == linuxLegacyRootTransportProfileStorePath {
+		return
+	}
+	if _, err := os.Stat(linuxLegacyRootTransportProfileStorePath); err == nil {
+		logger.Warn(
+			"legacy root-owned linux transport profile store detected but ignored; import or recreate profiles in the user-space host store",
+			"legacy_store_path",
+			linuxLegacyRootTransportProfileStorePath,
+			"active_store_path",
+			active,
+		)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		logger.Warn(
+			"legacy root-owned linux transport profile store could not be inspected",
+			"legacy_store_path",
+			linuxLegacyRootTransportProfileStorePath,
+			"active_store_path",
+			active,
+			"error",
+			err,
+		)
+	}
 }
 
 func attachLinuxWireGuardTurnLeaseProvider(controller *linuxTunController, host *clientcontrol.Host) {

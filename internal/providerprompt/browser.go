@@ -707,7 +707,7 @@ func resolveBrowserPathWith(
 	}
 	for _, candidate := range browserLookupCandidates(goos) {
 		path, err := lookPath(candidate)
-		if err == nil {
+		if err == nil && browserExecutableSupported(goos, path) {
 			return path, nil
 		}
 	}
@@ -789,6 +789,45 @@ func browserExecutableExists(path string) bool {
 		return false
 	}
 	return !info.IsDir()
+}
+
+func browserExecutableSupported(goos, path string) bool {
+	if goos != "linux" {
+		return true
+	}
+	return !isLinuxSnapBrowserWrapper(path)
+}
+
+func isLinuxSnapBrowserWrapper(path string) bool {
+	clean := filepath.Clean(strings.TrimSpace(path))
+	if clean == "" {
+		return false
+	}
+	if clean == "/usr/bin/snap" || strings.HasPrefix(clean, "/snap/") {
+		return true
+	}
+	switch filepath.Base(clean) {
+	case "chromium", "chromium-browser":
+	default:
+		return false
+	}
+	if target, err := filepath.EvalSymlinks(clean); err == nil {
+		target = filepath.Clean(target)
+		if target == "/usr/bin/snap" || strings.HasPrefix(target, "/snap/") {
+			return true
+		}
+	}
+	file, err := os.Open(clean)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+
+	buf := make([]byte, 4096)
+	n, _ := file.Read(buf)
+	content := strings.ToLower(string(buf[:n]))
+	return strings.Contains(content, "/usr/bin/snap") ||
+		(strings.Contains(content, "snap") && strings.Contains(content, "chromium"))
 }
 
 func chromiumLaunchArgs(userDataDir string, debugPort int) []string {

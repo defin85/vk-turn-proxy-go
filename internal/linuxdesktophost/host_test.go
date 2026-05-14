@@ -86,6 +86,11 @@ func TestNewClientControlHostPublishesSupportedLinuxTunWhenPrerequisitesPass(t *
 	if !supportsLinuxUnderlayRoutePolicy(capability, clientcontrol.PlatformTunnelUnderlayRoutePolicyPreserveActiveLocalNetwork) {
 		t.Fatalf("platform_tunnels[0] does not advertise preserve_active_local_network: %+v", capability)
 	}
+	for _, prerequisite := range capability.SatisfiedPrerequisites {
+		if prerequisite == clientcontrol.PlatformTunnelPrerequisitePermission {
+			t.Fatalf("platform_tunnels[0].satisfied_prerequisites = %v, want permission acquired only during startup", capability.SatisfiedPrerequisites)
+		}
+	}
 	if len(capability.ExecutionPlans) != 1 {
 		t.Fatalf("platform_tunnels[0].execution_plans len = %d, want 1", len(capability.ExecutionPlans))
 	}
@@ -95,6 +100,50 @@ func TestNewClientControlHostPublishesSupportedLinuxTunWhenPrerequisitesPass(t *
 	}
 	if descriptor.TransportProfile == nil {
 		t.Fatal("execution plan transport_profile = nil, want profile prerequisite status")
+	}
+}
+
+func TestNewClientControlHostPackagedUbuntuDoesNotCreateRootLifecycle(t *testing.T) {
+	t.Setenv(linuxTransportProfileStoreEnv, filepath.Join(t.TempDir(), "store.json"))
+	t.Setenv(linuxTunPackagedTargetEnv, linuxTunPackagedTargetUbuntu)
+	t.Setenv(linuxTunHelperPathEnv, "/tmp/relaydock-linux-tun-helper")
+	var lifecycleCreated bool
+	withLinuxTunHostOverrides(t,
+		func(clientcontrol.BuildIdentity) *linuxTunPrerequisiteFailure {
+			return nil
+		},
+		func(*slog.Logger) LinuxTunLifecycle {
+			lifecycleCreated = true
+			return &fakeLinuxTunLifecycle{}
+		},
+	)
+
+	host := NewClientControlHost(nil)
+	info := host.Info()
+
+	if len(info.PlatformTunnels) != 1 || !info.PlatformTunnels[0].Available {
+		t.Fatalf("platform_tunnels = %+v, want available linux_tun", info.PlatformTunnels)
+	}
+	if lifecycleCreated {
+		t.Fatal("NewClientControlHost() created the root Linux TUN lifecycle for packaged Ubuntu")
+	}
+}
+
+func TestDetectLinuxTransportProfileStorePathDefaultsToUserConfigStore(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv(linuxTransportProfileStoreEnv, "")
+	t.Setenv("XDG_CONFIG_HOME", configDir)
+
+	path, err := detectLinuxTransportProfileStorePath()
+	if err != nil {
+		t.Fatalf("detectLinuxTransportProfileStorePath() error = %v", err)
+	}
+	want := filepath.Join(configDir, "vk-turn-proxy-go", "vpn-transport-profiles", "store.json")
+	if path != want {
+		t.Fatalf("detectLinuxTransportProfileStorePath() = %q, want %q", path, want)
+	}
+	if strings.Contains(path, "/var/lib/relaydock") {
+		t.Fatalf("detectLinuxTransportProfileStorePath() = %q, want operator user store", path)
 	}
 }
 
@@ -257,6 +306,631 @@ func TestLinuxTunControllerPermissionDeniedReturnsTypedStartFailure(t *testing.T
 	}
 	if lifecycle.cleanupCalls != 0 {
 		t.Fatalf("cleanupCalls = %d, want 0", lifecycle.cleanupCalls)
+	}
+}
+
+func TestLinuxTunHostPermissionDeniedKeepsLocalHostNegotiable(t *testing.T) {
+	t.Parallel()
+
+	lifecycle := &fakeLinuxTunLifecycle{
+		permissionErr: errors.New("pkexec authorization was denied"),
+	}
+	controller := newLinuxTunController(supportedLinuxTunCapability(""), lifecycle)
+	controller.setWireGuardTurnLeaseProvider(fakeLinuxTunLeaseProvider)
+	host := clientcontrol.New(
+		clientcontrol.WithBuildIdentity(clientcontrol.BuildIdentity{Target: "linux/amd64"}),
+		clientcontrol.WithPlatformTunnelCapabilities([]clientcontrol.PlatformTunnelCapability{controller.Capability()}),
+		clientcontrol.WithPlatformTunnelStarter(controller.Start),
+		clientcontrol.WithPlatformTunnelStopper(controller.Stop),
+		clientcontrol.WithWireGuardTurnMaterializer(func(context.Context, clientcontrol.WireGuardTurnMaterializeRequest) (*clientcontrol.WireGuardTurnExecutionLease, error) {
+			t.Fatal("materializer should not run before permission acquisition succeeds")
+			return nil, nil
+		}),
+	)
+
+	before := host.Info()
+	if len(before.PlatformTunnels) != 1 || !before.PlatformTunnels[0].Available {
+		t.Fatalf("host.Info().PlatformTunnels before start = %+v, want available linux_tun capability", before.PlatformTunnels)
+	}
+	_, err := host.StartPlatformTunnel(context.Background(), clientcontrol.PlatformTunnelStartRequest{
+		Mode:         clientcontrol.PlatformTunnelModeLinuxTun,
+		ResolutionID: "resolution-1",
+		RuntimeDefaults: &clientcontrol.RuntimeDefaults{
+			ListenAddr: "127.0.0.1:7777",
+			PeerAddr:   "relay.example.test:3478",
+		},
+	})
+	if err == nil {
+		t.Fatal("StartPlatformTunnel() error = nil, want typed permission failure")
+	}
+	startErr := new(clientcontrol.PlatformTunnelStartError)
+	if !errors.As(err, &startErr) {
+		t.Fatalf("StartPlatformTunnel() error = %v, want PlatformTunnelStartError", err)
+	}
+	if startErr.Result.Stage != clientcontrol.PlatformTunnelStartupStagePermissionAcquire {
+		t.Fatalf("typed failure stage = %q, want %q", startErr.Result.Stage, clientcontrol.PlatformTunnelStartupStagePermissionAcquire)
+	}
+	if startErr.Result.MissingPrerequisite != clientcontrol.PlatformTunnelPrerequisitePermission {
+		t.Fatalf(
+			"typed failure missing_prerequisite = %q, want %q",
+			startErr.Result.MissingPrerequisite,
+			clientcontrol.PlatformTunnelPrerequisitePermission,
+		)
+	}
+	after := host.Info()
+	if after.ContractVersion != before.ContractVersion {
+		t.Fatalf("host.Info() contract_version after permission failure = %q, want %q", after.ContractVersion, before.ContractVersion)
+	}
+	if len(after.PlatformTunnels) != 1 || !after.PlatformTunnels[0].Available {
+		t.Fatalf("host.Info().PlatformTunnels after permission failure = %+v, want local host still negotiable", after.PlatformTunnels)
+	}
+	if lifecycle.cleanupCalls != 0 {
+		t.Fatalf("cleanupCalls = %d, want 0 before native state exists", lifecycle.cleanupCalls)
+	}
+}
+
+func TestLinuxTunControllerMaterializesLeaseBeforePermissionAcquire(t *testing.T) {
+	t.Parallel()
+
+	var order []string
+	lifecycle := &fakeLinuxTunLifecycle{
+		permissionErr: errors.New("pkexec authorization was denied"),
+		onAcquirePermission: func() {
+			order = append(order, "permission")
+		},
+	}
+	controller := newLinuxTunController(supportedLinuxTunCapability(""), lifecycle)
+	controller.setWireGuardTurnLeaseProvider(func(
+		ctx context.Context,
+		req clientcontrol.PlatformTunnelStartRequest,
+		plan *clientcontrol.RuntimeExecutionPlan,
+	) (*clientcontrol.WireGuardTurnExecutionLease, error) {
+		order = append(order, "lease")
+		if req.ResolutionID != "resolution-1" {
+			t.Fatalf("lease provider resolution_id = %q, want resolution-1", req.ResolutionID)
+		}
+		if plan == nil || plan.HostAdapter != clientcontrol.RuntimeHostAdapterLinuxTun {
+			t.Fatalf("lease provider plan = %+v, want linux_tun host adapter", plan)
+		}
+		return fakeLinuxTunLeaseProvider(ctx, req, plan)
+	})
+
+	_, err := controller.Start(context.Background(), clientcontrol.PlatformTunnelStartRequest{
+		Mode:         clientcontrol.PlatformTunnelModeLinuxTun,
+		ResolutionID: "resolution-1",
+		RuntimeDefaults: &clientcontrol.RuntimeDefaults{
+			ListenAddr: "127.0.0.1:7777",
+			PeerAddr:   "relay.example.test:3478",
+		},
+	})
+
+	if err == nil {
+		t.Fatal("Start() error = nil, want typed permission failure")
+	}
+	startErr := new(clientcontrol.PlatformTunnelStartError)
+	if !errors.As(err, &startErr) {
+		t.Fatalf("Start() error = %v, want PlatformTunnelStartError", err)
+	}
+	if startErr.Result.Stage != clientcontrol.PlatformTunnelStartupStagePermissionAcquire {
+		t.Fatalf("typed failure stage = %q, want %q", startErr.Result.Stage, clientcontrol.PlatformTunnelStartupStagePermissionAcquire)
+	}
+	if got := strings.Join(order, " -> "); got != "lease -> permission" {
+		t.Fatalf("orchestration order = %s, want lease -> permission", got)
+	}
+	if got := strings.Join(lifecycle.calls, " -> "); got != "permission_acquire" {
+		t.Fatalf("lifecycle calls = %s, want only permission_acquire", got)
+	}
+}
+
+func TestLinuxTunControllerPassesMaterializedAttemptToNativeClient(t *testing.T) {
+	t.Parallel()
+
+	var captured LinuxTunNativeStartRequest
+	native := &fakeLinuxTunNativeClient{
+		start: func(_ context.Context, req LinuxTunNativeStartRequest) (LinuxTunNativeStartResult, error) {
+			captured = req
+			return LinuxTunNativeStartResult{
+				UnderlayRoutePolicy: clientcontrol.PlatformTunnelUnderlayRoutePolicyPreserveActiveLocalNetwork,
+				UnderlayExclusions:  []string{"203.0.113.10"},
+				Dataplane: &clientcontrol.PlatformTunnelDataplaneEvidence{
+					HostAttached:                 true,
+					WireGuardHandshakeFresh:      true,
+					WireGuardRxBytesDelta:        2048,
+					WireGuardTxBytesDelta:        1024,
+					BidirectionalTrafficVerified: true,
+				},
+			}, nil
+		},
+	}
+	controller := newLinuxTunControllerWithNativeClient(supportedLinuxTunCapability(""), native)
+	controller.setWireGuardTurnLeaseProvider(func(
+		context.Context,
+		clientcontrol.PlatformTunnelStartRequest,
+		*clientcontrol.RuntimeExecutionPlan,
+	) (*clientcontrol.WireGuardTurnExecutionLease, error) {
+		lease, err := fakeLinuxTunLeaseProvider(context.Background(), clientcontrol.PlatformTunnelStartRequest{}, nil)
+		if err != nil {
+			return nil, err
+		}
+		lease.ResolutionID = "resolution-secret"
+		return lease, nil
+	})
+
+	result, err := controller.Start(context.Background(), clientcontrol.PlatformTunnelStartRequest{
+		Mode:         clientcontrol.PlatformTunnelModeLinuxTun,
+		ResolutionID: "resolution-secret",
+		TransportProfile: &clientcontrol.TransportProfileReference{
+			ProfileID: "profile-secret",
+		},
+		RuntimeDefaults: &clientcontrol.RuntimeDefaults{
+			ListenAddr: "127.0.0.1:7777",
+			PeerAddr:   "relay.example.test:3478",
+		},
+	})
+
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if !result.Ready {
+		t.Fatalf("Start().Ready = false, want true: %+v", result)
+	}
+	if captured.Mode != clientcontrol.PlatformTunnelModeLinuxTun {
+		t.Fatalf("native request mode = %q, want linux_tun", captured.Mode)
+	}
+	if strings.TrimSpace(captured.AttemptID) == "" {
+		t.Fatal("native request attempt_id is empty")
+	}
+	if strings.TrimSpace(captured.AttemptNonce) == "" {
+		t.Fatal("native request attempt_nonce is empty")
+	}
+	if captured.AttemptID == captured.AttemptNonce {
+		t.Fatalf("native request attempt_id and attempt_nonce are equal: %q", captured.AttemptID)
+	}
+	if captured.ExecutionPlan.HostAdapter != clientcontrol.RuntimeHostAdapterLinuxTun {
+		t.Fatalf("native request host_adapter = %q, want linux_tun", captured.ExecutionPlan.HostAdapter)
+	}
+	if captured.Lease.ResolutionID != "" {
+		t.Fatalf("native request lease resolution_id = %q, want omitted host-owned resolution state", captured.Lease.ResolutionID)
+	}
+	if captured.Lease.TURNServerAddress != "203.0.113.10:3478" {
+		t.Fatalf("native request turn server = %q, want materialized lease", captured.Lease.TURNServerAddress)
+	}
+	if captured.PolicyDirectives.UnderlayRoutePolicy != clientcontrol.PlatformTunnelUnderlayRoutePolicyPreserveActiveLocalNetwork {
+		t.Fatalf("native request underlay policy = %q, want preserve_active_local_network", captured.PolicyDirectives.UnderlayRoutePolicy)
+	}
+	if got := strings.Join(captured.PolicyDirectives.UnderlayExclusions, ","); got != "203.0.113.10:3478" {
+		t.Fatalf("native request underlay exclusions = %q, want TURN endpoint exclusion", got)
+	}
+	if !captured.PolicyDirectives.DNSBypassRequired {
+		t.Fatal("native request DNSBypassRequired = false, want true")
+	}
+}
+
+func TestLinuxTunControllerRejectsOverlappingNativeAttempt(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	done := make(chan error, 1)
+	nativeStartCalls := make(chan LinuxTunNativeStartRequest, 2)
+	native := &fakeLinuxTunNativeClient{
+		start: func(_ context.Context, req LinuxTunNativeStartRequest) (LinuxTunNativeStartResult, error) {
+			nativeStartCalls <- req
+			close(started)
+			<-release
+			return LinuxTunNativeStartResult{
+				UnderlayRoutePolicy: clientcontrol.PlatformTunnelUnderlayRoutePolicyPreserveActiveLocalNetwork,
+				UnderlayExclusions:  []string{"203.0.113.10"},
+				Dataplane: &clientcontrol.PlatformTunnelDataplaneEvidence{
+					HostAttached:                 true,
+					WireGuardHandshakeFresh:      true,
+					BidirectionalTrafficVerified: true,
+				},
+			}, nil
+		},
+	}
+	controller := newLinuxTunControllerWithNativeClient(supportedLinuxTunCapability(""), native)
+	controller.setWireGuardTurnLeaseProvider(fakeLinuxTunLeaseProvider)
+	startReq := clientcontrol.PlatformTunnelStartRequest{
+		Mode:         clientcontrol.PlatformTunnelModeLinuxTun,
+		ResolutionID: "resolution-1",
+		RuntimeDefaults: &clientcontrol.RuntimeDefaults{
+			ListenAddr: "127.0.0.1:7777",
+			PeerAddr:   "relay.example.test:3478",
+		},
+	}
+
+	go func() {
+		_, err := controller.Start(context.Background(), startReq)
+		done <- err
+	}()
+	<-started
+
+	_, err := controller.Start(context.Background(), startReq)
+
+	if err == nil {
+		t.Fatal("overlapping Start() error = nil, want typed failure")
+	}
+	startErr := new(clientcontrol.PlatformTunnelStartError)
+	if !errors.As(err, &startErr) {
+		t.Fatalf("overlapping Start() error = %v, want PlatformTunnelStartError", err)
+	}
+	if startErr.Result.Ready {
+		t.Fatalf("overlapping Start() ready = true, want false: %+v", startErr.Result)
+	}
+	if startErr.Result.Stage != clientcontrol.PlatformTunnelStartupStageCapabilityCheck {
+		t.Fatalf("overlapping Start() stage = %q, want capability_check", startErr.Result.Stage)
+	}
+	if !strings.Contains(startErr.Result.Message, "active attempt") {
+		t.Fatalf("overlapping Start() message = %q, want active attempt", startErr.Result.Message)
+	}
+	if len(nativeStartCalls) != 1 {
+		t.Fatalf("native start calls = %d, want 1", len(nativeStartCalls))
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatalf("first Start() error = %v", err)
+	}
+}
+
+func TestLinuxTunControllerKeepsActiveAttemptUntilStop(t *testing.T) {
+	t.Parallel()
+
+	var startCalls int
+	var activeAttemptID string
+	var activeAttemptNonce string
+	native := &fakeLinuxTunNativeClient{
+		start: func(_ context.Context, req LinuxTunNativeStartRequest) (LinuxTunNativeStartResult, error) {
+			startCalls++
+			activeAttemptID = req.AttemptID
+			activeAttemptNonce = req.AttemptNonce
+			return LinuxTunNativeStartResult{
+				UnderlayRoutePolicy: clientcontrol.PlatformTunnelUnderlayRoutePolicyPreserveActiveLocalNetwork,
+				UnderlayExclusions:  []string{"203.0.113.10"},
+				Dataplane: &clientcontrol.PlatformTunnelDataplaneEvidence{
+					HostAttached:                 true,
+					WireGuardHandshakeFresh:      true,
+					BidirectionalTrafficVerified: true,
+				},
+			}, nil
+		},
+		cleanup: func(_ context.Context, req LinuxTunNativeCleanupRequest) error {
+			if req.AttemptID != activeAttemptID {
+				t.Fatalf("cleanup attempt_id = %q, want active attempt %q", req.AttemptID, activeAttemptID)
+			}
+			if req.AttemptNonce != activeAttemptNonce {
+				t.Fatalf("cleanup attempt_nonce = %q, want active attempt nonce", req.AttemptNonce)
+			}
+			return nil
+		},
+	}
+	controller := newLinuxTunControllerWithNativeClient(supportedLinuxTunCapability(""), native)
+	controller.setWireGuardTurnLeaseProvider(fakeLinuxTunLeaseProvider)
+	startReq := clientcontrol.PlatformTunnelStartRequest{
+		Mode:         clientcontrol.PlatformTunnelModeLinuxTun,
+		ResolutionID: "resolution-1",
+		RuntimeDefaults: &clientcontrol.RuntimeDefaults{
+			ListenAddr: "127.0.0.1:7777",
+			PeerAddr:   "relay.example.test:3478",
+		},
+	}
+
+	if result, err := controller.Start(context.Background(), startReq); err != nil || !result.Ready {
+		t.Fatalf("first Start() = %+v, %v; want ready", result, err)
+	}
+	if _, err := controller.Start(context.Background(), startReq); err == nil {
+		t.Fatal("second Start() error = nil, want active-attempt failure")
+	}
+	if startCalls != 1 {
+		t.Fatalf("startCalls after rejected second start = %d, want 1", startCalls)
+	}
+	if _, err := controller.Stop(context.Background(), clientcontrol.PlatformTunnelStopRequest{
+		Mode: clientcontrol.PlatformTunnelModeLinuxTun,
+	}); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+	if result, err := controller.Start(context.Background(), startReq); err != nil || !result.Ready {
+		t.Fatalf("third Start() after Stop = %+v, %v; want ready", result, err)
+	}
+	if startCalls != 2 {
+		t.Fatalf("startCalls after third start = %d, want 2", startCalls)
+	}
+}
+
+func TestLinuxTunControllerMapsNativeFailuresToTypedResults(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		kind       LinuxTunNativeFailureKind
+		wantStage  clientcontrol.PlatformTunnelStartupStage
+		wantPrereq clientcontrol.PlatformTunnelPrerequisite
+	}{
+		{
+			name:       "helper permission denied",
+			kind:       LinuxTunNativeFailurePermissionDenied,
+			wantStage:  clientcontrol.PlatformTunnelStartupStagePermissionAcquire,
+			wantPrereq: clientcontrol.PlatformTunnelPrerequisitePermission,
+		},
+		{
+			name:       "malformed helper payload",
+			kind:       LinuxTunNativeFailureMalformedPayload,
+			wantStage:  clientcontrol.PlatformTunnelStartupStageHostBringup,
+			wantPrereq: clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+		},
+		{
+			name:       "helper exit",
+			kind:       LinuxTunNativeFailureHelperExit,
+			wantStage:  clientcontrol.PlatformTunnelStartupStageHostBringup,
+			wantPrereq: clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+		},
+		{
+			name:       "native startup",
+			kind:       LinuxTunNativeFailureNativeStart,
+			wantStage:  clientcontrol.PlatformTunnelStartupStageHostBringup,
+			wantPrereq: clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+		},
+		{
+			name:       "runtime attach",
+			kind:       LinuxTunNativeFailureRuntimeAttach,
+			wantStage:  clientcontrol.PlatformTunnelStartupStageRuntimeAttach,
+			wantPrereq: clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+		},
+		{
+			name:       "dataplane",
+			kind:       LinuxTunNativeFailureDataplane,
+			wantStage:  clientcontrol.PlatformTunnelStartupStageDataplaneVerify,
+			wantPrereq: clientcontrol.PlatformTunnelPrerequisiteDataplaneEvidence,
+		},
+		{
+			name:       "cleanup surfaced during startup reconciliation",
+			kind:       LinuxTunNativeFailureCleanup,
+			wantStage:  clientcontrol.PlatformTunnelStartupStageHostBringup,
+			wantPrereq: clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			native := &fakeLinuxTunNativeClient{
+				start: func(context.Context, LinuxTunNativeStartRequest) (LinuxTunNativeStartResult, error) {
+					return LinuxTunNativeStartResult{}, &LinuxTunNativeFailure{
+						Kind:    tt.kind,
+						Message: "typed native failure " + string(tt.kind),
+					}
+				},
+			}
+			controller := newLinuxTunControllerWithNativeClient(supportedLinuxTunCapability(""), native)
+			controller.setWireGuardTurnLeaseProvider(fakeLinuxTunLeaseProvider)
+
+			_, err := controller.Start(context.Background(), clientcontrol.PlatformTunnelStartRequest{
+				Mode:         clientcontrol.PlatformTunnelModeLinuxTun,
+				ResolutionID: "resolution-1",
+				RuntimeDefaults: &clientcontrol.RuntimeDefaults{
+					ListenAddr: "127.0.0.1:7777",
+					PeerAddr:   "relay.example.test:3478",
+				},
+			})
+
+			if err == nil {
+				t.Fatal("Start() error = nil, want typed native failure")
+			}
+			startErr := new(clientcontrol.PlatformTunnelStartError)
+			if !errors.As(err, &startErr) {
+				t.Fatalf("Start() error = %v, want PlatformTunnelStartError", err)
+			}
+			if startErr.Result.Ready {
+				t.Fatalf("typed failure ready = true, want false: %+v", startErr.Result)
+			}
+			if startErr.Result.Stage != tt.wantStage {
+				t.Fatalf("typed failure stage = %q, want %q", startErr.Result.Stage, tt.wantStage)
+			}
+			if startErr.Result.MissingPrerequisite != tt.wantPrereq {
+				t.Fatalf(
+					"typed failure missing_prerequisite = %q, want %q",
+					startErr.Result.MissingPrerequisite,
+					tt.wantPrereq,
+				)
+			}
+			if !strings.Contains(startErr.Result.Message, string(tt.kind)) {
+				t.Fatalf("typed failure message = %q, want kind %q", startErr.Result.Message, tt.kind)
+			}
+		})
+	}
+}
+
+func TestLinuxTunControllerStopReturnsNativeCleanupFailure(t *testing.T) {
+	t.Parallel()
+
+	native := &fakeLinuxTunNativeClient{
+		cleanup: func(context.Context, LinuxTunNativeCleanupRequest) error {
+			return &LinuxTunNativeFailure{
+				Kind:    LinuxTunNativeFailureCleanup,
+				Message: "helper cleanup failed",
+			}
+		},
+	}
+	controller := newLinuxTunControllerWithNativeClient(supportedLinuxTunCapability(""), native)
+
+	_, err := controller.Stop(context.Background(), clientcontrol.PlatformTunnelStopRequest{
+		Mode: clientcontrol.PlatformTunnelModeLinuxTun,
+	})
+
+	if err == nil {
+		t.Fatal("Stop() error = nil, want cleanup failure")
+	}
+	if !strings.Contains(err.Error(), "helper cleanup failed") {
+		t.Fatalf("Stop() error = %v, want cleanup message", err)
+	}
+	if native.cleanupCalls != 1 {
+		t.Fatalf("cleanupCalls = %d, want 1", native.cleanupCalls)
+	}
+}
+
+func TestLinuxTunHostCleansUpHelperAttemptAfterPartialStartupFailure(t *testing.T) {
+	t.Parallel()
+
+	var startedAttempt LinuxTunNativeStartRequest
+	var cleanupAttempt LinuxTunNativeCleanupRequest
+	native := &fakeLinuxTunNativeClient{
+		start: func(_ context.Context, req LinuxTunNativeStartRequest) (LinuxTunNativeStartResult, error) {
+			startedAttempt = req
+			return LinuxTunNativeStartResult{}, &LinuxTunNativeFailure{
+				Kind:    LinuxTunNativeFailureNativeStart,
+				Message: "helper created partial native state and failed",
+			}
+		},
+		cleanup: func(_ context.Context, req LinuxTunNativeCleanupRequest) error {
+			cleanupAttempt = req
+			return nil
+		},
+	}
+	controller := newLinuxTunControllerWithNativeClient(supportedLinuxTunCapability(""), native)
+	controller.setWireGuardTurnLeaseProvider(fakeLinuxTunLeaseProvider)
+	host := clientcontrol.New(
+		clientcontrol.WithBuildIdentity(clientcontrol.BuildIdentity{Target: "linux/amd64"}),
+		clientcontrol.WithPlatformTunnelCapabilities([]clientcontrol.PlatformTunnelCapability{controller.Capability()}),
+		clientcontrol.WithPlatformTunnelStarter(controller.Start),
+		clientcontrol.WithPlatformTunnelStopper(controller.Stop),
+		clientcontrol.WithWireGuardTurnMaterializer(func(context.Context, clientcontrol.WireGuardTurnMaterializeRequest) (*clientcontrol.WireGuardTurnExecutionLease, error) {
+			return fakeLinuxTunLeaseProvider(context.Background(), clientcontrol.PlatformTunnelStartRequest{}, nil)
+		}),
+	)
+
+	_, err := host.StartPlatformTunnel(context.Background(), clientcontrol.PlatformTunnelStartRequest{
+		Mode:         clientcontrol.PlatformTunnelModeLinuxTun,
+		ResolutionID: "resolution-1",
+		RuntimeDefaults: &clientcontrol.RuntimeDefaults{
+			ListenAddr: "127.0.0.1:7777",
+			PeerAddr:   "relay.example.test:3478",
+		},
+	})
+
+	if err == nil {
+		t.Fatal("StartPlatformTunnel() error = nil, want partial startup failure")
+	}
+	startErr := new(clientcontrol.PlatformTunnelStartError)
+	if !errors.As(err, &startErr) {
+		t.Fatalf("StartPlatformTunnel() error = %v, want PlatformTunnelStartError", err)
+	}
+	if startErr.Result.Stage != clientcontrol.PlatformTunnelStartupStageHostBringup {
+		t.Fatalf("typed failure stage = %q, want host_bringup", startErr.Result.Stage)
+	}
+	if strings.TrimSpace(startedAttempt.AttemptID) == "" || strings.TrimSpace(startedAttempt.AttemptNonce) == "" {
+		t.Fatalf("started attempt = %q/%q, want id and nonce", startedAttempt.AttemptID, startedAttempt.AttemptNonce)
+	}
+	if cleanupAttempt.AttemptID != startedAttempt.AttemptID {
+		t.Fatalf("cleanup attempt_id = %q, want %q", cleanupAttempt.AttemptID, startedAttempt.AttemptID)
+	}
+	if cleanupAttempt.AttemptNonce != startedAttempt.AttemptNonce {
+		t.Fatalf("cleanup attempt_nonce = %q, want startup attempt nonce", cleanupAttempt.AttemptNonce)
+	}
+	if native.cleanupCalls != 1 {
+		t.Fatalf("cleanupCalls = %d, want 1", native.cleanupCalls)
+	}
+}
+
+func TestLinuxTunHostKeepsLocalHostReachableAfterHelperCrash(t *testing.T) {
+	t.Parallel()
+
+	native := &fakeLinuxTunNativeClient{
+		start: func(context.Context, LinuxTunNativeStartRequest) (LinuxTunNativeStartResult, error) {
+			return LinuxTunNativeStartResult{}, &LinuxTunNativeFailure{
+				Kind:    LinuxTunNativeFailureHelperExit,
+				Message: "helper exited before returning a response",
+			}
+		},
+	}
+	controller := newLinuxTunControllerWithNativeClient(supportedLinuxTunCapability(""), native)
+	controller.setWireGuardTurnLeaseProvider(fakeLinuxTunLeaseProvider)
+	host := clientcontrol.New(
+		clientcontrol.WithBuildIdentity(clientcontrol.BuildIdentity{Target: "linux/amd64"}),
+		clientcontrol.WithPlatformTunnelCapabilities([]clientcontrol.PlatformTunnelCapability{controller.Capability()}),
+		clientcontrol.WithPlatformTunnelStarter(controller.Start),
+		clientcontrol.WithPlatformTunnelStopper(controller.Stop),
+		clientcontrol.WithWireGuardTurnMaterializer(func(context.Context, clientcontrol.WireGuardTurnMaterializeRequest) (*clientcontrol.WireGuardTurnExecutionLease, error) {
+			return fakeLinuxTunLeaseProvider(context.Background(), clientcontrol.PlatformTunnelStartRequest{}, nil)
+		}),
+	)
+	before := host.Info()
+
+	_, err := host.StartPlatformTunnel(context.Background(), clientcontrol.PlatformTunnelStartRequest{
+		Mode:         clientcontrol.PlatformTunnelModeLinuxTun,
+		ResolutionID: "resolution-1",
+		RuntimeDefaults: &clientcontrol.RuntimeDefaults{
+			ListenAddr: "127.0.0.1:7777",
+			PeerAddr:   "relay.example.test:3478",
+		},
+	})
+
+	if err == nil {
+		t.Fatal("StartPlatformTunnel() error = nil, want helper crash failure")
+	}
+	startErr := new(clientcontrol.PlatformTunnelStartError)
+	if !errors.As(err, &startErr) {
+		t.Fatalf("StartPlatformTunnel() error = %v, want PlatformTunnelStartError", err)
+	}
+	if startErr.Result.Stage != clientcontrol.PlatformTunnelStartupStageHostBringup {
+		t.Fatalf("typed failure stage = %q, want host_bringup", startErr.Result.Stage)
+	}
+	after := host.Info()
+	if after.ContractVersion != before.ContractVersion {
+		t.Fatalf("host.Info() contract_version after helper crash = %q, want %q", after.ContractVersion, before.ContractVersion)
+	}
+	if len(after.PlatformTunnels) != 1 || !after.PlatformTunnels[0].Available {
+		t.Fatalf("host.Info().PlatformTunnels after helper crash = %+v, want local host still negotiable", after.PlatformTunnels)
+	}
+}
+
+func TestLinuxTunHostReportsCleanupFailureWithoutBlockingHost(t *testing.T) {
+	t.Parallel()
+
+	native := &fakeLinuxTunNativeClient{
+		start: func(context.Context, LinuxTunNativeStartRequest) (LinuxTunNativeStartResult, error) {
+			return LinuxTunNativeStartResult{}, &LinuxTunNativeFailure{
+				Kind:    LinuxTunNativeFailureStaleState,
+				Message: "stale rdtun0 state blocks startup",
+			}
+		},
+		cleanup: func(context.Context, LinuxTunNativeCleanupRequest) error {
+			return &LinuxTunNativeFailure{
+				Kind:    LinuxTunNativeFailureCleanup,
+				Message: "stale rdtun0 cleanup failed",
+			}
+		},
+	}
+	controller := newLinuxTunControllerWithNativeClient(supportedLinuxTunCapability(""), native)
+	controller.setWireGuardTurnLeaseProvider(fakeLinuxTunLeaseProvider)
+	host := clientcontrol.New(
+		clientcontrol.WithBuildIdentity(clientcontrol.BuildIdentity{Target: "linux/amd64"}),
+		clientcontrol.WithPlatformTunnelCapabilities([]clientcontrol.PlatformTunnelCapability{controller.Capability()}),
+		clientcontrol.WithPlatformTunnelStarter(controller.Start),
+		clientcontrol.WithPlatformTunnelStopper(controller.Stop),
+	)
+
+	_, err := host.StartPlatformTunnel(context.Background(), clientcontrol.PlatformTunnelStartRequest{
+		Mode:         clientcontrol.PlatformTunnelModeLinuxTun,
+		ResolutionID: "resolution-1",
+		RuntimeDefaults: &clientcontrol.RuntimeDefaults{
+			ListenAddr: "127.0.0.1:7777",
+			PeerAddr:   "relay.example.test:3478",
+		},
+	})
+
+	if err == nil {
+		t.Fatal("StartPlatformTunnel() error = nil, want stale native state failure")
+	}
+	startErr := new(clientcontrol.PlatformTunnelStartError)
+	if !errors.As(err, &startErr) {
+		t.Fatalf("StartPlatformTunnel() error = %v, want PlatformTunnelStartError", err)
+	}
+	if !strings.Contains(startErr.Result.Message, "cleanup after startup failure also failed") {
+		t.Fatalf("typed failure message = %q, want cleanup failure detail", startErr.Result.Message)
+	}
+	if len(host.Info().PlatformTunnels) != 1 {
+		t.Fatalf("host.Info().PlatformTunnels lost after cleanup failure: %+v", host.Info().PlatformTunnels)
 	}
 }
 
@@ -671,8 +1345,33 @@ type fakeLinuxTunLifecycle struct {
 	dataplane     *clientcontrol.PlatformTunnelDataplaneEvidence
 	dataplaneErr  error
 
-	calls        []string
+	onAcquirePermission func()
+	calls               []string
+	cleanupCalls        int
+}
+
+type fakeLinuxTunNativeClient struct {
+	start        func(context.Context, LinuxTunNativeStartRequest) (LinuxTunNativeStartResult, error)
+	cleanup      func(context.Context, LinuxTunNativeCleanupRequest) error
 	cleanupCalls int
+}
+
+func (f *fakeLinuxTunNativeClient) Start(
+	ctx context.Context,
+	req LinuxTunNativeStartRequest,
+) (LinuxTunNativeStartResult, error) {
+	if f.start != nil {
+		return f.start(ctx, req)
+	}
+	return LinuxTunNativeStartResult{}, nil
+}
+
+func (f *fakeLinuxTunNativeClient) Cleanup(ctx context.Context, req LinuxTunNativeCleanupRequest) error {
+	f.cleanupCalls++
+	if f.cleanup != nil {
+		return f.cleanup(ctx, req)
+	}
+	return nil
 }
 
 func withLinuxTunHostOverrides(
@@ -696,6 +1395,9 @@ func withLinuxTunHostOverrides(
 }
 
 func (f *fakeLinuxTunLifecycle) AcquirePermission(context.Context, clientcontrol.PlatformTunnelStartRequest) error {
+	if f.onAcquirePermission != nil {
+		f.onAcquirePermission()
+	}
 	f.calls = append(f.calls, "permission_acquire")
 	return f.permissionErr
 }

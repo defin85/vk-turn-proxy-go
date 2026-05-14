@@ -112,7 +112,8 @@ _unselectedTransportProfilePrerequisite = TransportProfilePrerequisiteStatus(
   importAdapters: <TransportProfileImportAdapter>[
     TransportProfileImportAdapter.wireGuardConf,
   ],
-  message: 'Select a VPN transport profile for this execution plan before startup.',
+  message:
+      'Select a VPN transport profile for this execution plan before startup.',
 );
 
 const RuntimeExecutionPlanDescriptor _androidVpnExecutionPlanDescriptor =
@@ -2189,10 +2190,65 @@ void main() {
         imported!.secretMaterialRef.kind,
         TransportProfileMaterialSource.portableTransfer,
       );
+      expect(bridge.selectTransportProfileForStartupCalls, isEmpty);
       expect(
         controller.notice,
         contains('Imported portable VPN transport profile'),
       );
+    },
+  );
+
+  test(
+    'controller selects portable VPN transport-profile for startup when mode is supplied',
+    () async {
+      final bridge = _FakeMobileHostBridge(
+        ensureReadyResult: const MobileHostConnectionResult(
+          state: MobileHostLifecycleState.ready,
+          message: 'Connected to embedded mobile host bridge',
+          info: _hostInfoMissingTransportProfile,
+          description: 'native bridge',
+        ),
+        transportProfilesList: const <TransportProfileStatus>[],
+      );
+      final controller = MobileShellController(
+        bridge: bridge,
+        stateStore: _InMemoryStateStore(
+          MobileShellState(
+            profiles: const <ProfileRecord>[],
+            providerConfigs: const <ProviderConfigRecord>[],
+            draft: ProfileDraft.defaults(),
+          ),
+        ),
+        appBuild: _testGuiBuild,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      final imported = await controller
+          .confirmPortableVPNTransportProfileImport(
+            envelope: '{"type":"portable_transport_profile","version":1}',
+            passphrase: 'portable-secret',
+            selectForStartupMode: PlatformTunnelMode.androidVpnService,
+          );
+
+      expect(imported, isNotNull);
+      expect(bridge.selectTransportProfileForStartupCalls, hasLength(1));
+      expect(
+        bridge.selectTransportProfileForStartupCalls.single.key,
+        _androidTransportProfileReference.profileId,
+      );
+      expect(
+        bridge.selectTransportProfileForStartupCalls.single.value.plan,
+        _androidVpnExecutionPlanDescriptor.plan,
+      );
+      expect(
+        controller.platformTunnelStartPreparationBlockReason(
+          PlatformTunnelMode.androidVpnService,
+        ),
+        isNull,
+      );
+      expect(controller.notice, contains('Imported and selected'));
     },
   );
 
@@ -2248,9 +2304,9 @@ void main() {
 
       expect(bridge.startedPlatformTunnels, isEmpty);
 
-      final importedProfile = controller.vpnTransportProfilesForMode(
-        PlatformTunnelMode.androidVpnService,
-      ).single;
+      final importedProfile = controller
+          .vpnTransportProfilesForMode(PlatformTunnelMode.androidVpnService)
+          .single;
       await controller.selectVPNTransportProfileForMode(
         PlatformTunnelMode.androidVpnService,
         importedProfile,
@@ -4173,6 +4229,9 @@ class _FakeMobileHostBridge implements MobileHostBridge {
   final List<TransportProfilePortableImportRequest>
   confirmTransportProfilePortableImportCalls =
       <TransportProfilePortableImportRequest>[];
+  final List<MapEntry<String, TransportProfileSelectForStartupRequest>>
+  selectTransportProfileForStartupCalls =
+      <MapEntry<String, TransportProfileSelectForStartupRequest>>[];
   final List<PlatformTunnelApplicationRoutingPolicy>
   startedPlatformTunnelRoutingPolicies =
       <PlatformTunnelApplicationRoutingPolicy>[];
@@ -4417,6 +4476,7 @@ class _FakeMobileHostBridge implements MobileHostBridge {
     String profileId,
     TransportProfileSelectForStartupRequest request,
   ) async {
+    selectTransportProfileForStartupCalls.add(MapEntry(profileId, request));
     _hostInfo = _readyHostInfo;
     return validateTransportProfile(profileId);
   }

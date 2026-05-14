@@ -90,6 +90,13 @@ const RuntimeExecutionPlan _windowsWintunExecutionPlan = RuntimeExecutionPlan(
   hostAdapter: RuntimeHostAdapter.windowsWintun,
 );
 
+const RuntimeExecutionPlan _linuxTunExecutionPlan = RuntimeExecutionPlan(
+  accessMethod: RuntimeAccessMethod.turnCredentials,
+  carrierFamily: RuntimeCarrierFamily.turnDatagram,
+  engineFamily: RuntimeEngineFamily.wireguardNative,
+  hostAdapter: RuntimeHostAdapter.linuxTun,
+);
+
 const HostInfo _readyWindowsWintunHostInfo = HostInfo(
   contractVersion: '1',
   build: _testHostBuild,
@@ -120,6 +127,51 @@ const HostInfo _readyWindowsWintunHostInfo = HostInfo(
       executionPlans: <RuntimeExecutionPlanDescriptor>[
         RuntimeExecutionPlanDescriptor(
           plan: _windowsWintunExecutionPlan,
+          supportState: RuntimeExecutionPlanSupportState.supported,
+          remoteEndpointFamily: RuntimeRemoteEndpointFamily.turnServer,
+          isDefault: true,
+        ),
+      ],
+    ),
+  ],
+);
+
+const HostInfo _readyLinuxTunHostInfo = HostInfo(
+  contractVersion: '1',
+  build: BuildIdentity(
+    product: 'RelayDock',
+    version: '0.1.0',
+    buildNumber: '1',
+    revision: 'deadbeefcafe',
+    role: 'clientd',
+    target: 'linux/amd64',
+  ),
+  capabilities: <Capability>[
+    Capability.desktopSidecar,
+    Capability.platformTunnels,
+    Capability.profiles,
+    Capability.providerConfigs,
+    Capability.providerRuntimeArtifacts,
+    Capability.runtimeExecutionPlanning,
+    Capability.sessions,
+    Capability.challenges,
+    Capability.diagnostics,
+    Capability.eventStream,
+  ],
+  platformTunnels: <PlatformTunnelCapability>[
+    PlatformTunnelCapability(
+      mode: PlatformTunnelMode.linuxTun,
+      available: true,
+      satisfiedPrerequisites: <PlatformTunnelPrerequisite>[
+        PlatformTunnelPrerequisite.routeExclusion,
+        PlatformTunnelPrerequisite.dnsBypass,
+      ],
+      supportedUnderlayRoutePolicies: <PlatformTunnelUnderlayRoutePolicy>[
+        PlatformTunnelUnderlayRoutePolicy.preserveActiveLocalNetwork,
+      ],
+      executionPlans: <RuntimeExecutionPlanDescriptor>[
+        RuntimeExecutionPlanDescriptor(
+          plan: _linuxTunExecutionPlan,
           supportState: RuntimeExecutionPlanSupportState.supported,
           remoteEndpointFamily: RuntimeRemoteEndpointFamily.turnServer,
           isDefault: true,
@@ -1319,6 +1371,17 @@ void main() {
             updatedAt: DateTime.utc(2026, 4, 5, 17, 1),
           ),
         ],
+        platformTunnelStatuses: <PlatformTunnelStatus>[
+          PlatformTunnelStatus(
+            mode: PlatformTunnelMode.linuxTun,
+            state: PlatformTunnelLifecycleState.failed,
+            ready: false,
+            stage: PlatformTunnelStartupStage.hostBringup,
+            missingPrerequisite: PlatformTunnelPrerequisite.hostImplementation,
+            message: 'linux_tun helper failed during native start',
+            updatedAt: DateTime.utc(2026, 4, 7, 10, 9),
+          ),
+        ],
       );
       final directory = await Directory.systemTemp.createTemp(
         'gui-shell-diagnostics-',
@@ -1359,6 +1422,17 @@ void main() {
       expect(
         (payload['gui_build'] as Map<String, dynamic>)['revision'],
         'gui123456789',
+      );
+      final platformTunnels =
+          payload['platform_tunnels'] as List<dynamic>? ?? const <dynamic>[];
+      expect(platformTunnels, hasLength(1));
+      expect(
+        (platformTunnels.single as Map<String, dynamic>)['stage'],
+        'host_bringup',
+      );
+      expect(
+        (platformTunnels.single as Map<String, dynamic>)['message'],
+        'linux_tun helper failed during native start',
       );
     },
   );
@@ -1627,10 +1701,61 @@ void main() {
         imported!.secretMaterialRef.kind,
         TransportProfileMaterialSource.portableTransfer,
       );
+      expect(api.selectTransportProfileForStartupCalls, isEmpty);
       expect(
         controller.notice,
         contains('Imported portable VPN transport profile'),
       );
+    },
+  );
+
+  test(
+    'controller selects portable VPN transport-profile for startup when mode is supplied',
+    () async {
+      final api = _FakeControlPlaneApi(
+        profiles: const <ProfileRecord>[],
+        sessions: const <SessionRecord>[],
+        hostInfo: _desktopTransportProfileHostInfo(configured: false),
+        transportProfiles: const <TransportProfileStatus>[],
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(<HostConnectionResult>[
+          HostConnectionResult(
+            state: HostLifecycleState.ready,
+            message: 'ready',
+            info: _desktopTransportProfileHostInfo(configured: false),
+          ),
+        ]),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      final imported = await controller
+          .confirmPortableVPNTransportProfileImport(
+            envelope: '{"type":"portable_transport_profile","version":1}',
+            passphrase: 'portable-secret',
+            selectForStartupMode: PlatformTunnelMode.windowsWintun,
+          );
+
+      expect(imported, isNotNull);
+      expect(api.selectTransportProfileForStartupCalls, hasLength(1));
+      expect(
+        api.selectTransportProfileForStartupCalls.single.key,
+        'transport-profile-1',
+      );
+      expect(
+        api.selectTransportProfileForStartupCalls.single.value.plan,
+        _windowsWintunExecutionPlan,
+      );
+      expect(
+        controller.platformTunnelStartPreparationBlockReason(
+          PlatformTunnelMode.windowsWintun,
+        ),
+        isNull,
+      );
+      expect(controller.notice, contains('Imported and selected'));
     },
   );
 
@@ -1760,6 +1885,58 @@ void main() {
         PlatformTunnelStartupStage.capabilityCheck,
       );
       expect(controller.notice, contains('Capability check'));
+    },
+  );
+
+  test(
+    'controller keeps local host ready when linux tunnel permission is denied',
+    () async {
+      final api = _FakeControlPlaneApi(
+        profiles: const <ProfileRecord>[],
+        resolutions: <ResolutionRecord>[_resolutionRecord(id: 'resolution-1')],
+        sessions: const <SessionRecord>[],
+        hostInfo: _readyLinuxTunHostInfo,
+        startPlatformTunnelHandler: (call) async {
+          expect(call.mode, PlatformTunnelMode.linuxTun);
+          return const PlatformTunnelStartResult(
+            mode: PlatformTunnelMode.linuxTun,
+            ready: false,
+            stage: PlatformTunnelStartupStage.permissionAcquire,
+            missingPrerequisite: PlatformTunnelPrerequisite.permission,
+            message: 'pkexec authorization was denied',
+          );
+        },
+      );
+      final supervisor = _SequencedHostSupervisor(const <HostConnectionResult>[
+        HostConnectionResult(
+          state: HostLifecycleState.ready,
+          message: 'ready',
+          info: _readyLinuxTunHostInfo,
+        ),
+      ]);
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: supervisor,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.startPlatformTunnel(PlatformTunnelMode.linuxTun);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(api.startPlatformTunnelCalls, hasLength(1));
+      expect(controller.status, ShellStatus.ready);
+      expect(controller.hostConnection?.state, HostLifecycleState.ready);
+      expect(supervisor.calls, 1);
+      expect(
+        controller.platformTunnelResultFor(PlatformTunnelMode.linuxTun)?.stage,
+        PlatformTunnelStartupStage.permissionAcquire,
+      );
+      expect(
+        controller.platformTunnelStatusFor(PlatformTunnelMode.linuxTun)?.state,
+        PlatformTunnelLifecycleState.permission,
+      );
+      expect(controller.notice, isNot(contains('Local host blocked')));
     },
   );
 
@@ -2159,6 +2336,45 @@ void main() {
   );
 
   test(
+    'controller does not block platform tunnel setup on stale failed provider resolutions',
+    () async {
+      final api = _FakeControlPlaneApi(
+        profiles: const <ProfileRecord>[],
+        sessions: const <SessionRecord>[],
+        resolutions: <ResolutionRecord>[
+          _resolutionRecord(state: ResolutionState.failed),
+        ],
+        hostInfo: _desktopTransportProfileHostInfo(configured: true),
+        transportProfiles: <TransportProfileStatus>[
+          _desktopTransportProfileStatus(),
+        ],
+      );
+      final controller = DesktopShellController(
+        api: api,
+        supervisor: _SequencedHostSupervisor(<HostConnectionResult>[
+          HostConnectionResult(
+            state: HostLifecycleState.ready,
+            message: 'ready',
+            info: _desktopTransportProfileHostInfo(configured: true),
+          ),
+        ]),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(controller.selectedResolutionId, 'resolution-1');
+      expect(api.providerTransportCompatibilityRequests, isEmpty);
+      expect(
+        controller.platformTunnelStartPreparationBlockReason(
+          PlatformTunnelMode.windowsWintun,
+        ),
+        isNull,
+      );
+    },
+  );
+
+  test(
     'controller starts provider resolution before windows platform tunnel start',
     () async {
       final api = _FakeControlPlaneApi(
@@ -2468,6 +2684,9 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
   final List<TransportProfilePortableImportRequest>
   confirmTransportProfilePortableImportCalls =
       <TransportProfilePortableImportRequest>[];
+  final List<MapEntry<String, TransportProfileSelectForStartupRequest>>
+  selectTransportProfileForStartupCalls =
+      <MapEntry<String, TransportProfileSelectForStartupRequest>>[];
   final List<ProfileRecord> upsertedProfiles = <ProfileRecord>[];
   final List<ProviderConfigRecord> upsertedProviderConfigs =
       <ProviderConfigRecord>[];
@@ -2560,6 +2779,7 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
       events: const <EventRecord>[],
       challenges: _challenges.values.toList(growable: false),
       metrics: 'vk_turn_proxy_runtime_session_starts_total 1',
+      platformTunnels: _platformTunnelStatuses,
       hostBuild: _testHostBuild,
       contractVersion: '1',
     );
@@ -2724,6 +2944,7 @@ class _FakeControlPlaneApi implements ControlPlaneApi {
     String profileId,
     TransportProfileSelectForStartupRequest request,
   ) async {
+    selectTransportProfileForStartupCalls.add(MapEntry(profileId, request));
     _hostInfo = _desktopTransportProfileHostInfo(configured: true);
     return validateTransportProfile(profileId);
   }

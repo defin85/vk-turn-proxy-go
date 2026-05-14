@@ -12,6 +12,7 @@ declare -a DEFAULT_TARGETS=(
 declare -a COMMANDS=(
   "clientd"
   "probe"
+  "relaydock-linux-tun-helper"
   "tunnel-client"
   "tunnel-server"
   "turnlab-shell"

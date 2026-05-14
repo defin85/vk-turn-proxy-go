@@ -766,6 +766,7 @@ type Diagnostics struct {
 	HostBuild       BuildIdentity              `json:"host_build"`
 	ContractVersion string                     `json:"contract_version"`
 	RemoteCatalogs  []VPSProviderCatalogStatus `json:"remote_catalogs,omitempty"`
+	PlatformTunnels []PlatformTunnelStatus     `json:"platform_tunnels,omitempty"`
 }
 
 type StartSessionRequest struct {

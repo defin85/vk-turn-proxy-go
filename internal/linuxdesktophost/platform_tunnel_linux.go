@@ -85,6 +85,18 @@ type linuxDefaultRoute struct {
 	Gateway string
 }
 
+var (
+	linuxTunUbuntuHostCheck = isUbuntuHost
+	linuxTunDeviceCheck     = func() error {
+		_, err := os.Stat("/dev/net/tun")
+		return err
+	}
+	linuxTunIPRouteCheck = func() error {
+		_, err := exec.LookPath("ip")
+		return err
+	}
+)
+
 func defaultLinuxTunPrerequisiteCheck(build clientcontrol.BuildIdentity) *linuxTunPrerequisiteFailure {
 	if runtime.GOOS != "linux" {
 		return &linuxTunPrerequisiteFailure{
@@ -98,7 +110,7 @@ func defaultLinuxTunPrerequisiteCheck(build clientcontrol.BuildIdentity) *linuxT
 	if failure := linuxTunPackagedTargetFailure(build, os.Getenv(linuxTunPackagedTargetEnv)); failure != nil {
 		return failure
 	}
-	if ubuntu, detail := isUbuntuHost(); !ubuntu {
+	if ubuntu, detail := linuxTunUbuntuHostCheck(); !ubuntu {
 		return &linuxTunPrerequisiteFailure{
 			prerequisite: clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
 			message: fmt.Sprintf(
@@ -108,19 +120,13 @@ func defaultLinuxTunPrerequisiteCheck(build clientcontrol.BuildIdentity) *linuxT
 			),
 		}
 	}
-	if os.Geteuid() != 0 {
-		return &linuxTunPrerequisiteFailure{
-			prerequisite: clientcontrol.PlatformTunnelPrerequisitePermission,
-			message:      "linux_tun requires an elevated packaged host with permission to create TUN devices and update routes",
-		}
-	}
-	if _, err := os.Stat("/dev/net/tun"); err != nil {
+	if err := linuxTunDeviceCheck(); err != nil {
 		return &linuxTunPrerequisiteFailure{
 			prerequisite: clientcontrol.PlatformTunnelPrerequisiteHostImplementation,
 			message:      fmt.Sprintf("linux_tun requires /dev/net/tun: %v", err),
 		}
 	}
-	if _, err := exec.LookPath("ip"); err != nil {
+	if err := linuxTunIPRouteCheck(); err != nil {
 		return &linuxTunPrerequisiteFailure{
 			prerequisite: clientcontrol.PlatformTunnelPrerequisiteRouteExclusion,
 			message:      fmt.Sprintf("linux_tun route preparation requires iproute2: %v", err),

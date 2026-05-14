@@ -10,9 +10,11 @@ It is the concise first-pass view for Codex and other repository-local agents.
 - Current shipped slices cover provider resolution for `vk` and `generic-turn`, the local client control plane, runtime observability, the turnlab harness, and desktop/mobile Flutter shells.
 - The first packaged Windows system-tunnel ready path is now repo-owned through `windows_wintun`; use `docs/windows-desktop-wg-poc.md` for the verified packaged-host and VMware execution-cell runbook.
 - The first Linux `linux_tun` support claim is Ubuntu-package-specific: build
-  with `make build-gui-linux`, install under `/opt/relaydock`, and use
+  with `make build-gui-linux`, install under `/opt/relaydock`, run the local
+  `clientd` host as the operator user, and reserve elevation for the separate
+  `relaydock-linux-tun-helper` during `linux_tun` startup. Use
   `docs/linux-desktop-tun-package.md` for the required package, capability,
-  startup, cleanup, and validation evidence.
+  helper, startup, cleanup, and validation evidence.
 - The local control plane now exposes typed runtime execution planning so current overlay startup, future packaged `wireguard_native` plans, and later experimental carriers stay explicitly separated.
 - VPS-side provider catalogs now live behind `cmd/vps-provider-catalog`, while local `clientd` syncs, validates, and maps remote artifacts into typed provider resolutions.
 - Provider logic stays in `internal/provider/...`; transport stays in `internal/transport/...`; runtime orchestration stays in `internal/session`.
@@ -24,6 +26,7 @@ It is the concise first-pass view for Codex and other repository-local agents.
 | --- | --- | --- |
 | `cmd/probe` | provider-only resolution and sanitized artifacts | checking provider contours, invite resolution, challenge paths |
 | `cmd/clientd` | local HTTP control plane for shells and hosts | verifying profiles, sessions, challenges, diagnostics, event stream |
+| `cmd/relaydock-linux-tun-helper` | package-internal privileged Linux TUN helper | validating helper protocol, polkit packaging, and Linux native-start boundaries |
 | `cmd/vps-provider-catalog` | VPS-side provider catalog and remote artifact issue service | testing add-79 catalog sync, artifact issue, audit, and metrics |
 | `cmd/tunnel-client` | runtime client entrypoint | investigating end-to-end runtime orchestration |
 | `cmd/tunnel-server` | relay/server baseline | checking server-side forwarding and transport behavior |

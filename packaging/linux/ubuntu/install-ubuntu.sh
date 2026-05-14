@@ -6,7 +6,6 @@ INSTALL_ROOT="${INSTALL_ROOT:-/opt/relaydock}"
 DESKTOP_ENTRY_DIR="${DESKTOP_ENTRY_DIR:-/usr/share/applications}"
 ICON_THEME_DIR="${ICON_THEME_DIR:-/usr/share/icons/hicolor}"
 POLKIT_ACTION_DIR="${POLKIT_ACTION_DIR:-/usr/share/polkit-1/actions}"
-STATE_DIR="${STATE_DIR:-/var/lib/relaydock/vpn-transport-profiles}"
 DESKTOP_ENTRY_NAME="com.defin85.relaydock.desktop"
 APP_ICON_NAME="com.defin85.relaydock.png"
 POLICY_NAME="com.defin85.relaydock.linux-tun.policy"
@@ -35,7 +34,6 @@ if [[ "$(id -u)" -ne 0 ]]; then
     DESKTOP_ENTRY_DIR="${DESKTOP_ENTRY_DIR}" \
     ICON_THEME_DIR="${ICON_THEME_DIR}" \
     POLKIT_ACTION_DIR="${POLKIT_ACTION_DIR}" \
-    STATE_DIR="${STATE_DIR}" \
     bash "$0" "$@"
 fi
 
@@ -52,7 +50,7 @@ for required in \
   "${PACKAGE_DIR}/relaydock" \
   "${PACKAGE_DIR}/clientd" \
   "${PACKAGE_DIR}/libexec/clientd" \
-  "${PACKAGE_DIR}/libexec/relaydock-clientd-linux-tun" \
+  "${PACKAGE_DIR}/libexec/relaydock-linux-tun-helper" \
   "${PACKAGE_DIR}/share/applications/${DESKTOP_ENTRY_NAME}" \
   "${PACKAGE_DIR}/share/icons/hicolor/256x256/apps/${APP_ICON_NAME}" \
   "${PACKAGE_DIR}/share/polkit-1/actions/${POLICY_NAME}"; do
@@ -67,7 +65,7 @@ cp -a "${PACKAGE_DIR}/." "${INSTALL_ROOT}/"
 chown -R root:root "${INSTALL_ROOT}"
 chmod 0755 "${INSTALL_ROOT}/clientd"
 chmod 0755 "${INSTALL_ROOT}/libexec/clientd"
-chmod 0755 "${INSTALL_ROOT}/libexec/relaydock-clientd-linux-tun"
+chmod 0755 "${INSTALL_ROOT}/libexec/relaydock-linux-tun-helper"
 
 install -d -m 0755 "${DESKTOP_ENTRY_DIR}"
 install -m 0644 \
@@ -83,8 +81,6 @@ install -d -m 0755 "${POLKIT_ACTION_DIR}"
 install -m 0644 \
   "${PACKAGE_DIR}/share/polkit-1/actions/${POLICY_NAME}" \
   "${POLKIT_ACTION_DIR}/${POLICY_NAME}"
-
-install -d -m 0700 "${STATE_DIR}"
 
 if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database "${DESKTOP_ENTRY_DIR}" >/dev/null 2>&1 || true
