@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -549,6 +550,109 @@ func TestTransportProfileStoreLifecycleValidateAndSelectForStartup(t *testing.T)
 	ref := info.PlatformTunnels[0].ExecutionPlans[0].TransportProfile.DefaultProfile
 	if ref == nil || ref.ProfileID != status.ID {
 		t.Fatalf("host default profile ref = %+v, want %s", ref, status.ID)
+	}
+}
+
+func TestTransportProfileStoreRejectsLoopbackWireGuardEndpointForStartup(t *testing.T) {
+	starterCalls := 0
+	host := New(
+		WithBuildIdentity(BuildIdentity{Target: "android/embedded"}),
+		WithVPNTransportProfileStore(),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{supportedTestAndroidVPNCapability()}),
+		WithPlatformTunnelStarter(func(context.Context, PlatformTunnelStartRequest) (PlatformTunnelStartResult, error) {
+			starterCalls++
+			return PlatformTunnelStartResult{}, nil
+		}),
+	)
+	status, err := host.ImportTransportProfile(testWireGuardTransportProfileImportWithEndpoint(
+		"loopback-client-key",
+		"127.0.0.1:39010",
+	))
+	if err != nil {
+		t.Fatalf("ImportTransportProfile() error = %v", err)
+	}
+	if status.Validation.State != TransportProfileValidationStateInvalid {
+		t.Fatalf("imported validation state = %q, want invalid", status.Validation.State)
+	}
+	if len(status.DefaultFor) != 0 {
+		t.Fatalf("imported default_for = %+v, want no startup default for loopback endpoint", status.DefaultFor)
+	}
+	if !strings.Contains(status.Validation.Message, "must be remote") {
+		t.Fatalf("validation message = %q, want remote endpoint detail", status.Validation.Message)
+	}
+
+	if _, err := host.SelectTransportProfileForStartup(status.ID, TransportProfileSelectForStartupRequest{
+		Plan: testStrictWireGuardTurnDescriptor().Plan,
+	}); !errors.Is(err, ErrTransportProfileInvalid) {
+		t.Fatalf("SelectTransportProfileForStartup(loopback) error = %v, want ErrTransportProfileInvalid", err)
+	}
+
+	result, err := host.StartPlatformTunnel(context.Background(), PlatformTunnelStartRequest{
+		Mode: PlatformTunnelModeAndroidVPNService,
+		ExecutionPlan: &RuntimeExecutionPlan{
+			AccessMethod:  RuntimeAccessMethodTURNCredentials,
+			CarrierFamily: RuntimeCarrierFamilyTURNDatagram,
+			EngineFamily:  RuntimeEngineFamilyWireGuardNative,
+			HostAdapter:   RuntimeHostAdapterAndroidVPNService,
+		},
+		TransportProfile: &TransportProfileReference{ProfileID: status.ID},
+	})
+	if err != nil {
+		t.Fatalf("StartPlatformTunnel() error = %v", err)
+	}
+	if result.Stage != PlatformTunnelStartupStageProfileValidate ||
+		result.MissingPrerequisite != PlatformTunnelPrerequisiteTransportProfile {
+		t.Fatalf("startup result = %+v, want profile validation failure", result)
+	}
+	if !strings.Contains(result.Message, "must be remote") {
+		t.Fatalf("startup message = %q, want loopback endpoint detail", result.Message)
+	}
+	if starterCalls != 0 {
+		t.Fatalf("starter calls = %d, want 0 for invalid transport profile", starterCalls)
+	}
+}
+
+func TestTransportProfileStoreInvalidDefaultDoesNotFallBackToAnotherProfile(t *testing.T) {
+	host := New(
+		WithBuildIdentity(BuildIdentity{Target: "android/embedded"}),
+		WithVPNTransportProfileStore(),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{supportedTestAndroidVPNCapability()}),
+	)
+	invalid, err := host.ImportTransportProfile(testWireGuardTransportProfileImportWithEndpoint(
+		"invalid-default-client-key",
+		"127.0.0.1:39010",
+	))
+	if err != nil {
+		t.Fatalf("ImportTransportProfile(invalid) error = %v", err)
+	}
+	valid, err := host.ImportTransportProfile(testWireGuardTransportProfileImport("valid-client-key"))
+	if err != nil {
+		t.Fatalf("ImportTransportProfile(valid) error = %v", err)
+	}
+
+	scopeID := transportProfileDefaultScopeID(testStrictWireGuardTurnDescriptor().Plan)
+	host.mu.Lock()
+	host.transportProfileDefaults[scopeID] = invalid.ID
+	host.refreshTransportProfileStatusesLocked()
+	host.mu.Unlock()
+
+	info := host.Info()
+	prerequisite := info.PlatformTunnels[0].ExecutionPlans[0].TransportProfile
+	if prerequisite == nil {
+		t.Fatal("transport profile prerequisite = nil, want invalid default status")
+	}
+	if prerequisite.SelectedProfile != nil || prerequisite.DefaultProfile != nil {
+		t.Fatalf("transport profile refs = selected %+v default %+v, want no fallback refs", prerequisite.SelectedProfile, prerequisite.DefaultProfile)
+	}
+	if !strings.Contains(prerequisite.Message, invalid.ID) ||
+		!strings.Contains(prerequisite.Message, "must be remote") {
+		t.Fatalf("transport profile message = %q, want invalid default detail", prerequisite.Message)
+	}
+	if strings.Contains(prerequisite.Message, valid.ID) {
+		t.Fatalf("transport profile message = %q, unexpectedly referenced fallback profile %s", prerequisite.Message, valid.ID)
+	}
+	if info.PlatformTunnels[0].ExecutionPlans[0].SupportState != RuntimeExecutionPlanSupportStateUnavailable {
+		t.Fatalf("support_state = %q, want unavailable for invalid default", info.PlatformTunnels[0].ExecutionPlans[0].SupportState)
 	}
 }
 
@@ -1234,6 +1338,15 @@ func TestStructuredTransportProfileCreateUpdateValidateAndMaterialize(t *testing
 	if strings.Contains(string(body), testWireGuardStructuredKey(4)) {
 		t.Fatalf("ordinary profile read leaked structured preshared key: %s", body)
 	}
+	if status.StructuredDraft == nil {
+		t.Fatal("created profile structured_draft = nil, want redacted editable draft")
+	}
+	if got := status.StructuredDraft.Endpoint; got != "relay.example.test:51820" {
+		t.Fatalf("created structured_draft endpoint = %q, want relay.example.test:51820", got)
+	}
+	if got := status.StructuredDraft.Fields[TransportProfileStructuredFieldPeerPublicKey]; got != testWireGuardStructuredKey(2) {
+		t.Fatalf("created structured_draft peer_public_key = %v, want test key", got)
+	}
 
 	lease, err := host.materializeWireGuardTurnLeaseFromTransportProfile(
 		"resolution-structured",
@@ -1275,6 +1388,15 @@ func TestStructuredTransportProfileCreateUpdateValidateAndMaterialize(t *testing
 	updated := updateResult.Profile
 	if updated.ID != status.ID {
 		t.Fatalf("updated profile id = %q, want %q", updated.ID, status.ID)
+	}
+	if updated.StructuredDraft == nil {
+		t.Fatal("updated profile structured_draft = nil, want redacted editable draft")
+	}
+	if got := updated.StructuredDraft.Endpoint; got != "relay-two.example.test:51820" {
+		t.Fatalf("updated structured_draft endpoint = %q, want relay-two.example.test:51820", got)
+	}
+	if got := updated.StructuredDraft.Fields[TransportProfileStructuredFieldAllowedIPs]; !reflect.DeepEqual(got, []string{"10.30.0.0/16"}) {
+		t.Fatalf("updated structured_draft allowed_ips = %#v, want 10.30.0.0/16", got)
 	}
 
 	lease, err = host.materializeWireGuardTurnLeaseFromTransportProfile(
@@ -1565,6 +1687,13 @@ func testStrictWireGuardTurnDescriptor() RuntimeExecutionPlanDescriptor {
 }
 
 func testWireGuardTransportProfileImport(privateKey string) TransportProfileImportRequest {
+	return testWireGuardTransportProfileImportWithEndpoint(privateKey, "relay.example.test:51820")
+}
+
+func testWireGuardTransportProfileImportWithEndpoint(
+	privateKey string,
+	endpoint string,
+) TransportProfileImportRequest {
 	return TransportProfileImportRequest{
 		Adapter:     TransportProfileImportAdapterWireGuardConf,
 		Kind:        TransportProfileKindWireGuardNativeV1,
@@ -1578,7 +1707,7 @@ func testWireGuardTransportProfileImport(privateKey string) TransportProfileImpo
 			"[Peer]",
 			"PublicKey = peer-public-key",
 			"AllowedIPs = 0.0.0.0/0",
-			"Endpoint = relay.example.test:51820",
+			"Endpoint = " + endpoint,
 			"",
 		}, "\n"),
 	}

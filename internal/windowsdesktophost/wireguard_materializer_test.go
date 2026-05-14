@@ -149,7 +149,7 @@ func TestDefaultWindowsWireGuardTurnMaterializerRejectsProfileWithoutRawIngressE
 	}
 }
 
-func TestWindowsWireGuardEnvPathMigratesIntoTransportProfileStore(t *testing.T) {
+func TestWindowsWireGuardEnvPathDoesNotMigrateIntoTransportProfileStoreByDefault(t *testing.T) {
 	profilePath := filepath.Join(t.TempDir(), "desktop1-windows.conf")
 	storePath := filepath.Join(t.TempDir(), "vpn-transport-profiles", "store.json")
 	profileContents := strings.Join([]string{
@@ -168,6 +168,37 @@ func TestWindowsWireGuardEnvPathMigratesIntoTransportProfileStore(t *testing.T) 
 	}
 	t.Setenv(windowsWireGuardProfileEnv, profilePath)
 	t.Setenv(windowsTransportProfileStoreEnv, storePath)
+
+	host := NewClientControlHost(nil)
+	profiles, err := host.TransportProfiles()
+	if err != nil {
+		t.Fatalf("TransportProfiles() error = %v", err)
+	}
+	if len(profiles) != 0 {
+		t.Fatalf("TransportProfiles() len = %d, want no implicit legacy migration", len(profiles))
+	}
+}
+
+func TestWindowsWireGuardEnvPathMigratesIntoTransportProfileStoreWhenExplicitlyEnabled(t *testing.T) {
+	profilePath := filepath.Join(t.TempDir(), "desktop1-windows.conf")
+	storePath := filepath.Join(t.TempDir(), "vpn-transport-profiles", "store.json")
+	profileContents := strings.Join([]string{
+		"[Interface]",
+		"PrivateKey = client-private-key",
+		"Address = 10.10.0.2/32",
+		"",
+		"[Peer]",
+		"PublicKey = peer-public-key",
+		"AllowedIPs = 0.0.0.0/0",
+		"Endpoint = relay.example.test:3478",
+		"",
+	}, "\n")
+	if err := os.WriteFile(profilePath, []byte(profileContents), 0o600); err != nil {
+		t.Fatalf("write profile: %v", err)
+	}
+	t.Setenv(windowsWireGuardProfileEnv, profilePath)
+	t.Setenv(windowsTransportProfileStoreEnv, storePath)
+	t.Setenv(windowsLegacyWireGuardMigrationEnv, "1")
 
 	host := NewClientControlHost(nil)
 	info := host.Info()

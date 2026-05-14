@@ -1452,6 +1452,115 @@ func TestHostStartPlatformTunnelPublishesReadySession(t *testing.T) {
 	}
 }
 
+func TestHostStartPlatformTunnelPublishesStrictWireGuardIngressInSessionProfile(t *testing.T) {
+	build := testBuildIdentity()
+	build.Target = "windows/amd64"
+	plan := RuntimeExecutionPlan{
+		AccessMethod:  RuntimeAccessMethodTURNCredentials,
+		CarrierFamily: RuntimeCarrierFamilyTURNDatagram,
+		EngineFamily:  RuntimeEngineFamilyWireGuardNative,
+		HostAdapter:   RuntimeHostAdapterWindowsWintun,
+	}
+	host := New(
+		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+		WithBuildIdentity(build),
+		WithSessionIDSource(func() string { return "session-platform-wintun" }),
+		withRegistry(provider.NewRegistry(fakeAdapter{
+			name: "vk",
+			resolve: func(context.Context, string) (provider.Resolution, error) {
+				return provider.Resolution{
+					Credentials: provider.Credentials{
+						Username: "turn-user",
+						Password: "turn-pass",
+						Address:  "turn.example.test:3478",
+					},
+					Metadata: map[string]string{
+						"provider":          "vk",
+						"resolution_method": "static_link",
+					},
+				}, nil
+			},
+		})),
+		WithPlatformTunnelCapabilities([]PlatformTunnelCapability{{
+			Mode:      PlatformTunnelModeWindowsWintun,
+			Available: true,
+			SatisfiedPrerequisites: []PlatformTunnelPrerequisite{
+				PlatformTunnelPrerequisiteDriver,
+				PlatformTunnelPrerequisiteRouteExclusion,
+				PlatformTunnelPrerequisiteDNSBypass,
+			},
+		}}),
+		WithPlatformTunnelStarter(func(_ context.Context, req PlatformTunnelStartRequest) (PlatformTunnelStartResult, error) {
+			return PlatformTunnelStartResult{
+				Mode:          req.Mode,
+				Ready:         true,
+				ExecutionPlan: cloneRuntimeExecutionPlan(req.ExecutionPlan),
+				RemoteIngress: &RuntimeRemoteIngressDiagnostics{
+					EndpointFamily: RuntimeRemoteEndpointFamilyTURNServer,
+					EndpointRole:   RuntimeRemoteEndpointRoleWireGuardRawDatagram,
+					Protocol:       RuntimeRemoteIngressProtocolRawWireGuard,
+					Address:        "92.63.105.2:56042",
+					Isolation:      RuntimeRemoteIngressIsolationDedicated,
+				},
+				Dataplane: &PlatformTunnelDataplaneEvidence{
+					HostAttached:                 true,
+					WireGuardHandshakeFresh:      true,
+					WireGuardRxBytesDelta:        128,
+					WireGuardTxBytesDelta:        256,
+					WintunReceivedBytesDelta:     64,
+					RemoteEgressIP:               "92.63.105.2",
+					BidirectionalTrafficVerified: true,
+				},
+				UnderlayRoutePolicy: req.UnderlayRoutePolicy,
+			}, nil
+		}),
+	)
+
+	resolutionState, err := host.StartResolution(context.Background(), StartResolutionRequest{
+		Provider: "vk",
+		Input: &ProviderInputEnvelope{
+			Kind: ProviderInputKindLink,
+			Link: "https://vk.com/call/join/test-token",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartResolution() error = %v", err)
+	}
+	resolved := waitForResolutionState(t, host, resolutionState.ID, ResolutionStateResolved)
+
+	result, err := host.StartPlatformTunnel(context.Background(), PlatformTunnelStartRequest{
+		Mode:          PlatformTunnelModeWindowsWintun,
+		ResolutionID:  resolved.ID,
+		ExecutionPlan: &plan,
+		RuntimeDefaults: &RuntimeDefaults{
+			ListenAddr:  reserveUDPAddr(t),
+			PeerAddr:    "176.109.104.105:56040",
+			Connections: 1,
+			Mode:        TransportModeAuto,
+			UseDTLS:     boolRef(true),
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartPlatformTunnel() error = %v", err)
+	}
+	if !result.Ready {
+		t.Fatalf("StartPlatformTunnel().Ready = false, want true: %+v", result)
+	}
+	sessionState, err := host.Session(result.SessionID)
+	if err != nil {
+		t.Fatalf("Session() error = %v", err)
+	}
+	if sessionState.Profile.PeerAddr != "92.63.105.2:56042" {
+		t.Fatalf("published session peer_addr = %q, want raw ingress", sessionState.Profile.PeerAddr)
+	}
+	if sessionState.Profile.Mode != TransportModeUDP {
+		t.Fatalf("published session mode = %q, want %q", sessionState.Profile.Mode, TransportModeUDP)
+	}
+	if sessionState.Profile.UseDTLS == nil || *sessionState.Profile.UseDTLS {
+		t.Fatalf("published session use_dtls = %v, want false", sessionState.Profile.UseDTLS)
+	}
+}
+
 func TestHostStopPlatformTunnelStopsPublishedPlatformSession(t *testing.T) {
 	build := testBuildIdentity()
 	build.Target = "android/embedded"

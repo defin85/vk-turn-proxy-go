@@ -871,7 +871,7 @@ func (h *Host) publishReadyPlatformTunnelResult(
 	req PlatformTunnelStartRequest,
 	result PlatformTunnelStartResult,
 ) (PlatformTunnelStartResult, error) {
-	session, err := h.publishPlatformTunnelSession(req)
+	session, err := h.publishPlatformTunnelSession(req, result)
 	if err != nil {
 		return h.platformTunnelPublicationFailure(ctx, req, result, err), nil
 	}
@@ -992,7 +992,7 @@ func (h *Host) cleanupPlatformTunnelRuntime(ctx context.Context, mode PlatformTu
 	return err
 }
 
-func (h *Host) publishPlatformTunnelSession(req PlatformTunnelStartRequest) (Session, error) {
+func (h *Host) publishPlatformTunnelSession(req PlatformTunnelStartRequest, result PlatformTunnelStartResult) (Session, error) {
 	if strings.TrimSpace(req.ResolutionID) == "" {
 		return Session{}, fmt.Errorf("platform tunnel session publication requires resolution_id")
 	}
@@ -1003,7 +1003,27 @@ func (h *Host) publishPlatformTunnelSession(req PlatformTunnelStartRequest) (Ses
 	if err != nil {
 		return Session{}, err
 	}
+	spec = platformTunnelSessionProfileSpec(spec, result)
 	return h.startPlatformTunnelSession(req.Mode, spec, req.ResolutionID)
+}
+
+func platformTunnelSessionProfileSpec(spec ProfileSpec, result PlatformTunnelStartResult) ProfileSpec {
+	if result.RemoteIngress == nil {
+		return spec
+	}
+	address := strings.TrimSpace(result.RemoteIngress.Address)
+	if address == "" {
+		return spec
+	}
+	switch result.RemoteIngress.Protocol {
+	case RuntimeRemoteIngressProtocolRawWireGuard,
+		RuntimeRemoteIngressProtocolUDPProtocolMux:
+		spec.PeerAddr = address
+		spec.Mode = TransportModeUDP
+		useDTLS := false
+		spec.UseDTLS = &useDTLS
+	}
+	return spec
 }
 
 func (h *Host) materializedProfileSpecForResolution(

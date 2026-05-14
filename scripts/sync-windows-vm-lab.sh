@@ -64,9 +64,6 @@ $wintunPath = Join-Path $BundleRoot 'wintun.dll'
 $guiPath = if (Test-Path $relayDockPath) { $relayDockPath } else { throw "bundled RelayDock.exe not found under $BundleRoot" }
 if (-not (Test-Path $clientdPath)) { throw "bundled clientd.exe not found under $BundleRoot" }
 if (-not (Test-Path $wintunPath)) { throw "bundled wintun.dll not found under $BundleRoot" }
-if (Test-Path $WireGuardProfilePath) {
-    $env:VKTP_WINDOWS_WIREGUARD_PROFILE = $WireGuardProfilePath
-}
 
 function Test-IsAdmin {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -102,9 +99,6 @@ try {
     $guiProcess = Start-Process -FilePath $guiPath -WorkingDirectory $BundleRoot -PassThru
     Write-Host "clientd pid=$($clientdProcess.Id) ready on $ListenAddress"
     Write-Host "gui pid=$($guiProcess.Id) started from $guiPath"
-    if (-not [string]::IsNullOrWhiteSpace($env:VKTP_WINDOWS_WIREGUARD_PROFILE)) {
-        Write-Host "wireguard profile override=$env:VKTP_WINDOWS_WIREGUARD_PROFILE"
-    }
     Wait-Process -Id $guiProcess.Id -ErrorAction Stop
 }
 finally {

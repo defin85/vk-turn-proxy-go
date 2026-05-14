@@ -398,6 +398,7 @@ type TransportProfileStatus struct {
 	SecretMaterialRef TransportProfileSecretMaterialRef   `json:"secret_material_ref"`
 	Actions           []TransportProfileLifecycleAction   `json:"actions,omitempty"`
 	DefaultFor        []TransportProfileDefaultBinding    `json:"default_for,omitempty"`
+	StructuredDraft   *TransportProfileStructuredDraft    `json:"structured_draft,omitempty"`
 	ImportedAt        time.Time                           `json:"imported_at"`
 	UpdatedAt         time.Time                           `json:"updated_at"`
 }

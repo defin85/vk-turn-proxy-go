@@ -988,6 +988,21 @@ void main() {
         profiles.single.actions,
         contains(TransportProfileLifecycleAction.exportPortable),
       );
+      expect(
+        profiles
+            .single
+            .structuredDraft
+            ?.fields[TransportProfileStructuredFieldId.endpoint],
+        'relay.example.test:51820',
+      );
+      expect(
+        profiles
+            .single
+            .structuredDraft
+            ?.secretActions[TransportProfileStructuredFieldId
+            .interfacePrivateKey],
+        TransportProfileSecretUpdateAction.preserveExisting,
+      );
 
       final exportedPortable = await client.exportTransportProfilePortable(
         'transport-profile-1',
@@ -1923,6 +1938,30 @@ Map<String, dynamic> _transportProfileStatusPayload({
     'secret_material_ref': <String, dynamic>{
       'kind': secretMaterialKind,
       'ref': 'host-owned:transport-profile-1',
+    },
+    'structured_draft': <String, dynamic>{
+      'kind': 'wireguard_native_v1',
+      'schema_version': 'wireguard_native_v1.structured_editor.v1',
+      'display_name': 'WireGuard',
+      'fields': <String, dynamic>{
+        'interface_addresses': <String>['10.10.0.2/32'],
+        'dns_servers': <String>['1.1.1.1'],
+        'mtu': 1420,
+        'peer_public_key': 'peer-public-key',
+        'allowed_ips': <String>['0.0.0.0/0'],
+        'endpoint': 'relay.example.test:51820',
+        'persistent_keepalive': 5,
+      },
+      'secret_actions': <String, dynamic>{
+        'interface_private_key': 'preserve_existing',
+      },
+      'interface_addresses': <String>['10.10.0.2/32'],
+      'dns_servers': <String>['1.1.1.1'],
+      'mtu': 1420,
+      'peer_public_key': 'peer-public-key',
+      'allowed_ips': <String>['0.0.0.0/0'],
+      'endpoint': 'relay.example.test:51820',
+      'persistent_keepalive_seconds': 5,
     },
     'actions': <String>[
       'replace',

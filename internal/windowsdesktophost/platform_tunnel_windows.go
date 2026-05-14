@@ -51,15 +51,15 @@ type powershellQueryResult struct {
 }
 
 type windowsDataplaneProbeResult struct {
-	SelectedRouteInterfaceAlias  string `json:"selected_route_interface_alias"`
-	SelectedRouteNextHop         string `json:"selected_route_next_hop"`
-	SelectedRouteError           string `json:"selected_route_error"`
-	RemoteEgressIP            string `json:"remote_egress_ip"`
-	WintunReceivedBytesBefore int64  `json:"wintun_received_bytes_before"`
-	WintunReceivedBytesAfter  int64  `json:"wintun_received_bytes_after"`
-	WintunSentBytesBefore     int64  `json:"wintun_sent_bytes_before"`
-	WintunSentBytesAfter      int64  `json:"wintun_sent_bytes_after"`
-	ProbeError                string `json:"probe_error"`
+	SelectedRouteInterfaceAlias string `json:"selected_route_interface_alias"`
+	SelectedRouteNextHop        string `json:"selected_route_next_hop"`
+	SelectedRouteError          string `json:"selected_route_error"`
+	RemoteEgressIP              string `json:"remote_egress_ip"`
+	WintunReceivedBytesBefore   int64  `json:"wintun_received_bytes_before"`
+	WintunReceivedBytesAfter    int64  `json:"wintun_received_bytes_after"`
+	WintunSentBytesBefore       int64  `json:"wintun_sent_bytes_before"`
+	WintunSentBytesAfter        int64  `json:"wintun_sent_bytes_after"`
+	ProbeError                  string `json:"probe_error"`
 }
 
 func newWindowsWintunLifecycle(logger *slog.Logger) WindowsWintunLifecycle {
@@ -487,7 +487,7 @@ $dns = @(Get-DnsClientServerAddress -InterfaceIndex $route.InterfaceIndex -Addre
 func queryWindowsWintunDataplaneProbe(ctx context.Context, interfaceAlias string) (*windowsDataplaneProbeResult, error) {
 	payload := map[string]any{
 		"interface_alias": strings.TrimSpace(interfaceAlias),
-		"probe_url":       "http://1.1.1.1/cdn-cgi/trace",
+		"probe_url":       "https://1.1.1.1/cdn-cgi/trace",
 		"timeout_seconds": 15,
 	}
 	script := `
@@ -584,7 +584,7 @@ $afterSent = Get-WintunSentBytes
 		return nil, fmt.Errorf("decode Wintun data-plane probe: %w", err)
 	}
 	if strings.TrimSpace(result.ProbeError) != "" {
-		return &result, fmt.Errorf(strings.TrimSpace(result.ProbeError))
+		return &result, errors.New(strings.TrimSpace(result.ProbeError))
 	}
 	if strings.TrimSpace(result.RemoteEgressIP) == "" {
 		return &result, fmt.Errorf("Wintun data-plane probe returned empty remote egress IP")

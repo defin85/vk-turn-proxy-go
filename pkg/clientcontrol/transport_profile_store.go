@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"sort"
@@ -151,6 +153,7 @@ func cloneTransportProfileStatus(status TransportProfileStatus) TransportProfile
 	clone.Actions = append([]TransportProfileLifecycleAction(nil), status.Actions...)
 	clone.DefaultFor = cloneTransportProfileDefaultBindings(status.DefaultFor)
 	clone.Compatibility.CompatibleExecutionPlans = append([]RuntimeExecutionPlan(nil), status.Compatibility.CompatibleExecutionPlans...)
+	clone.StructuredDraft = cloneTransportProfileStructuredDraft(status.StructuredDraft)
 	return clone
 }
 
@@ -175,6 +178,41 @@ func cloneTransportProfileDefaultBindings(bindings []TransportProfileDefaultBind
 		out = append(out, copyBinding)
 	}
 	return out
+}
+
+func cloneTransportProfileStructuredDraft(draft *TransportProfileStructuredDraft) *TransportProfileStructuredDraft {
+	if draft == nil {
+		return nil
+	}
+	clone := *draft
+	if draft.Fields != nil {
+		clone.Fields = make(map[TransportProfileStructuredFieldID]any, len(draft.Fields))
+		for field, value := range draft.Fields {
+			clone.Fields[field] = cloneStructuredDraftFieldValue(value)
+		}
+	}
+	if draft.SecretActions != nil {
+		clone.SecretActions = make(map[TransportProfileStructuredFieldID]TransportProfileSecretUpdateAction, len(draft.SecretActions))
+		for field, action := range draft.SecretActions {
+			clone.SecretActions[field] = action
+		}
+	}
+	clone.InterfaceAddresses = append([]string(nil), draft.InterfaceAddresses...)
+	clone.DNSServers = append([]string(nil), draft.DNSServers...)
+	clone.AllowedIPs = append([]string(nil), draft.AllowedIPs...)
+	clone.DefaultFor = cloneRuntimeExecutionPlan(draft.DefaultFor)
+	return &clone
+}
+
+func cloneStructuredDraftFieldValue(value any) any {
+	switch typed := value.(type) {
+	case []string:
+		return append([]string(nil), typed...)
+	case []any:
+		return append([]any(nil), typed...)
+	default:
+		return typed
+	}
 }
 
 func cloneTransportProfileReference(ref *TransportProfileReference) *TransportProfileReference {
@@ -261,6 +299,10 @@ func (h *Host) transportProfilePrerequisiteStatusLocked(
 			status.SelectedProfile = ref
 			status.MissingKind = ""
 			status.Message = ""
+			return status
+		} else {
+			status.MissingKind = ""
+			status.Message = err.Error()
 			return status
 		}
 	}
@@ -523,17 +565,23 @@ func (h *Host) storeParsedTransportProfileLocked(
 		importedAt = existing.status.ImportedAt.UTC()
 	}
 
+	validation := transportProfileValidationStatus(normalized.Kind, parsed)
+	compatibilityState := TransportProfileCompatibilityStateCompatible
+	compatibilityMessage := ""
+	if validation.State != TransportProfileValidationStateValid {
+		compatibilityState = TransportProfileCompatibilityStateIncompatible
+		compatibilityMessage = "transport profile material is invalid"
+	}
+
 	status := TransportProfileStatus{
 		ID:          profileID,
 		Kind:        normalized.Kind,
 		Version:     "1",
 		DisplayName: firstNonEmpty(normalized.DisplayName, defaultTransportProfileDisplayName(normalized.Kind)),
-		Validation: TransportProfileValidationStatus{
-			State:       TransportProfileValidationStateValid,
-			Fingerprint: wireGuardProfileFingerprint(parsed),
-		},
+		Validation:  validation,
 		Compatibility: TransportProfileCompatibilityStatus{
-			State: TransportProfileCompatibilityStateCompatible,
+			State:   compatibilityState,
+			Message: compatibilityMessage,
 			CompatibleExecutionPlans: compatiblePlansForTransportProfileKind(
 				normalized.Kind,
 				h.platformTunnels,
@@ -543,11 +591,11 @@ func (h *Host) storeParsedTransportProfileLocked(
 			Kind: materialSource,
 			Ref:  "host-owned:" + profileID,
 		},
-		Actions:    transportProfileStatusActionsForProfile(normalized.Kind, TransportProfileValidationStatus{State: TransportProfileValidationStateValid}, parsed),
+		Actions:    transportProfileStatusActionsForProfile(normalized.Kind, validation, parsed),
 		ImportedAt: importedAt,
 		UpdatedAt:  h.now().UTC(),
 	}
-	if assignDefaults && (normalized.DefaultFor != nil || !hadPreviousProfile) {
+	if status.Validation.State == TransportProfileValidationStateValid && assignDefaults && (normalized.DefaultFor != nil || !hadPreviousProfile) {
 		status.DefaultFor = h.defaultBindingsForImportedTransportProfileLocked(status, normalized.DefaultFor)
 	} else {
 		status.DefaultFor = h.defaultBindingsForTransportProfileLocked(status)
@@ -558,7 +606,7 @@ func (h *Host) storeParsedTransportProfileLocked(
 		status:    cloneTransportProfileStatus(status),
 		wireguard: cloneWireGuardProfile(parsed),
 	}
-	if assignDefaults && (normalized.DefaultFor != nil || !hadPreviousProfile) {
+	if status.Validation.State == TransportProfileValidationStateValid && assignDefaults && (normalized.DefaultFor != nil || !hadPreviousProfile) {
 		for _, binding := range status.DefaultFor {
 			h.transportProfileDefaults[binding.ScopeID] = profileID
 		}
@@ -643,17 +691,7 @@ func (h *Host) loadTransportProfileStore() error {
 		if status.Kind == TransportProfileKindWireGuardNativeV1 && record.WireGuard != nil {
 			profile = wireGuardProfileFromDisk(record.WireGuard)
 		}
-		if !wireGuardProfileComplete(profile) {
-			status.Validation = TransportProfileValidationStatus{
-				State:   TransportProfileValidationStateInvalid,
-				Message: "stored transport profile material is unavailable",
-			}
-			profile = nil
-		} else {
-			status.Validation.State = TransportProfileValidationStateValid
-			status.Validation.Message = ""
-			status.Validation.Fingerprint = wireGuardProfileFingerprint(profile)
-		}
+		status.Validation = transportProfileValidationStatus(status.Kind, profile)
 		status.SecretMaterialRef.Ref = "host-owned:" + status.ID
 		if status.SecretMaterialRef.Kind == "" {
 			status.SecretMaterialRef.Kind = TransportProfileMaterialSourceImportAdapter
@@ -762,6 +800,8 @@ func (h *Host) refreshTransportProfileStatusLocked(profileID string) {
 	if status.SecretMaterialRef.Kind == "" {
 		status.SecretMaterialRef.Kind = TransportProfileMaterialSourceImportAdapter
 	}
+	status.Validation = transportProfileValidationStatus(status.Kind, managed.wireguard)
+	status.StructuredDraft = redactedStructuredDraftForTransportProfile(status, managed.wireguard)
 	status.Actions = transportProfileStatusActionsForProfile(status.Kind, status.Validation, managed.wireguard)
 	status.Compatibility.CompatibleExecutionPlans = compatiblePlansForTransportProfileKind(
 		status.Kind,
@@ -807,10 +847,27 @@ func transportProfileStatusActionsForProfile(
 	wireguard *wireguardprofile.Profile,
 ) []TransportProfileLifecycleAction {
 	actions := transportProfileBaseStatusActions()
+	if validation.State != TransportProfileValidationStateValid {
+		actions = removeTransportProfileLifecycleAction(actions, TransportProfileLifecycleActionSelectForStartup)
+	}
 	if transportProfilePortableExportAvailable(kind, validation, wireguard) {
 		actions = append(actions, TransportProfileLifecycleActionExportPortable)
 	}
 	return actions
+}
+
+func removeTransportProfileLifecycleAction(
+	actions []TransportProfileLifecycleAction,
+	action TransportProfileLifecycleAction,
+) []TransportProfileLifecycleAction {
+	out := actions[:0]
+	for _, candidate := range actions {
+		if candidate == action {
+			continue
+		}
+		out = append(out, candidate)
+	}
+	return out
 }
 
 func (h *Host) resolveTransportProfileForStartupLocked(
@@ -918,10 +975,17 @@ func (h *Host) validateTransportProfileRefLocked(
 		return nil, fmt.Errorf("%w: profile %s has kind %s but selected plan requires %s", ErrTransportProfileIncompatible, profileID, managed.status.Kind, requiredKinds[0])
 	}
 	if managed.status.Validation.State != TransportProfileValidationStateValid {
+		message := strings.TrimSpace(managed.status.Validation.Message)
+		if message != "" {
+			return nil, fmt.Errorf("%w: profile %s validation state is %s: %s", ErrTransportProfileInvalid, profileID, managed.status.Validation.State, message)
+		}
 		return nil, fmt.Errorf("%w: profile %s validation state is %s", ErrTransportProfileInvalid, profileID, managed.status.Validation.State)
 	}
 	if !transportProfileCompatibleWithPlan(managed.status.Kind, plan) {
 		return nil, fmt.Errorf("%w: profile %s is not compatible with %s/%s/%s/%s", ErrTransportProfileIncompatible, profileID, plan.AccessMethod, plan.CarrierFamily, plan.EngineFamily, plan.HostAdapter)
+	}
+	if err := validateTransportProfileMaterialForPlan(managed, plan); err != nil {
+		return nil, err
 	}
 	return &TransportProfileReference{
 		ProfileID:      profileID,
@@ -1003,6 +1067,9 @@ func (h *Host) defaultBindingsForImportedTransportProfileLocked(
 	status TransportProfileStatus,
 	requestedPlan *RuntimeExecutionPlan,
 ) []TransportProfileDefaultBinding {
+	if status.Validation.State != TransportProfileValidationStateValid {
+		return nil
+	}
 	plans := compatiblePlansForTransportProfileKind(status.Kind, h.platformTunnels)
 	if requestedPlan != nil {
 		plans = []RuntimeExecutionPlan{*requestedPlan}
@@ -1027,6 +1094,9 @@ func (h *Host) defaultBindingsForImportedTransportProfileLocked(
 func (h *Host) defaultBindingsForTransportProfileLocked(
 	status TransportProfileStatus,
 ) []TransportProfileDefaultBinding {
+	if status.Validation.State != TransportProfileValidationStateValid {
+		return nil
+	}
 	plans := compatiblePlansForTransportProfileKind(status.Kind, h.platformTunnels)
 	out := make([]TransportProfileDefaultBinding, 0, len(plans))
 	for _, plan := range plans {
@@ -1233,6 +1303,138 @@ func wireGuardProfileComplete(profile *wireguardprofile.Profile) bool {
 		len(profile.Addresses) > 0 &&
 		strings.TrimSpace(profile.PeerPublicKey) != "" &&
 		len(profile.AllowedIPs) > 0
+}
+
+func redactedStructuredDraftForTransportProfile(
+	status TransportProfileStatus,
+	profile *wireguardprofile.Profile,
+) *TransportProfileStructuredDraft {
+	if status.Kind != TransportProfileKindWireGuardNativeV1 || profile == nil {
+		return nil
+	}
+	fields := map[TransportProfileStructuredFieldID]any{
+		TransportProfileStructuredFieldDisplayName:         strings.TrimSpace(status.DisplayName),
+		TransportProfileStructuredFieldInterfaceAddresses:  append([]string(nil), profile.Addresses...),
+		TransportProfileStructuredFieldDNSServers:          append([]string(nil), profile.DNSServers...),
+		TransportProfileStructuredFieldMTU:                 profile.MTU,
+		TransportProfileStructuredFieldPeerPublicKey:       strings.TrimSpace(profile.PeerPublicKey),
+		TransportProfileStructuredFieldAllowedIPs:          append([]string(nil), profile.AllowedIPs...),
+		TransportProfileStructuredFieldEndpoint:            strings.TrimSpace(profile.Endpoint),
+		TransportProfileStructuredFieldPersistentKeepalive: profile.PersistentKeepaliveSeconds,
+	}
+	for field, value := range fields {
+		if structuredDraftFieldEmpty(value) {
+			delete(fields, field)
+		}
+	}
+	secretActions := make(map[TransportProfileStructuredFieldID]TransportProfileSecretUpdateAction)
+	if strings.TrimSpace(profile.PrivateKey) != "" {
+		secretActions[TransportProfileStructuredFieldInterfacePrivateKey] = TransportProfileSecretUpdateActionPreserveExisting
+	}
+	if strings.TrimSpace(profile.PresharedKey) != "" {
+		secretActions[TransportProfileStructuredFieldPeerPresharedKey] = TransportProfileSecretUpdateActionPreserveExisting
+	}
+	return &TransportProfileStructuredDraft{
+		Kind:                       status.Kind,
+		SchemaVersion:              transportProfileStructuredWireGuardSchemaVersion,
+		DisplayName:                strings.TrimSpace(status.DisplayName),
+		Fields:                     fields,
+		SecretActions:              secretActions,
+		InterfaceAddresses:         append([]string(nil), profile.Addresses...),
+		DNSServers:                 append([]string(nil), profile.DNSServers...),
+		MTU:                        profile.MTU,
+		PeerPublicKey:              strings.TrimSpace(profile.PeerPublicKey),
+		AllowedIPs:                 append([]string(nil), profile.AllowedIPs...),
+		Endpoint:                   strings.TrimSpace(profile.Endpoint),
+		PersistentKeepaliveSeconds: profile.PersistentKeepaliveSeconds,
+	}
+}
+
+func structuredDraftFieldEmpty(value any) bool {
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed) == ""
+	case int:
+		return typed == 0
+	case []string:
+		return len(trimStringList(typed)) == 0
+	default:
+		return value == nil
+	}
+}
+
+func transportProfileValidationStatus(
+	kind TransportProfileKind,
+	profile *wireguardprofile.Profile,
+) TransportProfileValidationStatus {
+	switch kind {
+	case TransportProfileKindWireGuardNativeV1:
+		return wireGuardTransportProfileValidationStatus(profile)
+	default:
+		return TransportProfileValidationStatus{
+			State:   TransportProfileValidationStateInvalid,
+			Message: fmt.Sprintf("unsupported transport profile kind %s", kind),
+		}
+	}
+}
+
+func wireGuardTransportProfileValidationStatus(
+	profile *wireguardprofile.Profile,
+) TransportProfileValidationStatus {
+	if !wireGuardProfileComplete(profile) {
+		return TransportProfileValidationStatus{
+			State:   TransportProfileValidationStateInvalid,
+			Message: "stored transport profile material is unavailable",
+		}
+	}
+	endpoint := strings.TrimSpace(profile.Endpoint)
+	if endpoint == "" {
+		return TransportProfileValidationStatus{
+			State:   TransportProfileValidationStateInvalid,
+			Message: "WireGuard transport profile requires an explicit raw WireGuard ingress endpoint",
+		}
+	}
+	if err := validateRawWireGuardIngressEndpoint(endpoint); err != nil {
+		return TransportProfileValidationStatus{
+			State:   TransportProfileValidationStateInvalid,
+			Message: err.Error(),
+		}
+	}
+	return TransportProfileValidationStatus{
+		State:       TransportProfileValidationStateValid,
+		Fingerprint: wireGuardProfileFingerprint(profile),
+	}
+}
+
+func validateTransportProfileMaterialForPlan(
+	managed managedTransportProfile,
+	plan RuntimeExecutionPlan,
+) error {
+	if managed.status.Kind != TransportProfileKindWireGuardNativeV1 ||
+		!isStrictWireGuardTurnExecutionPlan(plan) {
+		return nil
+	}
+	if managed.wireguard == nil {
+		return fmt.Errorf("%w: profile %s WireGuard material is unavailable", ErrTransportProfileInvalid, managed.status.ID)
+	}
+	if err := validateRawWireGuardIngressEndpoint(managed.wireguard.Endpoint); err != nil {
+		return fmt.Errorf("%w: profile %s %s", ErrTransportProfileInvalid, managed.status.ID, err)
+	}
+	return nil
+}
+
+func validateRawWireGuardIngressEndpoint(endpoint string) error {
+	host, port, err := net.SplitHostPort(strings.TrimSpace(endpoint))
+	if err != nil || strings.TrimSpace(host) == "" || strings.TrimSpace(port) == "" {
+		return fmt.Errorf("WireGuard transport profile requires raw WireGuard ingress endpoint in host:port form")
+	}
+	if strings.EqualFold(host, "localhost") {
+		return fmt.Errorf("WireGuard transport profile raw ingress endpoint must be remote, got localhost")
+	}
+	if addr, err := netip.ParseAddr(host); err == nil && (addr.IsLoopback() || addr.IsUnspecified()) {
+		return fmt.Errorf("WireGuard transport profile raw ingress endpoint must be remote, got %s", addr)
+	}
+	return nil
 }
 
 func wireGuardProfileFingerprint(profile *wireguardprofile.Profile) string {

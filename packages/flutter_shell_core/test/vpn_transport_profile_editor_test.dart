@@ -84,6 +84,125 @@ void main() {
   });
 
   testWidgets(
+    'hydrates edit form from redacted structured draft and preserves secrets',
+    (WidgetTester tester) async {
+      TransportProfileStructuredDraft? savedDraft;
+
+      await tester.pumpWidget(
+        _EditorHarness(
+          mode: VPNTransportProfileEditorMode.edit,
+          existingProfile: _status(
+            displayName: 'Saved WireGuard',
+            structuredDraft: TransportProfileStructuredDraft(
+              kind: TransportProfileKind.wireGuardNativeV1,
+              schemaVersion: 'wireguard_native_v1.structured_editor.v1',
+              displayName: 'Saved WireGuard',
+              fields: <TransportProfileStructuredFieldId, Object?>{
+                TransportProfileStructuredFieldId.interfaceAddresses: <String>[
+                  '10.231.1.3/32',
+                ],
+                TransportProfileStructuredFieldId.dnsServers: <String>[
+                  '1.1.1.1',
+                ],
+                TransportProfileStructuredFieldId.mtu: 1420,
+                TransportProfileStructuredFieldId.peerPublicKey:
+                    'server-public-key',
+                TransportProfileStructuredFieldId.allowedIps: <String>[
+                  '0.0.0.0/1',
+                  '128.0.0.0/1',
+                ],
+                TransportProfileStructuredFieldId.endpoint:
+                    '176.109.104.105:56042',
+                TransportProfileStructuredFieldId.persistentKeepalive: 5,
+              },
+              secretActions:
+                  <
+                    TransportProfileStructuredFieldId,
+                    TransportProfileSecretUpdateAction
+                  >{
+                    TransportProfileStructuredFieldId.interfacePrivateKey:
+                        TransportProfileSecretUpdateAction.preserveExisting,
+                    TransportProfileStructuredFieldId.peerPresharedKey:
+                        TransportProfileSecretUpdateAction.preserveExisting,
+                  },
+            ),
+          ),
+          onValidate:
+              (TransportProfileStructuredValidationRequest request) async {
+                return const TransportProfileStructuredValidationResult(
+                  valid: true,
+                );
+              },
+          onSave: (TransportProfileStructuredDraft draft) async {
+            savedDraft = draft;
+            return TransportProfileStructuredSaveResult(
+              profile: _status(displayName: 'Saved WireGuard'),
+            );
+          },
+        ),
+      );
+
+      expect(
+        _textFor(tester, 'vpn-profile-editor-display_name'),
+        'Saved WireGuard',
+      );
+      expect(
+        _textFor(tester, 'vpn-profile-editor-interface_addresses'),
+        '10.231.1.3/32',
+      );
+      expect(_textFor(tester, 'vpn-profile-editor-dns_servers'), '1.1.1.1');
+      expect(_textFor(tester, 'vpn-profile-editor-mtu'), '1420');
+      expect(
+        _textFor(tester, 'vpn-profile-editor-peer_public_key'),
+        'server-public-key',
+      );
+      expect(
+        _textFor(tester, 'vpn-profile-editor-allowed_ips'),
+        '0.0.0.0/1\n128.0.0.0/1',
+      );
+      expect(
+        _textFor(tester, 'vpn-profile-editor-endpoint'),
+        '176.109.104.105:56042',
+      );
+      expect(_textFor(tester, 'vpn-profile-editor-persistent_keepalive'), '5');
+      expect(
+        find.byKey(
+          const ValueKey<String>('vpn-profile-editor-interface_private_key'),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.byKey(
+          const ValueKey<String>('vpn-profile-editor-peer_preshared_key'),
+        ),
+        findsNothing,
+      );
+
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+
+      expect(
+        savedDraft?.fields[TransportProfileStructuredFieldId.endpoint],
+        '176.109.104.105:56042',
+      );
+      expect(
+        savedDraft?.fields[TransportProfileStructuredFieldId.allowedIps],
+        <String>['0.0.0.0/1', '128.0.0.0/1'],
+      );
+      expect(
+        savedDraft?.secretActions[TransportProfileStructuredFieldId
+            .interfacePrivateKey],
+        TransportProfileSecretUpdateAction.preserveExisting,
+      );
+      expect(
+        savedDraft?.secretActions[TransportProfileStructuredFieldId
+            .peerPresharedKey],
+        TransportProfileSecretUpdateAction.preserveExisting,
+      );
+    },
+  );
+
+  testWidgets(
     'shows field errors and clears submitted secrets on validation failure',
     (WidgetTester tester) async {
       var saveCalled = false;
@@ -681,6 +800,7 @@ TransportProfileStatus _status({
       const <TransportProfileLifecycleAction>[],
   List<TransportProfileDefaultBinding> defaultFor =
       const <TransportProfileDefaultBinding>[],
+  TransportProfileStructuredDraft? structuredDraft,
 }) {
   final now = DateTime.utc(2026);
   return TransportProfileStatus(
@@ -700,6 +820,7 @@ TransportProfileStatus _status({
     ),
     actions: actions,
     defaultFor: defaultFor,
+    structuredDraft: structuredDraft,
     importedAt: now,
     updatedAt: now,
   );

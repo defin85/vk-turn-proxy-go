@@ -14,6 +14,7 @@ import (
 )
 
 const windowsTransportProfileStoreEnv = "VKTP_WINDOWS_TRANSPORT_PROFILE_STORE"
+const windowsLegacyWireGuardMigrationEnv = "VKTP_WINDOWS_LEGACY_WIREGUARD_MIGRATION"
 
 func NewClientControlHost(logger *slog.Logger) *clientcontrol.Host {
 	if logger == nil {
@@ -55,7 +56,9 @@ func NewClientControlHost(logger *slog.Logger) *clientcontrol.Host {
 		)
 	}
 	host := clientcontrol.New(opts...)
-	migrateLegacyWindowsWireGuardProfile(logger, host)
+	if legacyWindowsWireGuardMigrationEnabled() {
+		migrateLegacyWindowsWireGuardProfile(logger, host)
+	}
 	controller.setWireGuardTurnLeaseProvider(
 		func(
 			ctx context.Context,
@@ -80,6 +83,15 @@ func NewClientControlHost(logger *slog.Logger) *clientcontrol.Host {
 		},
 	)
 	return host
+}
+
+func legacyWindowsWireGuardMigrationEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(windowsLegacyWireGuardMigrationEnv))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 func detectWindowsTransportProfileStorePath() (string, error) {

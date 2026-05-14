@@ -501,10 +501,23 @@ class _VPNTransportProfileEditorSurfaceState
   }
 
   String _initialValueFor(TransportProfileStructuredFieldDescriptor field) {
+    if (field.secret) {
+      return '';
+    }
+    final draftValue = _initialDraftValueFor(field);
     if (field.id == TransportProfileStructuredFieldId.displayName) {
-      return widget.existingProfile?.displayName.trim().isNotEmpty == true
-          ? widget.existingProfile!.displayName.trim()
-          : firstNonEmpty(field.defaultString, _kindLabel(widget.schema.kind));
+      return firstNonEmpty(
+        firstNonEmpty(
+          widget.existingProfile?.displayName.trim() ?? '',
+          _initialTextForDraftValue(draftValue),
+        ),
+        firstNonEmpty(field.defaultString, _kindLabel(widget.schema.kind)),
+      );
+    }
+    final draftText = _initialTextForDraftValue(draftValue);
+    if (widget.mode == VPNTransportProfileEditorMode.edit &&
+        draftText.isNotEmpty) {
+      return draftText;
     }
     if (field.valueKind ==
         TransportProfileStructuredFieldValueKind.stringList) {
@@ -517,10 +530,62 @@ class _VPNTransportProfileEditorSurfaceState
     return field.defaultString;
   }
 
+  Object? _initialDraftValueFor(
+    TransportProfileStructuredFieldDescriptor field,
+  ) {
+    final draft = widget.existingProfile?.structuredDraft;
+    if (draft == null) {
+      return null;
+    }
+    if (draft.fields.containsKey(field.id)) {
+      return draft.fields[field.id];
+    }
+    return switch (field.id) {
+      TransportProfileStructuredFieldId.displayName => draft.displayName,
+      TransportProfileStructuredFieldId.interfaceAddresses =>
+        draft.interfaceAddresses,
+      TransportProfileStructuredFieldId.dnsServers => draft.dnsServers,
+      TransportProfileStructuredFieldId.mtu => draft.mtu,
+      TransportProfileStructuredFieldId.peerPublicKey => draft.peerPublicKey,
+      TransportProfileStructuredFieldId.allowedIps => draft.allowedIps,
+      TransportProfileStructuredFieldId.endpoint => draft.endpoint,
+      TransportProfileStructuredFieldId.persistentKeepalive =>
+        draft.persistentKeepaliveSeconds,
+      _ => null,
+    };
+  }
+
+  String _initialTextForDraftValue(Object? value) {
+    if (value is String) {
+      return value.trim();
+    }
+    if (value is int) {
+      return value == 0 ? '' : '$value';
+    }
+    if (value is Iterable<String>) {
+      return value
+          .map((String item) => item.trim())
+          .where((String item) => item.isNotEmpty)
+          .join('\n');
+    }
+    if (value is Iterable<dynamic>) {
+      return value
+          .whereType<String>()
+          .map((String item) => item.trim())
+          .where((String item) => item.isNotEmpty)
+          .join('\n');
+    }
+    return '';
+  }
+
   TransportProfileSecretUpdateAction _initialSecretActionFor(
     TransportProfileStructuredFieldDescriptor field,
   ) {
     final actions = field.secretUpdateActions;
+    final draftAction = _initialDraftSecretActionFor(field);
+    if (draftAction != null && actions.contains(draftAction)) {
+      return draftAction;
+    }
     if (widget.mode == VPNTransportProfileEditorMode.create &&
         actions.contains(TransportProfileSecretUpdateAction.generateHost)) {
       return TransportProfileSecretUpdateAction.generateHost;
@@ -535,6 +600,26 @@ class _VPNTransportProfileEditorSurfaceState
     return actions.isEmpty
         ? TransportProfileSecretUpdateAction.replaceSubmitted
         : actions.first;
+  }
+
+  TransportProfileSecretUpdateAction? _initialDraftSecretActionFor(
+    TransportProfileStructuredFieldDescriptor field,
+  ) {
+    final draft = widget.existingProfile?.structuredDraft;
+    if (draft == null) {
+      return null;
+    }
+    final fieldAction = draft.secretActions[field.id];
+    if (fieldAction != null) {
+      return fieldAction;
+    }
+    return switch (field.id) {
+      TransportProfileStructuredFieldId.interfacePrivateKey =>
+        draft.interfacePrivateKeyAction,
+      TransportProfileStructuredFieldId.peerPresharedKey =>
+        draft.peerPresharedKeyAction,
+      _ => null,
+    };
   }
 
   List<String> _splitList(String raw) {

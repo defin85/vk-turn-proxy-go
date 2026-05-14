@@ -897,6 +897,7 @@ class TransportProfileStatus {
     this.displayName = '',
     this.actions = const <TransportProfileLifecycleAction>[],
     this.defaultFor = const <TransportProfileDefaultBinding>[],
+    this.structuredDraft,
   });
 
   factory TransportProfileStatus.fromJson(Map<String, dynamic> json) {
@@ -926,6 +927,11 @@ class TransportProfileStatus {
             ),
           )
           .toList(growable: false),
+      structuredDraft: json['structured_draft'] is Map<String, dynamic>
+          ? TransportProfileStructuredDraft.fromJson(
+              json['structured_draft'] as Map<String, dynamic>,
+            )
+          : null,
       importedAt: _readDateTime(json['imported_at']),
       updatedAt: _readDateTime(json['updated_at']),
     );
@@ -940,6 +946,7 @@ class TransportProfileStatus {
   final TransportProfileSecretMaterialRef secretMaterialRef;
   final List<TransportProfileLifecycleAction> actions;
   final List<TransportProfileDefaultBinding> defaultFor;
+  final TransportProfileStructuredDraft? structuredDraft;
   final DateTime importedAt;
   final DateTime updatedAt;
 
@@ -1552,6 +1559,42 @@ class TransportProfileStructuredDraft {
     this.defaultFor,
   });
 
+  factory TransportProfileStructuredDraft.fromJson(Map<String, dynamic> json) {
+    final kind = TransportProfileKind.fromJson(json['kind'] as String?);
+    if (kind == null) {
+      throw const FormatException('transport profile structured draft invalid');
+    }
+    return TransportProfileStructuredDraft(
+      kind: kind,
+      schemaVersion: json['schema_version'] as String? ?? '',
+      displayName: json['display_name'] as String? ?? '',
+      fields: _readStructuredDraftFields(json['fields']),
+      secretActions: _readStructuredDraftSecretActions(json['secret_actions']),
+      interfacePrivateKey: json['interface_private_key'] as String? ?? '',
+      interfacePrivateKeyAction: TransportProfileSecretUpdateAction.fromJson(
+        json['interface_private_key_action'] as String?,
+      ),
+      interfaceAddresses: _readStringList(json['interface_addresses']),
+      dnsServers: _readStringList(json['dns_servers']),
+      mtu: _readInt(json['mtu']),
+      peerPublicKey: json['peer_public_key'] as String? ?? '',
+      peerPresharedKey: json['peer_preshared_key'] as String? ?? '',
+      peerPresharedKeyAction: TransportProfileSecretUpdateAction.fromJson(
+        json['peer_preshared_key_action'] as String?,
+      ),
+      allowedIps: _readStringList(json['allowed_ips']),
+      endpoint: json['endpoint'] as String? ?? '',
+      persistentKeepaliveSeconds: _readInt(
+        json['persistent_keepalive_seconds'],
+      ),
+      defaultFor: json['default_for'] is Map<String, dynamic>
+          ? RuntimeExecutionPlan.fromJson(
+              json['default_for'] as Map<String, dynamic>,
+            )
+          : null,
+    );
+  }
+
   final TransportProfileKind kind;
   final String schemaVersion;
   final String displayName;
@@ -2033,6 +2076,101 @@ _readTransportProfileSecretUpdateActions(dynamic raw) {
       )
       .whereType<TransportProfileSecretUpdateAction>()
       .toList(growable: false);
+}
+
+Map<TransportProfileStructuredFieldId, Object?> _readStructuredDraftFields(
+  dynamic raw,
+) {
+  if (raw is! Map<String, dynamic>) {
+    return const <TransportProfileStructuredFieldId, Object?>{};
+  }
+  final fields = <TransportProfileStructuredFieldId, Object?>{};
+  for (final entry in raw.entries) {
+    final field = TransportProfileStructuredFieldId.fromJson(entry.key);
+    if (field == null) {
+      continue;
+    }
+    final value = _readStructuredDraftFieldValue(entry.value);
+    if (value != null) {
+      fields[field] = value;
+    }
+  }
+  return Map<TransportProfileStructuredFieldId, Object?>.unmodifiable(fields);
+}
+
+Map<TransportProfileStructuredFieldId, TransportProfileSecretUpdateAction>
+_readStructuredDraftSecretActions(dynamic raw) {
+  if (raw is! Map<String, dynamic>) {
+    return const <
+      TransportProfileStructuredFieldId,
+      TransportProfileSecretUpdateAction
+    >{};
+  }
+  final actions =
+      <TransportProfileStructuredFieldId, TransportProfileSecretUpdateAction>{};
+  for (final entry in raw.entries) {
+    final field = TransportProfileStructuredFieldId.fromJson(entry.key);
+    final action = TransportProfileSecretUpdateAction.fromJson(
+      entry.value is String ? entry.value as String : null,
+    );
+    if (field != null && action != null) {
+      actions[field] = action;
+    }
+  }
+  return Map<
+    TransportProfileStructuredFieldId,
+    TransportProfileSecretUpdateAction
+  >.unmodifiable(actions);
+}
+
+Object? _readStructuredDraftFieldValue(dynamic raw) {
+  if (raw is String) {
+    final value = raw.trim();
+    return value.isEmpty ? null : value;
+  }
+  if (raw is int) {
+    return raw;
+  }
+  if (raw is num) {
+    return raw.toInt();
+  }
+  if (raw is List<dynamic>) {
+    final values = raw
+        .whereType<String>()
+        .map((String value) => value.trim())
+        .where((String value) => value.isNotEmpty)
+        .toList(growable: false);
+    return values.isEmpty ? null : values;
+  }
+  return null;
+}
+
+List<String> _readStringList(dynamic raw) {
+  if (raw is List<dynamic>) {
+    return raw
+        .whereType<String>()
+        .map((String value) => value.trim())
+        .where((String value) => value.isNotEmpty)
+        .toList(growable: false);
+  }
+  if (raw is String) {
+    final value = raw.trim();
+    return value.isEmpty ? const <String>[] : <String>[value];
+  }
+  return const <String>[];
+}
+
+int _readInt(dynamic raw) {
+  if (raw is int) {
+    return raw;
+  }
+  if (raw is num) {
+    return raw.toInt();
+  }
+  if (raw is String) {
+    return int.tryParse(raw.trim()) ?? 0;
+  }
+  return 0;
 }
 
 List<String> _trimmedStringList(List<String> values) {

@@ -30,7 +30,7 @@ import (
 const (
 	nativeInterfaceName     = "rdtun0"
 	nativeDefaultMTU        = 1280
-	nativeDataplaneURL      = "http://1.1.1.1/cdn-cgi/trace"
+	nativeDataplaneURL      = "https://1.1.1.1/cdn-cgi/trace"
 	nativeStateDirEnv       = "VKTP_LINUX_TUN_HELPER_STATE_DIR"
 	defaultNativeStateDir   = "/run/relaydock/linux-tun-helper"
 	nativeStateFileName     = "state.json"

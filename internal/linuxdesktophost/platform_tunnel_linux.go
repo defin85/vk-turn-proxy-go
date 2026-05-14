@@ -29,7 +29,7 @@ import (
 const (
 	linuxTunInterfaceName = "rdtun0"
 	linuxTunDefaultMTU    = 1280
-	linuxDataplaneURL     = "http://1.1.1.1/cdn-cgi/trace"
+	linuxDataplaneURL     = "https://1.1.1.1/cdn-cgi/trace"
 )
 
 type linuxCommandRunner interface {
